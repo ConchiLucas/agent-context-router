@@ -1,0 +1,21 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+*.db
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+dist/
+build/
+*.egg-info/
+
+# Node
+node_modules/
+.next/
+out/
+coverage/
