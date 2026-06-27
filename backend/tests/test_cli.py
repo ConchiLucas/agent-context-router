@@ -36,7 +36,7 @@ def test_doc_add_reads_markdown_file_and_posts_payload(monkeypatch, tmp_path) ->
         assert path == "/api/projects/my-app/documents"
         assert payload["id"] == "payments-runbook"
         assert payload["content_markdown"] == "# Payments\nRun tests."
-        return {"id": "payments-runbook", "chunk_count": 1, "status": "active"}
+        return {"id": "payments-runbook", "status": "active"}
 
     monkeypatch.setattr("context_router.cli._post_json", fake_post_json)
 

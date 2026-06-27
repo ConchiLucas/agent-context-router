@@ -55,7 +55,6 @@ def prepare_context(
             RetrievalHit(
                 trace_id=trace_id,
                 document_id=result.document_id,
-                chunk_id=result.chunk_id,
                 rank=result.rank,
                 score=result.score,
                 reason=result.reason,

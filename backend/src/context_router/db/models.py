@@ -62,28 +62,7 @@ class Document(TimestampMixin, Base):
     content_markdown: Mapped[str] = mapped_column(Text, nullable=False)
 
     project: Mapped[Project] = relationship(back_populates="documents")
-    chunks: Mapped[list[DocumentChunk]] = relationship(
-        back_populates="document",
-        cascade="all, delete-orphan",
-        order_by="DocumentChunk.chunk_index",
-    )
     retrieval_hits: Mapped[list[RetrievalHit]] = relationship(back_populates="document")
-
-
-class DocumentChunk(Base):
-    __tablename__ = "document_chunks"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    document_id: Mapped[str] = mapped_column(ForeignKey("documents.id"), nullable=False, index=True)
-    heading_path: Mapped[list[str]] = mapped_column(JSON, default=list)
-    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
-    content: Mapped[str] = mapped_column(Text, nullable=False)
-    token_estimate: Mapped[int] = mapped_column(Integer, nullable=False)
-    embedding: Mapped[list[float] | None] = mapped_column(JSON)
-    chunk_metadata: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, default=dict)
-
-    document: Mapped[Document] = relationship(back_populates="chunks")
-    retrieval_hits: Mapped[list[RetrievalHit]] = relationship(back_populates="chunk")
 
 
 class Trace(Base):
@@ -127,7 +106,6 @@ class RetrievalHit(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     trace_id: Mapped[str] = mapped_column(ForeignKey("traces.id"), nullable=False, index=True)
     document_id: Mapped[str] = mapped_column(ForeignKey("documents.id"), nullable=False, index=True)
-    chunk_id: Mapped[str | None] = mapped_column(ForeignKey("document_chunks.id"), index=True)
     rank: Mapped[int] = mapped_column(Integer, nullable=False)
     score: Mapped[float] = mapped_column(Float, nullable=False)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
@@ -136,4 +114,3 @@ class RetrievalHit(Base):
 
     trace: Mapped[Trace] = relationship(back_populates="retrieval_hits")
     document: Mapped[Document] = relationship(back_populates="retrieval_hits")
-    chunk: Mapped[DocumentChunk | None] = relationship(back_populates="retrieval_hits")

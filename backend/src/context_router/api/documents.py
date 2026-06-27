@@ -68,7 +68,6 @@ def list_documents(
                 area=document.area,
                 tags=document.tags,
                 status=document.status,
-                chunk_count=len(document.chunks),
             )
             for document in documents
         ]

@@ -13,7 +13,6 @@ class DocumentCreate(BaseModel):
 
 class DocumentUpsertResponse(BaseModel):
     id: str
-    chunk_count: int
     status: str
 
 
@@ -37,7 +36,6 @@ class DocumentSummary(BaseModel):
     area: str | None
     tags: list[str]
     status: str
-    chunk_count: int
 
 
 class DocumentListResponse(BaseModel):

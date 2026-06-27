@@ -67,26 +67,6 @@ def upgrade() -> None:
     op.create_index(op.f("ix_traces_project_id"), "traces", ["project_id"], unique=False)
 
     op.create_table(
-        "document_chunks",
-        sa.Column("id", sa.String(length=36), nullable=False),
-        sa.Column("document_id", sa.String(length=240), nullable=False),
-        sa.Column("heading_path", sa.JSON(), nullable=False),
-        sa.Column("chunk_index", sa.Integer(), nullable=False),
-        sa.Column("content", sa.Text(), nullable=False),
-        sa.Column("token_estimate", sa.Integer(), nullable=False),
-        sa.Column("embedding", sa.JSON(), nullable=True),
-        sa.Column("metadata", sa.JSON(), nullable=False),
-        sa.ForeignKeyConstraint(["document_id"], ["documents.id"]),
-        sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index(
-        op.f("ix_document_chunks_document_id"),
-        "document_chunks",
-        ["document_id"],
-        unique=False,
-    )
-
-    op.create_table(
         "trace_events",
         sa.Column("id", sa.String(length=36), nullable=False),
         sa.Column("trace_id", sa.String(length=120), nullable=False),
@@ -109,22 +89,14 @@ def upgrade() -> None:
         sa.Column("id", sa.String(length=36), nullable=False),
         sa.Column("trace_id", sa.String(length=120), nullable=False),
         sa.Column("document_id", sa.String(length=240), nullable=False),
-        sa.Column("chunk_id", sa.String(length=36), nullable=True),
         sa.Column("rank", sa.Integer(), nullable=False),
         sa.Column("score", sa.Float(), nullable=False),
         sa.Column("reason", sa.Text(), nullable=False),
         sa.Column("was_returned", sa.Boolean(), nullable=False),
         sa.Column("feedback", sa.String(length=40), nullable=True),
-        sa.ForeignKeyConstraint(["chunk_id"], ["document_chunks.id"]),
         sa.ForeignKeyConstraint(["document_id"], ["documents.id"]),
         sa.ForeignKeyConstraint(["trace_id"], ["traces.id"]),
         sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index(
-        op.f("ix_retrieval_hits_chunk_id"),
-        "retrieval_hits",
-        ["chunk_id"],
-        unique=False,
     )
     op.create_index(
         op.f("ix_retrieval_hits_document_id"),
@@ -150,13 +122,10 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_retrieval_hits_trace_id"), table_name="retrieval_hits")
     op.drop_index(op.f("ix_retrieval_hits_feedback"), table_name="retrieval_hits")
     op.drop_index(op.f("ix_retrieval_hits_document_id"), table_name="retrieval_hits")
-    op.drop_index(op.f("ix_retrieval_hits_chunk_id"), table_name="retrieval_hits")
     op.drop_table("retrieval_hits")
     op.drop_index(op.f("ix_trace_events_trace_id"), table_name="trace_events")
     op.drop_index(op.f("ix_trace_events_event_type"), table_name="trace_events")
     op.drop_table("trace_events")
-    op.drop_index(op.f("ix_document_chunks_document_id"), table_name="document_chunks")
-    op.drop_table("document_chunks")
     op.drop_index(op.f("ix_traces_project_id"), table_name="traces")
     op.drop_table("traces")
     op.drop_index(op.f("ix_documents_status"), table_name="documents")

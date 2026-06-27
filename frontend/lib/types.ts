@@ -25,7 +25,6 @@ export type DocumentSummary = {
   doc_type: string;
   tags: string[];
   status: string;
-  chunk_count: number;
 };
 
 export type DocumentListResponse = {
@@ -36,7 +35,6 @@ export type RetrievalHit = {
   id: string;
   document_id: string;
   document_title: string;
-  chunk_id: string | null;
   rank: number;
   reason: string;
   score: number;

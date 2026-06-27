@@ -141,7 +141,6 @@ def _trace_detail(trace: Trace) -> TraceDetailResponse:
                 id=hit.id,
                 document_id=hit.document_id,
                 document_title=hit.document.title,
-                chunk_id=hit.chunk_id,
                 rank=hit.rank,
                 score=hit.score,
                 reason=hit.reason,

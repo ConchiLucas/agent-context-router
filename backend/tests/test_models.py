@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 from context_router.db.models import (
     Base,
     Document,
-    DocumentChunk,
     Project,
     RetrievalHit,
     Trace,
@@ -38,17 +37,6 @@ def test_project_document_trace_lifecycle_can_be_persisted() -> None:
         )
         session.add(document)
 
-        chunk = DocumentChunk(
-            document_id=document.id,
-            heading_path=["Timeout history"],
-            chunk_index=0,
-            content="Past webhook timeout notes.",
-            token_estimate=5,
-            embedding=[0.1, 0.2, 0.3],
-            chunk_metadata={"source": "unit-test"},
-        )
-        session.add(chunk)
-
         trace = Trace(
             id="ctx_test_001",
             project_id=project.id,
@@ -68,7 +56,6 @@ def test_project_document_trace_lifecycle_can_be_persisted() -> None:
         hit = RetrievalHit(
             trace_id=trace.id,
             document_id=document.id,
-            chunk_id=chunk.id,
             rank=1,
             score=0.91,
             reason="Task mentions payments, webhook, and timeout.",

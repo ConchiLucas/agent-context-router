@@ -7,7 +7,7 @@ small CLI/API surface while recording which documents were selected, read, and r
 
 - Python FastAPI backend for projects, documents, retrieval, and traces.
 - `ctx` CLI for AI agents and humans.
-- PostgreSQL with pgvector for storage and future vector retrieval.
+- PostgreSQL storage with deterministic metadata and keyword retrieval.
 - Next.js dashboard for trace review and document inventory.
 
 ## Local Development

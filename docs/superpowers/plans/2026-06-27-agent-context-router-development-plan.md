@@ -6,7 +6,7 @@
 
 **Architecture:** Use a Python backend as the source of truth for projects, documents, retrieval, and traces. Expose the same core capability through HTTP API, a `ctx` CLI, and later an MCP server. Use a TypeScript/Next.js frontend for project management, document inspection, and trace review.
 
-**Tech Stack:** Python 3.12, FastAPI, Typer, PostgreSQL + pgvector, SQLAlchemy 2.x, Alembic, pytest, Ruff, Next.js, TypeScript, Tailwind CSS, shadcn/ui-style primitives, Playwright.
+**Tech Stack:** Python 3.12, FastAPI, Typer, PostgreSQL, SQLAlchemy 2.x, Alembic, pytest, Ruff, Next.js, TypeScript, Tailwind CSS, shadcn/ui-style primitives, Playwright.
 
 ---
 
@@ -50,9 +50,9 @@ The intended flow for a new AI coding session:
 
 - Manage multiple projects by slug, name, root path, and description.
 - Ingest Markdown documents and classify them by project, area, type, path, and tags.
-- Generate chunks for retrieval while preserving source document IDs and headings.
+- Store full Markdown documents for deterministic retrieval.
 - Provide `ctx prepare` to return a task-specific context package.
-- Provide `ctx read` to fetch a full document or selected chunk group.
+- Provide `ctx read` to fetch a full document.
 - Record trace events for prepare/read calls.
 - Provide a frontend trace page showing selected docs, reasons, scores, and read history.
 - Provide a project document inventory page.
@@ -60,7 +60,7 @@ The intended flow for a new AI coding session:
 
 ### Should Have
 
-- Hybrid retrieval: keyword + metadata filtering + vector similarity.
+- Deterministic retrieval: keyword scoring plus metadata filtering.
 - Document usefulness feedback: useful, unnecessary, missing, stale.
 - Suggested changes to `AI_CONTEXT_INDEX.md` or `AGENTS.md` based on trace review.
 - CLI output modes: Markdown for agents, JSON for debugging.
@@ -115,15 +115,12 @@ agent-context-router/
 │   │       │   └── traces.py
 │   │       └── services/
 │   │           ├── __init__.py
-│   │           ├── chunking.py
 │   │           ├── document_store.py
-│   │           ├── embeddings.py
 │   │           ├── retrieval.py
 │   │           ├── rendering.py
 │   │           └── tracing.py
 │   ├── tests/
 │   │   ├── conftest.py
-│   │   ├── test_chunking.py
 │   │   ├── test_retrieval.py
 │   │   ├── test_prepare_context.py
 │   │   └── test_cli.py
@@ -186,17 +183,6 @@ agent-context-router/
 - `content_markdown`
 - `created_at`, `updated_at`
 
-### DocumentChunk
-
-- `id`: UUID
-- `document_id`: FK
-- `heading_path`: list of headings
-- `chunk_index`
-- `content`
-- `token_estimate`
-- `embedding`: pgvector column, nullable until embeddings are generated
-- `metadata`: JSON object
-
 ### Trace
 
 - `id`: text ID returned to CLI, such as `ctx_20260627_001`
@@ -219,7 +205,6 @@ agent-context-router/
 - `id`: UUID
 - `trace_id`: FK
 - `document_id`: FK
-- `chunk_id`: nullable FK
 - `rank`
 - `score`
 - `reason`
@@ -276,7 +261,6 @@ Response:
 ```json
 {
   "id": "payments-webhook-timeout-history",
-  "chunk_count": 4,
   "status": "active"
 }
 ```
@@ -531,7 +515,7 @@ ctx read <doc-id> --trace <trace-id> --reason "<why this document is needed>"
 - [ ] Add Python package metadata and dependencies.
 - [ ] Add FastAPI health endpoint.
 - [ ] Add frontend package metadata.
-- [ ] Add Docker Compose with PostgreSQL and pgvector.
+- [ ] Add Docker Compose with PostgreSQL.
 - [ ] Add Make targets for backend test, backend lint, frontend dev, and all checks.
 
 ### Task 2: Add Database Models and Migrations
@@ -544,26 +528,23 @@ ctx read <doc-id> --trace <trace-id> --reason "<why this document is needed>"
 - Create: first Alembic migration under `backend/alembic/versions/`
 - Test: `backend/tests/test_models.py`
 
-- [ ] Write database models for projects, documents, chunks, traces, events, and retrieval hits.
+- [ ] Write database models for projects, documents, traces, events, and retrieval hits.
 - [ ] Add Alembic migration.
-- [ ] Add tests that create a project, document, chunk, trace, and retrieval hit.
+- [ ] Add tests that create a project, document, trace, and retrieval hit.
 - [ ] Run `pytest backend/tests/test_models.py -v`.
 
 ### Task 3: Implement Document Ingestion
 
 **Files:**
 
-- Create: `backend/src/context_router/services/chunking.py`
 - Create: `backend/src/context_router/services/document_store.py`
 - Create: `backend/src/context_router/api/documents.py`
-- Test: `backend/tests/test_chunking.py`
 - Test: `backend/tests/test_document_ingestion.py`
 
-- [ ] Implement Markdown heading-aware chunking.
-- [ ] Preserve heading paths and source document metadata.
+- [ ] Store Markdown documents with source metadata.
 - [ ] Add create/update document API.
-- [ ] Re-chunk documents when content changes.
-- [ ] Add tests for headings, short docs, long docs, and updates.
+- [ ] Replace document content when content changes.
+- [ ] Add tests for create/update behavior.
 
 ### Task 4: Implement Prepare Context Retrieval
 
@@ -576,8 +557,8 @@ ctx read <doc-id> --trace <trace-id> --reason "<why this document is needed>"
 - Test: `backend/tests/test_prepare_context.py`
 
 - [ ] Implement metadata scoring for area, tags, doc type, and title matches.
-- [ ] Implement keyword scoring for task text against chunks.
-- [ ] Leave vector scoring behind a provider interface so MVP works without external API keys.
+- [ ] Implement keyword scoring for task text against full document content.
+- [ ] Keep ranking local and deterministic so MVP works without external API keys.
 - [ ] Combine scores into ranked document results.
 - [ ] Render a compact Markdown context package.
 - [ ] Add tests that prove unrelated documents are not returned when a better match exists.
@@ -638,7 +619,7 @@ ctx read <doc-id> --trace <trace-id> --reason "<why this document is needed>"
 - [ ] List projects.
 - [ ] Show project detail and generated routing document template.
 - [ ] List documents with filters for project, area, type, tag, and status.
-- [ ] Show document metadata and chunk count.
+- [ ] Show document metadata.
 
 ### Task 9: Implement Trace UI
 
@@ -732,22 +713,21 @@ Mitigation: Treat `AI_CONTEXT_INDEX.md` as a routing file only. Full knowledge l
 
 Mitigation: Add human feedback and trace review from day one. Optimize against concrete traces, not abstract search quality.
 
-### Risk: Embedding provider setup blocks MVP
+### Risk: Ranking complexity blocks MVP
 
-Mitigation: Start with metadata and keyword ranking. Add pgvector embedding support through a provider interface.
+Mitigation: Use metadata and keyword ranking with clear scoring heuristics.
 
 ## 14. Recommended Build Order
 
 1. Backend skeleton, models, and migrations.
-2. Document ingestion and chunking.
+2. Document ingestion.
 3. `ctx prepare` with deterministic metadata + keyword retrieval.
 4. Trace recording.
 5. `ctx read`.
 6. Frontend trace review page.
 7. Project/document management UI.
-8. pgvector embeddings.
+8. Advanced local ranking heuristics.
 9. MCP server.
 10. Documentation improvement suggestions.
 
 This order gets to the core proof quickly: can the system reduce AI context wandering and make the retrieval chain visible?
-

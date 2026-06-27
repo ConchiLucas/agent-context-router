@@ -4,11 +4,10 @@ import re
 from collections import Counter
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
 from context_router.db.models import Document, Project
 from context_router.schemas.context import ContextDocument
-from context_router.services.embeddings import EmbeddingProvider, cosine_similarity
 
 TOKEN_RE = re.compile(r"[a-z0-9]+|[\u4e00-\u9fff]+", re.IGNORECASE)
 
@@ -19,22 +18,13 @@ def retrieve_documents(
     project: Project,
     task: str,
     max_documents: int,
-    embedding_provider: EmbeddingProvider | None = None,
 ) -> list[ContextDocument]:
     documents = session.scalars(
-        select(Document)
-        .where(Document.project_id == project.id, Document.status == "active")
-        .options(selectinload(Document.chunks))
+        select(Document).where(Document.project_id == project.id, Document.status == "active")
     ).all()
     task_tokens = _tokens(task)
-    task_embedding = None
-    if embedding_provider is not None:
-        task_embedding = embedding_provider.embed([task])[0]
 
-    scored = [
-        _score_document(document, task_tokens, task_embedding=task_embedding)
-        for document in documents
-    ]
+    scored = [_score_document(document, task_tokens) for document in documents]
     scored.sort(key=lambda result: (-result.score, result.document_id))
 
     ranked: list[ContextDocument] = []
@@ -47,27 +37,16 @@ def retrieve_documents(
 def _score_document(
     document: Document,
     task_tokens: Counter[str],
-    *,
-    task_embedding: list[float] | None,
 ) -> ContextDocument:
     searchable_terms = _document_terms(document)
     matched_terms = sorted(token for token in task_tokens if token in searchable_terms)
     metadata_score = _metadata_score(document, task_tokens)
 
-    best_chunk_id: str | None = None
     best_excerpt = document.content_markdown.strip().replace("\n", " ")[:180]
-    best_chunk_score = 0.0
+    content_terms = Counter(_tokens(document.content_markdown))
+    content_score = sum(task_tokens[token] * content_terms[token] for token in task_tokens)
 
-    for chunk in document.chunks:
-        chunk_terms = Counter(_tokens(chunk.content))
-        chunk_score = sum(task_tokens[token] * chunk_terms[token] for token in task_tokens)
-        chunk_score += cosine_similarity(task_embedding, chunk.embedding)
-        if chunk_score > best_chunk_score:
-            best_chunk_score = float(chunk_score)
-            best_chunk_id = chunk.id
-            best_excerpt = chunk.content.strip().replace("\n", " ")[:180]
-
-    score = metadata_score + best_chunk_score
+    score = metadata_score + float(content_score)
     reason = _reason(matched_terms=matched_terms, document=document, score=score)
     return ContextDocument(
         document_id=document.id,
@@ -75,7 +54,6 @@ def _score_document(
         reason=reason,
         score=round(score, 4),
         excerpt=best_excerpt,
-        chunk_id=best_chunk_id,
         rank=0,
     )
 
@@ -101,8 +79,7 @@ def _document_terms(document: Document) -> set[str]:
     if document.area:
         terms.add(document.area.lower())
     terms.update(tag.lower() for tag in document.tags)
-    for chunk in document.chunks:
-        terms.update(_tokens(chunk.content))
+    terms.update(_tokens(document.content_markdown))
     return terms
 
 

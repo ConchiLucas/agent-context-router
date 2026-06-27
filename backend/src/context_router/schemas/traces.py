@@ -23,7 +23,6 @@ class RetrievalHitResponse(BaseModel):
     id: str
     document_id: str
     document_title: str
-    chunk_id: str | None
     rank: int
     score: float
     reason: str

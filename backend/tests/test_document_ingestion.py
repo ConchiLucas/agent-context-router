@@ -12,7 +12,7 @@ from context_router.schemas.documents import DocumentCreate
 from context_router.services.document_store import upsert_document
 
 
-def test_upsert_document_replaces_chunks_when_content_changes() -> None:
+def test_upsert_document_replaces_document_content_when_content_changes() -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
 
@@ -49,17 +49,16 @@ def test_upsert_document_replaces_chunks_when_content_changes() -> None:
         )
         saved = session.scalar(select(Document).where(Document.id == "payments-runbook"))
 
-        assert first.chunk_count == 1
-        assert second.chunk_count == 2
+        assert first.status == "active"
+        assert second.status == "active"
         assert saved is not None
         assert saved.tags == ["payments", "updated"]
-        assert [chunk.content for chunk in saved.chunks] == [
-            "Second version.",
-            "Run payment tests.",
-        ]
+        assert (
+            saved.content_markdown == "# Payments\nSecond version.\n\n## Tests\nRun payment tests."
+        )
 
 
-def test_create_document_api_chunks_document_and_returns_count() -> None:
+def test_create_document_api_stores_document_and_returns_status() -> None:
     engine = create_engine(
         "sqlite+pysqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -96,12 +95,11 @@ def test_create_document_api_chunks_document_and_returns_count() -> None:
     assert response.status_code == 200
     assert response.json() == {
         "id": "build-runbook",
-        "chunk_count": 2,
         "status": "active",
     }
 
 
-def test_list_documents_returns_metadata_and_chunk_count() -> None:
+def test_list_documents_returns_metadata() -> None:
     engine = create_engine(
         "sqlite+pysqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -150,7 +148,6 @@ def test_list_documents_returns_metadata_and_chunk_count() -> None:
             "area": "build",
             "tags": ["build", "test"],
             "status": "active",
-            "chunk_count": 2,
         }
     ]
 

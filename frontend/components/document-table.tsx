@@ -20,7 +20,6 @@ export function DocumentTable({ documents }: Readonly<{ documents: DocumentSumma
             <th>Project</th>
             <th>Area</th>
             <th>Type</th>
-            <th style={{ textAlign: "right" }}>Chunks</th>
             <th style={{ borderTopRightRadius: "var(--radius-md)", width: "100px" }}>Status</th>
           </tr>
         </thead>
@@ -49,9 +48,6 @@ export function DocumentTable({ documents }: Readonly<{ documents: DocumentSumma
                 <span style={{ fontSize: "0.9rem", color: "#cbd5e1" }}>
                   {document.doc_type}
                 </span>
-              </td>
-              <td style={{ textAlign: "right", fontSize: "0.9rem", fontWeight: 600, color: "#f1f5f9" }}>
-                {document.chunk_count}
               </td>
               <td>
                 <span className={`badge ${statusClassMap[document.status] || ""}`}>

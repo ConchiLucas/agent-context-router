@@ -78,7 +78,7 @@ def add_document(
             "content_markdown": content,
         },
     )
-    typer.echo(f"Indexed document {body['id']} with {body['chunk_count']} chunks")
+    typer.echo(f"Indexed document {body['id']}")
 
 
 @app.command()

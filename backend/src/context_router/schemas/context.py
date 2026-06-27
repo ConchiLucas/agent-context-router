@@ -15,7 +15,6 @@ class ContextDocument(BaseModel):
     reason: str
     score: float
     excerpt: str
-    chunk_id: str | None = None
     rank: int
 
 
