@@ -12,9 +12,22 @@ small CLI/API surface while recording which documents were selected, read, and r
 
 ## Local Development
 
+The backend defaults to the local PostgreSQL convention used by the other
+workforce projects:
+
+```text
+host: 127.0.0.1
+port: 5432
+database: context_router
+user: conchi
+password: conchi123456
+```
+
+Create and migrate the database before starting the API:
+
 ```bash
-docker compose up -d postgres
-make backend-test
+cd backend
+uv run alembic upgrade head
 ```
 
 Run the API:
@@ -45,8 +58,8 @@ uv run ctx trace <trace-id>
 
 Set `CTX_API_URL` when the API is not on `http://127.0.0.1:8000`.
 
-Set `CONTEXT_ROUTER_DATABASE_URL` to use PostgreSQL instead of the local SQLite
-default:
+Override `CONTEXT_ROUTER_DATABASE_URL` only when using another PostgreSQL
+database, such as the optional docker-compose database on port `54329`:
 
 ```bash
 export CONTEXT_ROUTER_DATABASE_URL=postgresql+psycopg://context_router:context_router@127.0.0.1:54329/context_router
