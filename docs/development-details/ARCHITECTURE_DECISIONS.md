@@ -13,3 +13,5 @@
 
 - 文档体系采用按需读取结构：`AGENTS.md` 只保留一级索引，`docs/DEVELOPMENT_OUTLINE.md` 负责开发大纲，细节放入 `docs/development-details/`。
 - 上下文检索不再使用文档切分表或向量相关能力，统一基于完整文档正文和元数据做确定性关键词检索。
+- 任务入口路由信息作为 trace 的一等元数据保存，包括 area、入口索引路径、入口规则、route hint、调用来源和 agent 名称。
+- 显式传入 area 时，检索优先限定在相同 area 和通用文档内，避免 AI 为一个明确任务读取过多无关 area 的上下文。

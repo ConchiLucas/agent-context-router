@@ -32,6 +32,11 @@ export default async function TraceDetailPage({ params }: TraceDetailPageProps) 
       </header>
 
       <section className="section panel">
+        <h2 className="section-title">Routing Metadata</h2>
+        <TraceMetadata trace={trace} />
+      </section>
+
+      <section className="section panel">
         <h2 className="section-title">Returned Documents</h2>
         <RetrievalHitList hits={trace.retrieval_hits}>
           {(hit) => (
@@ -58,6 +63,33 @@ export default async function TraceDetailPage({ params }: TraceDetailPageProps) 
   );
 }
 
+function TraceMetadata({ trace }: Readonly<{ trace: TraceDetail }>) {
+  const items = [
+    ["Area", trace.area],
+    ["Source", trace.source],
+    ["Agent", trace.agent_name],
+    ["Working Directory", trace.cwd],
+    ["Entrypoint Path", trace.entrypoint_path],
+    ["Entrypoint Rule", trace.entrypoint_rule],
+    ["Route Hint", trace.route_hint],
+  ].filter((item): item is [string, string] => Boolean(item[1]));
+
+  if (items.length === 0) {
+    return <p className="page-subtitle">No routing metadata recorded.</p>;
+  }
+
+  return (
+    <div className="stack">
+      {items.map(([label, value]) => (
+        <div className="event-row" key={label}>
+          <strong>{label}</strong>
+          <span>{value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ReadEvents({ trace }: Readonly<{ trace: TraceDetail }>) {
   const readEvents = trace.events.filter((event) => event.event_type === "read");
   if (readEvents.length === 0) {
@@ -79,13 +111,37 @@ function ReadEvents({ trace }: Readonly<{ trace: TraceDetail }>) {
 function RoutingNotes({ trace }: Readonly<{ trace: TraceDetail }>) {
   const unnecessary = trace.retrieval_hits.filter((hit) => hit.feedback === "unnecessary");
   const stale = trace.retrieval_hits.filter((hit) => hit.feedback === "stale");
+  const readDocumentIds = new Set(
+    trace.events
+      .filter((event) => event.event_type === "read")
+      .map((event) => String(event.payload.document_id ?? ""))
+      .filter(Boolean)
+  );
+  const returnedUnread = trace.retrieval_hits.filter((hit) => !readDocumentIds.has(hit.document_id));
+  const returnedIds = new Set(trace.retrieval_hits.map((hit) => hit.document_id));
+  const readWithoutReturned = [...readDocumentIds].filter((documentId) => !returnedIds.has(documentId));
 
-  if (unnecessary.length === 0 && stale.length === 0) {
+  if (
+    unnecessary.length === 0 &&
+    stale.length === 0 &&
+    returnedUnread.length === 0 &&
+    readWithoutReturned.length === 0
+  ) {
     return <p className="page-subtitle">No routing issues marked yet.</p>;
   }
 
   return (
     <div className="stack">
+      {returnedUnread.map((hit) => (
+        <p className="page-subtitle" key={`unread-${hit.id}`}>
+          Returned but unread: {hit.document_id}.
+        </p>
+      ))}
+      {readWithoutReturned.map((documentId) => (
+        <p className="page-subtitle" key={`read-without-returned-${documentId}`}>
+          Read without being returned: {documentId}.
+        </p>
+      ))}
       {unnecessary.map((hit) => (
         <p className="page-subtitle" key={`unnecessary-${hit.id}`}>
           Reduce matching weight for {hit.document_id} on similar tasks.

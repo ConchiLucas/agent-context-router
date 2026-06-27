@@ -27,6 +27,7 @@ def prepare_context(
         session,
         project=project,
         task=request.task,
+        area=request.area,
         max_documents=request.max_documents,
     )
     trace_id = new_trace_id()
@@ -35,6 +36,12 @@ def prepare_context(
         project_id=project.id,
         task=request.task,
         cwd=request.cwd,
+        area=request.area,
+        entrypoint_path=request.entrypoint_path,
+        entrypoint_rule=request.entrypoint_rule,
+        route_hint=request.route_hint,
+        source=request.source,
+        agent_name=request.agent_name,
     )
     session.add(trace)
     session.add(
@@ -44,6 +51,12 @@ def prepare_context(
             payload={
                 "project": request.project,
                 "task": request.task,
+                "area": request.area,
+                "entrypoint_path": request.entrypoint_path,
+                "entrypoint_rule": request.entrypoint_rule,
+                "route_hint": request.route_hint,
+                "source": request.source,
+                "agent_name": request.agent_name,
                 "max_documents": request.max_documents,
                 "output_format": request.output_format,
             },
@@ -62,13 +75,25 @@ def prepare_context(
             )
         )
 
-    markdown = render_context_markdown(trace_id=trace_id, project=request.project, results=results)
+    markdown = render_context_markdown(
+        trace_id=trace_id,
+        project=request.project,
+        area=request.area,
+        entrypoint_path=request.entrypoint_path,
+        entrypoint_rule=request.entrypoint_rule,
+        route_hint=request.route_hint,
+        results=results,
+    )
     session.commit()
 
     return PrepareContextResponse(
         trace_id=trace_id,
         project=request.project,
         task=request.task,
+        area=request.area,
+        entrypoint_path=request.entrypoint_path,
+        entrypoint_rule=request.entrypoint_rule,
+        route_hint=request.route_hint,
         documents=results,
         markdown=markdown,
     )

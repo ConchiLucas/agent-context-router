@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from context_router.db.models import Document, Project, TraceEvent
+from context_router.db.models import Document, Project, Trace, TraceEvent
 from context_router.db.session import get_session
 from context_router.schemas.documents import (
     DocumentCreate,
@@ -45,7 +45,7 @@ def list_documents(
 ) -> DocumentListResponse:
     query = select(Document).join(Document.project).order_by(Document.id)
     if project is not None:
-        query = query.where(Project.slug == project)
+        query = query.where(Project.slug.in_(_project_slug_scope(session, project)))
     if area is not None:
         query = query.where(Document.area == area)
     if doc_type is not None:
@@ -74,23 +74,57 @@ def list_documents(
     )
 
 
+def _project_slug_scope(session: Session, project_slug: str) -> list[str]:
+    project = session.scalar(select(Project).where(Project.slug == project_slug))
+    if project is None:
+        return [project_slug]
+
+    slugs = [project.slug]
+    pending_ids = [project.id]
+    while pending_ids:
+        children = session.scalars(
+            select(Project).where(Project.parent_project_id.in_(pending_ids))
+        ).all()
+        slugs.extend(child.slug for child in children)
+        pending_ids = [child.id for child in children]
+    return slugs
+
+
 @read_router.get("/{document_id}", response_model=DocumentReadResponse)
 def read_document(
     document_id: str,
     session: Annotated[Session, Depends(get_session)],
     trace_id: str | None = Query(default=None),
     reason: str | None = Query(default=None),
+    source: str | None = Query(default=None),
+    untracked: bool = Query(default=False),
 ) -> DocumentReadResponse:
     document = session.scalar(select(Document).where(Document.id == document_id))
     if document is None:
         raise HTTPException(status_code=404, detail=f"Document not found: {document_id}")
 
-    if trace_id is not None:
+    if trace_id is None:
+        if reason:
+            raise HTTPException(
+                status_code=400,
+                detail="trace_id is required when reason is present",
+            )
+        if not untracked:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "trace_id and reason are required; pass untracked=true for administrative reads"
+                ),
+            )
+    else:
         if not reason:
             raise HTTPException(
                 status_code=400,
                 detail="reason is required when trace_id is present",
             )
+        trace = session.scalar(select(Trace).where(Trace.id == trace_id))
+        if trace is None:
+            raise HTTPException(status_code=404, detail=f"Trace not found: {trace_id}")
         session.add(
             TraceEvent(
                 trace_id=trace_id,
@@ -98,6 +132,7 @@ def read_document(
                 payload={
                     "document_id": document.id,
                     "reason": reason,
+                    "source": source,
                 },
             )
         )

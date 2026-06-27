@@ -17,8 +17,10 @@ postgres: 127.0.0.1:54329
 ```text
 frontend/lib/api.ts
 NEXT_PUBLIC_CONTEXT_ROUTER_API_URL
-默认值: http://127.0.0.1:8000
-compose 值: http://127.0.0.1:49173
+浏览器默认值: http://127.0.0.1:8000
+compose 浏览器值: http://127.0.0.1:49173
+CONTEXT_ROUTER_INTERNAL_API_URL
+compose 服务端渲染值: http://backend:8000
 ```
 
 后端数据库信息见：
@@ -64,11 +66,12 @@ ctx 命令或 MCP tool
 | 页面 | 文件 | 调用接口 | 用途 |
 | --- | --- | --- | --- |
 | 首页 Dashboard | `frontend/app/page.tsx` | `GET /api/projects`, `GET /api/documents`, `GET /api/traces` | 汇总项目、文档、trace 指标 |
-| 项目列表 | `frontend/app/projects/page.tsx` | `GET /api/projects` | 查看项目和 active docs 数量 |
-| 项目详情 | `frontend/app/projects/[slug]/page.tsx` | `GET /api/projects/{slug}` | 查看项目详情和 AI_CONTEXT_INDEX 模板 |
-| 文档列表 | `frontend/app/documents/page.tsx` | `GET /api/documents` | 按 project/area/type/tag/status 筛选文档 |
-| Trace 列表 | `frontend/app/traces/page.tsx` | `GET /api/traces` | 查看 prepare 调用历史 |
-| Trace 详情 | `frontend/app/traces/[traceId]/page.tsx` | `GET /api/traces/{trace_id}` | 查看返回文档、读取事件、反馈 |
+| 项目列表 | `frontend/app/projects/page.tsx` | `GET /api/projects` | 查看顶层项目、聚合 active docs 数量和子项目数量 |
+| 项目详情 | `frontend/app/projects/[slug]/page.tsx` | `GET /api/projects/{slug}` | 查看项目详情、子项目和 AI_CONTEXT_INDEX 模板 |
+| 文档列表 | `frontend/app/documents/page.tsx` | `GET /api/documents`, `GET /api/projects?include_children=true` | 按 project/area/type/tag/status 筛选文档 |
+| 文档详情 | `frontend/app/documents/[documentId]/page.tsx` | `GET /api/documents/{document_id}?untracked=true` | 管理端查看文档元数据和完整正文 |
+| Trace 列表 | `frontend/app/traces/page.tsx` | `GET /api/traces` | 查看 prepare 调用历史，可按 project/area/source 筛选 |
+| Trace 详情 | `frontend/app/traces/[traceId]/page.tsx` | `GET /api/traces/{trace_id}` | 查看入口元数据、返回文档、读取事件、反馈 |
 | Trace 反馈 | `frontend/components/feedback-controls.tsx` | `POST /api/traces/{trace_id}/feedback` | 标记 useful/unnecessary/stale/missing |
 
 前端 API 封装：
@@ -102,12 +105,12 @@ backend/src/context_router/main.py
 | 接口 | 文件 | 作用 |
 | --- | --- | --- |
 | `GET /health` | `backend/src/context_router/main.py` | 健康检查 |
-| `GET /api/projects` | `backend/src/context_router/api/projects.py` | 项目列表 |
+| `GET /api/projects` | `backend/src/context_router/api/projects.py` | 顶层项目列表，可用 `include_children=true` 返回全部项目 |
 | `POST /api/projects` | `backend/src/context_router/api/projects.py` | 创建项目 |
-| `GET /api/projects/{project_slug}` | `backend/src/context_router/api/projects.py` | 项目详情和路由模板 |
+| `GET /api/projects/{project_slug}` | `backend/src/context_router/api/projects.py` | 项目详情、子项目和路由模板 |
 | `POST /api/projects/{project_slug}/documents` | `backend/src/context_router/api/documents.py` | 新增或更新上下文文档 |
 | `GET /api/documents` | `backend/src/context_router/api/documents.py` | 文档列表和筛选 |
-| `GET /api/documents/{document_id}` | `backend/src/context_router/api/documents.py` | 读取文档全文，可记录 read 事件 |
+| `GET /api/documents/{document_id}` | `backend/src/context_router/api/documents.py` | 读取文档全文，默认要求 trace/reason，可显式 untracked 调试读取 |
 | `POST /api/context/prepare` | `backend/src/context_router/api/context.py` | 根据任务准备上下文文档 |
 | `GET /api/traces` | `backend/src/context_router/api/traces.py` | Trace 列表 |
 | `GET /api/traces/{trace_id}` | `backend/src/context_router/api/traces.py` | Trace 详情 |
@@ -139,6 +142,7 @@ ctx doc add
 ```text
 ctx prepare 或 MCP prepare_task_context
   -> POST /api/context/prepare
+  -> request 可携带 project/task/area/entrypoint_path/entrypoint_rule/route_hint/source/agent_name
   -> api/context.py:prepare_context
   -> services/retrieval.py:retrieve_documents
   -> services/rendering.py:render_context_markdown
@@ -149,8 +153,9 @@ ctx prepare 或 MCP prepare_task_context
 
 ```text
 ctx read 或 MCP read_context_document
-  -> GET /api/documents/{document_id}?trace_id=...&reason=...
+  -> GET /api/documents/{document_id}?trace_id=...&reason=...&source=...
   -> api/documents.py:read_document
+  -> 校验 trace 存在
   -> trace_events 写入 read 事件
 ```
 
@@ -168,9 +173,11 @@ Trace 详情页点击反馈按钮
 
 ```text
 Project
+  -> children Project
   -> Document
       -> RetrievalHit
   -> Trace
+      -> area / entrypoint_path / entrypoint_rule / route_hint / source / agent_name
       -> TraceEvent
       -> RetrievalHit
 ```

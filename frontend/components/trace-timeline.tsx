@@ -4,10 +4,22 @@ import Link from "next/link";
 export function TraceTimeline({ trace }: Readonly<{ trace: TraceSummary }>) {
   return (
     <Link className="panel row-card" href={`/traces/${trace.id}`} style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span className="badge" style={{ fontSize: "0.75rem" }}>
-          {trace.project_slug}
-        </span>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem" }}>
+        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+          <span className="badge" style={{ fontSize: "0.75rem" }}>
+            {trace.project_slug}
+          </span>
+          {trace.area ? (
+            <span className="badge" style={{ fontSize: "0.75rem" }}>
+              {trace.area}
+            </span>
+          ) : null}
+          {trace.source ? (
+            <span className="badge" style={{ fontSize: "0.75rem" }}>
+              {trace.source}
+            </span>
+          ) : null}
+        </div>
         <span className="page-subtitle" style={{ fontSize: "0.75rem", fontFamily: "ui-monospace, monospace" }}>
           {trace.id}
         </span>

@@ -59,7 +59,7 @@ postgresql+psycopg://context_router:context_router@postgres:5432/context_router
 已知当前 migration 版本：
 
 ```text
-20260627_0003
+20260627_0005
 ```
 
 核心表：
@@ -71,6 +71,19 @@ traces
 trace_events
 retrieval_hits
 alembic_version
+```
+
+`projects` 支持父子项目层级：
+
+```text
+id
+slug
+name
+root_path
+description
+parent_project_id
+created_at
+updated_at
 ```
 
 `documents` 保存完整 Markdown 正文：
@@ -87,6 +100,31 @@ status
 content_markdown
 created_at
 updated_at
+```
+
+当前受管文档只保存稳定入口和说明类文档。当前主要类型：
+
+```text
+agent_index
+routing_index
+```
+
+配置文件、表结构 SQL、manifest 和源码细节不作为常规受管文档入库，需要时让 AI 直接读取项目目录。
+
+`traces` 保存一次上下文准备过程和入口路由信息：
+
+```text
+id
+project_id
+task
+cwd
+area
+entrypoint_path
+entrypoint_rule
+route_hint
+source
+agent_name
+created_at
 ```
 
 ## 常用命令

@@ -6,6 +6,7 @@ class ProjectCreate(BaseModel):
     name: str
     root_path: str | None = None
     description: str = ""
+    parent_slug: str | None = None
 
 
 class ProjectResponse(BaseModel):
@@ -16,11 +17,14 @@ class ProjectResponse(BaseModel):
     name: str
     root_path: str | None
     description: str
+    parent_slug: str | None
 
 
 class ProjectSummary(ProjectResponse):
     document_count: int
     active_document_count: int
+    trace_count: int
+    child_project_count: int
 
 
 class ProjectListResponse(BaseModel):
@@ -28,4 +32,5 @@ class ProjectListResponse(BaseModel):
 
 
 class ProjectDetailResponse(ProjectSummary):
+    children: list[ProjectSummary]
     routing_template: str

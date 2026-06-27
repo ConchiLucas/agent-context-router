@@ -20,7 +20,12 @@ TOOLS = [
             "properties": {
                 "project": {"type": "string"},
                 "task": {"type": "string"},
+                "area": {"type": "string"},
                 "cwd": {"type": "string"},
+                "entrypoint_path": {"type": "string"},
+                "entrypoint_rule": {"type": "string"},
+                "route_hint": {"type": "string"},
+                "agent_name": {"type": "string"},
                 "max_documents": {"type": "integer", "minimum": 1, "maximum": 20},
             },
             "required": ["project", "task"],
@@ -112,7 +117,13 @@ def _prepare_task_context(arguments: dict[str, Any]) -> str:
         json_body={
             "project": arguments["project"],
             "task": arguments["task"],
+            "area": arguments.get("area"),
             "cwd": arguments.get("cwd"),
+            "entrypoint_path": arguments.get("entrypoint_path"),
+            "entrypoint_rule": arguments.get("entrypoint_rule"),
+            "route_hint": arguments.get("route_hint"),
+            "source": "mcp",
+            "agent_name": arguments.get("agent_name"),
             "max_documents": arguments.get("max_documents", 5),
             "output_format": "markdown",
         },
@@ -127,6 +138,7 @@ def _read_context_document(arguments: dict[str, Any]) -> str:
         params={
             "trace_id": arguments["trace_id"],
             "reason": arguments["reason"],
+            "source": "mcp",
         },
     )
     metadata = {

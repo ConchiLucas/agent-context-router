@@ -51,7 +51,7 @@ def test_read_document_records_trace_event_when_trace_id_and_reason_are_provided
 
     response = client.get(
         "/api/documents/payments-runbook",
-        params={"trace_id": "ctx_test_001", "reason": "Need full runbook"},
+        params={"trace_id": "ctx_test_001", "reason": "Need full runbook", "source": "cli"},
     )
 
     assert response.status_code == 200
@@ -63,3 +63,99 @@ def test_read_document_records_trace_event_when_trace_id_and_reason_are_provided
         assert event is not None
         assert event.payload["document_id"] == "payments-runbook"
         assert event.payload["reason"] == "Need full runbook"
+        assert event.payload["source"] == "cli"
+
+
+def test_read_document_requires_trace_unless_marked_untracked() -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(engine)
+
+    with TestingSession() as session:
+        project = Project(slug="my-app", name="My App")
+        session.add(project)
+        session.flush()
+        upsert_document(
+            session,
+            project=project,
+            document=DocumentCreate(
+                id="payments-runbook",
+                title="Payments runbook",
+                source_path="docs/payments.md",
+                doc_type="runbook",
+                area="payments",
+                tags=["payments"],
+                content_markdown="# Payments\nRun payment tests.",
+            ),
+        )
+        session.commit()
+
+    def override_session() -> Generator[Session, None, None]:
+        with TestingSession() as session:
+            yield session
+
+    app = create_app()
+    app.dependency_overrides[get_session] = override_session
+    client = TestClient(app)
+
+    tracked_response = client.get("/api/documents/payments-runbook")
+
+    assert tracked_response.status_code == 400
+    assert tracked_response.json()["detail"].startswith("trace_id and reason are required")
+
+    untracked_response = client.get(
+        "/api/documents/payments-runbook",
+        params={"untracked": True},
+    )
+
+    assert untracked_response.status_code == 200
+    assert untracked_response.json()["content_markdown"] == "# Payments\nRun payment tests."
+
+
+def test_read_document_rejects_missing_trace() -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(engine)
+
+    with TestingSession() as session:
+        project = Project(slug="my-app", name="My App")
+        session.add(project)
+        session.flush()
+        upsert_document(
+            session,
+            project=project,
+            document=DocumentCreate(
+                id="payments-runbook",
+                title="Payments runbook",
+                source_path="docs/payments.md",
+                doc_type="runbook",
+                area="payments",
+                tags=["payments"],
+                content_markdown="# Payments\nRun payment tests.",
+            ),
+        )
+        session.commit()
+
+    def override_session() -> Generator[Session, None, None]:
+        with TestingSession() as session:
+            yield session
+
+    app = create_app()
+    app.dependency_overrides[get_session] = override_session
+    client = TestClient(app)
+
+    response = client.get(
+        "/api/documents/payments-runbook",
+        params={"trace_id": "ctx_missing", "reason": "Need full runbook"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Trace not found: ctx_missing"

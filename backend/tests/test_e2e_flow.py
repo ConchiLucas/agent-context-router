@@ -96,7 +96,10 @@ def test_e2e_ingest_prepare_read_and_view_trace() -> None:
         json={
             "project": "sample-app",
             "task": "fix payments webhook timeout",
+            "area": "payments",
             "cwd": "/repo/sample-app",
+            "entrypoint_path": "AI_CONTEXT_INDEX.md",
+            "entrypoint_rule": "payments tasks",
             "max_documents": 3,
         },
     )
@@ -120,5 +123,8 @@ def test_e2e_ingest_prepare_read_and_view_trace() -> None:
     trace_response = client.get(f"/api/traces/{trace_id}")
     assert trace_response.status_code == 200
     trace = trace_response.json()
+    assert trace["area"] == "payments"
+    assert trace["entrypoint_path"] == "AI_CONTEXT_INDEX.md"
+    assert trace["entrypoint_rule"] == "payments tasks"
     assert trace["retrieval_hits"][0]["document_id"] == "payments-webhook-timeout"
     assert [event["event_type"] for event in trace["events"]] == ["prepare", "read"]

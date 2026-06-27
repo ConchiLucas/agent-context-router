@@ -5,14 +5,25 @@ def render_context_markdown(
     *,
     trace_id: str,
     project: str,
+    area: str | None,
+    entrypoint_path: str | None,
+    entrypoint_rule: str | None,
+    route_hint: str | None,
     results: list[ContextDocument],
 ) -> str:
     lines = [
         f"trace_id: {trace_id}",
         f"project: {project}",
-        "",
-        "## Required Context",
     ]
+    if area:
+        lines.append(f"area: {area}")
+    if entrypoint_path:
+        lines.append(f"entrypoint_path: {entrypoint_path}")
+    if entrypoint_rule:
+        lines.append(f"entrypoint_rule: {entrypoint_rule}")
+    if route_hint:
+        lines.append(f"route_hint: {route_hint}")
+    lines.extend(["", "## Required Context"])
 
     if not results:
         lines.extend(

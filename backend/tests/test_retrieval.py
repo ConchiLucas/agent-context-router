@@ -60,3 +60,51 @@ def test_retrieval_prefers_documents_matching_task_area_tags_and_text() -> None:
     assert results[0].score > results[1].score
     assert "payments" in results[0].reason
     assert "timeout" in results[0].excerpt
+
+
+def test_retrieval_can_route_by_explicit_area() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+
+    with Session(engine) as session:
+        project = Project(slug="my-app", name="My App")
+        session.add(project)
+        session.flush()
+
+        upsert_document(
+            session,
+            project=project,
+            document=DocumentCreate(
+                id="payments-webhook-runbook",
+                title="Payments webhook runbook",
+                source_path="docs/payments.md",
+                doc_type="runbook",
+                area="payments",
+                tags=["webhook"],
+                content_markdown="# Payments\nWebhook retry guidance.",
+            ),
+        )
+        upsert_document(
+            session,
+            project=project,
+            document=DocumentCreate(
+                id="frontend-react-guide",
+                title="Frontend React guide",
+                source_path="docs/frontend.md",
+                doc_type="architecture",
+                area="frontend",
+                tags=["react"],
+                content_markdown="# Frontend\nReact webhook examples.",
+            ),
+        )
+        session.commit()
+
+        results = retrieve_documents(
+            session,
+            project=project,
+            task="fix react webhook",
+            area="payments",
+            max_documents=5,
+        )
+
+    assert [result.document_id for result in results] == ["payments-webhook-runbook"]

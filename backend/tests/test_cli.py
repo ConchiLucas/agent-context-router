@@ -27,6 +27,56 @@ def test_project_add_posts_payload(monkeypatch) -> None:
     assert "my-app" in result.stdout
 
 
+def test_project_init_index_writes_short_routing_file(tmp_path) -> None:
+    runner = CliRunner()
+    output = tmp_path / "AI_CONTEXT_INDEX.md"
+
+    result = runner.invoke(
+        app,
+        [
+            "project",
+            "init-index",
+            "--project",
+            "my-app",
+            "--area",
+            "payments",
+            "--area",
+            "build",
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0
+    content = output.read_text(encoding="utf-8")
+    assert "ctx prepare --project my-app --area payments" in content
+    assert "ctx prepare --project my-app --area build" in content
+    assert "--entrypoint-path AI_CONTEXT_INDEX.md" in content
+    assert '--entrypoint-rule "default"' in content
+
+
+def test_project_init_index_refuses_to_overwrite_without_force(tmp_path) -> None:
+    runner = CliRunner()
+    output = tmp_path / "AI_CONTEXT_INDEX.md"
+    output.write_text("existing", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        [
+            "project",
+            "init-index",
+            "--project",
+            "my-app",
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "already exists" in result.output
+    assert output.read_text(encoding="utf-8") == "existing"
+
+
 def test_doc_add_reads_markdown_file_and_posts_payload(monkeypatch, tmp_path) -> None:
     runner = CliRunner()
     markdown_path = tmp_path / "payments.md"
@@ -68,11 +118,36 @@ def test_prepare_command_prints_markdown_response(monkeypatch) -> None:
         assert path == "/api/context/prepare"
         assert payload["project"] == "my-app"
         assert payload["task"] == "fix payments"
+        assert payload["area"] == "payments"
+        assert payload["entrypoint_path"] == "AI_CONTEXT_INDEX.md"
+        assert payload["entrypoint_rule"] == "payments tasks"
+        assert payload["route_hint"] == "payments"
+        assert payload["source"] == "cli"
+        assert payload["agent_name"] == "codex"
         return {"markdown": "trace_id: ctx_001\n\n## Required Context"}
 
     monkeypatch.setattr("context_router.cli._post_json", fake_post_json)
 
-    result = runner.invoke(app, ["prepare", "--project", "my-app", "--task", "fix payments"])
+    result = runner.invoke(
+        app,
+        [
+            "prepare",
+            "--project",
+            "my-app",
+            "--area",
+            "payments",
+            "--entrypoint-path",
+            "AI_CONTEXT_INDEX.md",
+            "--entrypoint-rule",
+            "payments tasks",
+            "--route-hint",
+            "payments",
+            "--agent-name",
+            "codex",
+            "--task",
+            "fix payments",
+        ],
+    )
 
     assert result.exit_code == 0
     assert "trace_id: ctx_001" in result.stdout
@@ -85,6 +160,7 @@ def test_read_command_requires_reason_and_prints_document(monkeypatch) -> None:
         assert path == "/api/documents/payments-runbook"
         assert params["trace_id"] == "ctx_001"
         assert params["reason"] == "Need full runbook"
+        assert params["source"] == "cli"
         return {
             "id": "payments-runbook",
             "title": "Payments runbook",
@@ -119,6 +195,8 @@ def test_trace_command_prints_trace_summary(monkeypatch) -> None:
             "id": "ctx_001",
             "project": {"slug": "my-app", "name": "My App"},
             "task": "fix payments",
+            "area": "payments",
+            "source": "cli",
             "retrieval_hits": [
                 {
                     "document_id": "payments-runbook",
@@ -147,6 +225,8 @@ def test_trace_command_prints_trace_summary(monkeypatch) -> None:
 
     assert result.exit_code == 0
     assert "Trace ctx_001" in result.stdout
+    assert "Area: payments" in result.stdout
+    assert "Source: cli" in result.stdout
     assert "fix payments" in result.stdout
     assert "payments-runbook" in result.stdout
     assert "Need details" in result.stdout

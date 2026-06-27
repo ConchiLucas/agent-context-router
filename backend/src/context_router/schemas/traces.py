@@ -35,6 +35,11 @@ class TraceDetailResponse(BaseModel):
     project: TraceProject
     task: str
     cwd: str | None
+    area: str | None
+    entrypoint_path: str | None
+    entrypoint_rule: str | None
+    route_hint: str | None
+    source: str | None
     agent_name: str | None
     created_at: datetime
     retrieval_hits: list[RetrievalHitResponse]
@@ -47,6 +52,8 @@ class TraceSummary(BaseModel):
     project_name: str
     task: str
     cwd: str | None
+    area: str | None
+    source: str | None
     created_at: datetime
     returned_document_count: int
     read_event_count: int

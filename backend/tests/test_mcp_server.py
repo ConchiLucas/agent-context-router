@@ -32,7 +32,12 @@ def test_mcp_prepare_tool_calls_prepare_api(monkeypatch) -> None:
                 "arguments": {
                     "project": "my-app",
                     "task": "fix payments",
+                    "area": "payments",
                     "cwd": "/repo/my-app",
+                    "entrypoint_path": "AI_CONTEXT_INDEX.md",
+                    "entrypoint_rule": "payments tasks",
+                    "route_hint": "payments",
+                    "agent_name": "codex",
                 },
             },
         }
@@ -45,7 +50,13 @@ def test_mcp_prepare_tool_calls_prepare_api(monkeypatch) -> None:
             {
                 "project": "my-app",
                 "task": "fix payments",
+                "area": "payments",
                 "cwd": "/repo/my-app",
+                "entrypoint_path": "AI_CONTEXT_INDEX.md",
+                "entrypoint_rule": "payments tasks",
+                "route_hint": "payments",
+                "source": "mcp",
+                "agent_name": "codex",
                 "max_documents": 5,
                 "output_format": "markdown",
             },
@@ -99,6 +110,7 @@ def test_mcp_read_tool_calls_document_api(monkeypatch) -> None:
             {
                 "trace_id": "ctx_001",
                 "reason": "Need full runbook",
+                "source": "mcp",
             },
         )
     ]

@@ -1,24 +1,20 @@
-import { TraceTimeline } from "@/components/trace-timeline";
-import { getTraces } from "@/lib/api";
+import { TracesView } from "@/components/traces-view";
 
-export default async function TracesPage() {
-  const result = await Promise.allSettled([getTraces()]);
-  const traces = result[0].status === "fulfilled" ? result[0].value.traces : [];
-  return (
-    <>
-      <header>
-        <h1 className="page-title">Traces</h1>
-        <p className="page-subtitle">Prepare calls, read history, and feedback.</p>
-      </header>
-      <section className="section grid">
-        {traces.length === 0 ? (
-          <div className="panel">
-            <p className="page-subtitle">No traces recorded yet.</p>
-          </div>
-        ) : (
-          traces.map((trace) => <TraceTimeline key={trace.id} trace={trace} />)
-        )}
-      </section>
-    </>
-  );
+type TracesPageProps = {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function TracesPage({ searchParams }: TracesPageProps) {
+  const params = await searchParams;
+  const filters = {
+    project: singleValue(params.project),
+    area: singleValue(params.area),
+    source: singleValue(params.source),
+  };
+
+  return <TracesView filters={filters} />;
+}
+
+function singleValue(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
 }

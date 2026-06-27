@@ -4,11 +4,15 @@ export type ProjectSummary = {
   name: string;
   root_path: string | null;
   description: string;
+  parent_slug: string | null;
   document_count: number;
   active_document_count: number;
+  trace_count: number;
+  child_project_count: number;
 };
 
 export type ProjectDetail = ProjectSummary & {
+  children: ProjectSummary[];
   routing_template: string;
 };
 
@@ -31,6 +35,17 @@ export type DocumentListResponse = {
   documents: DocumentSummary[];
 };
 
+export type DocumentDetail = {
+  id: string;
+  title: string;
+  source_path: string;
+  area: string | null;
+  doc_type: string;
+  tags: string[];
+  status: string;
+  content_markdown: string;
+};
+
 export type RetrievalHit = {
   id: string;
   document_id: string;
@@ -48,6 +63,8 @@ export type TraceSummary = {
   project_name: string;
   task: string;
   cwd: string | null;
+  area: string | null;
+  source: string | null;
   created_at: string;
   returned_document_count: number;
   read_event_count: number;
@@ -74,6 +91,11 @@ export type TraceDetail = {
   };
   task: string;
   cwd: string | null;
+  area: string | null;
+  entrypoint_path: string | null;
+  entrypoint_rule: string | null;
+  route_hint: string | null;
+  source: string | null;
   agent_name: string | null;
   created_at: string;
   retrieval_hits: RetrievalHit[];

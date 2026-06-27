@@ -37,6 +37,20 @@ class Project(TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(240), nullable=False)
     root_path: Mapped[str | None] = mapped_column(String(1024))
     description: Mapped[str] = mapped_column(Text, default="")
+    parent_project_id: Mapped[str | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="SET NULL"),
+        index=True,
+    )
+
+    parent: Mapped[Project | None] = relationship(
+        "Project",
+        back_populates="children",
+        remote_side="Project.id",
+    )
+    children: Mapped[list[Project]] = relationship(
+        "Project",
+        back_populates="parent",
+    )
 
     documents: Mapped[list[Document]] = relationship(
         back_populates="project",
@@ -72,6 +86,11 @@ class Trace(Base):
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
     task: Mapped[str] = mapped_column(Text, nullable=False)
     cwd: Mapped[str | None] = mapped_column(String(1024))
+    area: Mapped[str | None] = mapped_column(String(120), index=True)
+    entrypoint_path: Mapped[str | None] = mapped_column(String(1024))
+    entrypoint_rule: Mapped[str | None] = mapped_column(Text)
+    route_hint: Mapped[str | None] = mapped_column(String(240))
+    source: Mapped[str | None] = mapped_column(String(80), index=True)
     agent_name: Mapped[str | None] = mapped_column(String(120))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 

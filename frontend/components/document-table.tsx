@@ -1,4 +1,5 @@
 import type { DocumentSummary } from "@/lib/types";
+import Link from "next/link";
 
 const statusClassMap: Record<string, string> = {
   active: "badge-active",
@@ -6,7 +7,15 @@ const statusClassMap: Record<string, string> = {
   archived: "badge-archived",
 };
 
-export function DocumentTable({ documents }: Readonly<{ documents: DocumentSummary[] }>) {
+type DocumentTableProps = Readonly<{
+  documents: DocumentSummary[];
+  detailHref?: (document: DocumentSummary) => string;
+}>;
+
+export function DocumentTable({
+  documents,
+  detailHref = (document) => `/documents/${encodeURIComponent(document.id)}`,
+}: DocumentTableProps) {
   if (documents.length === 0) {
     return <p className="page-subtitle" style={{ textAlign: "center", padding: "2rem" }}>No documents indexed yet.</p>;
   }
@@ -27,9 +36,12 @@ export function DocumentTable({ documents }: Readonly<{ documents: DocumentSumma
           {documents.map((document) => (
             <tr key={document.id}>
               <td style={{ minWidth: "220px" }}>
-                <strong style={{ display: "block", color: "#f1f5f9", fontSize: "0.92rem", fontWeight: 600 }}>
+                <Link
+                  href={detailHref(document)}
+                  style={{ display: "block", color: "#f1f5f9", fontSize: "0.92rem", fontWeight: 600 }}
+                >
                   {document.title}
-                </strong>
+                </Link>
                 <span className="page-subtitle" style={{ fontSize: "0.75rem", fontFamily: "ui-monospace, monospace", opacity: 0.8 }}>
                   {document.id}
                 </span>

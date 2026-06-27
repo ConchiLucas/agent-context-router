@@ -28,6 +28,17 @@ pgvector
 document_chunks
 ```
 
+当前项目不把代码仓库里 AI 可以自己检索的易变材料批量保存为受管文档：
+
+```text
+配置文件
+package/go/pom/pyproject 等 manifest
+数据库建表 SQL
+代码目录里的细粒度源文件
+```
+
+这些内容需要时让 AI 直接读取项目目录。受管文档只保存稳定、精炼、长期有效的说明和入口索引。
+
 当前检索方式是确定性的本地检索：
 
 ```text
@@ -46,6 +57,8 @@ document_chunks
 - 项目名称
 - 项目根路径
 - 项目描述
+- 父项目
+- 子项目数量
 - 文档数量
 - active 文档数量
 
@@ -53,20 +66,27 @@ document_chunks
 
 - 作为上下文文档的归属。
 - 作为 `ctx prepare --project <slug>` 的入口。
+- 让一个大项目管理多个子项目，项目列表默认展示顶层项目，详情页再查看子项目。
 - 生成项目级 `AI_CONTEXT_INDEX.md` 模板。
 
 ### 2. 文档管理
 
-用于保存项目相关的上下文文档。
+用于保存项目相关的稳定上下文说明文档。
 
-文档通常来自：
+优先保存：
 
-- runbook
-- 架构说明
-- 排障记录
-- 测试命令说明
-- 业务规则说明
-- 项目约定文档
+- `AGENTS.md`
+- `AI_CONTEXT_INDEX.md`
+- 稳定的项目说明
+- 稳定的业务边界说明
+- 长期有效的开发约定
+
+不建议保存：
+
+- 配置文件原文
+- 表结构 SQL 原文
+- manifest 文件原文
+- AI 可以按需从源码目录直接读取的细节文件
 
 主要信息：
 
@@ -97,12 +117,20 @@ archived
 
 - project
 - task
+- area
 - cwd
+- entrypoint_path
+- entrypoint_rule
+- route_hint
+- source
+- agent_name
 - max_documents
 
 输出：
 
 - trace_id
+- area
+- 入口来源信息
 - 推荐文档列表
 - 每个文档的 rank
 - score
@@ -114,6 +142,15 @@ archived
 
 ```bash
 ctx prepare --project <project> --task "<task>"
+```
+
+如果入口索引已经判断出任务 area，可以直接传入：
+
+```bash
+ctx prepare --project <project> --area <area> \
+  --entrypoint-path AI_CONTEXT_INDEX.md \
+  --entrypoint-rule "<matched rule>" \
+  --task "<task>"
 ```
 
 AI 编程助手应先调用 prepare，再决定是否读取全文。
@@ -128,7 +165,7 @@ AI 编程助手应先调用 prepare，再决定是否读取全文。
 ctx read <doc-id> --trace <trace-id> --reason "<why needed>"
 ```
 
-读取全文时必须带上 reason，系统会记录 read 事件。
+读取全文时默认必须带上 trace 和 reason，系统会记录 read 事件。管理或调试场景可以显式使用 `untracked=true` 读取，但这类读取不会进入 trace。
 
 ### 5. Trace 记录
 
@@ -138,7 +175,12 @@ Trace 包含：
 
 - 任务文本
 - 项目
+- area
 - cwd
+- 入口索引路径
+- 命中的入口规则
+- route hint
+- 调用来源
 - 返回过哪些文档
 - 每个文档的 score/reason/rank
 - 后续读取过哪些全文
@@ -172,8 +214,8 @@ missing
 当前页面：
 
 - Dashboard：查看项目、文档、trace、反馈指标。
-- Projects：查看项目列表。
-- Project Detail：查看项目详情和 AI_CONTEXT_INDEX 模板。
+- Projects：查看顶层项目列表。
+- Project Detail：查看项目详情、子项目和 AI_CONTEXT_INDEX 模板。
 - Documents：查看和筛选上下文文档。
 - Traces：查看 prepare 调用历史。
 - Trace Detail：查看返回文档、read 事件和反馈。
@@ -186,6 +228,7 @@ CLI 是当前主要操作入口之一。
 
 ```bash
 ctx project add
+ctx project init-index
 ctx doc add
 ctx prepare
 ctx read

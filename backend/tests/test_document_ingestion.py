@@ -152,6 +152,81 @@ def test_list_documents_returns_metadata() -> None:
     ]
 
 
+def test_list_documents_project_filter_includes_child_projects() -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(engine)
+
+    with TestingSession() as session:
+        parent = Project(slug="workspace", name="Workspace")
+        other = Project(slug="other", name="Other")
+        session.add_all([parent, other])
+        session.flush()
+        child = Project(slug="workspace-api", name="Workspace API", parent_project_id=parent.id)
+        session.add(child)
+        session.flush()
+        upsert_document(
+            session,
+            project=parent,
+            document=DocumentCreate(
+                id="workspace-index",
+                title="Workspace index",
+                source_path="docs/index.md",
+                doc_type="readme",
+                area="agent",
+                tags=["workspace"],
+                content_markdown="# Workspace\nTop-level notes.",
+            ),
+        )
+        upsert_document(
+            session,
+            project=child,
+            document=DocumentCreate(
+                id="api-runbook",
+                title="API runbook",
+                source_path="api/docs/runbook.md",
+                doc_type="runbook",
+                area="backend",
+                tags=["api"],
+                content_markdown="# API\nChild project notes.",
+            ),
+        )
+        upsert_document(
+            session,
+            project=other,
+            document=DocumentCreate(
+                id="other-runbook",
+                title="Other runbook",
+                source_path="docs/other.md",
+                doc_type="runbook",
+                area="other",
+                tags=["other"],
+                content_markdown="# Other\nUnrelated notes.",
+            ),
+        )
+        session.commit()
+
+    def override_session() -> Generator[Session, None, None]:
+        with TestingSession() as session:
+            yield session
+
+    app = create_app()
+    app.dependency_overrides[get_session] = override_session
+    client = TestClient(app)
+
+    response = client.get("/api/documents", params={"project": "workspace"})
+
+    assert response.status_code == 200
+    assert [document["id"] for document in response.json()["documents"]] == [
+        "api-runbook",
+        "workspace-index",
+    ]
+
+
 def test_list_documents_filters_by_project_area_type_tag_and_status() -> None:
     engine = create_engine(
         "sqlite+pysqlite:///:memory:",

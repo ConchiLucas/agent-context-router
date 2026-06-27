@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from collections import Counter
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from context_router.db.models import Document, Project
@@ -17,14 +17,17 @@ def retrieve_documents(
     *,
     project: Project,
     task: str,
+    area: str | None = None,
     max_documents: int,
 ) -> list[ContextDocument]:
-    documents = session.scalars(
-        select(Document).where(Document.project_id == project.id, Document.status == "active")
-    ).all()
+    query = select(Document).where(Document.project_id == project.id, Document.status == "active")
+    if area:
+        query = query.where(or_(Document.area == area, Document.area.is_(None)))
+
+    documents = session.scalars(query).all()
     task_tokens = _tokens(task)
 
-    scored = [_score_document(document, task_tokens) for document in documents]
+    scored = [_score_document(document, task_tokens, requested_area=area) for document in documents]
     scored.sort(key=lambda result: (-result.score, result.document_id))
 
     ranked: list[ContextDocument] = []
@@ -37,10 +40,12 @@ def retrieve_documents(
 def _score_document(
     document: Document,
     task_tokens: Counter[str],
+    *,
+    requested_area: str | None,
 ) -> ContextDocument:
     searchable_terms = _document_terms(document)
     matched_terms = sorted(token for token in task_tokens if token in searchable_terms)
-    metadata_score = _metadata_score(document, task_tokens)
+    metadata_score = _metadata_score(document, task_tokens, requested_area=requested_area)
 
     best_excerpt = document.content_markdown.strip().replace("\n", " ")[:180]
     content_terms = Counter(_tokens(document.content_markdown))
@@ -58,8 +63,16 @@ def _score_document(
     )
 
 
-def _metadata_score(document: Document, task_tokens: Counter[str]) -> float:
+def _metadata_score(
+    document: Document,
+    task_tokens: Counter[str],
+    *,
+    requested_area: str | None,
+) -> float:
     score = 0.0
+    if requested_area and document.area == requested_area:
+        score += 10.0
+
     if document.area:
         score += 3.0 * task_tokens.get(document.area.lower(), 0)
 

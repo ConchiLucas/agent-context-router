@@ -5,7 +5,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from context_router.db.models import Base, Project, TraceEvent
+from context_router.db.models import Base, Project, Trace, TraceEvent
 from context_router.db.session import get_session
 from context_router.main import create_app
 from context_router.schemas.documents import DocumentCreate
@@ -66,7 +66,12 @@ def test_trace_detail_records_prepare_read_and_feedback_lifecycle() -> None:
         json={
             "project": "my-app",
             "task": "fix payments webhook timeout",
+            "area": "payments",
             "cwd": "/repo/my-app",
+            "entrypoint_path": "AI_CONTEXT_INDEX.md",
+            "entrypoint_rule": "payments tasks",
+            "route_hint": "payments",
+            "source": "cli",
             "max_documents": 2,
         },
     )
@@ -97,6 +102,11 @@ def test_trace_detail_records_prepare_read_and_feedback_lifecycle() -> None:
     assert detail["id"] == trace_id
     assert detail["project"]["slug"] == "my-app"
     assert detail["task"] == "fix payments webhook timeout"
+    assert detail["area"] == "payments"
+    assert detail["entrypoint_path"] == "AI_CONTEXT_INDEX.md"
+    assert detail["entrypoint_rule"] == "payments tasks"
+    assert detail["route_hint"] == "payments"
+    assert detail["source"] == "cli"
     assert detail["retrieval_hits"][0]["document_id"] == "payments-runbook"
     assert detail["retrieval_hits"][0]["document_title"] == "Payments runbook"
     assert detail["retrieval_hits"][0]["feedback"] == "useful"
@@ -112,8 +122,18 @@ def test_trace_detail_records_prepare_read_and_feedback_lifecycle() -> None:
     traces = list_response.json()["traces"]
     assert traces[0]["id"] == trace_id
     assert traces[0]["project_slug"] == "my-app"
-    assert traces[0]["returned_document_count"] == 2
+    assert traces[0]["area"] == "payments"
+    assert traces[0]["source"] == "cli"
+    assert traces[0]["returned_document_count"] == 1
     assert traces[0]["read_event_count"] == 1
+
+    area_response = client.get("/api/traces", params={"area": "payments"})
+    assert area_response.status_code == 200
+    assert area_response.json()["traces"][0]["id"] == trace_id
+
+    source_response = client.get("/api/traces", params={"source": "mcp"})
+    assert source_response.status_code == 200
+    assert source_response.json()["traces"] == []
 
     with TestingSession() as session:
         feedback_event = session.scalar(
@@ -177,3 +197,46 @@ def test_trace_feedback_rejects_documents_not_returned_in_trace() -> None:
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Retrieval hit not found for this trace and document"
+
+
+def test_trace_list_project_filter_includes_child_projects() -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(engine)
+
+    with TestingSession() as session:
+        parent = Project(slug="workspace", name="Workspace")
+        other = Project(slug="other", name="Other")
+        session.add_all([parent, other])
+        session.flush()
+        child = Project(slug="workspace-api", name="Workspace API", parent_project_id=parent.id)
+        session.add(child)
+        session.flush()
+        session.add_all(
+            [
+                Trace(id="ctx_parent_001", project_id=parent.id, task="Review workspace"),
+                Trace(id="ctx_child_001", project_id=child.id, task="Fix API"),
+                Trace(id="ctx_other_001", project_id=other.id, task="Fix other"),
+            ]
+        )
+        session.commit()
+
+    def override_session() -> Generator[Session, None, None]:
+        with TestingSession() as session:
+            yield session
+
+    app = create_app()
+    app.dependency_overrides[get_session] = override_session
+    client = TestClient(app)
+
+    response = client.get("/api/traces", params={"project": "workspace"})
+
+    assert response.status_code == 200
+    assert {trace["id"] for trace in response.json()["traces"]} == {
+        "ctx_parent_001",
+        "ctx_child_001",
+    }

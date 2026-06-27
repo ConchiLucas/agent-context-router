@@ -24,6 +24,8 @@ router = APIRouter(prefix="/api/traces", tags=["traces"])
 def list_traces(
     session: Annotated[Session, Depends(get_session)],
     project: str | None = Query(default=None),
+    area: str | None = Query(default=None),
+    source: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
 ) -> TraceListResponse:
     query = (
@@ -38,10 +40,30 @@ def list_traces(
         .limit(limit)
     )
     if project is not None:
-        query = query.where(Project.slug == project)
+        query = query.where(Project.slug.in_(_project_slug_scope(session, project)))
+    if area is not None:
+        query = query.where(Trace.area == area)
+    if source is not None:
+        query = query.where(Trace.source == source)
 
     traces = session.scalars(query).all()
     return TraceListResponse(traces=[_trace_summary(trace) for trace in traces])
+
+
+def _project_slug_scope(session: Session, project_slug: str) -> list[str]:
+    project = session.scalar(select(Project).where(Project.slug == project_slug))
+    if project is None:
+        return [project_slug]
+
+    slugs = [project.slug]
+    pending_ids = [project.id]
+    while pending_ids:
+        children = session.scalars(
+            select(Project).where(Project.parent_project_id.in_(pending_ids))
+        ).all()
+        slugs.extend(child.slug for child in children)
+        pending_ids = [child.id for child in children]
+    return slugs
 
 
 @router.get("/{trace_id}", response_model=TraceDetailResponse)
@@ -117,6 +139,8 @@ def _trace_summary(trace: Trace) -> TraceSummary:
         project_name=trace.project.name,
         task=trace.task,
         cwd=trace.cwd,
+        area=trace.area,
+        source=trace.source,
         created_at=trace.created_at,
         returned_document_count=sum(1 for hit in trace.retrieval_hits if hit.was_returned),
         read_event_count=sum(1 for event in trace.events if event.event_type == "read"),
@@ -134,6 +158,11 @@ def _trace_detail(trace: Trace) -> TraceDetailResponse:
         ),
         task=trace.task,
         cwd=trace.cwd,
+        area=trace.area,
+        entrypoint_path=trace.entrypoint_path,
+        entrypoint_rule=trace.entrypoint_rule,
+        route_hint=trace.route_hint,
+        source=trace.source,
         agent_name=trace.agent_name,
         created_at=trace.created_at,
         retrieval_hits=[

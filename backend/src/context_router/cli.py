@@ -31,6 +31,64 @@ def _get_json(path: str, params: dict[str, Any]) -> dict[str, Any]:
     return response.json()
 
 
+def _render_index_template(*, project: str, areas: list[str], entrypoint_path: str) -> str:
+    lines = [
+        "# AI Context Index",
+        "",
+        (
+            "This file is for AI coding agents. Keep it short. "
+            "Do not paste full project knowledge here."
+        ),
+        "",
+    ]
+
+    if areas:
+        lines.extend(["## Route by area", ""])
+        for area in areas:
+            lines.extend(
+                [
+                    f"### {area}",
+                    "",
+                    "```bash",
+                    f"ctx prepare --project {project} --area {area} \\",
+                    f"  --entrypoint-path {entrypoint_path} \\",
+                    f'  --entrypoint-rule "{area}" \\',
+                    '  --task "<copy the user\'s task>"',
+                    "```",
+                    "",
+                ]
+            )
+
+    lines.extend(
+        [
+            "## Default route",
+            "",
+            "```bash",
+            f"ctx prepare --project {project} \\",
+            f"  --entrypoint-path {entrypoint_path} \\",
+            '  --entrypoint-rule "default" \\',
+            '  --task "<copy the user\'s task>"',
+            "```",
+            "",
+            "Use the returned `trace_id` for follow-up reads.",
+            "",
+            "## Read a specific document only when needed",
+            "",
+            "```bash",
+            'ctx read <doc-id> --trace <trace-id> --reason "<why this document is needed>"',
+            "```",
+            "",
+            "## Rules",
+            "",
+            "- Do not read large docs manually before running `ctx prepare`.",
+            "- Prefer the documents returned by `ctx prepare`.",
+            "- If needed context is missing, mention the missing document in the final response.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
 @project_app.command("add")
 def add_project(
     slug: Annotated[str, typer.Option("--slug", help="Stable project slug.")],
@@ -54,6 +112,29 @@ def add_project(
         },
     )
     typer.echo(f"Created project {body['slug']}")
+
+
+@project_app.command("init-index")
+def init_index(
+    project: Annotated[str, typer.Option("--project", help="Project slug.")],
+    output: Annotated[
+        Path,
+        typer.Option("--output", "-o", help="Path for the generated AI context index."),
+    ] = Path("AI_CONTEXT_INDEX.md"),
+    areas: Annotated[
+        list[str] | None,
+        typer.Option("--area", help="Area route to include. Repeat for multiple areas."),
+    ] = None,
+    force: Annotated[bool, typer.Option("--force", help="Overwrite an existing file.")] = False,
+) -> None:
+    if output.exists() and not force:
+        raise typer.BadParameter(f"{output} already exists; pass --force to overwrite")
+
+    output.write_text(
+        _render_index_template(project=project, areas=areas or [], entrypoint_path=output.name),
+        encoding="utf-8",
+    )
+    typer.echo(f"Wrote {output}")
 
 
 @doc_app.command("add")
@@ -85,7 +166,21 @@ def add_document(
 def prepare(
     project: Annotated[str, typer.Option("--project", help="Project slug.")],
     task: Annotated[str, typer.Option("--task", help="Task text from the user.")],
+    area: Annotated[str | None, typer.Option("--area", help="Route to a project area.")] = None,
     cwd: Annotated[str | None, typer.Option("--cwd", help="Current repository path.")] = None,
+    entrypoint_path: Annotated[
+        str | None,
+        typer.Option("--entrypoint-path", help="Index file path that routed this task."),
+    ] = None,
+    entrypoint_rule: Annotated[
+        str | None,
+        typer.Option("--entrypoint-rule", help="Rule or heading that selected this route."),
+    ] = None,
+    route_hint: Annotated[
+        str | None,
+        typer.Option("--route-hint", help="Optional routing hint from the index document."),
+    ] = None,
+    agent_name: Annotated[str | None, typer.Option("--agent-name", help="AI agent name.")] = None,
     max_documents: Annotated[int, typer.Option("--max-documents", min=1, max=20)] = 5,
     json_output: Annotated[
         bool,
@@ -95,7 +190,13 @@ def prepare(
     payload = {
         "project": project,
         "task": task,
+        "area": area,
         "cwd": cwd,
+        "entrypoint_path": entrypoint_path,
+        "entrypoint_rule": entrypoint_rule,
+        "route_hint": route_hint,
+        "source": "cli",
+        "agent_name": agent_name,
         "max_documents": max_documents,
         "output_format": "json" if json_output else "markdown",
     }
@@ -121,6 +222,7 @@ def read(
         {
             "trace_id": trace,
             "reason": reason,
+            "source": "cli",
         },
     )
     if json_output:
@@ -146,6 +248,10 @@ def trace(
     project = body.get("project", {})
     typer.echo(f"Trace {body['id']}")
     typer.echo(f"Project: {project.get('slug', 'unknown')}")
+    if body.get("area"):
+        typer.echo(f"Area: {body['area']}")
+    if body.get("source"):
+        typer.echo(f"Source: {body['source']}")
     typer.echo(f"Task: {body['task']}\n")
 
     typer.echo("Returned documents:")
