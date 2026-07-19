@@ -22,6 +22,7 @@ class DocumentLinkSummary(BaseModel):
     label: str
     relation_type: str
     sort_order: int
+    is_broken: bool
 
 
 class DocumentSyncResponse(BaseModel):
@@ -46,6 +47,9 @@ class DocumentReadResponse(BaseModel):
     area: str | None
     tags: list[str]
     status: str
+    is_reachable: bool
+    graph_depth: int | None
+    broken_link_count: int
     content_markdown: str
     links: list[DocumentLinkSummary] = Field(default_factory=list)
 
@@ -59,6 +63,9 @@ class DocumentSummary(BaseModel):
     area: str | None
     tags: list[str]
     status: str
+    is_reachable: bool
+    graph_depth: int | None
+    broken_link_count: int
     links: list[DocumentLinkSummary] = Field(default_factory=list)
 
 

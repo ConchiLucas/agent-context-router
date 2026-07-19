@@ -1,10 +1,12 @@
 from collections.abc import Generator
+from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from context_router.config import settings
 from context_router.db.models import Base, Project, Trace
 from context_router.db.session import get_session
 from context_router.main import create_app
@@ -215,3 +217,61 @@ def test_project_list_defaults_to_roots_and_detail_includes_children() -> None:
     assert body["children"][0]["parent_slug"] == "my-workspace"
     assert body["children"][0]["document_count"] == 1
     assert body["children"][0]["trace_count"] == 1
+
+
+def test_project_api_exposes_document_mapping_health(tmp_path, monkeypatch) -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(engine)
+    documents_root = tmp_path / "documents"
+    project_docs = documents_root / "my-app-docs"
+    (project_docs / "docs").mkdir(parents=True)
+    (project_docs / "AGENTS.md").write_text("# Entry", encoding="utf-8")
+    monkeypatch.setattr(settings, "documents_container_root", str(documents_root))
+    with TestingSession() as session:
+        session.add(
+            Project(
+                slug="my-app",
+                name="My App",
+                root_path="/repo/my-app",
+                docs_path="my-app-docs",
+                last_synced_at=datetime.now(UTC),
+                last_sync_status="success",
+                last_sync_summary={
+                    "indexed": 4,
+                    "reachable": 3,
+                    "orphan": 1,
+                    "broken_links": 2,
+                    "pruned": 0,
+                },
+            )
+        )
+        session.commit()
+
+    def override_session() -> Generator[Session, None, None]:
+        with TestingSession() as session:
+            yield session
+
+    app = create_app()
+    app.dependency_overrides[get_session] = override_session
+    client = TestClient(app)
+
+    response = client.get("/api/projects/my-app")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["docs_path"] == "my-app-docs"
+    assert body["mapping_status"] == "ready"
+    assert body["last_synced_at"] is not None
+    assert body["last_sync_status"] == "success"
+    assert body["sync_summary"] == {
+        "indexed": 4,
+        "reachable": 3,
+        "orphan": 1,
+        "broken_links": 2,
+        "pruned": 0,
+    }

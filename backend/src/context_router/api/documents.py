@@ -111,6 +111,8 @@ def list_documents(
         query = query.where(Document.doc_type == doc_type)
     if status is not None:
         query = query.where(Document.status == status)
+    else:
+        query = query.where(Document.status != "removed")
 
     documents = session.scalars(query).all()
     if tag is not None:
@@ -127,6 +129,11 @@ def list_documents(
                 area=document.area,
                 tags=document.tags,
                 status=document.status,
+                is_reachable=document.is_reachable,
+                graph_depth=document.graph_depth,
+                broken_link_count=sum(
+                    1 for link in document.outgoing_links if link.target_document_id is None
+                ),
                 links=_document_links(document),
             )
             for document in documents
@@ -244,6 +251,11 @@ def read_document(
         area=document.area,
         tags=document.tags,
         status=document.status,
+        is_reachable=document.is_reachable,
+        graph_depth=document.graph_depth,
+        broken_link_count=sum(
+            1 for link in document.outgoing_links if link.target_document_id is None
+        ),
         content_markdown=content_markdown,
         links=_document_links(document, for_mcp=source == "mcp"),
     )
@@ -261,6 +273,7 @@ def _document_links(
             label=link.label,
             relation_type=link.relation_type,
             sort_order=link.sort_order,
+            is_broken=link.target_document_id is None,
         )
         for link in sorted(document.outgoing_links, key=lambda item: item.sort_order)
         if not for_mcp

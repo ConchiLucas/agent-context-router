@@ -14,11 +14,13 @@ from context_router.schemas.projects import (
     ProjectListResponse,
     ProjectResponse,
     ProjectSummary,
+    SyncSummary,
 )
 from context_router.services.document_mapping import (
     DocumentMappingConflictError,
     DocumentMappingError,
     assign_document_mapping,
+    resolve_document_root,
 )
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -137,13 +139,19 @@ def _project_load_options():
 
 
 def _project_response(project: Project) -> ProjectResponse:
+    mapping_status = _mapping_status(project)
     return ProjectResponse(
         id=project.id,
         slug=project.slug,
         name=project.name,
         root_path=project.root_path,
+        docs_path=project.docs_path,
         description=project.description,
         parent_slug=project.parent.slug if project.parent else None,
+        mapping_status=mapping_status,
+        last_synced_at=project.last_synced_at,
+        last_sync_status=project.last_sync_status,
+        sync_summary=SyncSummary.model_validate(project.last_sync_summary or {}),
     )
 
 
@@ -161,13 +169,32 @@ def _project_summary(project: Project) -> ProjectSummary:
         slug=project.slug,
         name=project.name,
         root_path=project.root_path,
+        docs_path=project.docs_path,
         description=project.description,
         parent_slug=project.parent.slug if project.parent else None,
+        mapping_status=_mapping_status(project),
+        last_synced_at=project.last_synced_at,
+        last_sync_status=project.last_sync_status,
+        sync_summary=SyncSummary.model_validate(project.last_sync_summary or {}),
         document_count=len(documents),
         active_document_count=sum(1 for document in documents if document.status == "active"),
         trace_count=len(traces),
         child_project_count=len(project.children),
     )
+
+
+def _mapping_status(project: Project) -> str:
+    if not project.docs_path:
+        return "not_mapped"
+    try:
+        resolve_document_root(project)
+    except DocumentMappingError:
+        return "invalid"
+    if project.last_sync_status == "failed":
+        return "sync_failed"
+    if project.last_synced_at is None:
+        return "not_synced"
+    return "ready"
 
 
 def _iter_project_tree(project: Project):

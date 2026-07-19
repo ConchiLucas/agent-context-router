@@ -157,6 +157,20 @@ def test_sync_indexes_only_mapped_tree_and_computes_document_health(tmp_path, mo
         assert project.last_sync_status == "success"
         assert project.last_sync_summary["broken_links"] == 2
 
+    list_response = client.get("/api/documents", params={"project": "orders"})
+    assert list_response.status_code == 200
+    listed = {document["id"]: document for document in list_response.json()["documents"]}
+    assert listed["orders-entry"]["is_reachable"] is True
+    assert listed["orders-entry"]["graph_depth"] == 1
+    assert listed["orders-entry"]["broken_link_count"] == 2
+    assert [link["is_broken"] for link in listed["orders-entry"]["links"]] == [
+        False,
+        True,
+        True,
+    ]
+    assert listed["orders-orphan"]["is_reachable"] is False
+    assert listed["orders-orphan"]["graph_depth"] is None
+
 
 def test_sync_failure_rolls_back_index_and_preserves_last_success(tmp_path, monkeypatch) -> None:
     documents_root = tmp_path / "documents"
@@ -361,3 +375,15 @@ def test_prune_keeps_retrieval_hit_document_as_tombstone(tmp_path, monkeypatch) 
             select(RetrievalHit).where(RetrievalHit.document_id == "orders-business")
         )
         assert hit is not None
+
+    current_documents = client.get("/api/documents", params={"project": "orders"})
+    removed_documents = client.get(
+        "/api/documents",
+        params={"project": "orders", "status": "removed"},
+    )
+    assert {document["id"] for document in current_documents.json()["documents"]} == {
+        "orders-entry"
+    }
+    assert [document["id"] for document in removed_documents.json()["documents"]] == [
+        "orders-business"
+    ]

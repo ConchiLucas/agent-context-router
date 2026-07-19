@@ -36,6 +36,14 @@ class DocumentMappingCandidateListResponse(BaseModel):
     candidates: list[DocumentMappingCandidateResponse]
 
 
+class SyncSummary(BaseModel):
+    indexed: int = 0
+    reachable: int = 0
+    orphan: int = 0
+    broken_links: int = 0
+    pruned: int = 0
+
+
 class ProjectResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -43,8 +51,13 @@ class ProjectResponse(BaseModel):
     slug: str
     name: str
     root_path: str | None
+    docs_path: str | None
     description: str
     parent_slug: str | None
+    mapping_status: str
+    last_synced_at: datetime | None
+    last_sync_status: str
+    sync_summary: SyncSummary
 
 
 class ProjectSummary(ProjectResponse):

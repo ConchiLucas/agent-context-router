@@ -149,6 +149,9 @@ def test_list_documents_returns_metadata() -> None:
             "area": "build",
             "tags": ["build", "test"],
             "status": "active",
+            "is_reachable": False,
+            "graph_depth": None,
+            "broken_link_count": 0,
             "links": [],
         }
     ]
@@ -235,6 +238,7 @@ Run payment checks.
             "label": "Payments",
             "relation_type": "markdown_link",
             "sort_order": 0,
+            "is_broken": False,
         }
     ]
 
