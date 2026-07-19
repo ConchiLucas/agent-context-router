@@ -130,46 +130,37 @@ def _iter_project_tree(project: Project):
 
 
 def _routing_template(project_slug: str) -> str:
-    return f"""# AI Context Index
+    return f"""# AI_CONTEXT_INDEX.md
 
-This file is for AI coding agents. Keep it short. Do not paste full project knowledge here.
+本文件是 AI 的上下文树索引入口，只列下一层文档和读取命令。
 
-## First step for any task
+## 使用方式
 
-You can generate this file with:
+- 主流程是按 doc-id 运行 `ctx read <doc-id>`。
+- 每份文档继续列出自己的下一层文档。
+- `ctx prepare` 只在无法判断 doc-id 时兜底使用。
+- 源码、配置、表结构等实时内容可以直接查项目目录。
+
+## 初始化索引
 
 ```bash
 ctx project init-index --project {project_slug} --area <area>
 ```
 
-Run:
+## 下一层文档
+
+- `<doc-id>`：填写下一层文档用途。
+  - 读取：`ctx read <doc-id>`
+
+## 兜底检索
 
 ```bash
-ctx prepare --project {project_slug} --task "<copy the user's task>"
-```
-
-If this task clearly belongs to one area, route it directly:
-
-```bash
-ctx prepare --project {project_slug} --area <area> \\
-  --entrypoint-path AI_CONTEXT_INDEX.md \\
-  --entrypoint-rule "<matched rule>" \\
-  --task "<copy the user's task>"
-```
-
-Use the returned `trace_id` for follow-up reads.
-
-## Read a specific document only when needed
-
-Run:
-
-```bash
-ctx read <doc-id> --trace <trace-id> --reason "<why this document is needed>"
+ctx prepare --project {project_slug}
 ```
 
 ## Rules
 
-- Do not read large docs manually before running `ctx prepare`.
-- Prefer the documents returned by `ctx prepare`.
-- If needed context is missing, mention the missing document in the final response.
+- 不要一开始读取全部说明文档。
+- 优先按文档树 `ctx read <doc-id>`。
+- 如果文档树缺少合适入口，在最终回复中说明缺口。
 """

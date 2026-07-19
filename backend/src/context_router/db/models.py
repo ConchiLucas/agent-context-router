@@ -77,6 +77,59 @@ class Document(TimestampMixin, Base):
 
     project: Mapped[Project] = relationship(back_populates="documents")
     retrieval_hits: Mapped[list[RetrievalHit]] = relationship(back_populates="document")
+    outgoing_links: Mapped[list[DocumentLink]] = relationship(
+        "DocumentLink",
+        back_populates="source_document",
+        cascade="all, delete-orphan",
+        foreign_keys="DocumentLink.source_document_id",
+    )
+    incoming_links: Mapped[list[DocumentLink]] = relationship(
+        "DocumentLink",
+        back_populates="target_document",
+        foreign_keys="DocumentLink.target_document_id",
+    )
+
+
+class DocumentLink(TimestampMixin, Base):
+    __tablename__ = "document_links"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    source_document_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    target_document_id: Mapped[str | None] = mapped_column(
+        ForeignKey("documents.id", ondelete="SET NULL"),
+        index=True,
+    )
+    target_path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    label: Mapped[str] = mapped_column(String(500), nullable=False)
+    relation_type: Mapped[str] = mapped_column(String(80), default="markdown_link", index=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    source_document: Mapped[Document] = relationship(
+        "Document",
+        back_populates="outgoing_links",
+        foreign_keys=[source_document_id],
+    )
+    target_document: Mapped[Document | None] = relationship(
+        "Document",
+        back_populates="incoming_links",
+        foreign_keys=[target_document_id],
+    )
+
+
+class UsageCard(TimestampMixin, Base):
+    __tablename__ = "usage_cards"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    slug: Mapped[str] = mapped_column(String(160), unique=True, nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(240), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="")
+    content_markdown: Mapped[str] = mapped_column(Text, nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_builtin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
 
 class Trace(Base):

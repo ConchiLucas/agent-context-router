@@ -15,8 +15,8 @@ type TracesViewProps = Readonly<{
 export async function TracesView({
   filters,
   subtitle = filters.project
-    ? `Prepare calls, read history, and feedback for ${filters.project}.`
-    : "Prepare calls, read history, and feedback.",
+    ? `Document read paths, fallback prepare calls, and feedback for ${filters.project}.`
+    : "Document read paths, fallback prepare calls, and feedback.",
 }: TracesViewProps) {
   const result = await Promise.allSettled([getTraces(filters)]);
   const traces = result[0].status === "fulfilled" ? result[0].value.traces : [];

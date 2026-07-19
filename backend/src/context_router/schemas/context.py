@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 
 class PrepareContextRequest(BaseModel):
     project: str
-    task: str
+    task: str = ""
     area: str | None = None
     cwd: str | None = None
     entrypoint_path: str | None = None

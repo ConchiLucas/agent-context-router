@@ -59,7 +59,7 @@ postgresql+psycopg://context_router:context_router@postgres:5432/context_router
 已知当前 migration 版本：
 
 ```text
-20260627_0005
+20260703_0007
 ```
 
 核心表：
@@ -70,6 +70,7 @@ documents
 traces
 trace_events
 retrieval_hits
+usage_cards
 alembic_version
 ```
 
@@ -107,6 +108,11 @@ updated_at
 ```text
 agent_index
 routing_index
+usage_guide
+usage_step
+routing_guide
+area_route
+project_entry_guide
 ```
 
 配置文件、表结构 SQL、manifest 和源码细节不作为常规受管文档入库，需要时让 AI 直接读取项目目录。
@@ -125,6 +131,20 @@ route_hint
 source
 agent_name
 created_at
+```
+
+`usage_cards` 保存前端 Usage 菜单中的 Markdown 使用说明卡片：
+
+```text
+id
+slug
+title
+description
+content_markdown
+sort_order
+is_builtin
+created_at
+updated_at
 ```
 
 ## 常用命令

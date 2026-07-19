@@ -9,6 +9,9 @@ import httpx
 
 DEFAULT_API_URL = "http://127.0.0.1:8000"
 PROTOCOL_VERSION = "2024-11-05"
+CURRENT_TRACE_ID: str | None = None
+CURRENT_DOCUMENT_ID: str | None = None
+CURRENT_DEPTH = 0
 
 
 TOOLS = [
@@ -28,20 +31,18 @@ TOOLS = [
                 "agent_name": {"type": "string"},
                 "max_documents": {"type": "integer", "minimum": 1, "maximum": 20},
             },
-            "required": ["project", "task"],
+            "required": ["project"],
         },
     },
     {
         "name": "read_context_document",
-        "description": "Read a full context document and record the reason in a trace.",
+        "description": "Read a full context document. Trace recording is handled internally.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "document_id": {"type": "string"},
-                "trace_id": {"type": "string"},
-                "reason": {"type": "string"},
             },
-            "required": ["document_id", "trace_id", "reason"],
+            "required": ["document_id"],
         },
     },
 ]
@@ -111,12 +112,13 @@ def _call_tool(params: dict[str, Any]) -> dict[str, Any]:
 
 
 def _prepare_task_context(arguments: dict[str, Any]) -> str:
+    global CURRENT_DEPTH, CURRENT_DOCUMENT_ID, CURRENT_TRACE_ID
     body = _request_json(
         "POST",
         "/api/context/prepare",
         json_body={
             "project": arguments["project"],
-            "task": arguments["task"],
+            "task": arguments.get("task", ""),
             "area": arguments.get("area"),
             "cwd": arguments.get("cwd"),
             "entrypoint_path": arguments.get("entrypoint_path"),
@@ -128,19 +130,31 @@ def _prepare_task_context(arguments: dict[str, Any]) -> str:
             "output_format": "markdown",
         },
     )
+    CURRENT_TRACE_ID = body.get("trace_id")
+    CURRENT_DOCUMENT_ID = None
+    CURRENT_DEPTH = 0
     return body["markdown"]
 
 
 def _read_context_document(arguments: dict[str, Any]) -> str:
+    global CURRENT_DEPTH, CURRENT_DOCUMENT_ID, CURRENT_TRACE_ID
+    document_id = arguments["document_id"]
+    params = {"source": "mcp"}
+    if CURRENT_TRACE_ID:
+        params["trace_id"] = CURRENT_TRACE_ID
+    if CURRENT_DOCUMENT_ID and CURRENT_DOCUMENT_ID != document_id:
+        params["parent_document_id"] = CURRENT_DOCUMENT_ID
+    next_depth = CURRENT_DEPTH + 1 if "parent_document_id" in params else 1
+    params["depth"] = next_depth
+
     body = _request_json(
         "GET",
-        f"/api/documents/{arguments['document_id']}",
-        params={
-            "trace_id": arguments["trace_id"],
-            "reason": arguments["reason"],
-            "source": "mcp",
-        },
+        f"/api/documents/{document_id}",
+        params=params,
     )
+    CURRENT_TRACE_ID = body.get("trace_id") or CURRENT_TRACE_ID
+    CURRENT_DOCUMENT_ID = body["id"]
+    CURRENT_DEPTH = next_depth
     metadata = {
         "document_id": body["id"],
         "title": body["title"],

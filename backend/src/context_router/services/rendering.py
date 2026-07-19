@@ -3,7 +3,6 @@ from context_router.schemas.context import ContextDocument
 
 def render_context_markdown(
     *,
-    trace_id: str,
     project: str,
     area: str | None,
     entrypoint_path: str | None,
@@ -12,7 +11,6 @@ def render_context_markdown(
     results: list[ContextDocument],
 ) -> str:
     lines = [
-        f"trace_id: {trace_id}",
         f"project: {project}",
     ]
     if area:
@@ -44,7 +42,7 @@ def render_context_markdown(
                 f"   reason: {result.reason}",
                 f"   excerpt: {result.excerpt}",
                 "   follow_up:",
-                f'   ctx read {result.document_id} --trace {trace_id} --reason "<why needed>"',
+                f"   ctx read {result.document_id}",
             ]
         )
 

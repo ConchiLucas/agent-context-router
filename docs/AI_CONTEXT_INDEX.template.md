@@ -1,42 +1,27 @@
-# AI Context Index
+# AI_CONTEXT_INDEX.md
 
-This file is for AI coding agents. Keep it short. Do not paste full project knowledge here.
+本文件是 AI 的上下文树索引入口，只列下一层文档和读取命令。
 
-## First step for any task
+## 使用方式
 
-You can generate this file with:
+- 主流程是按 doc-id 运行 `ctx read <doc-id>`。
+- 每份文档继续列出自己的下一层文档。
+- `ctx prepare` 只在无法判断 doc-id 时兜底使用。
 
-```bash
-ctx project init-index --project <project-slug> --area <area>
-```
+## 下一层文档
 
-Run:
+| 文档 | 用途 | 命令 |
+| --- | --- | --- |
+| `<doc-id>` | `<这份文档解决什么问题>` | `ctx read <doc-id>` |
 
-```bash
-ctx prepare --project <project-slug> --task "<copy the user's task>"
-```
-
-If this task clearly belongs to one area, route it directly:
+## 兜底检索
 
 ```bash
-ctx prepare --project <project-slug> --area <area> \
-  --entrypoint-path AI_CONTEXT_INDEX.md \
-  --entrypoint-rule "<matched rule>" \
-  --task "<copy the user's task>"
+ctx prepare --project <project-slug>
 ```
 
-Use the returned `trace_id` for follow-up reads.
+## 规则
 
-## Read a specific document only when needed
-
-Run:
-
-```bash
-ctx read <doc-id> --trace <trace-id> --reason "<why this document is needed>"
-```
-
-## Rules
-
-- Do not read large docs manually before running `ctx prepare`.
-- Prefer the documents returned by `ctx prepare`.
-- If needed context is missing, mention the missing document in the final response.
+- 源码、配置、表结构等实时内容可以直接查项目目录，不强制进入 Context Router。
+- 稳定说明、项目规则、链路说明优先通过本索引进入。
+- 如果文档树缺少合适入口，在最终回复中说明缺口，便于后续补充索引。

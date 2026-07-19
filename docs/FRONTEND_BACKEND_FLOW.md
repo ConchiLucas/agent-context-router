@@ -73,6 +73,7 @@ ctx 命令或 MCP tool
 | Trace 列表 | `frontend/app/traces/page.tsx` | `GET /api/traces` | 查看 prepare 调用历史，可按 project/area/source 筛选 |
 | Trace 详情 | `frontend/app/traces/[traceId]/page.tsx` | `GET /api/traces/{trace_id}` | 查看入口元数据、返回文档、读取事件、反馈 |
 | Trace 反馈 | `frontend/components/feedback-controls.tsx` | `POST /api/traces/{trace_id}/feedback` | 标记 useful/unnecessary/stale/missing |
+| Usage 卡片 | `frontend/app/usage/page.tsx` | `GET/POST/PUT/DELETE /api/usage/cards` | 查看、新增、编辑 Markdown 使用说明卡片 |
 
 前端 API 封装：
 
@@ -98,6 +99,7 @@ backend/src/context_router/main.py
 /api/projects/{project_slug}/documents
 /api/documents
 /api/traces
+/api/usage
 ```
 
 ## 后端接口到代码
@@ -115,6 +117,10 @@ backend/src/context_router/main.py
 | `GET /api/traces` | `backend/src/context_router/api/traces.py` | Trace 列表 |
 | `GET /api/traces/{trace_id}` | `backend/src/context_router/api/traces.py` | Trace 详情 |
 | `POST /api/traces/{trace_id}/feedback` | `backend/src/context_router/api/traces.py` | 记录文档推荐反馈 |
+| `GET /api/usage/cards` | `backend/src/context_router/api/usage.py` | Usage 卡片列表，首次访问初始化内置 ctx/SESSION_ID 卡片 |
+| `POST /api/usage/cards` | `backend/src/context_router/api/usage.py` | 新增普通 Usage 卡片 |
+| `PUT /api/usage/cards/{slug}` | `backend/src/context_router/api/usage.py` | 编辑 Usage 卡片 Markdown 内容 |
+| `DELETE /api/usage/cards/{slug}` | `backend/src/context_router/api/usage.py` | 删除非内置 Usage 卡片 |
 
 ## 核心流转
 
@@ -137,12 +143,12 @@ ctx doc add
   -> documents
 ```
 
-### 3. 准备任务上下文
+### 3. 兜底准备任务上下文
 
 ```text
 ctx prepare 或 MCP prepare_task_context
   -> POST /api/context/prepare
-  -> request 可携带 project/task/area/entrypoint_path/entrypoint_rule/route_hint/source/agent_name
+  -> request 可携带 project/area/entrypoint_path/entrypoint_rule/route_hint/source/agent_name
   -> api/context.py:prepare_context
   -> services/retrieval.py:retrieve_documents
   -> services/rendering.py:render_context_markdown
@@ -153,9 +159,9 @@ ctx prepare 或 MCP prepare_task_context
 
 ```text
 ctx read 或 MCP read_context_document
-  -> GET /api/documents/{document_id}?trace_id=...&reason=...&source=...
+  -> GET /api/documents/{document_id}?source=...
   -> api/documents.py:read_document
-  -> 校验 trace 存在
+  -> 系统自动使用当前 trace；没有当前 trace 时创建直接读取记录
   -> trace_events 写入 read 事件
 ```
 
@@ -169,6 +175,17 @@ Trace 详情页点击反馈按钮
   -> trace_events 写入 feedback 事件
 ```
 
+### 6. 维护 Usage 卡片
+
+```text
+Usage 页面
+  -> GET /api/usage/cards
+  -> api/usage.py:list_usage_cards
+  -> usage_cards
+  -> 点击卡片打开 Markdown 弹窗
+  -> POST/PUT/DELETE /api/usage/cards
+```
+
 ## 数据模型关系
 
 ```text
@@ -180,6 +197,8 @@ Project
       -> area / entrypoint_path / entrypoint_rule / route_hint / source / agent_name
       -> TraceEvent
       -> RetrievalHit
+UsageCard
+  -> Markdown 使用说明卡片
 ```
 
 关键文件：

@@ -29,14 +29,26 @@ export type DocumentSummary = {
   doc_type: string;
   tags: string[];
   status: string;
+  links: DocumentLinkSummary[];
 };
 
 export type DocumentListResponse = {
   documents: DocumentSummary[];
 };
 
+export type DocumentSyncResponse = {
+  project_slug: string;
+  docs_dir: string;
+  indexed_count: number;
+  link_count: number;
+  pruned_count: number;
+  indexed_document_ids: string[];
+  pruned_document_ids: string[];
+};
+
 export type DocumentDetail = {
   id: string;
+  trace_id: string | null;
   title: string;
   source_path: string;
   area: string | null;
@@ -44,6 +56,15 @@ export type DocumentDetail = {
   tags: string[];
   status: string;
   content_markdown: string;
+  links: DocumentLinkSummary[];
+};
+
+export type DocumentLinkSummary = {
+  target_document_id: string | null;
+  target_path: string;
+  label: string;
+  relation_type: string;
+  sort_order: number;
 };
 
 export type RetrievalHit = {
@@ -78,7 +99,7 @@ export type TraceListResponse = {
 export type TraceEvent = {
   id: string;
   event_type: "prepare" | "read" | "feedback" | "error" | string;
-  payload: Record<string, string | number | boolean | null>;
+  payload: Record<string, unknown>;
   created_at: string;
 };
 
@@ -103,3 +124,19 @@ export type TraceDetail = {
 };
 
 export type TraceFeedback = "useful" | "unnecessary" | "missing" | "stale";
+
+export type UsageCard = {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  content_markdown: string;
+  sort_order: number;
+  is_builtin: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type UsageCardListResponse = {
+  cards: UsageCard[];
+};

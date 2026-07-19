@@ -148,8 +148,219 @@ def test_list_documents_returns_metadata() -> None:
             "area": "build",
             "tags": ["build", "test"],
             "status": "active",
+            "links": [],
         }
     ]
+
+
+def test_sync_local_documents_indexes_frontmatter_and_markdown_links(tmp_path) -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(engine)
+
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (docs_dir / "root.md").write_text(
+        """---
+doc_id: root-index
+title: Root Index
+doc_type: agent_index
+area: agent
+tags: [agent, index]
+---
+
+# Root Index
+
+- [Payments](./payments.md)
+""",
+        encoding="utf-8",
+    )
+    (docs_dir / "payments.md").write_text(
+        """---
+doc_id: payments-runbook
+title: Payments Runbook
+doc_type: runbook
+area: payments
+tags: [payments]
+---
+
+# Payments Runbook
+
+Run payment checks.
+""",
+        encoding="utf-8",
+    )
+
+    with TestingSession() as session:
+        session.add(Project(slug="my-app", name="My App"))
+        session.commit()
+
+    def override_session() -> Generator[Session, None, None]:
+        with TestingSession() as session:
+            yield session
+
+    app = create_app()
+    app.dependency_overrides[get_session] = override_session
+    client = TestClient(app)
+
+    sync_response = client.post(
+        "/api/projects/my-app/documents/sync-local",
+        json={"docs_dir": str(docs_dir), "prune": True},
+    )
+
+    assert sync_response.status_code == 200
+    assert sync_response.json()["indexed_document_ids"] == [
+        "payments-runbook",
+        "root-index",
+    ]
+    assert sync_response.json()["link_count"] == 1
+
+    documents_response = client.get("/api/documents", params={"project": "my-app"})
+
+    assert documents_response.status_code == 200
+    documents = {document["id"]: document for document in documents_response.json()["documents"]}
+    assert documents["root-index"]["links"] == [
+        {
+            "target_document_id": "payments-runbook",
+            "target_path": str((docs_dir / "payments.md").resolve(strict=False)),
+            "label": "Payments",
+            "relation_type": "markdown_link",
+            "sort_order": 0,
+        }
+    ]
+
+    read_response = client.get("/api/documents/root-index", params={"untracked": True})
+
+    assert read_response.status_code == 200
+    assert read_response.json()["content_markdown"].startswith("# Root Index")
+    assert "doc_id:" not in read_response.json()["content_markdown"]
+
+
+def test_sync_local_documents_resolves_relative_docs_dir_from_project_root(tmp_path) -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(engine)
+
+    project_root = tmp_path / "target-project"
+    docs_dir = project_root / "docs"
+    docs_dir.mkdir(parents=True)
+    (docs_dir / "root.md").write_text(
+        """---
+doc_id: root-index
+title: Root Index
+doc_type: agent_index
+area: agent
+tags: [agent]
+---
+
+# Root Index
+""",
+        encoding="utf-8",
+    )
+
+    with TestingSession() as session:
+        session.add(Project(slug="my-app", name="My App", root_path=str(project_root)))
+        session.commit()
+
+    def override_session() -> Generator[Session, None, None]:
+        with TestingSession() as session:
+            yield session
+
+    app = create_app()
+    app.dependency_overrides[get_session] = override_session
+    client = TestClient(app)
+
+    sync_response = client.post(
+        "/api/projects/my-app/documents/sync-local",
+        json={"docs_dir": "docs", "prune": True},
+    )
+
+    assert sync_response.status_code == 200
+    assert sync_response.json()["docs_dir"] == str(docs_dir)
+
+    documents_response = client.get("/api/documents", params={"project": "my-app"})
+
+    assert documents_response.status_code == 200
+    assert documents_response.json()["documents"][0]["source_path"] == str(docs_dir / "root.md")
+
+
+def test_sync_project_root_only_reads_root_agent_and_docs_tree(tmp_path) -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(engine)
+
+    project_root = tmp_path / "target-project"
+    docs_dir = project_root / "docs"
+    submodule_dir = project_root / "submodule"
+    docs_dir.mkdir(parents=True)
+    submodule_dir.mkdir()
+    (project_root / "AGENTS.md").write_text(
+        """---
+doc_id: root-agent
+title: Root Agent
+doc_type: agent_index
+---
+
+# Root Agent
+
+[Second](./docs/second.md)
+""",
+        encoding="utf-8",
+    )
+    (docs_dir / "second.md").write_text(
+        """---
+doc_id: second-doc
+title: Second Doc
+doc_type: runbook
+---
+
+# Second Doc
+""",
+        encoding="utf-8",
+    )
+    (submodule_dir / "AGENTS.md").write_text(
+        """---
+doc_id: should-not-sync
+title: Should Not Sync
+doc_type: agent_index
+---
+
+# Should Not Sync
+""",
+        encoding="utf-8",
+    )
+
+    with TestingSession() as session:
+        session.add(Project(slug="my-app", name="My App", root_path=str(project_root)))
+        session.commit()
+
+    def override_session() -> Generator[Session, None, None]:
+        with TestingSession() as session:
+            yield session
+
+    app = create_app()
+    app.dependency_overrides[get_session] = override_session
+    client = TestClient(app)
+
+    sync_response = client.post(
+        "/api/projects/my-app/documents/sync-local",
+        json={"docs_dir": ".", "prune": True},
+    )
+
+    assert sync_response.status_code == 200
+    assert sync_response.json()["indexed_document_ids"] == ["root-agent", "second-doc"]
 
 
 def test_list_documents_project_filter_includes_child_projects() -> None:

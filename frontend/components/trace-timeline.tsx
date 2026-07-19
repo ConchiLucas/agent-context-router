@@ -33,14 +33,14 @@ export function TraceTimeline({ trace }: Readonly<{ trace: TraceSummary }>) {
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
             <path d="M14 2v4a2 2 0 0 0 2 2h4" />
           </svg>
-          <strong>{trace.returned_document_count}</strong> returned
+          <strong>{trace.returned_document_count}</strong> fallback docs
         </span>
         <span style={{ display: "flex", alignItems: "center", gap: "0.35rem", fontSize: "0.82rem" }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-secondary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" />
             <polyline points="12 6 12 12 16 14" />
           </svg>
-          <strong>{trace.read_event_count}</strong> reads
+          <strong>{trace.read_event_count}</strong> read path
         </span>
         <span style={{ display: "flex", alignItems: "center", gap: "0.35rem", fontSize: "0.82rem" }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e11d48" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

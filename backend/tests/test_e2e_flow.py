@@ -114,7 +114,7 @@ def test_e2e_ingest_prepare_read_and_view_trace() -> None:
         "/api/documents/payments-webhook-timeout",
         params={
             "trace_id": trace_id,
-            "reason": "Need previous timeout fix checklist",
+            "source": "cli",
         },
     )
     assert read_response.status_code == 200

@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="/Users/conchi/workforce/python_workforce/agent-context-router"
+BACKEND="$ROOT/backend"
+COMPOSE_FILE="$ROOT/docker-compose.yml"
+
+if command -v ctx >/dev/null 2>&1; then
+  CTX_BIN="$(command -v ctx)"
+  if [ "$CTX_BIN" != "$0" ]; then
+    exec "$CTX_BIN" "$@"
+  fi
+fi
+
+if command -v uv >/dev/null 2>&1; then
+  exec uv run --project "$BACKEND" ctx "$@"
+fi
+
+if command -v docker >/dev/null 2>&1; then
+  if docker compose -f "$COMPOSE_FILE" ps --services --filter status=running 2>/dev/null | grep -qx backend; then
+    exec docker compose -f "$COMPOSE_FILE" exec -T backend uv run ctx "$@"
+  fi
+fi
+
+cat >&2 <<EOF
+Context Router CLI is not available.
+
+Tried:
+1. global ctx from PATH
+2. uv run --project "$BACKEND" ctx
+3. docker compose exec backend uv run ctx
+
+Start Context Router first, or install uv/ctx, then retry.
+EOF
+exit 127

@@ -2,6 +2,9 @@ from context_router import mcp_server
 
 
 def test_mcp_prepare_tool_calls_prepare_api(monkeypatch) -> None:
+    mcp_server.CURRENT_TRACE_ID = None
+    mcp_server.CURRENT_DOCUMENT_ID = "old-doc"
+    mcp_server.CURRENT_DEPTH = 3
     requests: list[tuple[str, str, dict | None, dict | None]] = []
 
     def fake_request_json(
@@ -15,9 +18,9 @@ def test_mcp_prepare_tool_calls_prepare_api(monkeypatch) -> None:
         return {
             "trace_id": "ctx_001",
             "project": "my-app",
-            "task": "fix payments",
+            "task": "准备上下文：my-app/payments",
             "documents": [],
-            "markdown": "trace_id: ctx_001",
+            "markdown": "project: my-app",
         }
 
     monkeypatch.setattr(mcp_server, "_request_json", fake_request_json)
@@ -31,7 +34,6 @@ def test_mcp_prepare_tool_calls_prepare_api(monkeypatch) -> None:
                 "name": "prepare_task_context",
                 "arguments": {
                     "project": "my-app",
-                    "task": "fix payments",
                     "area": "payments",
                     "cwd": "/repo/my-app",
                     "entrypoint_path": "AI_CONTEXT_INDEX.md",
@@ -49,7 +51,7 @@ def test_mcp_prepare_tool_calls_prepare_api(monkeypatch) -> None:
             "/api/context/prepare",
             {
                 "project": "my-app",
-                "task": "fix payments",
+                "task": "",
                 "area": "payments",
                 "cwd": "/repo/my-app",
                 "entrypoint_path": "AI_CONTEXT_INDEX.md",
@@ -64,10 +66,16 @@ def test_mcp_prepare_tool_calls_prepare_api(monkeypatch) -> None:
         )
     ]
     assert response is not None
-    assert response["result"]["content"][0]["text"] == "trace_id: ctx_001"
+    assert response["result"]["content"][0]["text"] == "project: my-app"
+    assert mcp_server.CURRENT_TRACE_ID == "ctx_001"
+    assert mcp_server.CURRENT_DOCUMENT_ID is None
+    assert mcp_server.CURRENT_DEPTH == 0
 
 
 def test_mcp_read_tool_calls_document_api(monkeypatch) -> None:
+    mcp_server.CURRENT_TRACE_ID = "ctx_001"
+    mcp_server.CURRENT_DOCUMENT_ID = "root-index"
+    mcp_server.CURRENT_DEPTH = 1
     requests: list[tuple[str, str, dict | None, dict | None]] = []
 
     def fake_request_json(
@@ -80,6 +88,7 @@ def test_mcp_read_tool_calls_document_api(monkeypatch) -> None:
         requests.append((method, path, json_body, params))
         return {
             "id": "payments-runbook",
+            "trace_id": "ctx_001",
             "title": "Payments runbook",
             "content_markdown": "# Payments\nRun tests.",
         }
@@ -95,8 +104,6 @@ def test_mcp_read_tool_calls_document_api(monkeypatch) -> None:
                 "name": "read_context_document",
                 "arguments": {
                     "document_id": "payments-runbook",
-                    "trace_id": "ctx_001",
-                    "reason": "Need full runbook",
                 },
             },
         }
@@ -109,13 +116,16 @@ def test_mcp_read_tool_calls_document_api(monkeypatch) -> None:
             None,
             {
                 "trace_id": "ctx_001",
-                "reason": "Need full runbook",
+                "parent_document_id": "root-index",
+                "depth": 2,
                 "source": "mcp",
             },
         )
     ]
     assert response is not None
     assert "Payments runbook" in response["result"]["content"][0]["text"]
+    assert mcp_server.CURRENT_DOCUMENT_ID == "payments-runbook"
+    assert mcp_server.CURRENT_DEPTH == 2
 
 
 def test_mcp_lists_context_router_tools() -> None:

@@ -31,58 +31,117 @@ def _get_json(path: str, params: dict[str, Any]) -> dict[str, Any]:
     return response.json()
 
 
+def _safe_session_id(session_id: str) -> str:
+    safe = "".join(
+        char if char.isalnum() or char in {"-", "_", "."} else "-" for char in session_id
+    )
+    return safe.strip("-") or "default"
+
+
+def _state_path(session_id: str | None = None) -> Path:
+    session = session_id or os.environ.get("CTX_SESSION_ID")
+    if session:
+        state_dir = os.environ.get("CTX_STATE_DIR")
+        if state_dir:
+            return Path(state_dir) / f"{_safe_session_id(session)}.json"
+        return (
+            Path.home()
+            / ".cache"
+            / "agent-context-router"
+            / "sessions"
+            / f"{_safe_session_id(session)}.json"
+        )
+
+    state_file = os.environ.get("CTX_STATE_FILE")
+    if state_file:
+        return Path(state_file)
+
+    state_dir = os.environ.get("CTX_STATE_DIR")
+    if state_dir:
+        return Path(state_dir) / "current-session.json"
+
+    return Path.home() / ".cache" / "agent-context-router" / "current-session.json"
+
+
+def _load_state(session_id: str | None = None) -> dict[str, Any]:
+    path = _state_path(session_id)
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _save_state(
+    *,
+    trace_id: str,
+    session_id: str | None = None,
+    project: str | None = None,
+    area: str | None = None,
+    last_document_id: str | None = None,
+    depth: int | None = None,
+    reset_path: bool = False,
+) -> None:
+    path = _state_path(session_id)
+    state = _load_state(session_id)
+    state["trace_id"] = trace_id
+    if project is not None:
+        state["project"] = project
+    if area is not None:
+        state["area"] = area
+    if reset_path:
+        state.pop("last_document_id", None)
+        state.pop("depth", None)
+    if last_document_id is not None:
+        state["last_document_id"] = last_document_id
+    if depth is not None:
+        state["depth"] = depth
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+    except OSError:
+        # State is only a convenience; reads can still be tracked by the API fallback.
+        return
+
+
 def _render_index_template(*, project: str, areas: list[str], entrypoint_path: str) -> str:
     lines = [
-        "# AI Context Index",
+        "# AI_CONTEXT_INDEX.md",
         "",
-        (
-            "This file is for AI coding agents. Keep it short. "
-            "Do not paste full project knowledge here."
-        ),
+        "本文件是 AI 的上下文树索引入口，只列下一层文档和读取命令。",
+        "",
+        "## 使用方式",
+        "",
+        "- 主流程是按 doc-id 运行 `ctx read <doc-id>`。",
+        "- 每份文档继续列出自己的下一层文档。",
+        "- `ctx prepare` 只在无法判断 doc-id 时兜底使用。",
         "",
     ]
 
     if areas:
-        lines.extend(["## Route by area", ""])
+        lines.extend(["## 下一层文档", ""])
         for area in areas:
             lines.extend(
                 [
-                    f"### {area}",
-                    "",
-                    "```bash",
-                    f"ctx prepare --project {project} --area {area} \\",
-                    f"  --entrypoint-path {entrypoint_path} \\",
-                    f'  --entrypoint-rule "{area}" \\',
-                    '  --task "<copy the user\'s task>"',
-                    "```",
-                    "",
+                    f"- `{area}`：{area} 相关稳定说明。",
+                    f"  - 读取：`ctx read <{area}-doc-id>`",
                 ]
             )
+        lines.append("")
 
     lines.extend(
         [
-            "## Default route",
+            "## 读取示例",
             "",
-            "```bash",
-            f"ctx prepare --project {project} \\",
-            f"  --entrypoint-path {entrypoint_path} \\",
-            '  --entrypoint-rule "default" \\',
-            '  --task "<copy the user\'s task>"',
-            "```",
+            "- `ctx read <doc-id>`",
             "",
-            "Use the returned `trace_id` for follow-up reads.",
+            "## 兜底检索",
             "",
-            "## Read a specific document only when needed",
+            f"- `ctx prepare --project {project}`",
             "",
-            "```bash",
-            'ctx read <doc-id> --trace <trace-id> --reason "<why this document is needed>"',
-            "```",
-            "",
-            "## Rules",
-            "",
-            "- Do not read large docs manually before running `ctx prepare`.",
-            "- Prefer the documents returned by `ctx prepare`.",
-            "- If needed context is missing, mention the missing document in the final response.",
+            "- 源码、配置、表结构等实时内容可以直接查项目目录，不强制进入 Context Router。",
+            "- 如果文档树缺少合适入口，在最终回复中说明缺口，便于后续补充索引。",
             "",
         ]
     )
@@ -162,10 +221,54 @@ def add_document(
     typer.echo(f"Indexed document {body['id']}")
 
 
+@doc_app.command("sync")
+def sync_documents(
+    project: Annotated[str, typer.Option("--project", help="Project slug.")],
+    docs_dir: Annotated[
+        str,
+        typer.Option(
+            "--docs-dir",
+            help="Managed Markdown directory. Relative paths are resolved from project root_path.",
+        ),
+    ] = "docs",
+    prune: Annotated[
+        bool,
+        typer.Option(
+            "--prune",
+            help="Delete project documents that are not in the local docs tree.",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print JSON instead of a human-readable summary."),
+    ] = False,
+) -> None:
+    body = _post_json(
+        f"/api/projects/{project}/documents/sync-local",
+        {
+            "docs_dir": docs_dir,
+            "prune": prune,
+        },
+    )
+    if json_output:
+        typer.echo(json.dumps(body, ensure_ascii=False, indent=2))
+        return
+
+    typer.echo(
+        f"Synced {body['indexed_count']} documents and {body['link_count']} links "
+        f"for {body['project_slug']} from {body['docs_dir']}"
+    )
+    if body["pruned_count"]:
+        typer.echo(f"Pruned {body['pruned_count']} documents")
+
+
 @app.command()
 def prepare(
     project: Annotated[str, typer.Option("--project", help="Project slug.")],
-    task: Annotated[str, typer.Option("--task", help="Task text from the user.")],
+    task: Annotated[
+        str,
+        typer.Option("--task", help="Optional task text for ranking."),
+    ] = "",
     area: Annotated[str | None, typer.Option("--area", help="Route to a project area.")] = None,
     cwd: Annotated[str | None, typer.Option("--cwd", help="Current repository path.")] = None,
     entrypoint_path: Annotated[
@@ -179,6 +282,10 @@ def prepare(
     route_hint: Annotated[
         str | None,
         typer.Option("--route-hint", help="Optional routing hint from the index document."),
+    ] = None,
+    session: Annotated[
+        str | None,
+        typer.Option("--session", help="Stable AI conversation/session ID for trace continuity."),
     ] = None,
     agent_name: Annotated[str | None, typer.Option("--agent-name", help="AI agent name.")] = None,
     max_documents: Annotated[int, typer.Option("--max-documents", min=1, max=20)] = 5,
@@ -201,6 +308,14 @@ def prepare(
         "output_format": "json" if json_output else "markdown",
     }
     body = _post_json("/api/context/prepare", payload)
+    if body.get("trace_id"):
+        _save_state(
+            trace_id=body["trace_id"],
+            session_id=session,
+            project=body.get("project"),
+            area=body.get("area"),
+            reset_path=True,
+        )
     if json_output:
         typer.echo(json.dumps(body, ensure_ascii=False, indent=2))
     else:
@@ -209,22 +324,38 @@ def prepare(
 
 @app.command()
 def read(
-    document_id: Annotated[str, typer.Argument(help="Document ID returned by ctx prepare.")],
-    trace: Annotated[str, typer.Option("--trace", help="Trace ID returned by ctx prepare.")],
-    reason: Annotated[str, typer.Option("--reason", help="Why this full document is needed.")],
+    document_id: Annotated[str, typer.Argument(help="Document ID from the context index.")],
+    session: Annotated[
+        str | None,
+        typer.Option("--session", help="Stable AI conversation/session ID for trace continuity."),
+    ] = None,
     json_output: Annotated[
         bool,
         typer.Option("--json", help="Print JSON instead of Markdown."),
     ] = False,
 ) -> None:
+    params: dict[str, Any] = {"source": "cli"}
+    state = _load_state(session)
+    trace_id = state.get("trace_id")
+    if trace_id:
+        params["trace_id"] = trace_id
+    parent_document_id = state.get("last_document_id")
+    if parent_document_id and parent_document_id != document_id:
+        params["parent_document_id"] = parent_document_id
+    depth = _next_depth(state, has_parent="parent_document_id" in params)
+    params["depth"] = depth
+
     body = _get_json(
         f"/api/documents/{document_id}",
-        {
-            "trace_id": trace,
-            "reason": reason,
-            "source": "cli",
-        },
+        params,
     )
+    if body.get("trace_id"):
+        _save_state(
+            trace_id=body["trace_id"],
+            session_id=session,
+            last_document_id=document_id,
+            depth=depth,
+        )
     if json_output:
         typer.echo(json.dumps(body, ensure_ascii=False, indent=2))
     else:
@@ -233,8 +364,24 @@ def read(
 
 
 @app.command()
+def reset(
+    session: Annotated[
+        str | None,
+        typer.Option("--session", help="Stable AI conversation/session ID to reset."),
+    ] = None,
+) -> None:
+    """Clear the local ctx trace session."""
+    path = _state_path(session)
+    try:
+        path.unlink(missing_ok=True)
+    except OSError as exc:
+        raise typer.BadParameter(f"Failed to reset ctx state: {exc}") from exc
+    typer.echo("Reset ctx session")
+
+
+@app.command()
 def trace(
-    trace_id: Annotated[str, typer.Argument(help="Trace ID returned by ctx prepare.")],
+    trace_id: Annotated[str, typer.Argument(help="Trace ID recorded by Context Router.")],
     json_output: Annotated[
         bool,
         typer.Option("--json", help="Print JSON instead of a human-readable summary."),
@@ -268,4 +415,16 @@ def trace(
         typer.echo("\nRead events:")
         for event in read_events:
             payload = event.get("payload", {})
-            typer.echo(f"- {payload.get('document_id')}: {payload.get('reason')}")
+            source = payload.get("source") or "unknown source"
+            parent = payload.get("parent_document_id")
+            parent_part = f" <- {parent}" if parent else ""
+            typer.echo(f"- {payload.get('document_id')}{parent_part} ({source})")
+
+
+def _next_depth(state: dict[str, Any], *, has_parent: bool) -> int:
+    if not has_parent:
+        return 1
+    try:
+        return int(state.get("depth") or 1) + 1
+    except (TypeError, ValueError):
+        return 2

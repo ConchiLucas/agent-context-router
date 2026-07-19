@@ -75,9 +75,11 @@ def test_prepare_context_returns_ranked_docs_and_records_trace() -> None:
     assert body["entrypoint_rule"] == "payments tasks"
     assert body["route_hint"] == "payments"
     assert body["documents"][0]["document_id"] == "payments-webhook-timeout-history"
-    assert "trace_id:" in body["markdown"]
+    assert body["trace_id"].startswith("ctx_")
+    assert "trace_id:" not in body["markdown"]
     assert "area: payments" in body["markdown"]
     assert "entrypoint_path: AI_CONTEXT_INDEX.md" in body["markdown"]
+    assert "ctx read payments-webhook-timeout-history" in body["markdown"]
 
     with TestingSession() as session:
         trace = session.scalar(select(Trace).where(Trace.id == body["trace_id"]))

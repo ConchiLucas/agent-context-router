@@ -5,6 +5,8 @@ import type {
   ProjectListResponse,
   TraceDetail,
   TraceListResponse,
+  UsageCard,
+  UsageCardListResponse,
 } from "@/lib/types";
 
 const PUBLIC_API_BASE_URL =
@@ -21,6 +23,24 @@ export async function fetchJson<T>(path: string): Promise<T> {
     headers: {
       Accept: "application/json",
     },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+  }
+
+  return response.json() as Promise<T>;
+}
+
+async function sendJson<T>(path: string, method: string, body?: unknown): Promise<T> {
+  const response = await fetch(path, {
+    method,
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
     cache: "no-store",
   });
 
@@ -72,6 +92,37 @@ export async function getTraces(filters: Record<string, string | undefined> = {}
 
 export async function getTrace(traceId: string) {
   return fetchJson<TraceDetail>(`/api/traces/${traceId}`);
+}
+
+export async function getUsageCards() {
+  return fetchJson<UsageCardListResponse>("/api/usage/cards");
+}
+
+export async function createUsageCard(card: {
+  title: string;
+  description: string;
+  content_markdown: string;
+}) {
+  return sendJson<UsageCard>("/api/usage/cards", "POST", card);
+}
+
+export async function updateUsageCard(
+  slug: string,
+  card: {
+    title: string;
+    description: string;
+    content_markdown: string;
+    sort_order?: number;
+  }
+) {
+  return sendJson<UsageCard>(`/api/usage/cards/${encodeURIComponent(slug)}`, "PUT", card);
+}
+
+export async function deleteUsageCard(slug: string) {
+  return sendJson<{ deleted: boolean }>(
+    `/api/usage/cards/${encodeURIComponent(slug)}`,
+    "DELETE"
+  );
 }
 
 export function contextRouterApiUrl() {

@@ -109,14 +109,25 @@ archived
 
 只有 active 文档会参与当前上下文检索。
 
-### 3. 上下文准备
+### 3. 文档树读取
 
-这是项目的核心功能。
+这是项目的核心使用方式。AI 从总入口文档开始，按文档列出的下一层 doc-id 继续读取。
+
+典型命令：
+
+```bash
+ctx read <doc-id>
+```
+
+读取时系统会自动挂到当前调用链路；没有当前调用链路时，会创建直接读取记录。管理或调试场景可以显式使用 `untracked=true` 读取，但这类读取不会进入 trace。
+
+### 4. 兜底上下文检索
+
+当文档树没有明确入口时，AI 可以使用 prepare 做兜底检索。
 
 输入：
 
 - project
-- task
 - area
 - cwd
 - entrypoint_path
@@ -128,20 +139,20 @@ archived
 
 输出：
 
-- trace_id
+- 内部 trace_id
 - area
 - 入口来源信息
 - 推荐文档列表
 - 每个文档的 rank
 - score
-- reason
+- 匹配原因
 - excerpt
 - follow-up read 命令
 
 典型命令：
 
 ```bash
-ctx prepare --project <project> --task "<task>"
+ctx prepare --project <project>
 ```
 
 如果入口索引已经判断出任务 area，可以直接传入：
@@ -149,31 +160,28 @@ ctx prepare --project <project> --task "<task>"
 ```bash
 ctx prepare --project <project> --area <area> \
   --entrypoint-path AI_CONTEXT_INDEX.md \
-  --entrypoint-rule "<matched rule>" \
-  --task "<task>"
+  --entrypoint-rule "<matched rule>"
 ```
 
-AI 编程助手应先调用 prepare，再决定是否读取全文。
+AI 编程助手应优先按文档树 `ctx read <doc-id>`，只有无法判断 doc-id 时才调用 prepare。
 
-### 4. 文档全文读取
+### 5. 文档全文读取
 
-当 prepare 返回的 excerpt 不够时，AI 可以读取全文。
+当已经知道 doc-id 时，AI 可以读取全文。
 
 典型命令：
 
 ```bash
-ctx read <doc-id> --trace <trace-id> --reason "<why needed>"
+ctx read <doc-id>
 ```
 
-读取全文时默认必须带上 trace 和 reason，系统会记录 read 事件。管理或调试场景可以显式使用 `untracked=true` 读取，但这类读取不会进入 trace。
+### 6. Trace 记录
 
-### 5. Trace 记录
-
-Trace 用于记录一次上下文准备过程。
+Trace 用于记录一次文档读取或兜底检索过程。
 
 Trace 包含：
 
-- 任务文本
+- 读取或检索入口
 - 项目
 - area
 - cwd
@@ -181,9 +189,9 @@ Trace 包含：
 - 命中的入口规则
 - route hint
 - 调用来源
-- 返回过哪些文档
+- prepare 返回过哪些文档
 - 每个文档的 score/reason/rank
-- 后续读取过哪些全文
+- AI 实际读取过哪些全文
 - 用户或开发者对推荐结果的反馈
 
 Trace 的意义：
@@ -192,7 +200,7 @@ Trace 的意义：
 - 判断上下文推荐是否准确。
 - 发现过期、不必要或缺失的文档。
 
-### 6. 推荐反馈
+### 7. 推荐反馈
 
 前端 Trace 详情页可以标记推荐文档的反馈。
 
@@ -207,7 +215,7 @@ missing
 
 反馈用于后续改进文档质量和路由规则。
 
-### 7. 前端面板
+### 8. 前端面板
 
 前端主要是审计和查看用途，不是主要数据录入入口。
 
@@ -217,10 +225,23 @@ missing
 - Projects：查看顶层项目列表。
 - Project Detail：查看项目详情、子项目和 AI_CONTEXT_INDEX 模板。
 - Documents：查看和筛选上下文文档。
-- Traces：查看 prepare 调用历史。
+- Traces：查看 read/prepare 调用历史。
 - Trace Detail：查看返回文档、read 事件和反馈。
+- Usage：查看和维护可复用的 Markdown 使用说明卡片。
 
-### 8. CLI 能力
+### 9. Usage 卡片
+
+Usage 卡片用于保存前端菜单中可查看、可编辑的 Markdown 使用说明。
+
+当前默认初始化一张内置卡片：
+
+```text
+ctx / SESSION_ID 使用说明
+```
+
+该卡片说明 `CTX` 命令变量、`SESSION_ID` 生成和复用规则、`ctx read` / `ctx prepare` / `ctx doc sync` 的使用边界。内置卡片可以编辑但不能删除；后续可以新增开发规范等普通卡片。
+
+### 10. CLI 能力
 
 CLI 是当前主要操作入口之一。
 
@@ -235,7 +256,7 @@ ctx read
 ctx trace
 ```
 
-### 9. MCP 能力
+### 11. MCP 能力
 
 MCP server 用于让 AI 编程助手直接调用上下文路由能力。
 

@@ -13,6 +13,8 @@
 ## 核心规则
 
 - 修改代码前先阅读相关文件和开发规范。
-- 修改后端代码后，按开发规范使用 Docker Compose 重启后端。
+- 本项目只使用当前目录下的 Docker Compose 管理服务；不要用宿主机直接启动前端或后端。
+- 修改后端代码后，按开发规范使用 `docker compose restart backend` 重启后端。
 - 用户要求启动前后端时，按开发规范使用 Docker Compose 启动；如果已启动则重启。
+- 后续自测、测试、lint、build、migration 都按开发规范走 Docker Compose。
 - 只记录代码层面的开发内容，不记录普通聊天。

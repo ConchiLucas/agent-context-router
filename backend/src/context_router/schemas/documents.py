@@ -16,8 +16,32 @@ class DocumentUpsertResponse(BaseModel):
     status: str
 
 
+class DocumentLinkSummary(BaseModel):
+    target_document_id: str | None
+    target_path: str
+    label: str
+    relation_type: str
+    sort_order: int
+
+
+class DocumentSyncRequest(BaseModel):
+    docs_dir: str = "docs"
+    prune: bool = False
+
+
+class DocumentSyncResponse(BaseModel):
+    project_slug: str
+    docs_dir: str
+    indexed_count: int
+    link_count: int
+    pruned_count: int
+    indexed_document_ids: list[str]
+    pruned_document_ids: list[str]
+
+
 class DocumentReadResponse(BaseModel):
     id: str
+    trace_id: str | None = None
     title: str
     source_path: str
     doc_type: str
@@ -25,6 +49,7 @@ class DocumentReadResponse(BaseModel):
     tags: list[str]
     status: str
     content_markdown: str
+    links: list[DocumentLinkSummary] = Field(default_factory=list)
 
 
 class DocumentSummary(BaseModel):
@@ -36,6 +61,7 @@ class DocumentSummary(BaseModel):
     area: str | None
     tags: list[str]
     status: str
+    links: list[DocumentLinkSummary] = Field(default_factory=list)
 
 
 class DocumentListResponse(BaseModel):

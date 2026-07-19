@@ -13,8 +13,9 @@ export default async function DocumentsPage({ searchParams }: DocumentsPageProps
     tag: singleValue(params.tag),
     status: singleValue(params.status),
   };
+  const view = singleValue(params.view);
 
-  return <DocumentsView filters={filters} />;
+  return <DocumentsView filters={filters} view={view} />;
 }
 
 function singleValue(value: string | string[] | undefined) {

@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 
-import { DocumentDetailView } from "@/components/document-detail-view";
 import { DocumentsView } from "@/components/documents-view";
+import { ModalCloseButton } from "@/components/modal-close-button";
+import { ProjectDocumentPreviewShell } from "@/components/project-document-preview-shell";
+import { ProjectLinkReloadButton } from "@/components/project-link-reload-button";
 import { TracesView } from "@/components/traces-view";
 import { getProjects } from "@/lib/api";
 
@@ -20,6 +22,7 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
   const tag = singleValue(params.tag);
   const status = singleValue(params.status);
   const source = singleValue(params.source);
+  const documentView = singleValue(params.view);
   const result = await Promise.allSettled([getProjects()]);
   const projects = result[0].status === "fulfilled" ? result[0].value.projects : [];
   const documentsPanelHref = projectPanelHref({
@@ -29,6 +32,7 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
     doc_type: docType,
     tag,
     status,
+    view: documentView,
   });
   return (
     <>
@@ -90,6 +94,10 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
                   >
                     Traces
                   </Link>
+                  <ProjectLinkReloadButton
+                    disabled={!project.root_path}
+                    projectSlug={project.slug}
+                  />
                 </div>
               </article>
             );
@@ -98,42 +106,40 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
       </section>
       {activePanel === "documents" ? (
         <ProjectPanel backHref="/projects">
-          <DocumentsView
-            detailHref={(document) =>
-              projectPanelHref({
-                panel: "documents",
+          <ProjectDocumentPreviewShell
+            closeHref={documentsPanelHref}
+            initialDocumentId={activeDocument}
+          >
+            <DocumentsView
+              baseHref="/projects"
+              detailHref={(document) =>
+                projectPanelHref({
+                  panel: "documents",
+                  project: activeProject,
+                  area,
+                  doc_type: docType,
+                  tag,
+                  status,
+                  view: documentView,
+                  document: document.id,
+                })
+              }
+              filters={{
                 project: activeProject,
                 area,
                 doc_type: docType,
                 tag,
                 status,
-                document: document.id,
-              })
-            }
-            filters={{
-              project: activeProject,
-              area,
-              doc_type: docType,
-              tag,
-              status,
-            }}
-            hiddenFields={{ panel: "documents" }}
-            subtitle={
-              activeProject
-                ? `Context documents for ${activeProject}.`
-                : "Context documents and routing metadata."
-            }
-          />
-          {activeDocument ? (
-            <NestedProjectPanel backHref={documentsPanelHref}>
-              <DocumentDetailView
-                backHref={documentsPanelHref}
-                backLabel="Documents"
-                documentId={activeDocument}
-                showInlineBack={false}
-              />
-            </NestedProjectPanel>
-          ) : null}
+              }}
+              hiddenFields={{ panel: "documents" }}
+              subtitle={
+                activeProject
+                  ? `Context documents for ${activeProject}.`
+                  : "Context documents and routing metadata."
+              }
+              view={documentView}
+            />
+          </ProjectDocumentPreviewShell>
         </ProjectPanel>
       ) : null}
       {activePanel === "traces" ? (
@@ -165,11 +171,7 @@ function ProjectPanel({
 }>) {
   return (
     <aside className="project-modal" aria-modal="true" role="dialog">
-      <div className="project-modal-toolbar">
-        <Link className="button" href={backHref}>
-          Back
-        </Link>
-      </div>
+      <ModalCloseButton className="icon-close-button project-modal-close" href={backHref} />
       <div className="project-modal-content">{children}</div>
     </aside>
   );
@@ -177,25 +179,6 @@ function ProjectPanel({
 
 function singleValue(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
-}
-
-function NestedProjectPanel({
-  backHref,
-  children,
-}: Readonly<{
-  backHref: string;
-  children: ReactNode;
-}>) {
-  return (
-    <aside className="project-modal nested-project-modal" aria-modal="true" role="dialog">
-      <div className="project-modal-toolbar">
-        <Link className="button" href={backHref}>
-          Back
-        </Link>
-      </div>
-      <div className="project-modal-content">{children}</div>
-    </aside>
-  );
 }
 
 function projectPanelHref(params: {
@@ -206,6 +189,7 @@ function projectPanelHref(params: {
   tag?: string;
   status?: string;
   source?: string;
+  view?: string;
   document?: string;
 }) {
   const searchParams = new URLSearchParams();

@@ -80,7 +80,7 @@ def test_trace_detail_records_prepare_read_and_feedback_lifecycle() -> None:
 
     read_response = client.get(
         "/api/documents/payments-runbook",
-        params={"trace_id": trace_id, "reason": "Need exact retry test guidance"},
+        params={"trace_id": trace_id, "source": "cli"},
     )
     assert read_response.status_code == 200
 

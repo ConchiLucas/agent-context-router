@@ -1,6 +1,7 @@
 services:
   postgres:
     image: postgres:16
+    restart: unless-stopped
     environment:
       POSTGRES_DB: context_router
       POSTGRES_USER: context_router
@@ -17,20 +18,25 @@ services:
 
   backend:
     image: ghcr.io/astral-sh/uv:python3.12-bookworm
+    restart: "no"
     working_dir: /app/backend
     command: uv run uvicorn context_router.main:create_app --factory --host 0.0.0.0 --port 8000
     environment:
       CONTEXT_ROUTER_DATABASE_URL: postgresql+psycopg://context_router:context_router@postgres:5432/context_router
+      CONTEXT_ROUTER_WORKSPACE_HOST_ROOT: /Users/conchi/workforce
+      CONTEXT_ROUTER_WORKSPACE_CONTAINER_ROOT: /workspace
     ports:
       - "49173:8000"
     volumes:
       - .:/app
+      - /Users/conchi/workforce:/workspace:ro
     depends_on:
       postgres:
         condition: service_healthy
 
   frontend:
     image: node:22-bookworm
+    restart: "no"
     working_dir: /app/frontend
     command: sh -c "npm install && npm run dev -- --hostname 0.0.0.0 --port 3000"
     environment:

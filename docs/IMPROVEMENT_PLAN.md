@@ -9,7 +9,7 @@
 推荐的产品边界是：
 
 - AI 浏览业务项目源码时，不强制经过本项目。
-- AI 阅读被纳入项目管理的上下文文档时，应优先经过 `ctx prepare` 和 `ctx read`。
+- AI 阅读被纳入项目管理的上下文文档时，应优先按文档树执行 `ctx read <doc-id>`。
 - 根目录索引文档只负责告诉 AI 调用哪个入口命令，不承载大量知识。
 - 后台负责检索、排序、trace、权限、反馈和文档管理。
 - 当前阶段继续保持无向量数据库、无 embedding、无文档切分。
@@ -39,7 +39,7 @@
 
 建议：
 
-- CLI `ctx read` 已经要求 `--trace` 和 `--reason`，后端 API 也应考虑默认要求 trace 和 reason。
+- CLI `ctx read` 只要求 `doc-id`；trace 由 CLI/API 内部自动串联，不要求 AI 手动传 traceId 或 reason。
 - 如果保留无 trace 读取能力，建议只作为管理端或调试端接口，并明确标记为 untracked read。
 - `read` 事件中记录调用来源，例如 CLI、MCP、Web UI、API。
 - 文档详情页区分“被返回过但未读取”和“已被读取”。
@@ -134,9 +134,9 @@
 
 1. `ctx prepare` 增加 `--area`，后端和 MCP 同步支持。
 2. trace 记录 `area`、入口索引来源和调用来源。
-3. 后端受管文档读取默认要求 `trace_id` 和 `reason`。
+3. 后端受管文档读取默认自动关联当前 trace；没有当前 trace 时创建直接读取记录。
 4. 改造 `AI_CONTEXT_INDEX.template.md`，让它能生成按 area 路由的短索引。
-5. 前端 trace 详情页增加“返回但未读取”“读取原因”“反馈状态”视图。
+5. 前端 trace 详情页增加“返回但未读取”“读取状态/来源”“反馈状态”视图。
 6. 增加项目接入命令，自动生成入口索引和基础配置。
 
 ## 需要避免的方向
@@ -150,7 +150,7 @@
 ## MVP 验收标准
 
 - 其他项目根目录只需要一个很短的上下文入口文档。
-- AI 执行 `ctx prepare --project app --area payments --task "修复支付 webhook timeout"` 后能拿到 trace_id、必读文档、摘要和下一步建议。
-- AI 执行 `ctx read <doc_id> --trace <trace_id> --reason "..."` 后，后台能看到读取原因。
+- AI 执行 `ctx read <doc_id>` 后，后台能看到实际读取了哪份文档。
+- 文档树无法覆盖任务时，AI 再执行 `ctx prepare --project app --area payments` 获取兜底候选文档。
 - 后台能看到某次任务返回了哪些文档、实际读取了哪些文档、哪些返回后没有被读取。
 - 用户能根据 trace 判断是文档缺失、路由不准、文档过期，还是 AI 没有继续读取。

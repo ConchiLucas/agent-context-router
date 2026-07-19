@@ -23,10 +23,16 @@ def prepare_context(
     if project is None:
         raise HTTPException(status_code=404, detail=f"Project not found: {request.project}")
 
+    task_text = request.task.strip()
+    trace_task = task_text or _default_trace_task(project.slug, request.area)
+    retrieval_task = task_text or " ".join(
+        part for part in [request.area, project.name, project.description] if part
+    )
+
     results = retrieve_documents(
         session,
         project=project,
-        task=request.task,
+        task=retrieval_task,
         area=request.area,
         max_documents=request.max_documents,
     )
@@ -34,7 +40,7 @@ def prepare_context(
     trace = Trace(
         id=trace_id,
         project_id=project.id,
-        task=request.task,
+        task=trace_task,
         cwd=request.cwd,
         area=request.area,
         entrypoint_path=request.entrypoint_path,
@@ -50,7 +56,7 @@ def prepare_context(
             event_type="prepare",
             payload={
                 "project": request.project,
-                "task": request.task,
+                "task": trace_task,
                 "area": request.area,
                 "entrypoint_path": request.entrypoint_path,
                 "entrypoint_rule": request.entrypoint_rule,
@@ -76,7 +82,6 @@ def prepare_context(
         )
 
     markdown = render_context_markdown(
-        trace_id=trace_id,
         project=request.project,
         area=request.area,
         entrypoint_path=request.entrypoint_path,
@@ -89,7 +94,7 @@ def prepare_context(
     return PrepareContextResponse(
         trace_id=trace_id,
         project=request.project,
-        task=request.task,
+        task=trace_task,
         area=request.area,
         entrypoint_path=request.entrypoint_path,
         entrypoint_rule=request.entrypoint_rule,
@@ -97,3 +102,9 @@ def prepare_context(
         documents=results,
         markdown=markdown,
     )
+
+
+def _default_trace_task(project_slug: str, area: str | None) -> str:
+    if area:
+        return f"准备上下文：{project_slug}/{area}"
+    return f"准备上下文：{project_slug}"
