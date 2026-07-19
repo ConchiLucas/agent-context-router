@@ -9,6 +9,15 @@
 
 ## 记录
 
+### 2026-07-19
+
+- 采用“产品 MCP-only、HTTP API 内部保留”的边界，AI 只感知两个 MCP 工具，开发者只使用 Web 查看和管理。
+- MCP 不维护全局当前 trace 或当前文档，所有 read 显式绑定 trace，避免多个 AI 任务并发串链。
+- AI 可自主跳过 MCP；系统只记录实际 prepare/read，不增加人工反馈、任务成功评分或不读原因字段。
+- 项目文档继续放在各自项目仓库，Context Router 只保存可同步索引；cwd 最长 root_path 匹配负责跨项目定位。
+- Tasks 页面是可观察性产品，数据源只包含 MCP 任务，Web 文档预览保持 untracked。
+- 旧表和 migration 保留历史兼容，运行时路由和页面可以删除。
+
 ### 2026-06-27
 
 - 文档体系采用按需读取结构：`AGENTS.md` 只保留一级索引，`docs/DEVELOPMENT_OUTLINE.md` 负责开发大纲，细节放入 `docs/development-details/`。

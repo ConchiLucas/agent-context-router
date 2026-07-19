@@ -43,7 +43,7 @@ TOOLS = [
 
 
 def api_url() -> str:
-    return os.environ.get("CTX_API_URL", DEFAULT_API_URL).rstrip("/")
+    return os.environ.get("CONTEXT_ROUTER_API_URL", DEFAULT_API_URL).rstrip("/")
 
 
 def _request_json(

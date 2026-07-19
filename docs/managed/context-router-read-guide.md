@@ -1,29 +1,17 @@
-# 读取完整文档
+# read_context_document 说明
 
-本文件说明 `ctx read` 的使用方式。
+## 参数
 
-## 定位
+| 参数 | 必填 | 说明 |
+| --- | --- | --- |
+| `trace_id` | 是 | 来自当前任务的 prepare 返回 |
+| `document_id` | 是 | 准备读取的候选文档 ID |
+| `parent_document_id` | 否 | 从已读父文档继续向下时传入 |
 
-`ctx read <doc-id>` 是 Context Router 的主流程命令，用来读取文档树中的下一层或具体说明文档。
+## 规则
 
-## 命令
-
-```bash
-ctx read <doc-id>
-```
-
-示例：
-
-```bash
-ctx read context-router-routing-guide
-ctx read context-router-area-frontend
-ctx read word-select-dashboard-web-react-agents-md
-```
-
-系统会自动把读取事件挂到当前调用链路；如果没有当前链路，会创建直接读取记录。
-
-## 约束
-
-- 一次只读取当前任务需要的文档。
-- 不要为了保险读取所有文档。
-- 如果是源码、配置、表结构或日志，优先直接读取项目目录。
+- 不要跨任务复用 trace_id。
+- parent_document_id 必须是同一 trace 中更早读过的文档。
+- 只读完成当前任务需要的文档，不要遍历全部候选。
+- 文档内容与当前源码冲突时，以源码和实时配置为准。
+- Web 预览使用 untracked 读取，不会伪装成 AI read 事件。

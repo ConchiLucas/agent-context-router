@@ -1,27 +1,24 @@
 # AI_CONTEXT_INDEX.md
 
-本文件是 AI 的上下文树索引入口，只列下一层文档和读取命令。
+本文件是 AI 的短上下文索引。只列稳定文档、适用任务和下一层关系，不复制大段正文。
 
-## 使用方式
+## Context Router 使用规则
 
-- 主流程是按 doc-id 运行 `ctx read <doc-id>`。
-- 每份文档继续列出自己的下一层文档。
-- `ctx prepare` 只在无法判断 doc-id 时兜底使用。
+- 任务依赖业务规则、启动、数据库或跨层链路时，调用 MCP `prepare_task_context(task, cwd, agent_name)`。
+- 从最多 3 份候选文档中选择需要的内容，再调用 `read_context_document(trace_id, document_id)`。
+- 从一份文档继续读取下一层时，传 `parent_document_id`。
+- 明确文件或纯源码定位可以直接检索仓库，不强制调用 MCP。
+- 不要一次读取全部文档。
 
-## 下一层文档
+## 文档索引
 
-| 文档 | 用途 | 命令 |
+| document_id | 适用任务 | 下一层文档 |
 | --- | --- | --- |
-| `<doc-id>` | `<这份文档解决什么问题>` | `ctx read <doc-id>` |
+| `<doc-id>` | `<什么情况下需要这份文档>` | `<下一层 document_id，没有则留空>` |
 
-## 兜底检索
+## 维护规则
 
-```bash
-ctx prepare --project <project-slug>
-```
-
-## 规则
-
-- 源码、配置、表结构等实时内容可以直接查项目目录，不强制进入 Context Router。
-- 稳定说明、项目规则、链路说明优先通过本索引进入。
-- 如果文档树缺少合适入口，在最终回复中说明缺口，便于后续补充索引。
+- 文档源放在各自项目仓库。
+- project 的 root path 必须能覆盖 AI 传入的 cwd。
+- 修改 Markdown 后在 Context Router 的 Projects 页面点击 **Sync Documents**。
+- 文档 ID 和用途要稳定、具体，避免用“其他”“综合说明”等模糊描述。

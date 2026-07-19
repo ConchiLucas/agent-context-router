@@ -117,7 +117,7 @@ project_entry_guide
 
 配置文件、表结构 SQL、manifest 和源码细节不作为常规受管文档入库，需要时让 AI 直接读取项目目录。
 
-`traces` 保存一次上下文准备过程和入口路由信息：
+`traces` 保存一次 MCP 上下文准备过程和入口路由信息：
 
 ```text
 id
@@ -133,7 +133,11 @@ agent_name
 created_at
 ```
 
-`usage_cards` 保存前端 Usage 菜单中的 Markdown 使用说明卡片：
+`trace_events` 保存客观 MCP 调用事件。当前运行时主要写入 `prepare` 和 `read`，payload 中可包含 `duration_ms`、`document_id`、`parent_document_id` 和 `depth`。
+
+`retrieval_hits` 保存 prepare 返回的候选文档、rank、score、reason 和是否返回。Tasks 详情把它与 read 事件对照为 `Read by AI` 或 `Returned only`。
+
+`usage_cards` 是旧版本 Usage 功能的历史表。当前没有对应 API 或页面，migration 和表暂时保留兼容：
 
 ```text
 id
@@ -171,5 +175,5 @@ docker compose exec -T postgres psql -U context_router -d context_router -c "\dt
 
 - 检查 bug 或运行脚本前，先确认要连接的是本机默认数据库还是 Docker Compose 数据库。
 - 后端容器内脚本优先使用 compose 内部连接串。
-- 宿主机直接运行脚本时优先使用当前默认数据库连接串。
+- 不要把宿主机脚本作为项目的启动或验证方式。
 - 表结构变更必须通过 Alembic migration 管理。

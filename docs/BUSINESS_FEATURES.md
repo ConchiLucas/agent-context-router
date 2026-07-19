@@ -1,285 +1,78 @@
 # 业务功能说明
 
-本文件只说明项目的业务目标、核心能力和功能模块。调用链路和排查路径见 `docs/FRONTEND_BACKEND_FLOW.md`。
+## 1. 产品目标
 
-## 项目定位
+本项目只解决两个问题：
 
-Agent Context Router 是给 AI 编程助手使用的上下文路由工具。
+1. 让 Codex、Antigravity 等 AI 比全仓库盲搜更快地定位稳定项目文档。
+2. 让开发者看到 AI 获取了哪些候选文档、实际读了哪些文档，以及阅读的父子链路。
 
-它的核心价值是：让 AI 在处理编码任务前，先通过统一入口获取和任务最相关的项目上下文，并记录这次上下文选择、全文阅读和反馈过程。
+项目不判断任务是否成功，不要求开发者反馈，也不要求 AI填写不读或停止阅读的原因。
 
-## 核心目标
+## 2. 项目与文档
 
-- 管理多个项目的上下文入口。
-- 管理项目相关的 Markdown 文档、runbook、架构说明、排障记录等。
-- 根据任务文本返回最相关的上下文文档。
-- 记录每次上下文准备、文档阅读和反馈。
-- 提供前端面板查看项目、文档、trace 和反馈情况。
-- 提供 CLI 和 MCP 工具，方便 AI 编程助手调用。
+- 每个业务项目保存 slug、名称、root path、描述和可选父项目。
+- 文档源仍在各自项目仓库，Context Router 数据库只保存索引、内容缓存和关系。
+- Projects 页面可以新增项目并同步 root path 下的 Markdown。
+- Documents 页面展示文档清单、关系图、元数据和正文。
+- 父项目查询可以包含子项目文档。
 
-## 当前不做的事情
+root path 同时用于 MCP 的 cwd 自动识别。多个项目都匹配时选择路径最长、最具体的项目。
 
-当前项目不使用：
+## 3. MCP 上下文准备
 
-```text
-向量
-embedding
-pgvector
-document_chunks
-```
+`prepare_task_context` 接收：
 
-当前项目不把代码仓库里 AI 可以自己检索的易变材料批量保存为受管文档：
+- `task`：必填，当前任务原文。
+- `cwd`：必填，当前工作目录。
+- `project`：可选，覆盖 cwd 自动识别。
+- `agent_name`：可选，调用工具名称。
 
-```text
-配置文件
-package/go/pom/pyproject 等 manifest
-数据库建表 SQL
-代码目录里的细粒度源文件
-```
+后端检索项目及子项目中的 active 文档，最多返回 3 份候选文档，并创建独立 trace。每次调用互不共享状态。
 
-这些内容需要时让 AI 直接读取项目目录。受管文档只保存稳定、精炼、长期有效的说明和入口索引。
+## 4. MCP 文档读取
 
-当前检索方式是确定性的本地检索：
+`read_context_document` 接收：
 
-```text
-关键词 + title + doc_type + area + tags + content_markdown
-```
+- `trace_id`：必填，来自 prepare。
+- `document_id`：必填，准备读取的文档。
+- `parent_document_id`：可选，表示从已读父文档继续向下。
 
-## 功能模块
+后端校验 trace、文档和 parent，自动计算 depth 并记录服务端耗时。没有 trace 的 MCP read 会被拒绝。
 
-### 1. 项目管理
+## 5. Tasks 可观察链路
 
-用于登记一个需要被 AI 使用上下文的项目。
+Tasks 外层列表只展示 `source=mcp` 的任务：
 
-主要信息：
+- 任务文本、项目、AI 工具、时间。
+- 候选文档数、实际 read 数、MCP 总耗时。
 
-- 项目 slug
-- 项目名称
-- 项目根路径
-- 项目描述
-- 父项目
-- 子项目数量
-- 文档数量
-- active 文档数量
+任务详情展示：
 
-主要用途：
+- `prepare_task_context` 请求及返回候选文档。
+- 每份候选文档是 `Read by AI` 还是 `Returned only`。
+- 每次 `read_context_document` 的 document_id、parent_document_id 和耗时。
 
-- 作为上下文文档的归属。
-- 作为 `ctx prepare --project <slug>` 的入口。
-- 让一个大项目管理多个子项目，项目列表默认展示顶层项目，详情页再查看子项目。
-- 生成项目级 `AI_CONTEXT_INDEX.md` 模板。
+页面不展示反馈，不推测“为什么没读”，也不把 Web 管理读取记作 AI 任务。
 
-### 2. 文档管理
+## 6. AI 何时可以跳过 MCP
 
-用于保存项目相关的稳定上下文说明文档。
+以下任务通常可以直接检索代码：
 
-优先保存：
+- 用户已经给出明确文件路径。
+- 只需找符号、调用点或配置值。
+- 内容必须以当前源码为准，稳定说明文档帮助不大。
 
-- `AGENTS.md`
-- `AI_CONTEXT_INDEX.md`
-- 稳定的项目说明
-- 稳定的业务边界说明
-- 长期有效的开发约定
+以下任务更适合先调用 MCP：
 
-不建议保存：
+- 需要业务边界、数据库信息、启动规范。
+- 需要理解多个前后端服务如何流转。
+- 新窗口缺少项目背景，且问题表达偏业务而非代码符号。
 
-- 配置文件原文
-- 表结构 SQL 原文
-- manifest 文件原文
-- AI 可以按需从源码目录直接读取的细节文件
+## 7. 非目标
 
-主要信息：
-
-- 文档 ID
-- 标题
-- 来源路径
-- 文档类型
-- 所属 area
-- tags
-- status
-- Markdown 正文
-
-文档状态：
-
-```text
-active
-stale
-archived
-```
-
-只有 active 文档会参与当前上下文检索。
-
-### 3. 文档树读取
-
-这是项目的核心使用方式。AI 从总入口文档开始，按文档列出的下一层 doc-id 继续读取。
-
-典型命令：
-
-```bash
-ctx read <doc-id>
-```
-
-读取时系统会自动挂到当前调用链路；没有当前调用链路时，会创建直接读取记录。管理或调试场景可以显式使用 `untracked=true` 读取，但这类读取不会进入 trace。
-
-### 4. 兜底上下文检索
-
-当文档树没有明确入口时，AI 可以使用 prepare 做兜底检索。
-
-输入：
-
-- project
-- area
-- cwd
-- entrypoint_path
-- entrypoint_rule
-- route_hint
-- source
-- agent_name
-- max_documents
-
-输出：
-
-- 内部 trace_id
-- area
-- 入口来源信息
-- 推荐文档列表
-- 每个文档的 rank
-- score
-- 匹配原因
-- excerpt
-- follow-up read 命令
-
-典型命令：
-
-```bash
-ctx prepare --project <project>
-```
-
-如果入口索引已经判断出任务 area，可以直接传入：
-
-```bash
-ctx prepare --project <project> --area <area> \
-  --entrypoint-path AI_CONTEXT_INDEX.md \
-  --entrypoint-rule "<matched rule>"
-```
-
-AI 编程助手应优先按文档树 `ctx read <doc-id>`，只有无法判断 doc-id 时才调用 prepare。
-
-### 5. 文档全文读取
-
-当已经知道 doc-id 时，AI 可以读取全文。
-
-典型命令：
-
-```bash
-ctx read <doc-id>
-```
-
-### 6. Trace 记录
-
-Trace 用于记录一次文档读取或兜底检索过程。
-
-Trace 包含：
-
-- 读取或检索入口
-- 项目
-- area
-- cwd
-- 入口索引路径
-- 命中的入口规则
-- route hint
-- 调用来源
-- prepare 返回过哪些文档
-- 每个文档的 score/reason/rank
-- AI 实际读取过哪些全文
-- 用户或开发者对推荐结果的反馈
-
-Trace 的意义：
-
-- 复盘 AI 为什么读了某些文档。
-- 判断上下文推荐是否准确。
-- 发现过期、不必要或缺失的文档。
-
-### 7. 推荐反馈
-
-前端 Trace 详情页可以标记推荐文档的反馈。
-
-当前反馈类型：
-
-```text
-useful
-unnecessary
-stale
-missing
-```
-
-反馈用于后续改进文档质量和路由规则。
-
-### 8. 前端面板
-
-前端主要是审计和查看用途，不是主要数据录入入口。
-
-当前页面：
-
-- Dashboard：查看项目、文档、trace、反馈指标。
-- Projects：查看顶层项目列表。
-- Project Detail：查看项目详情、子项目和 AI_CONTEXT_INDEX 模板。
-- Documents：查看和筛选上下文文档。
-- Traces：查看 read/prepare 调用历史。
-- Trace Detail：查看返回文档、read 事件和反馈。
-- Usage：查看和维护可复用的 Markdown 使用说明卡片。
-
-### 9. Usage 卡片
-
-Usage 卡片用于保存前端菜单中可查看、可编辑的 Markdown 使用说明。
-
-当前默认初始化一张内置卡片：
-
-```text
-ctx / SESSION_ID 使用说明
-```
-
-该卡片说明 `CTX` 命令变量、`SESSION_ID` 生成和复用规则、`ctx read` / `ctx prepare` / `ctx doc sync` 的使用边界。内置卡片可以编辑但不能删除；后续可以新增开发规范等普通卡片。
-
-### 10. CLI 能力
-
-CLI 是当前主要操作入口之一。
-
-常用命令：
-
-```bash
-ctx project add
-ctx project init-index
-ctx doc add
-ctx prepare
-ctx read
-ctx trace
-```
-
-### 11. MCP 能力
-
-MCP server 用于让 AI 编程助手直接调用上下文路由能力。
-
-当前工具：
-
-```text
-prepare_task_context
-read_context_document
-```
-
-## 业务边界
-
-这个项目负责：
-
-- 管理上下文文档。
-- 推荐任务相关文档。
-- 记录 AI 上下文使用行为。
-- 提供排查和反馈闭环。
-
-这个项目不负责：
-
-- 替代代码仓库本身。
-- 存储所有项目知识。
-- 自动判断最终代码修改方案。
-- 做复杂权限系统。
-  - 做向量语义检索。
+- 不做任务完成度和成功率评分。
+- 不做人工反馈系统。
+- 不强制 AI 每次调用 MCP。
+- 不把数据库作为项目文档的唯一编辑源。
+- 不提供开发者命令行产品入口。

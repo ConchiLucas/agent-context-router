@@ -11,6 +11,16 @@
 
 ## 记录
 
+### 2026-07-19
+
+- 产品层改为 MCP-only，保留 FastAPI HTTP API 作为 MCP 与 Web 的内部实现；删除旧命令行入口、依赖、脚本和测试。
+- MCP 收敛为无状态 `prepare_task_context(task, cwd, project?, agent_name?)` 与 `read_context_document(trace_id, document_id, parent_document_id?)` 两个工具；每次 prepare 独立建链，候选最多 3 份。
+- project 默认按 cwd 的最长 root_path 自动识别；read 必须显式传 trace_id，parent_document_id 必须是同链路已读文档，depth 和 duration_ms 由后端生成。
+- 前端用 `/tasks` 外层任务列表和 `/tasks/{traceId}` 独立详情替代 Traces 工作台，展示候选、实际阅读、父子链路和 MCP 耗时；移除 Usage、反馈和停止原因运行时。
+- Projects 页面增加网页创建项目，Reload Links 改为 Sync Documents；文档页不再展示命令提示。
+- 历史数据库字段、usage_cards 表和 migration 暂时保留兼容，不作为当前产品能力暴露。
+- 根 AGENTS.md、README、业务/链路文档和 managed 文档改为 MCP-first 按需阅读规则。
+
 ### 2026-06-27
 
 - 建立 `docs/DEVELOPMENT_OUTLINE.md` 作为代码开发大纲。

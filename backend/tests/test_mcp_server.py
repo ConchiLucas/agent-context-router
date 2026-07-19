@@ -3,6 +3,12 @@ import json
 from context_router import mcp_server
 
 
+def test_mcp_api_url_uses_context_router_environment_name(monkeypatch) -> None:
+    monkeypatch.setenv("CONTEXT_ROUTER_API_URL", "http://router.internal:9000/")
+
+    assert mcp_server.api_url() == "http://router.internal:9000"
+
+
 def test_mcp_prepare_uses_minimal_task_contract(monkeypatch) -> None:
     requests: list[tuple[str, str, dict | None, dict | None]] = []
 
