@@ -1,4 +1,5 @@
-from typing import Annotated
+from datetime import datetime
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, StringConstraints
 
@@ -11,6 +12,28 @@ class ProjectCreate(BaseModel):
     root_path: NonBlankString
     description: str = ""
     parent_slug: str | None = None
+
+
+class DocumentMappingRequest(BaseModel):
+    docs_path: NonBlankString
+
+
+class DocumentMappingResponse(BaseModel):
+    project_slug: str
+    docs_path: str
+    last_synced_at: datetime | None
+    last_sync_status: str
+    last_sync_summary: dict[str, Any]
+
+
+class DocumentMappingCandidateResponse(BaseModel):
+    docs_path: str
+    markdown_count: int
+    mapped_project_slug: str | None
+
+
+class DocumentMappingCandidateListResponse(BaseModel):
+    candidates: list[DocumentMappingCandidateResponse]
 
 
 class ProjectResponse(BaseModel):

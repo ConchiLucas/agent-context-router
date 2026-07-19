@@ -7,11 +7,18 @@ from sqlalchemy.orm import Session, selectinload
 from context_router.db.models import Project
 from context_router.db.session import get_session
 from context_router.schemas.projects import (
+    DocumentMappingRequest,
+    DocumentMappingResponse,
     ProjectCreate,
     ProjectDetailResponse,
     ProjectListResponse,
     ProjectResponse,
     ProjectSummary,
+)
+from context_router.services.document_mapping import (
+    DocumentMappingConflictError,
+    DocumentMappingError,
+    assign_document_mapping,
 )
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -59,6 +66,41 @@ def create_project(
     session.commit()
     session.refresh(saved)
     return _project_response(saved)
+
+
+@router.put(
+    "/{project_slug}/document-mapping",
+    response_model=DocumentMappingResponse,
+)
+def update_document_mapping(
+    project_slug: str,
+    request: DocumentMappingRequest,
+    session: Annotated[Session, Depends(get_session)],
+) -> DocumentMappingResponse:
+    project = session.scalar(select(Project).where(Project.slug == project_slug))
+    if project is None:
+        raise HTTPException(status_code=404, detail=f"Project not found: {project_slug}")
+
+    try:
+        assign_document_mapping(
+            session,
+            project=project,
+            docs_path=request.docs_path,
+        )
+    except DocumentMappingConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except DocumentMappingError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    session.commit()
+    session.refresh(project)
+    return DocumentMappingResponse(
+        project_slug=project.slug,
+        docs_path=project.docs_path or "",
+        last_synced_at=project.last_synced_at,
+        last_sync_status=project.last_sync_status,
+        last_sync_summary=project.last_sync_summary,
+    )
 
 
 @router.get("/{project_slug}", response_model=ProjectDetailResponse)
