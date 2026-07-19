@@ -42,6 +42,12 @@ def resolve_document_root(project: Project) -> Path:
     return _resolve_docs_path(project.docs_path)
 
 
+def resolve_document_storage_root(project: Project) -> Path:
+    if not project.docs_path:
+        raise DocumentMappingError(f"Project has no document mapping: {project.slug}")
+    return _resolve_docs_path(project.docs_path, require_structure=False)
+
+
 def list_document_candidates(session: Session) -> list[DocumentMappingCandidate]:
     root = documents_root()
     occupied = {
@@ -100,7 +106,7 @@ def assign_document_mapping(
     return project
 
 
-def _resolve_docs_path(docs_path: str) -> Path:
+def _resolve_docs_path(docs_path: str, *, require_structure: bool = True) -> Path:
     relative = Path(docs_path.strip())
     if relative.is_absolute() or ".." in relative.parts or len(relative.parts) != 1:
         raise DocumentMappingError(
@@ -118,6 +124,9 @@ def _resolve_docs_path(docs_path: str) -> Path:
         raise DocumentMappingError(
             f"Mapped document directory is unavailable: {docs_path}"
         ) from exc
+
+    if not require_structure:
+        return resolved
 
     agents_path = resolved / "AGENTS.md"
     docs_directory = resolved / "docs"
