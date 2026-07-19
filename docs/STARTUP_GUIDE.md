@@ -61,6 +61,8 @@ docker compose exec frontend npm run lint
 docker compose exec frontend npm run build
 ```
 
+`npm run build` 在一次性临时副本中构建，不会覆盖正在运行的开发服务 `.next` 缓存或改写源码配置。
+
 ## 数据库
 
 - 本地开发优先使用项目已配置的 PostgreSQL 数据库连接。
