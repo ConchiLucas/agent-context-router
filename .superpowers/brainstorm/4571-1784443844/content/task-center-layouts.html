@@ -1,0 +1,133 @@
+<h2>任务中心采用哪种信息结构？</h2>
+<p class="subtitle">三种方案都只展示调用过 MCP 的任务；点击卡片选择你倾向的布局。</p>
+
+<div class="cards">
+  <div class="card" data-choice="master-detail" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">A · 列表 + 详情（推荐）</div>
+        <div class="mockup-body">
+          <div style="display:grid;grid-template-columns:34% 66%;min-height:270px">
+            <div style="padding:12px;border-right:1px solid #d7dce2">
+              <div class="label">最近任务</div>
+              <div style="margin-top:10px;padding:10px;background:#e8f0ff;border-radius:7px">
+                <strong>修复登录超时</strong><br>
+                <small>3 个候选 · 2 次阅读</small>
+              </div>
+              <div style="margin-top:8px;padding:10px;border-bottom:1px solid #e2e5e9">
+                <strong>调整首页布局</strong><br>
+                <small>2 个候选 · 0 次阅读</small>
+              </div>
+              <div style="margin-top:8px;padding:10px;border-bottom:1px solid #e2e5e9">
+                <strong>排查迁移失败</strong><br>
+                <small>3 个候选 · 3 次阅读</small>
+              </div>
+            </div>
+            <div style="padding:12px">
+              <div class="label">实际阅读链路</div>
+              <div style="display:flex;align-items:center;gap:7px;margin-top:16px;flex-wrap:wrap">
+                <span style="padding:8px;border-radius:6px;background:#edf1f5">任务</span>
+                <span>→</span>
+                <span style="padding:8px;border-radius:6px;background:#edf1f5">MCP 推荐 3 篇</span>
+                <span>→</span>
+                <span style="padding:8px;border-radius:6px;background:#e4f6ea">读取 A</span>
+                <span>→</span>
+                <span style="padding:8px;border-radius:6px;background:#e4f6ea">读取 C</span>
+              </div>
+              <div style="margin-top:18px;padding-top:12px;border-top:1px solid #e2e5e9">
+                <strong>推荐结果</strong>
+                <p style="margin:8px 0">✓ 登录与鉴权说明 <small>已阅读</small></p>
+                <p style="margin:8px 0">— 前端开发规范 <small>未阅读</small></p>
+                <p style="margin:8px 0">✓ 故障排查手册 <small>已阅读</small></p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>主从式任务中心</h3>
+      <p>左边快速切换任务，右边立即看到候选文档和真实阅读顺序。最适合日常持续观察。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="timeline-first" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">B · 链路优先</div>
+        <div class="mockup-body">
+          <div style="padding:12px;min-height:270px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <strong>修复登录超时</strong><small>Codex · 刚刚</small>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:20px;text-align:center">
+              <div style="padding:12px;background:#edf1f5;border-radius:7px">任务入口<br><small>09:31:02</small></div>
+              <div style="padding:12px;background:#edf1f5;border-radius:7px">返回候选<br><small>3 篇</small></div>
+              <div style="padding:12px;background:#e4f6ea;border-radius:7px">读取文档 A<br><small>09:31:04</small></div>
+              <div style="padding:12px;background:#e4f6ea;border-radius:7px">读取文档 C<br><small>09:31:08</small></div>
+            </div>
+            <div style="margin-top:22px;border-top:1px solid #e2e5e9;padding-top:14px">
+              <div class="label">当前节点详情</div>
+              <p><strong>故障排查手册</strong></p>
+              <p><small>由“登录与鉴权说明”中的文档链接继续读取</small></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>横向流程图</h3>
+      <p>单个任务链路最醒目，适合复盘；但频繁切换和对比多个任务不够方便。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="table-first" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">C · 数据表优先</div>
+        <div class="mockup-body">
+          <div style="padding:12px;min-height:270px">
+            <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;padding:9px;border-bottom:1px solid #d7dce2;font-weight:600">
+              <span>任务</span><span>候选</span><span>阅读</span><span>耗时</span>
+            </div>
+            <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;padding:11px;border-bottom:1px solid #e2e5e9;background:#e8f0ff">
+              <span>修复登录超时</span><span>3</span><span>2</span><span>86 ms</span>
+            </div>
+            <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;padding:11px;border-bottom:1px solid #e2e5e9">
+              <span>调整首页布局</span><span>2</span><span>0</span><span>41 ms</span>
+            </div>
+            <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;padding:11px;border-bottom:1px solid #e2e5e9">
+              <span>排查迁移失败</span><span>3</span><span>3</span><span>112 ms</span>
+            </div>
+            <div style="margin-top:18px;padding:12px;background:#edf1f5;border-radius:7px">
+              点击一行后，在抽屉中查看阅读链路
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>审计数据表</h3>
+      <p>最适合大量任务筛选和横向比较，但阅读链路被收进二级抽屉，不够直观。</p>
+    </div>
+  </div>
+</div>
+
+<div class="pros-cons">
+  <div class="pros">
+    <h4>我推荐 A</h4>
+    <ul>
+      <li>打开页面就能看到“哪些任务用了 MCP”</li>
+      <li>不用跳转即可查看推荐与实际阅读的差异</li>
+      <li>后续可平滑增加文档详情，不必重做结构</li>
+    </ul>
+  </div>
+  <div class="cons">
+    <h4>第一版刻意不展示</h4>
+    <ul>
+      <li>未调用 MCP 的任务</li>
+      <li>不读或停止阅读的原因</li>
+      <li>人工反馈和任务成功率</li>
+    </ul>
+  </div>
+</div>

@@ -1,0 +1,160 @@
+<style>
+  #task-center-v2 { color: #182230; }
+  #task-center-v2 * { box-sizing: border-box; }
+  #task-center-v2 .topbar { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; margin-bottom:24px; }
+  #task-center-v2 .eyebrow { color:#667085; font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+  #task-center-v2 h2 { margin:5px 0 6px; }
+  #task-center-v2 .sub { margin:0; color:#667085; }
+  #task-center-v2 .filters { display:flex; gap:8px; flex-wrap:wrap; }
+  #task-center-v2 .filter { border:1px solid #d0d5dd; background:#fff; color:#344054; padding:8px 11px; border-radius:7px; font:inherit; }
+  #task-center-v2 .task-table { border:1px solid #e4e7ec; border-radius:10px; overflow:hidden; background:#fff; }
+  #task-center-v2 .task-head, #task-center-v2 .task-row { display:grid; grid-template-columns:minmax(260px,2fr) 1fr .8fr .8fr .8fr; gap:16px; align-items:center; padding:13px 16px; }
+  #task-center-v2 .task-head { background:#f8fafc; color:#667085; font-size:12px; font-weight:700; border-bottom:1px solid #e4e7ec; }
+  #task-center-v2 .task-row { width:100%; border:0; border-bottom:1px solid #edf0f3; background:#fff; color:#344054; text-align:left; cursor:pointer; font:inherit; }
+  #task-center-v2 .task-row:last-child { border-bottom:0; }
+  #task-center-v2 .task-row:hover { background:#f8fbff; }
+  #task-center-v2 .task-title { display:block; color:#101828; font-weight:700; margin-bottom:4px; }
+  #task-center-v2 .task-id { color:#98a2b3; font-size:12px; }
+  #task-center-v2 .count { font-weight:700; color:#101828; }
+  #task-center-v2 .tag { display:inline-flex; align-items:center; border-radius:999px; padding:4px 8px; background:#f2f4f7; color:#475467; font-size:12px; }
+  #task-center-v2 .tag.read { background:#eaf8ef; color:#256b3d; }
+  #task-center-v2 .detail { display:none; }
+  #task-center-v2 .detail.active { display:block; }
+  #task-center-v2 .list.hidden { display:none; }
+  #task-center-v2 .back { border:0; background:transparent; padding:0; color:#315fbd; cursor:pointer; font:inherit; font-weight:700; margin-bottom:18px; }
+  #task-center-v2 .detail-header { border-bottom:1px solid #e4e7ec; padding-bottom:18px; margin-bottom:24px; }
+  #task-center-v2 .meta { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+  #task-center-v2 .flow { position:relative; margin:12px 0 28px 12px; padding-left:30px; }
+  #task-center-v2 .flow:before { content:""; position:absolute; left:7px; top:14px; bottom:24px; width:2px; background:#d9e2f2; }
+  #task-center-v2 .event { position:relative; padding:0 0 22px; }
+  #task-center-v2 .event:before { content:""; position:absolute; left:-30px; top:5px; width:14px; height:14px; border-radius:50%; background:#fff; border:3px solid #4776d0; }
+  #task-center-v2 .event.read:before { border-color:#2e8b57; }
+  #task-center-v2 .event-label { color:#667085; font-size:12px; margin-bottom:5px; }
+  #task-center-v2 .event-main { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; }
+  #task-center-v2 .event-title { color:#101828; font-weight:700; }
+  #task-center-v2 .event-detail { color:#667085; margin-top:4px; font-size:13px; }
+  #task-center-v2 .event-time { color:#98a2b3; font-size:12px; white-space:nowrap; }
+  #task-center-v2 .section-title { margin:0 0 12px; font-size:16px; }
+  #task-center-v2 .docs { border-top:1px solid #e4e7ec; }
+  #task-center-v2 .doc { display:grid; grid-template-columns:34px minmax(200px,1.5fr) .7fr .7fr; gap:14px; align-items:center; padding:13px 4px; border-bottom:1px solid #edf0f3; }
+  #task-center-v2 .rank { color:#98a2b3; font-weight:700; }
+  #task-center-v2 .doc-title { font-weight:700; color:#101828; }
+  #task-center-v2 .doc-excerpt { color:#667085; font-size:12px; margin-top:3px; }
+  @media (max-width:760px) {
+    #task-center-v2 .topbar { flex-direction:column; }
+    #task-center-v2 .task-head { display:none; }
+    #task-center-v2 .task-row { grid-template-columns:1fr 1fr; }
+    #task-center-v2 .task-row > :first-child { grid-column:1 / -1; }
+    #task-center-v2 .doc { grid-template-columns:28px 1fr; }
+    #task-center-v2 .doc > :nth-child(n+3) { grid-column:2; }
+  }
+</style>
+
+<div id="task-center-v2">
+  <section class="list" data-view="list">
+    <div class="topbar">
+      <div>
+        <div class="eyebrow">MCP 调用记录</div>
+        <h2>任务</h2>
+        <p class="sub">只展示调用过 Context Router MCP 的任务</p>
+      </div>
+      <div class="filters">
+        <button class="filter" type="button">全部项目 ▾</button>
+        <button class="filter" type="button">全部 Agent ▾</button>
+      </div>
+    </div>
+
+    <div class="task-table" aria-label="任务列表">
+      <div class="task-head">
+        <span>任务</span><span>项目</span><span>Agent</span><span>候选文档</span><span>实际阅读</span>
+      </div>
+      <button class="task-row" type="button" data-open-task="login-timeout">
+        <span><span class="task-title">修复登录超时问题</span><span class="task-id">trace_01K4M9H2 · 2 分钟前</span></span>
+        <span>word-workforce</span><span><span class="tag">Codex</span></span><span><span class="count">3</span> 篇</span><span><span class="count">2</span> 次</span>
+      </button>
+      <button class="task-row" type="button" data-open-task="frontend-layout">
+        <span><span class="task-title">调整首页任务卡片布局</span><span class="task-id">trace_01K4M7P8 · 18 分钟前</span></span>
+        <span>context-router</span><span><span class="tag">Antigravity</span></span><span><span class="count">2</span> 篇</span><span><span class="count">0</span> 次</span>
+      </button>
+      <button class="task-row" type="button" data-open-task="migration-failure">
+        <span><span class="task-title">排查数据库迁移失败</span><span class="task-id">trace_01K4M4AA · 1 小时前</span></span>
+        <span>context-router</span><span><span class="tag">Codex</span></span><span><span class="count">3</span> 篇</span><span><span class="count">3</span> 次</span>
+      </button>
+    </div>
+  </section>
+
+  <section class="detail" data-view="detail">
+    <button class="back" type="button" data-back>← 返回任务列表</button>
+    <div class="detail-header">
+      <div class="eyebrow">任务详情 · trace_01K4M9H2</div>
+      <h2>修复登录超时问题</h2>
+      <p class="sub">展示 MCP 实际发生的调用，不要求 Agent 补充解释</p>
+      <div class="meta">
+        <span class="tag">word-workforce</span>
+        <span class="tag">Codex</span>
+        <span class="tag">3 个候选</span>
+        <span class="tag read">2 次阅读</span>
+        <span class="tag">总耗时 86 ms</span>
+      </div>
+    </div>
+
+    <h3 class="section-title">MCP 调用链路</h3>
+    <div class="flow" aria-label="MCP 调用链路">
+      <div class="event">
+        <div class="event-label">任务入口</div>
+        <div class="event-main">
+          <div><div class="event-title">prepare_task_context</div><div class="event-detail">task="修复登录超时问题" · cwd=/workforce/word</div></div>
+          <span class="event-time">09:31:02.104</span>
+        </div>
+      </div>
+      <div class="event">
+        <div class="event-label">MCP 返回</div>
+        <div class="event-main">
+          <div><div class="event-title">返回 3 个候选文档</div><div class="event-detail">登录与鉴权说明、前端开发规范、故障排查手册</div></div>
+          <span class="event-time">+ 41 ms</span>
+        </div>
+      </div>
+      <div class="event read">
+        <div class="event-label">实际阅读 1</div>
+        <div class="event-main">
+          <div><div class="event-title">read_context_document · 登录与鉴权说明</div><div class="event-detail">从 prepare 候选结果进入</div></div>
+          <span class="event-time">09:31:04.230</span>
+        </div>
+      </div>
+      <div class="event read">
+        <div class="event-label">实际阅读 2</div>
+        <div class="event-main">
+          <div><div class="event-title">read_context_document · 故障排查手册</div><div class="event-detail">由“登录与鉴权说明”中的关联文档继续读取</div></div>
+          <span class="event-time">09:31:08.611</span>
+        </div>
+      </div>
+    </div>
+
+    <h3 class="section-title">候选文档与阅读结果</h3>
+    <div class="docs">
+      <div class="doc"><span class="rank">01</span><span><span class="doc-title">登录与鉴权说明</span><span class="doc-excerpt">登录态、Token 刷新与超时处理入口</span></span><span>score 18.4</span><span><span class="tag read">已阅读</span></span></div>
+      <div class="doc"><span class="rank">02</span><span><span class="doc-title">前端开发规范</span><span class="doc-excerpt">页面请求与错误状态的通用约定</span></span><span>score 12.1</span><span><span class="tag">未阅读</span></span></div>
+      <div class="doc"><span class="rank">03</span><span><span class="doc-title">故障排查手册</span><span class="doc-excerpt">线上登录超时的定位路径与检查项</span></span><span>score 10.8</span><span><span class="tag read">已阅读</span></span></div>
+    </div>
+  </section>
+</div>
+
+<script>
+  (function () {
+    const root = document.getElementById('task-center-v2');
+    const list = root.querySelector('[data-view="list"]');
+    const detail = root.querySelector('[data-view="detail"]');
+    root.querySelectorAll('[data-open-task]').forEach((button) => {
+      button.addEventListener('click', () => {
+        list.classList.add('hidden');
+        detail.classList.add('active');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    });
+    root.querySelector('[data-back]').addEventListener('click', () => {
+      detail.classList.remove('active');
+      list.classList.remove('hidden');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  })();
+</script>
