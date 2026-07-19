@@ -82,11 +82,11 @@ export function ProjectLinkReloadButton({
   return (
     <div className="project-sync-control">
       <button
-        aria-label={`Reload document links for ${projectSlug}`}
+        aria-label={`Sync documents for ${projectSlug}`}
         className="button project-sync-button"
         disabled={isDisabled}
         onClick={() => void reloadLinks()}
-        title={disabled ? "Root path is required" : "Reload local markdown links"}
+        title={disabled ? "Root path is required" : "Sync local markdown documents"}
         type="button"
       >
         <svg
@@ -105,7 +105,7 @@ export function ProjectLinkReloadButton({
           <path d="M7 18H3v4" />
           <path d="M17 6h4V2" />
         </svg>
-        <span>{isLoading ? "Reloading" : "Reload Links"}</span>
+        <span>{isLoading ? "Syncing" : "Sync Documents"}</span>
       </button>
       {syncState.message ? (
         <span

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { DocumentsView } from "@/components/documents-view";
 import { ModalCloseButton } from "@/components/modal-close-button";
 import { ProjectDocumentPreviewShell } from "@/components/project-document-preview-shell";
+import { ProjectCreateForm } from "@/components/project-create-form";
 import { ProjectLinkReloadButton } from "@/components/project-link-reload-button";
 import { getProjects } from "@/lib/api";
 
@@ -38,6 +39,9 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
         <h1 className="page-title">Projects</h1>
         <p className="page-subtitle">Top-level workspaces and their subprojects.</p>
       </header>
+      <section className="section">
+        <ProjectCreateForm />
+      </section>
       <section className="section grid project-grid">
         {projects.length === 0 ? (
           <div className="panel">

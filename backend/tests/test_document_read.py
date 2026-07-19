@@ -507,7 +507,7 @@ def test_read_document_marks_prepare_followup_read() -> None:
 
     response = client.get(
         "/api/documents/payments-runbook",
-        params={"trace_id": "ctx_test_001", "source": "cli"},
+        params={"trace_id": "ctx_test_001", "source": "mcp"},
     )
 
     assert response.status_code == 200

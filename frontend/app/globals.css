@@ -365,6 +365,15 @@ body {
 }
 
 @media (max-width: 620px) {
+  .project-create-form {
+    grid-template-columns: 1fr;
+  }
+
+  .project-create-wide,
+  .project-create-actions {
+    grid-column: auto;
+  }
+
   .task-row,
   .task-summary-grid,
   .read-facts {
@@ -478,6 +487,70 @@ textarea {
 .project-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: stretch;
+}
+
+.project-create-panel {
+  padding: 1rem 1.25rem;
+}
+
+.project-create-panel summary {
+  width: fit-content;
+  cursor: pointer;
+  color: #c4b5fd;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.project-create-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1.25rem;
+  border-top: 1px solid var(--line);
+  padding-top: 1.25rem;
+}
+
+.project-create-form label {
+  display: grid;
+  gap: 0.45rem;
+  color: #cbd5e1;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.project-create-form input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.03);
+  color: #f8fafc;
+  padding: 0.72rem 0.8rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.project-create-form input:focus {
+  border-color: rgba(129, 140, 248, 0.72);
+  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.12);
+}
+
+.project-create-wide,
+.project-create-actions {
+  grid-column: 1 / -1;
+}
+
+.project-create-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.project-create-actions span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 650;
 }
 
 /* Interactive Cards & Rows */

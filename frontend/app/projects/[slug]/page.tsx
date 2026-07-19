@@ -42,6 +42,10 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
           <span className="metric-label">Subprojects</span>
           <strong className="metric-value">{project.child_project_count}</strong>
         </div>
+        <Link className="panel metric" href={`/tasks?project=${encodeURIComponent(project.slug)}`}>
+          <span className="metric-label">MCP Tasks</span>
+          <strong className="metric-value">{project.trace_count}</strong>
+        </Link>
       </section>
 
       {project.children.length > 0 ? (
@@ -65,7 +69,7 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
       ) : null}
 
       <section className="section panel">
-        <h2 className="section-title">AI_CONTEXT_INDEX.md</h2>
+        <h2 className="section-title">MCP routing template</h2>
         <pre className="code-block">{project.routing_template}</pre>
       </section>
     </>

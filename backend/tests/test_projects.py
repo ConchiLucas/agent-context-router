@@ -93,8 +93,9 @@ def test_list_and_get_project_include_document_counts_and_routing_template() -> 
     assert body["document_count"] == 1
     assert body["trace_count"] == 0
     assert body["children"] == []
-    assert "ctx read <doc-id>" in body["routing_template"]
-    assert "ctx prepare --project my-app" in body["routing_template"]
+    assert "prepare_task_context" in body["routing_template"]
+    assert "read_context_document" in body["routing_template"]
+    assert "ctx " not in body["routing_template"]
 
 
 def test_project_list_defaults_to_roots_and_detail_includes_children() -> None:

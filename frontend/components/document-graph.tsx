@@ -113,7 +113,7 @@ export function DocumentGraph({
               在总入口 Markdown 中添加本地链接，例如
               {" "}
               <code>[数据库信息](./rob-english-word-workforce-database-info.md)</code>
-              ，然后重新运行同步命令。
+              ，然后在 Projects 页面点击 Sync Documents。
             </p>
           </div>
         )}
@@ -263,7 +263,7 @@ function descriptionForDocument(document: DocumentSummary) {
 }
 
 function readCommand(documentId: string) {
-  return `ctx read ${documentId}`;
+  return `document_id: ${documentId}`;
 }
 
 const docTypeLabels: Record<string, string> = {

@@ -132,35 +132,28 @@ def _iter_project_tree(project: Project):
 def _routing_template(project_slug: str) -> str:
     return f"""# AI_CONTEXT_INDEX.md
 
-本文件是 AI 的上下文树索引入口，只列下一层文档和读取命令。
+本文件是 AI 的上下文树索引入口，只列下一层文档和适用任务。
 
 ## 使用方式
 
-- 主流程是按 doc-id 运行 `ctx read <doc-id>`。
-- 每份文档继续列出自己的下一层文档。
-- `ctx prepare` 只在无法判断 doc-id 时兜底使用。
+- 开始任务时调用 MCP 工具 `prepare_task_context`，传入 task 和 cwd。
+- 从返回的候选文档中选择需要的内容。
+- 读取候选文档时调用 `read_context_document`，并传回 trace_id。
 - 源码、配置、表结构等实时内容可以直接查项目目录。
 
-## 初始化索引
+## 项目标识
 
-```bash
-ctx project init-index --project {project_slug} --area <area>
-```
+- project: `{project_slug}`
+- 通常由 cwd 自动识别，不需要 AI 手工指定。
 
 ## 下一层文档
 
 - `<doc-id>`：填写下一层文档用途。
-  - 读取：`ctx read <doc-id>`
-
-## 兜底检索
-
-```bash
-ctx prepare --project {project_slug}
-```
+  - 适用任务：描述 AI 在什么情况下需要它。
 
 ## Rules
 
 - 不要一开始读取全部说明文档。
-- 优先按文档树 `ctx read <doc-id>`。
+- 只读取当前任务需要的候选文档。
 - 如果文档树缺少合适入口，在最终回复中说明缺口。
 """
