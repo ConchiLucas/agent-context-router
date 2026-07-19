@@ -47,18 +47,17 @@ export function TaskDetail({ task }: Readonly<{ task: TraceDetail }>) {
           >
             <div className="candidate-grid">
               {task.retrieval_hits.length === 0 ? (
-                <p className="task-muted">No candidate documents returned.</p>
+                <p className="task-muted">No entry document returned.</p>
               ) : (
                 task.retrieval_hits.map((hit) => (
                   <article className="candidate-card" key={hit.id}>
                     <div>
-                      <span>#{hit.rank}</span>
+                      <span>Entry</span>
                       <strong>{hit.document_title}</strong>
                     </div>
                     <code>{hit.document_id}</code>
-                    <p>{hit.reason}</p>
                     <span className={`candidate-state ${readIds.has(hit.document_id) ? "read" : "skipped"}`}>
-                      {readIds.has(hit.document_id) ? "Read by AI" : "Returned only"}
+                      {readIds.has(hit.document_id) ? "Entry read" : "Entry returned"}
                     </span>
                   </article>
                 ))
@@ -87,6 +86,7 @@ export function TaskDetail({ task }: Readonly<{ task: TraceDetail }>) {
                     label="Parent"
                     value={payloadString(event, "parent_document_id") || "task root"}
                   />
+                  <Fact label="Read depth" value={payloadString(event, "depth") || "—"} />
                 </div>
               </ChainStep>
             ))

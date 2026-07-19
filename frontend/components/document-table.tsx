@@ -29,6 +29,9 @@ export function DocumentTable({
             <th>Project</th>
             <th>Area</th>
             <th>Type</th>
+            <th>Reachability</th>
+            <th>Depth</th>
+            <th>Broken links</th>
             <th style={{ borderTopRightRadius: "var(--radius-md)", width: "100px" }}>Status</th>
           </tr>
         </thead>
@@ -61,6 +64,13 @@ export function DocumentTable({
                   {document.doc_type}
                 </span>
               </td>
+              <td>
+                <span className={`badge ${document.is_reachable ? "badge-active" : "badge-stale"}`}>
+                  {document.is_reachable ? "reachable" : "orphan"}
+                </span>
+              </td>
+              <td>{document.graph_depth ?? "—"}</td>
+              <td>{document.broken_link_count}</td>
               <td>
                 <span className={`badge ${statusClassMap[document.status] || ""}`}>
                   {document.status}

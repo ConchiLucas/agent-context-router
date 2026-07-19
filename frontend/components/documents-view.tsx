@@ -54,7 +54,7 @@ export async function DocumentsView({
           <div>
             <h2 className="section-title">Context Map</h2>
             <p className="page-subtitle">
-              从总索引开始，按使用方式、路由规则和子项目入口查看上下文关系。
+              从 AGENTS.md 查看可达层级、孤立文档和断链。
             </p>
           </div>
           <div className="segmented-control" aria-label="Document view mode">

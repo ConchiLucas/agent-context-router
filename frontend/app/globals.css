@@ -1667,6 +1667,125 @@ textarea {
   color: #dbeafe !important;
 }
 
+.document-health-map,
+.document-depth-levels {
+  display: grid;
+  gap: 1rem;
+}
+
+.document-health-empty {
+  padding: 2rem;
+  text-align: center;
+}
+
+.document-depth-level,
+.document-health-section {
+  display: grid;
+  gap: 0.8rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: rgba(15, 23, 42, 0.34);
+}
+
+.document-health-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.document-health-heading div {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.document-health-heading span {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.document-health-heading h3 {
+  margin: 0;
+  color: #f8fafc;
+  font-size: 1rem;
+}
+
+.document-health-heading > strong {
+  display: grid;
+  place-items: center;
+  min-width: 2rem;
+  min-height: 2rem;
+  border-radius: 999px;
+  background: rgba(129, 140, 248, 0.12);
+  color: #c4b5fd;
+}
+
+.document-depth-nodes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 0.7rem;
+}
+
+.document-depth-level:first-child {
+  border-color: rgba(129, 140, 248, 0.34);
+  background: linear-gradient(135deg, rgba(129, 140, 248, 0.09), rgba(15, 23, 42, 0.34));
+}
+
+.orphan-section {
+  border-color: rgba(251, 191, 36, 0.24);
+}
+
+.orphan-node {
+  border-color: rgba(251, 191, 36, 0.22);
+  background: rgba(120, 53, 15, 0.08);
+}
+
+.broken-section {
+  border-color: rgba(251, 113, 133, 0.25);
+}
+
+.broken-link-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.broken-link-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-width: 0;
+  padding: 0.7rem 0.8rem;
+  border-radius: var(--radius-sm);
+  background: rgba(127, 29, 29, 0.1);
+}
+
+.broken-link-item div {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.broken-link-item strong {
+  color: #fecdd3;
+  font-size: 0.86rem;
+}
+
+.broken-link-item span {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.broken-link-item code {
+  overflow-wrap: anywhere;
+  color: #fda4af;
+  font-size: 0.75rem;
+}
+
 .row-meta,
 .split-row,
 .feedback-row {
@@ -2632,6 +2751,11 @@ textarea {
   .document-graph-map,
   .document-graph-route {
     grid-template-columns: 1fr;
+  }
+
+  .broken-link-item {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .document-view-toolbar {
