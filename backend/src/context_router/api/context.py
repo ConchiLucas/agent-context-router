@@ -6,10 +6,21 @@ from sqlalchemy.orm import Session
 
 from context_router.db.models import RetrievalHit, Trace, TraceEvent
 from context_router.db.session import get_session
-from context_router.schemas.context import PrepareContextRequest, PrepareContextResponse
+from context_router.schemas.context import (
+    ContextDocument,
+    PrepareContextRequest,
+    PrepareContextResponse,
+)
+from context_router.services.document_graph import (
+    DocumentGraphError,
+    project_entry_document,
+)
+from context_router.services.local_document_reader import (
+    LocalDocumentReadError,
+    read_document_content,
+)
 from context_router.services.project_resolution import ProjectResolutionError, resolve_project
 from context_router.services.rendering import render_context_markdown
-from context_router.services.retrieval import retrieve_documents
 from context_router.services.tracing import new_trace_id
 
 router = APIRouter(prefix="/api/context", tags=["context"])
@@ -29,16 +40,29 @@ def prepare_context(
     except ProjectResolutionError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+    if project.last_synced_at is None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Project has no synced document mapping: {project.slug}",
+        )
+
     task_text = request.task.strip()
     started_at = perf_counter()
+    try:
+        entry_document = project_entry_document(session, project)
+        entry_content = read_document_content(entry_document)
+    except (DocumentGraphError, LocalDocumentReadError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-    results = retrieve_documents(
-        session,
-        project=project,
-        task=task_text,
-        area=request.area,
-        max_documents=request.max_documents,
+    result = ContextDocument(
+        document_id=entry_document.id,
+        title=entry_document.title,
+        reason="Mapped AGENTS.md entry point",
+        score=1.0,
+        excerpt=entry_content.strip().replace("\n", " ")[:180],
+        rank=1,
     )
+    results = [result]
     duration_ms = round((perf_counter() - started_at) * 1000, 3)
     trace_id = new_trace_id()
     trace = Trace(
@@ -67,7 +91,8 @@ def prepare_context(
                 "route_hint": request.route_hint,
                 "source": request.source,
                 "agent_name": request.agent_name,
-                "max_documents": request.max_documents,
+                "max_documents": 1,
+                "entry_document_id": entry_document.id,
                 "output_format": request.output_format,
                 "duration_ms": duration_ms,
             },
