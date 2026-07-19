@@ -3,12 +3,43 @@ export type ProjectSummary = {
   slug: string;
   name: string;
   root_path: string | null;
+  docs_path: string | null;
   description: string;
   parent_slug: string | null;
+  mapping_status: string;
+  last_synced_at: string | null;
+  last_sync_status: string;
+  sync_summary: SyncSummary;
   document_count: number;
   active_document_count: number;
   trace_count: number;
   child_project_count: number;
+};
+
+export type SyncSummary = {
+  indexed: number;
+  reachable: number;
+  orphan: number;
+  broken_links: number;
+  pruned: number;
+};
+
+export type DocumentMappingCandidate = {
+  docs_path: string;
+  markdown_count: number;
+  mapped_project_slug: string | null;
+};
+
+export type DocumentMappingCandidateListResponse = {
+  candidates: DocumentMappingCandidate[];
+};
+
+export type DocumentMappingResponse = {
+  project_slug: string;
+  docs_path: string;
+  last_synced_at: string | null;
+  last_sync_status: string;
+  last_sync_summary: Record<string, number>;
 };
 
 export type ProjectDetail = ProjectSummary & {
@@ -29,6 +60,9 @@ export type DocumentSummary = {
   doc_type: string;
   tags: string[];
   status: string;
+  is_reachable: boolean;
+  graph_depth: number | null;
+  broken_link_count: number;
   links: DocumentLinkSummary[];
 };
 
@@ -38,8 +72,11 @@ export type DocumentListResponse = {
 
 export type DocumentSyncResponse = {
   project_slug: string;
-  docs_dir: string;
+  docs_path: string;
   indexed_count: number;
+  reachable_count: number;
+  orphan_count: number;
+  broken_link_count: number;
   link_count: number;
   pruned_count: number;
   indexed_document_ids: string[];
@@ -55,6 +92,9 @@ export type DocumentDetail = {
   doc_type: string;
   tags: string[];
   status: string;
+  is_reachable: boolean;
+  graph_depth: number | null;
+  broken_link_count: number;
   content_markdown: string;
   links: DocumentLinkSummary[];
 };
@@ -65,6 +105,7 @@ export type DocumentLinkSummary = {
   label: string;
   relation_type: string;
   sort_order: number;
+  is_broken: boolean;
 };
 
 export type RetrievalHit = {
