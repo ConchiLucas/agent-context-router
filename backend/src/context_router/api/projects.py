@@ -108,7 +108,12 @@ def _project_response(project: Project) -> ProjectResponse:
 def _project_summary(project: Project) -> ProjectSummary:
     project_tree = list(_iter_project_tree(project))
     documents = [document for tree_project in project_tree for document in tree_project.documents]
-    traces = [trace for tree_project in project_tree for trace in tree_project.traces]
+    traces = [
+        trace
+        for tree_project in project_tree
+        for trace in tree_project.traces
+        if trace.source == "mcp"
+    ]
     return ProjectSummary(
         id=project.id,
         slug=project.slug,

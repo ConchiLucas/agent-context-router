@@ -25,6 +25,8 @@ def test_mcp_prepare_uses_minimal_task_contract(monkeypatch) -> None:
             "project": "my-app",
             "task": "fix login timeout",
             "documents": [],
+            "area": None,
+            "markdown": "# redundant rendered output",
         }
 
     monkeypatch.setattr(mcp_server, "_request_json", fake_request_json)
@@ -58,8 +60,12 @@ def test_mcp_prepare_uses_minimal_task_contract(monkeypatch) -> None:
     ]
     assert response is not None
     payload = json.loads(response["result"]["content"][0]["text"])
-    assert payload["trace_id"] == "ctx_001"
-    assert payload["documents"] == []
+    assert payload == {
+        "trace_id": "ctx_001",
+        "project": "my-app",
+        "task": "fix login timeout",
+        "documents": [],
+    }
 
 
 def test_mcp_read_forwards_explicit_trace_and_parent(monkeypatch) -> None:
@@ -83,7 +89,15 @@ def test_mcp_read_forwards_explicit_trace_and_parent(monkeypatch) -> None:
             "tags": ["auth"],
             "status": "active",
             "content_markdown": "# Auth debugging\nCheck token expiry.",
-            "links": [],
+            "links": [
+                {
+                    "target_document_id": "auth-deep-dive",
+                    "target_path": "auth-deep-dive.md",
+                    "label": "Deep dive",
+                    "relation_type": "markdown_link",
+                    "sort_order": 0,
+                }
+            ],
         }
 
     monkeypatch.setattr(mcp_server, "_request_json", fake_request_json)
@@ -116,6 +130,7 @@ def test_mcp_read_forwards_explicit_trace_and_parent(monkeypatch) -> None:
     assert payload["trace_id"] == "ctx_002"
     assert payload["document_id"] == "auth-debugging"
     assert payload["content_markdown"].startswith("# Auth debugging")
+    assert payload["links"] == [{"document_id": "auth-deep-dive", "label": "Deep dive"}]
 
 
 def test_mcp_lists_only_stateless_context_tools() -> None:
@@ -131,6 +146,27 @@ def test_mcp_lists_only_stateless_context_tools() -> None:
     ]
     assert tools[0]["inputSchema"]["required"] == ["task", "cwd"]
     assert tools[1]["inputSchema"]["required"] == ["trace_id", "document_id"]
+
+
+def test_mcp_invalid_arguments_return_error_without_stopping_server() -> None:
+    invalid_calls = [
+        _tool_call("prepare_task_context", {"cwd": "/repo/my-app"}),
+        _tool_call("prepare_task_context", {"task": "   ", "cwd": "   "}),
+        _tool_call("read_context_document", {"document_id": "auth-guide"}),
+    ]
+
+    for call in invalid_calls:
+        response = mcp_server.handle_request(call)
+
+        assert response is not None
+        assert response["result"]["isError"] is True
+        assert "Invalid arguments" in response["result"]["content"][0]["text"]
+
+    list_response = mcp_server.handle_request(
+        {"jsonrpc": "2.0", "id": 3, "method": "tools/list", "params": {}}
+    )
+    assert list_response is not None
+    assert len(list_response["result"]["tools"]) == 2
 
 
 def _tool_call(name: str, arguments: dict) -> dict:

@@ -35,3 +35,17 @@ test("projectDraftToPayload rejects missing required fields", () => {
     /Name and slug are required/
   );
 });
+
+test("projectDraftToPayload rejects a blank project root path", () => {
+  assert.throws(
+    () =>
+      projectDraftToPayload({
+        name: "Context Router",
+        slug: "context-router",
+        rootPath: "   ",
+        description: "",
+        parentSlug: "",
+      }),
+    /Project root path is required/
+  );
+});

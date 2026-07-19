@@ -91,16 +91,29 @@ def handle_request(message: dict[str, Any]) -> dict[str, Any] | None:
     return _error(message_id, code=-32601, message=f"Unknown method: {method}")
 
 
-def _call_tool(params: dict[str, Any]) -> dict[str, Any]:
+def _call_tool(params: Any) -> dict[str, Any]:
+    if not isinstance(params, dict):
+        return _text_result("Invalid arguments: tool call params must be an object", is_error=True)
+
     name = params.get("name")
     arguments = params.get("arguments") or {}
+    if not isinstance(arguments, dict):
+        return _text_result("Invalid arguments: arguments must be an object", is_error=True)
+
     try:
         if name == "prepare_task_context":
             return _text_result(_prepare_task_context(arguments))
         if name == "read_context_document":
             return _text_result(_read_context_document(arguments))
+    except (KeyError, TypeError, ValueError) as exc:
+        return _text_result(f"Invalid arguments: {exc}", is_error=True)
     except httpx.HTTPError as exc:
         return _text_result(f"Context router API error: {exc}", is_error=True)
+    except Exception as exc:  # Keep one malformed request from terminating the stdio server.
+        return _text_result(
+            f"Unexpected Context Router error: {type(exc).__name__}",
+            is_error=True,
+        )
 
     return _text_result(f"Unknown tool: {name}", is_error=True)
 
@@ -110,26 +123,34 @@ def _prepare_task_context(arguments: dict[str, Any]) -> str:
         "POST",
         "/api/context/prepare",
         json_body={
-            "project": arguments.get("project"),
-            "task": arguments["task"],
-            "cwd": arguments["cwd"],
+            "project": _optional_string(arguments, "project"),
+            "task": _required_string(arguments, "task"),
+            "cwd": _required_string(arguments, "cwd"),
             "source": "mcp",
-            "agent_name": arguments.get("agent_name"),
+            "agent_name": _optional_string(arguments, "agent_name"),
             "max_documents": 3,
             "output_format": "json",
         },
     )
-    return json.dumps(body, ensure_ascii=False)
+    result = {
+        "trace_id": body["trace_id"],
+        "project": body["project"],
+        "task": body["task"],
+        "documents": body.get("documents", []),
+    }
+    return json.dumps(result, ensure_ascii=False)
 
 
 def _read_context_document(arguments: dict[str, Any]) -> str:
-    document_id = arguments["document_id"]
+    trace_id = _required_string(arguments, "trace_id")
+    document_id = _required_string(arguments, "document_id")
     params = {
-        "trace_id": arguments["trace_id"],
+        "trace_id": trace_id,
         "source": "mcp",
     }
-    if arguments.get("parent_document_id"):
-        params["parent_document_id"] = arguments["parent_document_id"]
+    parent_document_id = _optional_string(arguments, "parent_document_id")
+    if parent_document_id:
+        params["parent_document_id"] = parent_document_id
 
     body = _request_json(
         "GET",
@@ -146,9 +167,32 @@ def _read_context_document(arguments: dict[str, Any]) -> str:
         "tags": body.get("tags", []),
         "status": body.get("status"),
         "content_markdown": body["content_markdown"],
-        "links": body.get("links", []),
+        "links": [
+            {
+                "document_id": link["target_document_id"],
+                "label": link["label"],
+            }
+            for link in body.get("links", [])
+            if link.get("target_document_id")
+        ],
     }
     return json.dumps(result, ensure_ascii=False)
+
+
+def _required_string(arguments: dict[str, Any], name: str) -> str:
+    value = arguments.get(name)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{name} must be a non-empty string")
+    return value.strip()
+
+
+def _optional_string(arguments: dict[str, Any], name: str) -> str | None:
+    value = arguments.get(name)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"{name} must be a string")
+    return value.strip() or None
 
 
 def _text_result(text: str, *, is_error: bool = False) -> dict[str, Any]:

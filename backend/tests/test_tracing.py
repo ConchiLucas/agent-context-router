@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from context_router.db.models import Base, Project, Trace
+from context_router.db.models import Base, Project, Trace, TraceEvent
 from context_router.db.session import get_session
 from context_router.main import create_app
 from context_router.schemas.documents import DocumentCreate
@@ -85,6 +85,16 @@ def test_trace_detail_records_objective_mcp_lifecycle() -> None:
     )
     assert read_response.status_code == 200
 
+    with TestingSession() as session:
+        session.add(
+            TraceEvent(
+                trace_id=trace_id,
+                event_type="feedback",
+                payload={"duration_ms": 5000, "feedback": "historical"},
+            )
+        )
+        session.commit()
+
     detail_response = client.get(f"/api/traces/{trace_id}")
     assert detail_response.status_code == 200
     detail = detail_response.json()
@@ -106,6 +116,10 @@ def test_trace_detail_records_objective_mcp_lifecycle() -> None:
         "prepare",
         "read",
     ]
+    expected_mcp_duration_ms = round(
+        sum(event["payload"]["duration_ms"] for event in detail["events"]),
+        3,
+    )
 
     list_response = client.get("/api/traces")
     assert list_response.status_code == 200
@@ -115,7 +129,7 @@ def test_trace_detail_records_objective_mcp_lifecycle() -> None:
     assert traces[0]["area"] == "payments"
     assert traces[0]["source"] == "mcp"
     assert traces[0]["agent_name"] == "codex"
-    assert traces[0]["mcp_duration_ms"] >= 0
+    assert traces[0]["mcp_duration_ms"] == expected_mcp_duration_ms
     assert "feedback_count" not in traces[0]
     assert traces[0]["returned_document_count"] == 1
     assert traces[0]["read_event_count"] == 1

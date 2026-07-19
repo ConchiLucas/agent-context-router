@@ -14,43 +14,43 @@ export default async function DashboardPage() {
   const readCount = traces.reduce((total, trace) => total + trace.read_event_count, 0);
 
   const metrics = [
-    { 
-      label: "Projects", 
+    {
+      label: "Projects",
       value: String(projects.length),
       icon: (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
         </svg>
-      )
+      ),
     },
-    { 
-      label: "Active Docs", 
+    {
+      label: "Active Docs",
       value: String(documents.filter((doc) => doc.status === "active").length),
       icon: (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-secondary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
           <path d="M14 2v4a2 2 0 0 0 2 2h4" />
         </svg>
-      )
+      ),
     },
-    { 
-      label: "MCP Tasks", 
+    {
+      label: "MCP Tasks",
       value: String(traces.length),
       icon: (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
         </svg>
-      )
+      ),
     },
-    { 
-      label: "Document Reads", 
+    {
+      label: "Document Reads",
       value: String(readCount),
       icon: (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#e11d48" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
           <circle cx="12" cy="12" r="3" />
         </svg>
-      )
+      ),
     },
   ];
 

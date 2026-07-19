@@ -1,10 +1,14 @@
-from pydantic import BaseModel, ConfigDict
+from typing import Annotated
+
+from pydantic import BaseModel, ConfigDict, StringConstraints
+
+NonBlankString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
 class ProjectCreate(BaseModel):
-    slug: str
-    name: str
-    root_path: str | None = None
+    slug: NonBlankString
+    name: NonBlankString
+    root_path: NonBlankString
     description: str = ""
     parent_slug: str | None = None
 

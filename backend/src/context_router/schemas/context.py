@@ -1,11 +1,15 @@
-from pydantic import BaseModel, Field
+from typing import Annotated
+
+from pydantic import BaseModel, Field, StringConstraints
+
+NonBlankString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
 class PrepareContextRequest(BaseModel):
     project: str | None = None
-    task: str = Field(min_length=1)
+    task: NonBlankString
     area: str | None = None
-    cwd: str = Field(min_length=1)
+    cwd: NonBlankString
     entrypoint_path: str | None = None
     entrypoint_rule: str | None = None
     route_hint: str | None = None

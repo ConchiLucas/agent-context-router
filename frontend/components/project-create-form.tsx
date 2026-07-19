@@ -71,6 +71,7 @@ export function ProjectCreateForm() {
           <input
             onChange={(event) => setDraft({ ...draft, rootPath: event.target.value })}
             placeholder="/Users/you/workspace/context-router"
+            required
             value={draft.rootPath}
           />
         </label>

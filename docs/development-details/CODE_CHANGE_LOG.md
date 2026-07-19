@@ -20,6 +20,7 @@
 - Projects 页面增加网页创建项目，Reload Links 改为 Sync Documents；文档页不再展示命令提示。
 - 历史数据库字段、usage_cards 表和 migration 暂时保留兼容，不作为当前产品能力暴露。
 - 根 AGENTS.md、README、业务/链路文档和 managed 文档改为 MCP-first 按需阅读规则。
+- 收紧 MCP-only 边界：坏参数返回工具错误但不终止 stdio 服务；task/cwd/root_path 必须为非空白字符串；项目任务数、任务事件和耗时只统计 MCP prepare/read；MCP 返回值移除冗余渲染字段并压缩文档链接。
 
 ### 2026-06-27
 

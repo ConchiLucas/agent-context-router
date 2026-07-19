@@ -9,14 +9,18 @@ export type ProjectDraft = {
 export function projectDraftToPayload(draft: ProjectDraft) {
   const name = draft.name.trim();
   const slug = draft.slug.trim();
+  const rootPath = draft.rootPath.trim();
   if (!name || !slug) {
     throw new Error("Name and slug are required");
+  }
+  if (!rootPath) {
+    throw new Error("Project root path is required");
   }
 
   return {
     name,
     slug,
-    root_path: optionalValue(draft.rootPath),
+    root_path: rootPath,
     description: draft.description.trim(),
     parent_slug: optionalValue(draft.parentSlug),
   };

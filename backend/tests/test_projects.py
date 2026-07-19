@@ -43,6 +43,36 @@ def test_create_project_api_persists_and_returns_project() -> None:
     assert response.json()["slug"] == "my-app"
 
 
+def test_create_project_requires_non_blank_root_path() -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(engine)
+
+    def override_session() -> Generator[Session, None, None]:
+        with TestingSession() as session:
+            yield session
+
+    app = create_app()
+    app.dependency_overrides[get_session] = override_session
+    client = TestClient(app)
+
+    missing_response = client.post(
+        "/api/projects",
+        json={"slug": "missing-root", "name": "Missing root"},
+    )
+    blank_response = client.post(
+        "/api/projects",
+        json={"slug": "blank-root", "name": "Blank root", "root_path": "   "},
+    )
+
+    assert missing_response.status_code == 422
+    assert blank_response.status_code == 422
+
+
 def test_list_and_get_project_include_document_counts_and_routing_template() -> None:
     engine = create_engine(
         "sqlite+pysqlite:///:memory:",
@@ -134,7 +164,22 @@ def test_project_list_defaults_to_roots_and_detail_includes_children() -> None:
                 content_markdown="# API\nRun backend tests.",
             ),
         )
-        session.add(Trace(id="ctx_child_001", project_id=child.id, task="Fix child API"))
+        session.add(
+            Trace(
+                id="ctx_child_001",
+                project_id=child.id,
+                task="Fix child API",
+                source="mcp",
+            )
+        )
+        session.add(
+            Trace(
+                id="ctx_child_historical",
+                project_id=child.id,
+                task="Historical CLI task",
+                source="cli",
+            )
+        )
         session.commit()
 
     def override_session() -> Generator[Session, None, None]:

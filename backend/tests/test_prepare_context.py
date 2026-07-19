@@ -106,6 +106,10 @@ def test_prepare_context_requires_real_task_and_cwd() -> None:
     TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     Base.metadata.create_all(engine)
 
+    with TestingSession() as session:
+        session.add(Project(slug="my-app", name="My App", root_path="/repo/my-app"))
+        session.commit()
+
     def override_session() -> Generator[Session, None, None]:
         with TestingSession() as session:
             yield session
@@ -114,9 +118,15 @@ def test_prepare_context_requires_real_task_and_cwd() -> None:
     app.dependency_overrides[get_session] = override_session
     client = TestClient(app)
 
-    response = client.post(
-        "/api/context/prepare",
-        json={"task": "", "cwd": ""},
-    )
+    requests = [
+        {"project": "my-app", "task": "", "cwd": ""},
+        {"project": "my-app", "task": "   ", "cwd": "/repo/my-app"},
+        {"project": "my-app", "task": "fix login", "cwd": "   "},
+    ]
 
-    assert response.status_code == 422
+    for payload in requests:
+        response = client.post("/api/context/prepare", json=payload)
+        assert response.status_code == 422
+
+    with TestingSession() as session:
+        assert session.scalar(select(Trace)) is None

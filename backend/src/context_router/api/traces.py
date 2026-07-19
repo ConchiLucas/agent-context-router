@@ -16,6 +16,7 @@ from context_router.schemas.traces import (
 )
 
 router = APIRouter(prefix="/api/traces", tags=["traces"])
+TASK_EVENT_TYPES = {"prepare", "read"}
 
 
 @router.get("", response_model=TraceListResponse)
@@ -138,6 +139,7 @@ def _trace_detail(trace: Trace) -> TraceDetailResponse:
                 created_at=event.created_at,
             )
             for event in trace.events
+            if event.event_type in TASK_EVENT_TYPES
         ],
     )
 
@@ -145,6 +147,8 @@ def _trace_detail(trace: Trace) -> TraceDetailResponse:
 def _mcp_duration_ms(trace: Trace) -> float:
     total = 0.0
     for event in trace.events:
+        if event.event_type not in TASK_EVENT_TYPES:
+            continue
         duration = event.payload.get("duration_ms")
         if isinstance(duration, (int, float)) and not isinstance(duration, bool):
             total += float(duration)
