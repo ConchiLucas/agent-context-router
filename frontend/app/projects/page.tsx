@@ -5,7 +5,6 @@ import { DocumentsView } from "@/components/documents-view";
 import { ModalCloseButton } from "@/components/modal-close-button";
 import { ProjectDocumentPreviewShell } from "@/components/project-document-preview-shell";
 import { ProjectLinkReloadButton } from "@/components/project-link-reload-button";
-import { TracesView } from "@/components/traces-view";
 import { getProjects } from "@/lib/api";
 
 type ProjectsPageProps = {
@@ -21,7 +20,6 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
   const docType = singleValue(params.doc_type);
   const tag = singleValue(params.tag);
   const status = singleValue(params.status);
-  const source = singleValue(params.source);
   const documentView = singleValue(params.view);
   const result = await Promise.allSettled([getProjects()]);
   const projects = result[0].status === "fulfilled" ? result[0].value.projects : [];
@@ -74,9 +72,9 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
                       <small>{project.active_document_count} active</small>
                     </div>
                     <div>
-                      <span>Traces</span>
+                      <span>MCP Tasks</span>
                       <strong>{project.trace_count}</strong>
-                      <small>prepare calls</small>
+                      <small>recorded calls</small>
                     </div>
                   </div>
                 </div>
@@ -90,9 +88,9 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
                   </Link>
                   <Link
                     className="button"
-                    href={`/projects?panel=traces&project=${encodedSlug}`}
+                    href={`/tasks?project=${encodedSlug}`}
                   >
-                    Traces
+                    Tasks
                   </Link>
                   <ProjectLinkReloadButton
                     disabled={!project.root_path}
@@ -142,22 +140,6 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
           </ProjectDocumentPreviewShell>
         </ProjectPanel>
       ) : null}
-      {activePanel === "traces" ? (
-        <ProjectPanel backHref="/projects">
-          <TracesView
-            filters={{
-              project: activeProject,
-              area,
-              source,
-            }}
-            subtitle={
-              activeProject
-                ? `Prepare calls, read history, and feedback for ${activeProject}.`
-                : "Prepare calls, read history, and feedback."
-            }
-          />
-        </ProjectPanel>
-      ) : null}
     </>
   );
 }
@@ -182,13 +164,12 @@ function singleValue(value: string | string[] | undefined) {
 }
 
 function projectPanelHref(params: {
-  panel: "documents" | "traces";
+  panel: "documents";
   project?: string;
   area?: string;
   doc_type?: string;
   tag?: string;
   status?: string;
-  source?: string;
   view?: string;
   document?: string;
 }) {

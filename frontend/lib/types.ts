@@ -75,7 +75,6 @@ export type RetrievalHit = {
   reason: string;
   score: number;
   was_returned: boolean;
-  feedback: TraceFeedback | null;
 };
 
 export type TraceSummary = {
@@ -86,10 +85,11 @@ export type TraceSummary = {
   cwd: string | null;
   area: string | null;
   source: string | null;
+  agent_name: string | null;
   created_at: string;
   returned_document_count: number;
   read_event_count: number;
-  feedback_count: number;
+  mcp_duration_ms: number;
 };
 
 export type TraceListResponse = {
@@ -98,7 +98,7 @@ export type TraceListResponse = {
 
 export type TraceEvent = {
   id: string;
-  event_type: "prepare" | "read" | "feedback" | "error" | string;
+  event_type: "prepare" | "read" | "error" | string;
   payload: Record<string, unknown>;
   created_at: string;
 };
@@ -121,22 +121,4 @@ export type TraceDetail = {
   created_at: string;
   retrieval_hits: RetrievalHit[];
   events: TraceEvent[];
-};
-
-export type TraceFeedback = "useful" | "unnecessary" | "missing" | "stale";
-
-export type UsageCard = {
-  id: string;
-  slug: string;
-  title: string;
-  description: string;
-  content_markdown: string;
-  sort_order: number;
-  is_builtin: boolean;
-  created_at: string;
-  updated_at: string;
-};
-
-export type UsageCardListResponse = {
-  cards: UsageCard[];
 };

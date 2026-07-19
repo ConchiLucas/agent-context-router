@@ -1,18 +1,17 @@
 import Link from "next/link";
 
-import { getDocuments, getProjects, getTraces } from "@/lib/api";
-import { CliTerminal } from "@/components/cli-terminal";
+import { getDocuments, getProjects, getTasks } from "@/lib/api";
 
 export default async function DashboardPage() {
   const [projectsResult, documentsResult, tracesResult] = await Promise.allSettled([
     getProjects(),
     getDocuments(),
-    getTraces(),
+    getTasks(),
   ]);
   const projects = projectsResult.status === "fulfilled" ? projectsResult.value.projects : [];
   const documents = documentsResult.status === "fulfilled" ? documentsResult.value.documents : [];
   const traces = tracesResult.status === "fulfilled" ? tracesResult.value.traces : [];
-  const feedbackCount = traces.reduce((total, trace) => total + trace.feedback_count, 0);
+  const readCount = traces.reduce((total, trace) => total + trace.read_event_count, 0);
 
   const metrics = [
     { 
@@ -35,7 +34,7 @@ export default async function DashboardPage() {
       )
     },
     { 
-      label: "Prepare Calls", 
+      label: "MCP Tasks", 
       value: String(traces.length),
       icon: (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -44,11 +43,12 @@ export default async function DashboardPage() {
       )
     },
     { 
-      label: "Feedback", 
-      value: String(feedbackCount),
+      label: "Document Reads", 
+      value: String(readCount),
       icon: (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#e11d48" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+          <circle cx="12" cy="12" r="3" />
         </svg>
       )
     },
@@ -58,7 +58,7 @@ export default async function DashboardPage() {
     <>
       <header style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
         <h1 className="page-title">Context Routing Dashboard</h1>
-        <p className="page-subtitle">Monitor projects, context documents, and recent trace activity.</p>
+        <p className="page-subtitle">See what AI tools asked for and which context documents they opened.</p>
       </header>
 
       <section className="section grid grid-4">
@@ -73,20 +73,20 @@ export default async function DashboardPage() {
         ))}
       </section>
 
-      <section className="section grid two-column">
+      <section className="section grid">
         <div className="panel" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <h2 className="section-title" style={{ margin: 0 }}>Recent Traces</h2>
-            <Link href="/traces" style={{ fontSize: "0.85rem", color: "var(--accent)", fontWeight: 600 }}>
+            <h2 className="section-title" style={{ margin: 0 }}>Recent MCP Tasks</h2>
+            <Link href="/tasks" style={{ fontSize: "0.85rem", color: "var(--accent)", fontWeight: 600 }}>
               View all &rarr;
             </Link>
           </div>
           {traces.length === 0 ? (
-            <p className="page-subtitle">No trace records yet.</p>
+            <p className="page-subtitle">No MCP tasks recorded yet.</p>
           ) : (
             <div className="stack">
               {traces.slice(0, 5).map((trace) => (
-                <Link className="row-link" href={`/traces/${trace.id}`} key={trace.id}>
+                <Link className="row-link" href={`/tasks/${trace.id}`} key={trace.id}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem" }}>
                     <strong style={{ fontSize: "0.95rem", color: "#f1f5f9", fontWeight: 600 }}>{trace.task}</strong>
                     <span className="badge" style={{ fontSize: "0.7rem", padding: "0.15rem 0.45rem", whiteSpace: "nowrap" }}>
@@ -113,14 +113,6 @@ export default async function DashboardPage() {
               ))}
             </div>
           )}
-        </div>
-        
-        <div className="panel" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-          <h2 className="section-title" style={{ margin: 0 }}>CLI Entry</h2>
-          <p className="page-subtitle" style={{ margin: 0 }}>
-            Run this command from your terminal to trigger context retrieval and generate a new routing trace:
-          </p>
-          <CliTerminal command='ctx prepare --project <project> --task "<task>"' />
         </div>
       </section>
     </>
