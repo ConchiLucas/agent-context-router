@@ -4,14 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from context_router.db.models import Project, RetrievalHit, Trace, TraceEvent
+from context_router.db.models import Project, RetrievalHit, Trace
 from context_router.db.session import get_session
 from context_router.schemas.traces import (
     RetrievalHitResponse,
     TraceDetailResponse,
     TraceEventResponse,
-    TraceFeedbackRequest,
-    TraceFeedbackResponse,
     TraceListResponse,
     TraceProject,
     TraceSummary,
@@ -86,52 +84,6 @@ def get_trace(
     return _trace_detail(trace)
 
 
-@router.post("/{trace_id}/feedback", response_model=TraceFeedbackResponse)
-def record_feedback(
-    trace_id: str,
-    request: TraceFeedbackRequest,
-    session: Annotated[Session, Depends(get_session)],
-) -> TraceFeedbackResponse:
-    trace = session.scalar(select(Trace).where(Trace.id == trace_id))
-    if trace is None:
-        raise HTTPException(status_code=404, detail=f"Trace not found: {trace_id}")
-
-    hits = session.scalars(
-        select(RetrievalHit).where(
-            RetrievalHit.trace_id == trace_id,
-            RetrievalHit.document_id == request.document_id,
-        )
-    ).all()
-    if not hits:
-        raise HTTPException(
-            status_code=404,
-            detail="Retrieval hit not found for this trace and document",
-        )
-
-    for hit in hits:
-        hit.feedback = request.feedback
-
-    session.add(
-        TraceEvent(
-            trace_id=trace_id,
-            event_type="feedback",
-            payload={
-                "document_id": request.document_id,
-                "feedback": request.feedback,
-                "note": request.note,
-            },
-        )
-    )
-    session.commit()
-
-    return TraceFeedbackResponse(
-        trace_id=trace_id,
-        document_id=request.document_id,
-        feedback=request.feedback,
-        updated_hit_count=len(hits),
-    )
-
-
 def _trace_summary(trace: Trace) -> TraceSummary:
     return TraceSummary(
         id=trace.id,
@@ -141,10 +93,11 @@ def _trace_summary(trace: Trace) -> TraceSummary:
         cwd=trace.cwd,
         area=trace.area,
         source=trace.source,
+        agent_name=trace.agent_name,
         created_at=trace.created_at,
         returned_document_count=sum(1 for hit in trace.retrieval_hits if hit.was_returned),
         read_event_count=sum(1 for event in trace.events if event.event_type == "read"),
-        feedback_count=sum(1 for event in trace.events if event.event_type == "feedback"),
+        mcp_duration_ms=_mcp_duration_ms(trace),
     )
 
 
@@ -174,7 +127,6 @@ def _trace_detail(trace: Trace) -> TraceDetailResponse:
                 score=hit.score,
                 reason=hit.reason,
                 was_returned=hit.was_returned,
-                feedback=hit.feedback,
             )
             for hit in trace.retrieval_hits
         ],
@@ -188,3 +140,12 @@ def _trace_detail(trace: Trace) -> TraceDetailResponse:
             for event in trace.events
         ],
     )
+
+
+def _mcp_duration_ms(trace: Trace) -> float:
+    total = 0.0
+    for event in trace.events:
+        duration = event.payload.get("duration_ms")
+        if isinstance(duration, (int, float)) and not isinstance(duration, bool):
+            total += float(duration)
+    return round(total, 3)
