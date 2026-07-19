@@ -35,6 +35,69 @@ export type BrokenDocumentLink = {
   link: DocumentLinkSummary;
 };
 
+export type DocumentHierarchyNode = {
+  document: DocumentSummary;
+  edgeLabel: string | null;
+  isReference: boolean;
+  children: DocumentHierarchyNode[];
+};
+
+export function buildDocumentHierarchy(
+  documents: DocumentSummary[],
+  project?: string,
+): DocumentHierarchyNode | null {
+  const documentById = new Map(documents.map((document) => [document.id, document]));
+  const roots = documents
+    .filter(
+      (document) =>
+        document.status === "active" &&
+        document.is_reachable &&
+        document.graph_depth === 1 &&
+        document.doc_type === "agent_index",
+    )
+    .sort(
+      (left, right) =>
+        Number(right.project_slug === project) - Number(left.project_slug === project) ||
+        left.source_path.localeCompare(right.source_path) ||
+        left.id.localeCompare(right.id),
+    );
+  const root = roots[0];
+  if (!root) return null;
+
+  const expanded = new Set<string>([root.id]);
+
+  function buildNode(
+    document: DocumentSummary,
+    edgeLabel: string | null,
+    isReference = false,
+  ): DocumentHierarchyNode {
+    if (isReference) {
+      return { document, edgeLabel, isReference: true, children: [] };
+    }
+
+    const links = document.links
+      .filter((link) => !link.is_broken && link.target_document_id !== null)
+      .sort(
+        (left, right) =>
+          left.sort_order - right.sort_order || left.target_path.localeCompare(right.target_path),
+      );
+    const children = links.flatMap((link) => {
+      const target = documentById.get(link.target_document_id ?? "");
+      if (!target || target.status !== "active" || !target.is_reachable) return [];
+
+      const followsShortestDepth =
+        document.graph_depth !== null && target.graph_depth === document.graph_depth + 1;
+      const reference = !followsShortestDepth || expanded.has(target.id);
+      if (!reference) expanded.add(target.id);
+      return [buildNode(target, link.label, reference)];
+    });
+
+    return { document, edgeLabel, isReference: false, children };
+  }
+
+  return buildNode(root, null);
+}
+
 export function groupDocumentsByDepth(documents: DocumentSummary[]) {
   const byDepth = new Map<number, DocumentSummary[]>();
   const orphans: DocumentSummary[] = [];

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildDocumentHierarchy,
   groupDocumentsByDepth,
   mappingNoticeText,
   mappingStatusLabel,
@@ -79,6 +80,36 @@ test("groupDocumentsByDepth returns broken links in stable source and link order
   );
 });
 
+test("buildDocumentHierarchy preserves arbitrary depth and marks duplicate or cyclic links", () => {
+  const entry = document("entry", true, 1, [
+    documentLink("business", "Business", "docs/business.md", 0),
+    documentLink("schema", "Schema shortcut", "docs/schema.md", 1),
+  ]);
+  const business = document("business", true, 2, [
+    documentLink("schema", "Schema", "docs/schema.md", 0),
+  ]);
+  const schema = document("schema", true, 3, [
+    documentLink("table", "Table", "docs/table.md", 0),
+  ]);
+  const table = document("table", true, 4, [
+    documentLink("business", "Business cycle", "docs/business.md", 0),
+  ]);
+
+  const hierarchy = buildDocumentHierarchy([table, schema, entry, business], "orders");
+
+  assert.equal(hierarchy?.document.id, "entry");
+  assert.equal(hierarchy?.children[0].document.id, "business");
+  assert.equal(hierarchy?.children[0].edgeLabel, "Business");
+  assert.equal(hierarchy?.children[0].children[0].document.id, "schema");
+  assert.equal(hierarchy?.children[0].children[0].children[0].document.id, "table");
+  assert.equal(
+    hierarchy?.children[0].children[0].children[0].children[0].isReference,
+    true,
+  );
+  assert.equal(hierarchy?.children[1].document.id, "schema");
+  assert.equal(hierarchy?.children[1].isReference, true);
+});
+
 function document(
   id: string,
   isReachable: boolean,
@@ -109,5 +140,21 @@ function brokenLink(label: string, targetPath: string, sortOrder: number) {
     relation_type: "markdown_link",
     sort_order: sortOrder,
     is_broken: true,
+  };
+}
+
+function documentLink(
+  targetDocumentId: string,
+  label: string,
+  targetPath: string,
+  sortOrder: number,
+) {
+  return {
+    target_document_id: targetDocumentId,
+    target_path: targetPath,
+    label,
+    relation_type: "markdown_link",
+    sort_order: sortOrder,
+    is_broken: false,
   };
 }

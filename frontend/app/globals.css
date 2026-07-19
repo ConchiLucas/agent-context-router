@@ -1673,6 +1673,93 @@ textarea {
   gap: 1rem;
 }
 
+.document-hierarchy-scroll {
+  min-width: 0;
+  overflow-x: auto;
+  padding: 0.35rem 0.2rem 0.9rem;
+}
+
+.document-hierarchy-tree {
+  width: max-content;
+  min-width: 100%;
+}
+
+.document-hierarchy-branch {
+  display: flex;
+  align-items: center;
+  min-width: max-content;
+}
+
+.document-hierarchy-branch > .document-graph-node {
+  width: 250px;
+  flex: 0 0 250px;
+}
+
+.document-hierarchy-connector {
+  position: relative;
+  width: 2.8rem;
+  height: 2px;
+  flex: 0 0 2.8rem;
+  background: linear-gradient(90deg, rgba(129, 140, 248, 0.75), rgba(192, 132, 252, 0.4));
+}
+
+.document-hierarchy-connector::after {
+  position: absolute;
+  top: -3px;
+  right: 0;
+  width: 8px;
+  height: 8px;
+  transform: rotate(45deg);
+  border-top: 2px solid rgba(192, 132, 252, 0.85);
+  border-right: 2px solid rgba(192, 132, 252, 0.85);
+  content: "";
+}
+
+.document-hierarchy-children {
+  position: relative;
+  display: grid;
+  gap: 0.8rem;
+  padding-left: 1.8rem;
+}
+
+.document-hierarchy-children::before {
+  position: absolute;
+  top: 1.25rem;
+  bottom: 1.25rem;
+  left: 0;
+  border-left: 2px solid rgba(129, 140, 248, 0.3);
+  content: "";
+}
+
+.document-hierarchy-children:has(> .document-hierarchy-child:only-child)::before {
+  display: none;
+}
+
+.document-hierarchy-child {
+  position: relative;
+}
+
+.document-hierarchy-child::before {
+  position: absolute;
+  top: 50%;
+  right: 100%;
+  width: 1.8rem;
+  border-top: 2px solid rgba(129, 140, 248, 0.42);
+  content: "";
+}
+
+.reference-node {
+  border-style: dashed;
+  border-color: rgba(148, 163, 184, 0.34);
+  background: rgba(30, 41, 59, 0.42);
+}
+
+.reference-node .document-graph-node-label {
+  border-color: rgba(148, 163, 184, 0.3);
+  background: rgba(148, 163, 184, 0.08);
+  color: #cbd5e1 !important;
+}
+
 .document-health-empty {
   padding: 2rem;
   text-align: center;
@@ -2756,6 +2843,36 @@ textarea {
   .broken-link-item {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .document-hierarchy-scroll {
+    overflow-x: visible;
+  }
+
+  .document-hierarchy-tree {
+    width: 100%;
+  }
+
+  .document-hierarchy-branch {
+    display: grid;
+    gap: 0.75rem;
+    min-width: 0;
+  }
+
+  .document-hierarchy-branch > .document-graph-node {
+    width: 100%;
+    max-width: none;
+  }
+
+  .document-hierarchy-children {
+    gap: 0.75rem;
+    padding-left: 0.9rem;
+  }
+
+  .document-hierarchy-children::before,
+  .document-hierarchy-child::before,
+  .document-hierarchy-connector {
+    display: none;
   }
 
   .document-view-toolbar {
