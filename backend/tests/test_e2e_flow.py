@@ -100,6 +100,7 @@ def test_e2e_ingest_prepare_read_and_view_trace() -> None:
             "cwd": "/repo/sample-app",
             "entrypoint_path": "AI_CONTEXT_INDEX.md",
             "entrypoint_rule": "payments tasks",
+            "source": "mcp",
             "max_documents": 3,
         },
     )
@@ -114,7 +115,7 @@ def test_e2e_ingest_prepare_read_and_view_trace() -> None:
         "/api/documents/payments-webhook-timeout",
         params={
             "trace_id": trace_id,
-            "source": "cli",
+            "source": "mcp",
         },
     )
     assert read_response.status_code == 200

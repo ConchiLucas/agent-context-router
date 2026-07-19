@@ -1,3 +1,4 @@
+from time import perf_counter
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -144,11 +145,13 @@ def read_document(
     session: Annotated[Session, Depends(get_session)],
     trace_id: str | None = Query(default=None),
     parent_document_id: str | None = Query(default=None),
-    depth: int | None = Query(default=None, ge=1),
-    reason: str | None = Query(default=None),
     source: str | None = Query(default=None),
     untracked: bool = Query(default=False),
 ) -> DocumentReadResponse:
+    if source == "mcp" and trace_id is None:
+        raise HTTPException(status_code=422, detail="trace_id is required for MCP document reads")
+
+    started_at = perf_counter()
     document = session.scalar(select(Document).where(Document.id == document_id))
     if document is None:
         raise HTTPException(status_code=404, detail=f"Document not found: {document_id}")
@@ -169,6 +172,12 @@ def read_document(
             source=source,
         )
         resolved_trace_id = trace.id
+        depth = _derive_read_depth(
+            session,
+            trace=trace,
+            parent_document_id=parent_document_id,
+        )
+        duration_ms = round((perf_counter() - started_at) * 1000, 3)
         session.add(
             TraceEvent(
                 trace_id=trace.id,
@@ -187,6 +196,7 @@ def read_document(
                         requested_trace_id=trace_id,
                         parent_document_id=parent_document_id,
                     ),
+                    "duration_ms": duration_ms,
                 },
             )
         )
@@ -254,6 +264,8 @@ def _resolve_or_create_trace(
         trace = session.scalar(select(Trace).where(Trace.id == trace_id))
         if trace is not None:
             return trace
+        if source == "mcp":
+            raise HTTPException(status_code=404, detail=f"Trace not found: {trace_id}")
 
     trace = Trace(
         id=new_trace_id(),
@@ -268,3 +280,34 @@ def _resolve_or_create_trace(
     session.add(trace)
     session.flush()
     return trace
+
+
+def _derive_read_depth(
+    session: Session,
+    *,
+    trace: Trace,
+    parent_document_id: str | None,
+) -> int:
+    if parent_document_id is None:
+        return 1
+
+    read_events = session.scalars(
+        select(TraceEvent)
+        .where(
+            TraceEvent.trace_id == trace.id,
+            TraceEvent.event_type == "read",
+        )
+        .order_by(TraceEvent.created_at.desc())
+    ).all()
+    for event in read_events:
+        if event.payload.get("document_id") != parent_document_id:
+            continue
+        try:
+            return int(event.payload.get("depth") or 1) + 1
+        except (TypeError, ValueError):
+            return 2
+
+    raise HTTPException(
+        status_code=422,
+        detail=f"Parent document was not read in this trace: {parent_document_id}",
+    )

@@ -51,7 +51,7 @@ def test_read_document_records_trace_event_when_trace_id_is_provided() -> None:
 
     response = client.get(
         "/api/documents/payments-runbook",
-        params={"trace_id": "ctx_test_001", "source": "cli"},
+        params={"trace_id": "ctx_test_001", "source": "mcp"},
     )
 
     assert response.status_code == 200
@@ -65,9 +65,54 @@ def test_read_document_records_trace_event_when_trace_id_is_provided() -> None:
         assert event.payload["document_id"] == "payments-runbook"
         assert event.payload["document_title"] == "Payments runbook"
         assert event.payload["parent_document_id"] is None
-        assert event.payload["depth"] is None
-        assert event.payload["source"] == "cli"
+        assert event.payload["depth"] == 1
+        assert event.payload["source"] == "mcp"
         assert event.payload["read_mode"] == "current_trace"
+        assert event.payload["duration_ms"] >= 0
+
+
+def test_mcp_read_requires_trace_id() -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(engine)
+
+    with TestingSession() as session:
+        project = Project(slug="my-app", name="My App")
+        session.add(project)
+        session.flush()
+        upsert_document(
+            session,
+            project=project,
+            document=DocumentCreate(
+                id="payments-runbook",
+                title="Payments runbook",
+                source_path="docs/payments.md",
+                doc_type="runbook",
+                area="payments",
+                tags=["payments"],
+                content_markdown="# Payments",
+            ),
+        )
+        session.commit()
+
+    def override_session() -> Generator[Session, None, None]:
+        with TestingSession() as session:
+            yield session
+
+    app = create_app()
+    app.dependency_overrides[get_session] = override_session
+    client = TestClient(app)
+
+    response = client.get(
+        "/api/documents/payments-runbook",
+        params={"source": "mcp"},
+    )
+
+    assert response.status_code == 422
 
 
 def test_read_document_creates_trace_unless_marked_untracked() -> None:
@@ -245,7 +290,7 @@ def test_read_document_reports_missing_local_file_when_project_has_root_path(tmp
     assert "Local document file not found" in response.json()["detail"]
 
 
-def test_read_document_falls_back_when_trace_is_missing() -> None:
+def test_mcp_read_rejects_missing_trace() -> None:
     engine = create_engine(
         "sqlite+pysqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -283,19 +328,15 @@ def test_read_document_falls_back_when_trace_is_missing() -> None:
 
     response = client.get(
         "/api/documents/payments-runbook",
-        params={"trace_id": "ctx_missing", "source": "cli"},
+        params={"trace_id": "ctx_missing", "source": "mcp"},
     )
 
-    assert response.status_code == 200
-    assert response.json()["trace_id"] != "ctx_missing"
+    assert response.status_code == 404
 
     with TestingSession() as session:
         event = session.scalar(select(TraceEvent).where(TraceEvent.event_type == "read"))
 
-        assert event is not None
-        assert event.payload["document_id"] == "payments-runbook"
-        assert event.payload["source"] == "cli"
-        assert event.payload["read_mode"] == "direct_read"
+        assert event is None
 
 
 def test_read_document_records_tree_parent_and_depth() -> None:
@@ -339,26 +380,83 @@ def test_read_document_records_tree_parent_and_depth() -> None:
     app.dependency_overrides[get_session] = override_session
     client = TestClient(app)
 
+    root_response = client.get(
+        "/api/documents/root-index",
+        params={"trace_id": "ctx_test_001", "source": "mcp"},
+    )
     response = client.get(
         "/api/documents/payments-runbook",
         params={
             "trace_id": "ctx_test_001",
             "parent_document_id": "root-index",
-            "depth": 2,
-            "source": "cli",
+            "source": "mcp",
         },
     )
 
+    assert root_response.status_code == 200
     assert response.status_code == 200
 
     with TestingSession() as session:
-        event = session.scalar(select(TraceEvent).where(TraceEvent.event_type == "read"))
+        events = session.scalars(
+            select(TraceEvent)
+            .where(TraceEvent.event_type == "read")
+            .order_by(TraceEvent.created_at)
+        ).all()
 
-        assert event is not None
-        assert event.payload["document_id"] == "payments-runbook"
-        assert event.payload["parent_document_id"] == "root-index"
-        assert event.payload["depth"] == 2
-        assert event.payload["read_mode"] == "tree_read"
+        assert [event.payload["depth"] for event in events] == [1, 2]
+        assert events[1].payload["document_id"] == "payments-runbook"
+        assert events[1].payload["parent_document_id"] == "root-index"
+        assert events[1].payload["read_mode"] == "tree_read"
+
+
+def test_mcp_read_rejects_parent_not_read_in_same_trace() -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(engine)
+
+    with TestingSession() as session:
+        project = Project(slug="my-app", name="My App")
+        session.add(project)
+        session.flush()
+        for document_id in ["root-index", "payments-runbook"]:
+            upsert_document(
+                session,
+                project=project,
+                document=DocumentCreate(
+                    id=document_id,
+                    title=document_id,
+                    source_path=f"docs/{document_id}.md",
+                    doc_type="runbook",
+                    area="payments",
+                    tags=[],
+                    content_markdown=f"# {document_id}",
+                ),
+            )
+        session.add(Trace(id="ctx_test_001", project_id=project.id, task="Fix payments"))
+        session.commit()
+
+    def override_session() -> Generator[Session, None, None]:
+        with TestingSession() as session:
+            yield session
+
+    app = create_app()
+    app.dependency_overrides[get_session] = override_session
+    client = TestClient(app)
+
+    response = client.get(
+        "/api/documents/payments-runbook",
+        params={
+            "trace_id": "ctx_test_001",
+            "parent_document_id": "root-index",
+            "source": "mcp",
+        },
+    )
+
+    assert response.status_code == 422
 
 
 def test_read_document_marks_prepare_followup_read() -> None:
