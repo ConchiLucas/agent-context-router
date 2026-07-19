@@ -36,6 +36,18 @@ class Project(TimestampMixin, Base):
     slug: Mapped[str] = mapped_column(String(120), unique=True, nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(240), nullable=False)
     root_path: Mapped[str | None] = mapped_column(String(1024))
+    docs_path: Mapped[str | None] = mapped_column(String(1024), unique=True, index=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_sync_status: Mapped[str] = mapped_column(
+        String(40),
+        default="never",
+        nullable=False,
+    )
+    last_sync_summary: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        default=dict,
+        nullable=False,
+    )
     description: Mapped[str] = mapped_column(Text, default="")
     parent_project_id: Mapped[str | None] = mapped_column(
         ForeignKey("projects.id", ondelete="SET NULL"),
@@ -74,6 +86,13 @@ class Document(TimestampMixin, Base):
     tags: Mapped[list[str]] = mapped_column(JSON, default=list)
     status: Mapped[str] = mapped_column(String(40), default="active", index=True)
     content_markdown: Mapped[str] = mapped_column(Text, nullable=False)
+    is_reachable: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        index=True,
+    )
+    graph_depth: Mapped[int | None] = mapped_column(Integer, index=True)
 
     project: Mapped[Project] = relationship(back_populates="documents")
     retrieval_hits: Mapped[list[RetrievalHit]] = relationship(back_populates="document")

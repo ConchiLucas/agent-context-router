@@ -21,3 +21,13 @@ def test_settings_reads_context_router_database_url(monkeypatch) -> None:
     settings = Settings()
 
     assert settings.database_url.startswith("postgresql+psycopg://")
+
+
+def test_settings_reads_documents_roots(monkeypatch) -> None:
+    monkeypatch.setenv("CONTEXT_ROUTER_DOCUMENTS_HOST_ROOT", "/srv/ai-docs")
+    monkeypatch.setenv("CONTEXT_ROUTER_DOCUMENTS_CONTAINER_ROOT", "/documents")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.documents_host_root == "/srv/ai-docs"
+    assert settings.documents_container_root == "/documents"
