@@ -11,9 +11,8 @@ type RouteContext = {
   }>;
 };
 
-export async function POST(request: Request, context: RouteContext) {
+export async function POST(_request: Request, context: RouteContext) {
   const { slug } = await context.params;
-  const requestBody = await request.text();
 
   try {
     const response = await fetch(
@@ -23,7 +22,7 @@ export async function POST(request: Request, context: RouteContext) {
         headers: {
           "Content-Type": "application/json",
         },
-        body: requestBody || "{}",
+        body: "{}",
         cache: "no-store",
       },
     );

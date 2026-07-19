@@ -1,1 +1,1 @@
-"""Pydantic schemas for API and CLI boundaries."""
+"""Pydantic schemas for API and MCP boundaries."""

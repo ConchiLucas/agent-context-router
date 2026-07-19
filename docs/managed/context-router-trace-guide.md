@@ -1,26 +1,16 @@
-# 调用痕迹记录
+# Tasks 调用链说明
 
-本文件说明 trace 在 Context Router 中的作用。
+## 记录内容
 
-## trace 记录什么
+- task、cwd、project、agent_name 和创建时间。
+- prepare 返回的候选文档、rank、score 和 reason。
+- AI 实际调用 read 的 document_id、parent_document_id、depth。
+- prepare/read 的服务端 duration_ms。
 
-- AI 通过 `ctx read` 读取了哪些文档。
-- AI 通过 `ctx prepare` 兜底检索时返回了哪些文档。
-- 哪些推荐文档被读取，哪些只是被返回。
-- 后续反馈中标记的 useful、missing、stale、unnecessary。
+## 页面含义
 
-## 对 AI 的要求
+- `Read by AI`：候选文档随后出现 read 事件。
+- `Returned only`：文档被返回，但 AI 没有读取全文。
+- Tasks 外层列表只展示 MCP 来源任务。
 
-AI 只需要执行：
-
-```bash
-ctx read <doc-id>
-```
-
-或在无法判断 doc-id 时执行：
-
-```bash
-ctx prepare --project <project>
-```
-
-系统会在命令/API 封装层内部串起调用链路，AI 不需要手动传 traceId 或 reason。
+系统不记录人工反馈，也不推测 AI 为什么没有继续阅读。开发者可通过长期链路分布判断文档标题、标签、拆分或路由是否需要优化。

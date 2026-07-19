@@ -22,17 +22,16 @@ class DocumentLinkSummary(BaseModel):
     label: str
     relation_type: str
     sort_order: int
-
-
-class DocumentSyncRequest(BaseModel):
-    docs_dir: str = "docs"
-    prune: bool = False
+    is_broken: bool
 
 
 class DocumentSyncResponse(BaseModel):
     project_slug: str
-    docs_dir: str
+    docs_path: str
     indexed_count: int
+    reachable_count: int
+    orphan_count: int
+    broken_link_count: int
     link_count: int
     pruned_count: int
     indexed_document_ids: list[str]
@@ -48,6 +47,9 @@ class DocumentReadResponse(BaseModel):
     area: str | None
     tags: list[str]
     status: str
+    is_reachable: bool
+    graph_depth: int | None
+    broken_link_count: int
     content_markdown: str
     links: list[DocumentLinkSummary] = Field(default_factory=list)
 
@@ -61,6 +63,9 @@ class DocumentSummary(BaseModel):
     area: str | None
     tags: list[str]
     status: str
+    is_reachable: bool
+    graph_depth: int | None
+    broken_link_count: int
     links: list[DocumentLinkSummary] = Field(default_factory=list)
 
 

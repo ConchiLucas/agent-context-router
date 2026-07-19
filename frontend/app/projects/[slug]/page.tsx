@@ -1,6 +1,8 @@
 import Link from "next/link";
 
+import { ProjectDocumentControls } from "@/components/project-document-controls";
 import { getProject } from "@/lib/api";
+import { mappingStatusLabel, syncSummaryText } from "@/lib/document-health";
 
 type ProjectPageProps = {
   params: Promise<{
@@ -26,22 +28,49 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
     <>
       <header>
         <h1 className="page-title">{project.name}</h1>
-        <p className="page-subtitle">{project.root_path ?? project.slug}</p>
+        <p className="page-subtitle">{project.slug}</p>
       </header>
 
       <section className="section grid grid-4">
         <div className="panel metric">
-          <span className="metric-label">Documents</span>
-          <strong className="metric-value">{project.document_count}</strong>
+          <span className="metric-label">Indexed</span>
+          <strong className="metric-value">{project.sync_summary.indexed}</strong>
         </div>
         <div className="panel metric">
-          <span className="metric-label">Active</span>
-          <strong className="metric-value">{project.active_document_count}</strong>
+          <span className="metric-label">Reachable</span>
+          <strong className="metric-value">{project.sync_summary.reachable}</strong>
         </div>
         <div className="panel metric">
-          <span className="metric-label">Subprojects</span>
-          <strong className="metric-value">{project.child_project_count}</strong>
+          <span className="metric-label">Orphan</span>
+          <strong className="metric-value">{project.sync_summary.orphan}</strong>
         </div>
+        <Link className="panel metric" href={`/tasks?project=${encodeURIComponent(project.slug)}`}>
+          <span className="metric-label">MCP Tasks</span>
+          <strong className="metric-value">{project.trace_count}</strong>
+        </Link>
+      </section>
+
+      <section className="section panel project-detail-mapping">
+        <div className="project-detail-heading">
+          <div>
+            <h2 className="section-title">Document mapping</h2>
+            <p className="page-subtitle">
+              Choose a mounted document directory, then sync AGENTS.md and docs/**/*.md.
+            </p>
+          </div>
+          <span className={`badge mapping-${project.mapping_status}`}>
+            {mappingStatusLabel(project.mapping_status)}
+          </span>
+        </div>
+        <div className="project-health-grid">
+          <ProjectFact label="Code root" value={project.root_path ?? "Not configured"} />
+          <ProjectFact label="Document mapping" value={project.docs_path ?? "Not mapped"} />
+          <ProjectFact label="Status" value={mappingStatusLabel(project.mapping_status)} />
+          <ProjectFact label="Documents" value={syncSummaryText(project.sync_summary)} />
+          <ProjectFact label="Broken links" value={String(project.sync_summary.broken_links)} />
+          <ProjectFact label="Last synced" value={formatLastSynced(project.last_synced_at)} />
+        </div>
+        <ProjectDocumentControls project={project} />
       </section>
 
       {project.children.length > 0 ? (
@@ -64,10 +93,19 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
         </section>
       ) : null}
 
-      <section className="section panel">
-        <h2 className="section-title">AI_CONTEXT_INDEX.md</h2>
-        <pre className="code-block">{project.routing_template}</pre>
-      </section>
     </>
   );
+}
+
+function ProjectFact({ label, value }: Readonly<{ label: string; value: string }>) {
+  return (
+    <div className="project-fact">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function formatLastSynced(value: string | null) {
+  return value ? new Date(value).toLocaleString("en-GB") : "Never";
 }

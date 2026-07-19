@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+from time import perf_counter
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -12,17 +14,22 @@ from context_router.schemas.documents import (
     DocumentListResponse,
     DocumentReadResponse,
     DocumentSummary,
-    DocumentSyncRequest,
     DocumentSyncResponse,
     DocumentUpsertResponse,
 )
+from context_router.services.document_graph import (
+    DocumentGraphError,
+    ReadDecision,
+    authorize_mcp_read,
+)
+from context_router.services.document_mapping import DocumentMappingError
 from context_router.services.document_store import upsert_document
 from context_router.services.local_document_reader import (
     LocalDocumentAccessError,
     LocalDocumentNotFoundError,
     read_document_content,
 )
-from context_router.services.markdown_sync import sync_markdown_documents
+from context_router.services.markdown_sync import MarkdownSyncError, sync_mapped_documents
 from context_router.services.tracing import new_trace_id
 
 router = APIRouter(prefix="/api/projects/{project_slug}/documents", tags=["documents"])
@@ -47,7 +54,6 @@ def create_or_update_document(
 @router.post("/sync-local", response_model=DocumentSyncResponse)
 def sync_local_documents(
     project_slug: str,
-    request: DocumentSyncRequest,
     session: Annotated[Session, Depends(get_session)],
 ) -> DocumentSyncResponse:
     project = session.scalar(select(Project).where(Project.slug == project_slug))
@@ -55,20 +61,26 @@ def sync_local_documents(
         raise HTTPException(status_code=404, detail=f"Project not found: {project_slug}")
 
     try:
-        result = sync_markdown_documents(
-            session,
-            project=project,
-            docs_dir=request.docs_dir,
-            prune=request.prune,
-        )
-    except (FileNotFoundError, NotADirectoryError) as exc:
+        result = sync_mapped_documents(session, project=project)
+    except (DocumentMappingError, MarkdownSyncError) as exc:
+        session.rollback()
+        failed_project = session.scalar(select(Project).where(Project.slug == project_slug))
+        if failed_project is not None:
+            failed_project.last_sync_status = "failed"
+            session.commit()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    project.last_synced_at = datetime.now(UTC)
+    project.last_sync_status = "success"
+    project.last_sync_summary = result.summary
     session.commit()
     return DocumentSyncResponse(
         project_slug=project.slug,
-        docs_dir=str(result.docs_dir),
+        docs_path=result.docs_path,
         indexed_count=len(result.indexed_document_ids),
+        reachable_count=result.reachable_count,
+        orphan_count=result.orphan_count,
+        broken_link_count=result.broken_link_count,
         link_count=result.link_count,
         pruned_count=len(result.pruned_document_ids),
         indexed_document_ids=result.indexed_document_ids,
@@ -99,6 +111,8 @@ def list_documents(
         query = query.where(Document.doc_type == doc_type)
     if status is not None:
         query = query.where(Document.status == status)
+    else:
+        query = query.where(Document.status != "removed")
 
     documents = session.scalars(query).all()
     if tag is not None:
@@ -115,6 +129,11 @@ def list_documents(
                 area=document.area,
                 tags=document.tags,
                 status=document.status,
+                is_reachable=document.is_reachable,
+                graph_depth=document.graph_depth,
+                broken_link_count=sum(
+                    1 for link in document.outgoing_links if link.target_document_id is None
+                ),
                 links=_document_links(document),
             )
             for document in documents
@@ -144,14 +163,32 @@ def read_document(
     session: Annotated[Session, Depends(get_session)],
     trace_id: str | None = Query(default=None),
     parent_document_id: str | None = Query(default=None),
-    depth: int | None = Query(default=None, ge=1),
-    reason: str | None = Query(default=None),
     source: str | None = Query(default=None),
     untracked: bool = Query(default=False),
 ) -> DocumentReadResponse:
+    if source == "mcp" and trace_id is None:
+        raise HTTPException(status_code=422, detail="trace_id is required for MCP document reads")
+
+    started_at = perf_counter()
     document = session.scalar(select(Document).where(Document.id == document_id))
     if document is None:
         raise HTTPException(status_code=404, detail=f"Document not found: {document_id}")
+
+    trace: Trace | None = None
+    read_decision: ReadDecision | None = None
+    if source == "mcp":
+        trace = session.scalar(select(Trace).where(Trace.id == trace_id))
+        if trace is None:
+            raise HTTPException(status_code=404, detail=f"Trace not found: {trace_id}")
+        try:
+            read_decision = authorize_mcp_read(
+                session,
+                trace=trace,
+                document=document,
+                parent_document_id=parent_document_id,
+            )
+        except DocumentGraphError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     try:
         content_markdown = read_document_content(document)
@@ -162,13 +199,30 @@ def read_document(
 
     resolved_trace_id: str | None = None
     if not untracked:
-        trace = _resolve_or_create_trace(
-            session,
-            document=document,
-            trace_id=trace_id,
-            source=source,
-        )
+        if trace is None:
+            trace = _resolve_or_create_trace(
+                session,
+                document=document,
+                trace_id=trace_id,
+                source=source,
+            )
         resolved_trace_id = trace.id
+        if read_decision is not None:
+            depth = read_decision.depth
+            read_mode = read_decision.read_mode
+        else:
+            depth = _derive_read_depth(
+                session,
+                trace=trace,
+                parent_document_id=parent_document_id,
+            )
+            read_mode = _read_mode(
+                session=session,
+                trace=trace,
+                requested_trace_id=trace_id,
+                parent_document_id=parent_document_id,
+            )
+        duration_ms = round((perf_counter() - started_at) * 1000, 3)
         session.add(
             TraceEvent(
                 trace_id=trace.id,
@@ -181,12 +235,8 @@ def read_document(
                     "parent_document_id": parent_document_id,
                     "depth": depth,
                     "source": source,
-                    "read_mode": _read_mode(
-                        session=session,
-                        trace=trace,
-                        requested_trace_id=trace_id,
-                        parent_document_id=parent_document_id,
-                    ),
+                    "read_mode": read_mode,
+                    "duration_ms": duration_ms,
                 },
             )
         )
@@ -201,12 +251,21 @@ def read_document(
         area=document.area,
         tags=document.tags,
         status=document.status,
+        is_reachable=document.is_reachable,
+        graph_depth=document.graph_depth,
+        broken_link_count=sum(
+            1 for link in document.outgoing_links if link.target_document_id is None
+        ),
         content_markdown=content_markdown,
-        links=_document_links(document),
+        links=_document_links(document, for_mcp=source == "mcp"),
     )
 
 
-def _document_links(document: Document) -> list[DocumentLinkSummary]:
+def _document_links(
+    document: Document,
+    *,
+    for_mcp: bool = False,
+) -> list[DocumentLinkSummary]:
     return [
         DocumentLinkSummary(
             target_document_id=link.target_document_id,
@@ -214,8 +273,16 @@ def _document_links(document: Document) -> list[DocumentLinkSummary]:
             label=link.label,
             relation_type=link.relation_type,
             sort_order=link.sort_order,
+            is_broken=link.target_document_id is None,
         )
         for link in sorted(document.outgoing_links, key=lambda item: item.sort_order)
+        if not for_mcp
+        or (
+            link.target_document is not None
+            and link.target_document.project_id == document.project_id
+            and link.target_document.status == "active"
+            and link.target_document.is_reachable
+        )
     ]
 
 
@@ -254,6 +321,8 @@ def _resolve_or_create_trace(
         trace = session.scalar(select(Trace).where(Trace.id == trace_id))
         if trace is not None:
             return trace
+        if source == "mcp":
+            raise HTTPException(status_code=404, detail=f"Trace not found: {trace_id}")
 
     trace = Trace(
         id=new_trace_id(),
@@ -268,3 +337,34 @@ def _resolve_or_create_trace(
     session.add(trace)
     session.flush()
     return trace
+
+
+def _derive_read_depth(
+    session: Session,
+    *,
+    trace: Trace,
+    parent_document_id: str | None,
+) -> int:
+    if parent_document_id is None:
+        return 1
+
+    read_events = session.scalars(
+        select(TraceEvent)
+        .where(
+            TraceEvent.trace_id == trace.id,
+            TraceEvent.event_type == "read",
+        )
+        .order_by(TraceEvent.created_at.desc())
+    ).all()
+    for event in read_events:
+        if event.payload.get("document_id") != parent_document_id:
+            continue
+        try:
+            return int(event.payload.get("depth") or 1) + 1
+        except (TypeError, ValueError):
+            return 2
+
+    raise HTTPException(
+        status_code=422,
+        detail=f"Parent document was not read in this trace: {parent_document_id}",
+    )

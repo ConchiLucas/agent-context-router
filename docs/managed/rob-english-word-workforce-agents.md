@@ -1,20 +1,12 @@
-# AGENTS.md
+# rob-english-word-workforce AI 入口
 
-本文件是 `rob-english-word-workforce` 在 Context Router 中的一级入口索引。
+这是多项目 workspace 的稳定索引。AI 应按任务选择文档，不要一次读取全部内容。
 
-## 下一层文档
+| document_id | 适用任务 |
+| --- | --- |
+| `rob-english-word-workforce-subprojects-overview` | 先了解有哪些子项目及各自职责 |
+| `rob-english-word-workforce-database-info` | PostgreSQL、Redis、库名端口和数据排查 |
+| `rob-english-word-workforce-flow-overview` | 用户侧、后台、Java、Go 和 Python agent 的跨服务流转 |
+| `rob-english-word-workforce-ai-context-index` | 进一步按 startup/database/frontend/backend/business/debugging 路由 |
 
-| 文档 | 什么时候读 | 命令 |
-| --- | --- | --- |
-| `rob-english-word-workforce-subprojects-overview` | 需要先了解大项目下有哪些子项目，以及每个子项目大概做什么 | `ctx read rob-english-word-workforce-subprojects-overview` |
-| `rob-english-word-workforce-database-info` | 需要连接 PostgreSQL/Redis、确认库名账号端口或排查数据库数据问题 | `ctx read rob-english-word-workforce-database-info` |
-| `rob-english-word-workforce-flow-overview` | 需要了解用户侧、后台、Java 后端、Go server 和 Python agent 之间如何流转 | `ctx read rob-english-word-workforce-flow-overview` |
-
-## 说明
-
-这里只保留下一层入口，不放具体业务细节。第二层文档按主题给出简要入口；需要展开的主题再拆第三层，不需要展开的主题直接作为叶子节点。
-
-## 规则
-
-- 后续所有 Context Router 调用都复用同一个 `$SESSION_ID`。
-- 源码、配置、日志、实时表结构和临时排查信息可以直接读取项目目录。
+通过 MCP prepare 得到 trace_id 后，只对需要的 document_id 调用 read；源码和实时配置直接检查对应子项目。

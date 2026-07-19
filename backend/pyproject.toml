@@ -11,7 +11,6 @@ dependencies = [
   "pydantic-settings>=2.6.0",
   "psycopg[binary]>=3.2.0",
   "sqlalchemy>=2.0.30",
-  "typer>=0.12.0",
   "uvicorn>=0.30.0",
 ]
 
@@ -22,7 +21,6 @@ dev = [
 ]
 
 [project.scripts]
-ctx = "context_router.cli:app"
 context-router-mcp = "context_router.mcp_server:main"
 
 [build-system]

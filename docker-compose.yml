@@ -25,11 +25,14 @@ services:
       CONTEXT_ROUTER_DATABASE_URL: postgresql+psycopg://context_router:context_router@postgres:5432/context_router
       CONTEXT_ROUTER_WORKSPACE_HOST_ROOT: /Users/conchi/workforce
       CONTEXT_ROUTER_WORKSPACE_CONTAINER_ROOT: /workspace
+      CONTEXT_ROUTER_DOCUMENTS_HOST_ROOT: ${CONTEXT_ROUTER_DOCUMENTS_HOST_ROOT:-./document-sources}
+      CONTEXT_ROUTER_DOCUMENTS_CONTAINER_ROOT: ${CONTEXT_ROUTER_DOCUMENTS_CONTAINER_ROOT:-/documents}
     ports:
       - "49173:8000"
     volumes:
       - .:/app
       - /Users/conchi/workforce:/workspace:ro
+      - ${CONTEXT_ROUTER_DOCUMENTS_HOST_ROOT:-./document-sources}:${CONTEXT_ROUTER_DOCUMENTS_CONTAINER_ROOT:-/documents}:ro
     depends_on:
       postgres:
         condition: service_healthy

@@ -5,6 +5,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from context_router.config import settings
 from context_router.db.models import Base, Document, Project
 from context_router.db.session import get_session
 from context_router.main import create_app
@@ -148,12 +149,15 @@ def test_list_documents_returns_metadata() -> None:
             "area": "build",
             "tags": ["build", "test"],
             "status": "active",
+            "is_reachable": False,
+            "graph_depth": None,
+            "broken_link_count": 0,
             "links": [],
         }
     ]
 
 
-def test_sync_local_documents_indexes_frontmatter_and_markdown_links(tmp_path) -> None:
+def test_sync_local_documents_indexes_frontmatter_and_markdown_links(tmp_path, monkeypatch) -> None:
     engine = create_engine(
         "sqlite+pysqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -162,9 +166,11 @@ def test_sync_local_documents_indexes_frontmatter_and_markdown_links(tmp_path) -
     TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     Base.metadata.create_all(engine)
 
-    docs_dir = tmp_path / "docs"
-    docs_dir.mkdir()
-    (docs_dir / "root.md").write_text(
+    documents_root = tmp_path / "documents"
+    project_root = documents_root / "my-app-docs"
+    docs_dir = project_root / "docs"
+    docs_dir.mkdir(parents=True)
+    (project_root / "AGENTS.md").write_text(
         """---
 doc_id: root-index
 title: Root Index
@@ -175,7 +181,7 @@ tags: [agent, index]
 
 # Root Index
 
-- [Payments](./payments.md)
+- [Payments](./docs/payments.md)
 """,
         encoding="utf-8",
     )
@@ -196,8 +202,10 @@ Run payment checks.
     )
 
     with TestingSession() as session:
-        session.add(Project(slug="my-app", name="My App"))
+        session.add(Project(slug="my-app", name="My App", docs_path="my-app-docs"))
         session.commit()
+
+    monkeypatch.setattr(settings, "documents_container_root", str(documents_root))
 
     def override_session() -> Generator[Session, None, None]:
         with TestingSession() as session:
@@ -214,8 +222,8 @@ Run payment checks.
 
     assert sync_response.status_code == 200
     assert sync_response.json()["indexed_document_ids"] == [
-        "payments-runbook",
         "root-index",
+        "payments-runbook",
     ]
     assert sync_response.json()["link_count"] == 1
 
@@ -226,10 +234,11 @@ Run payment checks.
     assert documents["root-index"]["links"] == [
         {
             "target_document_id": "payments-runbook",
-            "target_path": str((docs_dir / "payments.md").resolve(strict=False)),
+            "target_path": "docs/payments.md",
             "label": "Payments",
             "relation_type": "markdown_link",
             "sort_order": 0,
+            "is_broken": False,
         }
     ]
 
@@ -240,7 +249,9 @@ Run payment checks.
     assert "doc_id:" not in read_response.json()["content_markdown"]
 
 
-def test_sync_local_documents_resolves_relative_docs_dir_from_project_root(tmp_path) -> None:
+def test_sync_local_documents_ignores_requested_path_and_uses_mapping(
+    tmp_path, monkeypatch
+) -> None:
     engine = create_engine(
         "sqlite+pysqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -249,10 +260,11 @@ def test_sync_local_documents_resolves_relative_docs_dir_from_project_root(tmp_p
     TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     Base.metadata.create_all(engine)
 
-    project_root = tmp_path / "target-project"
+    documents_root = tmp_path / "documents"
+    project_root = documents_root / "target-project"
     docs_dir = project_root / "docs"
     docs_dir.mkdir(parents=True)
-    (docs_dir / "root.md").write_text(
+    (project_root / "AGENTS.md").write_text(
         """---
 doc_id: root-index
 title: Root Index
@@ -267,8 +279,17 @@ tags: [agent]
     )
 
     with TestingSession() as session:
-        session.add(Project(slug="my-app", name="My App", root_path=str(project_root)))
+        session.add(
+            Project(
+                slug="my-app",
+                name="My App",
+                root_path="/srv/projects/my-app",
+                docs_path="target-project",
+            )
+        )
         session.commit()
+
+    monkeypatch.setattr(settings, "documents_container_root", str(documents_root))
 
     def override_session() -> Generator[Session, None, None]:
         with TestingSession() as session:
@@ -284,15 +305,15 @@ tags: [agent]
     )
 
     assert sync_response.status_code == 200
-    assert sync_response.json()["docs_dir"] == str(docs_dir)
+    assert sync_response.json()["docs_path"] == "target-project"
 
     documents_response = client.get("/api/documents", params={"project": "my-app"})
 
     assert documents_response.status_code == 200
-    assert documents_response.json()["documents"][0]["source_path"] == str(docs_dir / "root.md")
+    assert documents_response.json()["documents"][0]["source_path"] == "AGENTS.md"
 
 
-def test_sync_project_root_only_reads_root_agent_and_docs_tree(tmp_path) -> None:
+def test_sync_project_root_only_reads_root_agent_and_docs_tree(tmp_path, monkeypatch) -> None:
     engine = create_engine(
         "sqlite+pysqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -301,7 +322,8 @@ def test_sync_project_root_only_reads_root_agent_and_docs_tree(tmp_path) -> None
     TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     Base.metadata.create_all(engine)
 
-    project_root = tmp_path / "target-project"
+    documents_root = tmp_path / "documents"
+    project_root = documents_root / "target-project"
     docs_dir = project_root / "docs"
     submodule_dir = project_root / "submodule"
     docs_dir.mkdir(parents=True)
@@ -343,8 +365,17 @@ doc_type: agent_index
     )
 
     with TestingSession() as session:
-        session.add(Project(slug="my-app", name="My App", root_path=str(project_root)))
+        session.add(
+            Project(
+                slug="my-app",
+                name="My App",
+                root_path="/srv/projects/my-app",
+                docs_path="target-project",
+            )
+        )
         session.commit()
+
+    monkeypatch.setattr(settings, "documents_container_root", str(documents_root))
 
     def override_session() -> Generator[Session, None, None]:
         with TestingSession() as session:

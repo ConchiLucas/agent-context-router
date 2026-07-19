@@ -12,6 +12,10 @@
 
 ## 核心规则
 
+- 新窗口遇到业务规则、启动、数据库或跨层链路任务时，优先调用 Context Router MCP `prepare_task_context`，传当前 task、cwd 和 agent_name；明确文件或纯源码定位可直接检索。
+- MCP prepare 只返回映射文档项目的 `AGENTS.md` 入口；先读取入口，再根据它的 Markdown 直接链接选择下一层，并传 `parent_document_id`。
+- 文档映射与同步由 Projects 页面管理；不要把代码 `root_path` 当作文档目录，也不要向同步接口提交任意路径。
+- 如果 MCP 不可用或没有合适候选，继续使用本索引和仓库检索，不要阻塞任务。
 - 修改代码前先阅读相关文件和开发规范。
 - 本项目只使用当前目录下的 Docker Compose 管理服务；不要用宿主机直接启动前端或后端。
 - 修改后端代码后，按开发规范使用 `docker compose restart backend` 重启后端。

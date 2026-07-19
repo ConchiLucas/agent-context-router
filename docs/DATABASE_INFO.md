@@ -59,7 +59,7 @@ postgresql+psycopg://context_router:context_router@postgres:5432/context_router
 已知当前 migration 版本：
 
 ```text
-20260703_0007
+20260719_0008
 ```
 
 核心表：
@@ -81,6 +81,10 @@ id
 slug
 name
 root_path
+docs_path
+last_synced_at
+last_sync_status
+last_sync_summary
 description
 parent_project_id
 created_at
@@ -99,11 +103,19 @@ area
 tags
 status
 content_markdown
+is_reachable
+graph_depth
 created_at
 updated_at
 ```
 
-当前受管文档只保存稳定入口和说明类文档。当前主要类型：
+`root_path` 只用于 cwd 识别代码项目；唯一 `docs_path` 定位 `/documents` 下的直接子目录。`last_sync_summary` 保存 indexed、reachable、orphan、broken_links、pruned 计数。
+
+`documents.status="removed"` 是保留历史 Task 引用的 tombstone：普通 Documents 列表默认排除，但旧 `retrieval_hits` 和事件仍能展示标题。tombstone 的 `is_reachable=false`、`graph_depth=null`。
+
+`document_links` 保存同步解析出的 Markdown 链接；无法解析的目标保留 `target_document_id=null`，用于 Web 展示 broken link。
+
+当前受管文档来自映射根的 `AGENTS.md` 和 `docs/**/*.md`。入口强制为 `agent_index`，其余类型来自 front matter。
 
 ```text
 agent_index
@@ -117,7 +129,7 @@ project_entry_guide
 
 配置文件、表结构 SQL、manifest 和源码细节不作为常规受管文档入库，需要时让 AI 直接读取项目目录。
 
-`traces` 保存一次上下文准备过程和入口路由信息：
+`traces` 保存一次 MCP 上下文准备过程和入口路由信息：
 
 ```text
 id
@@ -133,7 +145,11 @@ agent_name
 created_at
 ```
 
-`usage_cards` 保存前端 Usage 菜单中的 Markdown 使用说明卡片：
+`trace_events` 保存客观 MCP 调用事件。当前运行时主要写入 `prepare` 和 `read`，payload 中可包含 `duration_ms`、`document_id`、`parent_document_id` 和 `depth`。
+
+`retrieval_hits` 保存 prepare 返回的 AGENTS.md 入口，并维持历史引用。Tasks 详情把它与 read 事件对照为 `Entry read` 或 `Entry returned`。
+
+`usage_cards` 是旧版本 Usage 功能的历史表。当前没有对应 API 或页面，migration 和表暂时保留兼容：
 
 ```text
 id
@@ -171,5 +187,5 @@ docker compose exec -T postgres psql -U context_router -d context_router -c "\dt
 
 - 检查 bug 或运行脚本前，先确认要连接的是本机默认数据库还是 Docker Compose 数据库。
 - 后端容器内脚本优先使用 compose 内部连接串。
-- 宿主机直接运行脚本时优先使用当前默认数据库连接串。
+- 不要把宿主机脚本作为项目的启动或验证方式。
 - 表结构变更必须通过 Alembic migration 管理。

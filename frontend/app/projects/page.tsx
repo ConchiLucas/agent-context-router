@@ -3,10 +3,11 @@ import Link from "next/link";
 
 import { DocumentsView } from "@/components/documents-view";
 import { ModalCloseButton } from "@/components/modal-close-button";
+import { ProjectDocumentControls } from "@/components/project-document-controls";
 import { ProjectDocumentPreviewShell } from "@/components/project-document-preview-shell";
-import { ProjectLinkReloadButton } from "@/components/project-link-reload-button";
-import { TracesView } from "@/components/traces-view";
+import { ProjectCreateForm } from "@/components/project-create-form";
 import { getProjects } from "@/lib/api";
+import { mappingStatusLabel } from "@/lib/document-health";
 
 type ProjectsPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -21,7 +22,6 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
   const docType = singleValue(params.doc_type);
   const tag = singleValue(params.tag);
   const status = singleValue(params.status);
-  const source = singleValue(params.source);
   const documentView = singleValue(params.view);
   const result = await Promise.allSettled([getProjects()]);
   const projects = result[0].status === "fulfilled" ? result[0].value.projects : [];
@@ -40,6 +40,9 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
         <h1 className="page-title">Projects</h1>
         <p className="page-subtitle">Top-level workspaces and their subprojects.</p>
       </header>
+      <section className="section">
+        <ProjectCreateForm />
+      </section>
       <section className="section grid project-grid">
         {projects.length === 0 ? (
           <div className="panel">
@@ -58,26 +61,31 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
                     </Link>
                     <p className="page-subtitle">{project.slug}</p>
                   </div>
-                  <span className="badge">{project.child_project_count} subprojects</span>
+                  <span className={`badge mapping-${project.mapping_status}`}>
+                    {mappingStatusLabel(project.mapping_status)}
+                  </span>
                 </div>
 
                 <div className="project-card-content">
-                  <div className="project-card-meta">
-                    <span>Root</span>
-                    <strong>{project.root_path ?? "no root path"}</strong>
-                  </div>
-
-                  <div className="project-card-stats">
-                    <div>
-                      <span>Documents</span>
-                      <strong>{project.document_count}</strong>
-                      <small>{project.active_document_count} active</small>
-                    </div>
-                    <div>
-                      <span>Traces</span>
-                      <strong>{project.trace_count}</strong>
-                      <small>prepare calls</small>
-                    </div>
+                  <div className="project-health-grid">
+                    <ProjectFact label="Code root" value={project.root_path ?? "Not configured"} />
+                    <ProjectFact
+                      label="Document mapping"
+                      value={project.docs_path ?? "Not mapped"}
+                    />
+                    <ProjectFact label="Status" value={mappingStatusLabel(project.mapping_status)} />
+                    <ProjectFact
+                      label="Documents"
+                      value={`${project.sync_summary.indexed} indexed / ${project.sync_summary.reachable} reachable / ${project.sync_summary.orphan} orphan`}
+                    />
+                    <ProjectFact
+                      label="Broken links"
+                      value={String(project.sync_summary.broken_links)}
+                    />
+                    <ProjectFact
+                      label="Last synced"
+                      value={formatLastSynced(project.last_synced_at)}
+                    />
                   </div>
                 </div>
 
@@ -90,14 +98,11 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
                   </Link>
                   <Link
                     className="button"
-                    href={`/projects?panel=traces&project=${encodedSlug}`}
+                    href={`/tasks?project=${encodedSlug}`}
                   >
-                    Traces
+                    Tasks
                   </Link>
-                  <ProjectLinkReloadButton
-                    disabled={!project.root_path}
-                    projectSlug={project.slug}
-                  />
+                  <ProjectDocumentControls project={project} />
                 </div>
               </article>
             );
@@ -142,24 +147,21 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
           </ProjectDocumentPreviewShell>
         </ProjectPanel>
       ) : null}
-      {activePanel === "traces" ? (
-        <ProjectPanel backHref="/projects">
-          <TracesView
-            filters={{
-              project: activeProject,
-              area,
-              source,
-            }}
-            subtitle={
-              activeProject
-                ? `Prepare calls, read history, and feedback for ${activeProject}.`
-                : "Prepare calls, read history, and feedback."
-            }
-          />
-        </ProjectPanel>
-      ) : null}
     </>
   );
+}
+
+function ProjectFact({ label, value }: Readonly<{ label: string; value: string }>) {
+  return (
+    <div className="project-fact">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function formatLastSynced(value: string | null) {
+  return value ? new Date(value).toLocaleString("en-GB") : "Never";
 }
 
 function ProjectPanel({
@@ -182,13 +184,12 @@ function singleValue(value: string | string[] | undefined) {
 }
 
 function projectPanelHref(params: {
-  panel: "documents" | "traces";
+  panel: "documents";
   project?: string;
   area?: string;
   doc_type?: string;
   tag?: string;
   status?: string;
-  source?: string;
   view?: string;
   document?: string;
 }) {

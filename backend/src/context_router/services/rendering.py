@@ -41,8 +41,8 @@ def render_context_markdown(
                 f"   score: {result.score:.2f}",
                 f"   reason: {result.reason}",
                 f"   excerpt: {result.excerpt}",
-                "   follow_up:",
-                f"   ctx read {result.document_id}",
+                f"   document_id: {result.document_id}",
+                "   read_with: read_context_document",
             ]
         )
 

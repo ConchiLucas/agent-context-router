@@ -17,11 +17,13 @@ type SyncState =
 
 type ProjectLinkReloadButtonProps = Readonly<{
   disabled?: boolean;
+  disabledReason?: string;
   projectSlug: string;
 }>;
 
 export function ProjectLinkReloadButton({
   disabled = false,
+  disabledReason = "A valid document mapping is required",
   projectSlug,
 }: ProjectLinkReloadButtonProps) {
   const router = useRouter();
@@ -46,10 +48,7 @@ export function ProjectLinkReloadButton({
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            docs_dir: ".",
-            prune: true,
-          }),
+          body: "{}",
         },
       );
       const payload = (await response.json().catch(() => null)) as
@@ -68,7 +67,7 @@ export function ProjectLinkReloadButton({
       const result = payload as DocumentSyncResponse;
       setSyncState({
         status: "success",
-        message: `${result.indexed_count} docs, ${result.link_count} links`,
+        message: `${result.indexed_count} indexed · ${result.reachable_count} reachable`,
       });
       router.refresh();
     } catch (error) {
@@ -82,11 +81,11 @@ export function ProjectLinkReloadButton({
   return (
     <div className="project-sync-control">
       <button
-        aria-label={`Reload document links for ${projectSlug}`}
+        aria-label={`Sync documents for ${projectSlug}`}
         className="button project-sync-button"
         disabled={isDisabled}
         onClick={() => void reloadLinks()}
-        title={disabled ? "Root path is required" : "Reload local markdown links"}
+        title={disabled ? disabledReason : "Sync mapped documents"}
         type="button"
       >
         <svg
@@ -105,7 +104,7 @@ export function ProjectLinkReloadButton({
           <path d="M7 18H3v4" />
           <path d="M17 6h4V2" />
         </svg>
-        <span>{isLoading ? "Reloading" : "Reload Links"}</span>
+        <span>{isLoading ? "Syncing" : "Sync Documents"}</span>
       </button>
       {syncState.message ? (
         <span

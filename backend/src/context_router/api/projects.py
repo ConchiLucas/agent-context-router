@@ -7,11 +7,20 @@ from sqlalchemy.orm import Session, selectinload
 from context_router.db.models import Project
 from context_router.db.session import get_session
 from context_router.schemas.projects import (
+    DocumentMappingRequest,
+    DocumentMappingResponse,
     ProjectCreate,
     ProjectDetailResponse,
     ProjectListResponse,
     ProjectResponse,
     ProjectSummary,
+    SyncSummary,
+)
+from context_router.services.document_mapping import (
+    DocumentMappingConflictError,
+    DocumentMappingError,
+    assign_document_mapping,
+    resolve_document_root,
 )
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -61,6 +70,41 @@ def create_project(
     return _project_response(saved)
 
 
+@router.put(
+    "/{project_slug}/document-mapping",
+    response_model=DocumentMappingResponse,
+)
+def update_document_mapping(
+    project_slug: str,
+    request: DocumentMappingRequest,
+    session: Annotated[Session, Depends(get_session)],
+) -> DocumentMappingResponse:
+    project = session.scalar(select(Project).where(Project.slug == project_slug))
+    if project is None:
+        raise HTTPException(status_code=404, detail=f"Project not found: {project_slug}")
+
+    try:
+        assign_document_mapping(
+            session,
+            project=project,
+            docs_path=request.docs_path,
+        )
+    except DocumentMappingConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except DocumentMappingError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    session.commit()
+    session.refresh(project)
+    return DocumentMappingResponse(
+        project_slug=project.slug,
+        docs_path=project.docs_path or "",
+        last_synced_at=project.last_synced_at,
+        last_sync_status=project.last_sync_status,
+        last_sync_summary=project.last_sync_summary,
+    )
+
+
 @router.get("/{project_slug}", response_model=ProjectDetailResponse)
 def get_project(
     project_slug: str,
@@ -95,32 +139,62 @@ def _project_load_options():
 
 
 def _project_response(project: Project) -> ProjectResponse:
+    mapping_status = _mapping_status(project)
     return ProjectResponse(
         id=project.id,
         slug=project.slug,
         name=project.name,
         root_path=project.root_path,
+        docs_path=project.docs_path,
         description=project.description,
         parent_slug=project.parent.slug if project.parent else None,
+        mapping_status=mapping_status,
+        last_synced_at=project.last_synced_at,
+        last_sync_status=project.last_sync_status,
+        sync_summary=SyncSummary.model_validate(project.last_sync_summary or {}),
     )
 
 
 def _project_summary(project: Project) -> ProjectSummary:
     project_tree = list(_iter_project_tree(project))
     documents = [document for tree_project in project_tree for document in tree_project.documents]
-    traces = [trace for tree_project in project_tree for trace in tree_project.traces]
+    traces = [
+        trace
+        for tree_project in project_tree
+        for trace in tree_project.traces
+        if trace.source == "mcp"
+    ]
     return ProjectSummary(
         id=project.id,
         slug=project.slug,
         name=project.name,
         root_path=project.root_path,
+        docs_path=project.docs_path,
         description=project.description,
         parent_slug=project.parent.slug if project.parent else None,
+        mapping_status=_mapping_status(project),
+        last_synced_at=project.last_synced_at,
+        last_sync_status=project.last_sync_status,
+        sync_summary=SyncSummary.model_validate(project.last_sync_summary or {}),
         document_count=len(documents),
         active_document_count=sum(1 for document in documents if document.status == "active"),
         trace_count=len(traces),
         child_project_count=len(project.children),
     )
+
+
+def _mapping_status(project: Project) -> str:
+    if not project.docs_path:
+        return "not_mapped"
+    try:
+        resolve_document_root(project)
+    except DocumentMappingError:
+        return "invalid"
+    if project.last_sync_status == "failed":
+        return "sync_failed"
+    if project.last_synced_at is None:
+        return "not_synced"
+    return "ready"
 
 
 def _iter_project_tree(project: Project):
@@ -132,35 +206,28 @@ def _iter_project_tree(project: Project):
 def _routing_template(project_slug: str) -> str:
     return f"""# AI_CONTEXT_INDEX.md
 
-本文件是 AI 的上下文树索引入口，只列下一层文档和读取命令。
+本文件是 AI 的上下文树索引入口，只列下一层文档和适用任务。
 
 ## 使用方式
 
-- 主流程是按 doc-id 运行 `ctx read <doc-id>`。
-- 每份文档继续列出自己的下一层文档。
-- `ctx prepare` 只在无法判断 doc-id 时兜底使用。
+- 开始任务时调用 MCP 工具 `prepare_task_context`，传入 task 和 cwd。
+- 从返回的候选文档中选择需要的内容。
+- 读取候选文档时调用 `read_context_document`，并传回 trace_id。
 - 源码、配置、表结构等实时内容可以直接查项目目录。
 
-## 初始化索引
+## 项目标识
 
-```bash
-ctx project init-index --project {project_slug} --area <area>
-```
+- project: `{project_slug}`
+- 通常由 cwd 自动识别，不需要 AI 手工指定。
 
 ## 下一层文档
 
 - `<doc-id>`：填写下一层文档用途。
-  - 读取：`ctx read <doc-id>`
-
-## 兜底检索
-
-```bash
-ctx prepare --project {project_slug}
-```
+  - 适用任务：描述 AI 在什么情况下需要它。
 
 ## Rules
 
 - 不要一开始读取全部说明文档。
-- 优先按文档树 `ctx read <doc-id>`。
+- 只读取当前任务需要的候选文档。
 - 如果文档树缺少合适入口，在最终回复中说明缺口。
 """

@@ -1,5 +1,10 @@
 import Link from "next/link";
 
+import {
+  buildDocumentHierarchy,
+  groupDocumentsByDepth,
+  type DocumentHierarchyNode,
+} from "@/lib/document-health";
 import type { DocumentSummary } from "@/lib/types";
 
 type DocumentGraphProps = Readonly<{
@@ -8,168 +13,150 @@ type DocumentGraphProps = Readonly<{
   project?: string;
 }>;
 
-type LinkedDocument = Readonly<{
-  document: DocumentSummary;
-  label: string;
-}>;
-
-type GraphRoute = Readonly<{
-  id: string;
-  relation: string;
-  branchDocument: DocumentSummary;
-  documents: LinkedDocument[];
-}>;
-
 export function DocumentGraph({
   documents,
   detailHref = (document) => `/documents/${encodeURIComponent(document.id)}`,
   project,
 }: DocumentGraphProps) {
   if (documents.length === 0) {
-    return (
-      <p className="page-subtitle" style={{ padding: "2rem", textAlign: "center" }}>
-        No documents indexed yet.
-      </p>
-    );
+    return <p className="page-subtitle document-health-empty">No documents indexed yet.</p>;
   }
 
-  const documentById = new Map(documents.map((document) => [document.id, document]));
-  const rootDocument = pickRootDocument(documents, project);
-  const rootLinks = rootDocument ? linkedDocuments(rootDocument, documentById) : [];
-  const routes = rootLinks.map((link) => ({
-    id: `${rootDocument?.id ?? "root"}-${link.document.id}`,
-    relation: link.label,
-    branchDocument: link.document,
-    documents: linkedDocuments(link.document, documentById),
-  }));
-  const unlinkedDocuments = rootDocument
-    ? documents.filter((document) => document.id !== rootDocument.id && !isConnected(document, routes))
-    : documents;
+  const hierarchy = buildDocumentHierarchy(documents, project);
+  const { orphans, brokenLinks } = groupDocumentsByDepth(documents);
 
   return (
-    <div className="document-graph-map">
-      <div className="document-graph-root">
-        {rootDocument ? (
-          <DocumentGraphNode
-            childCount={rootLinks.length}
-            command={readCommand(rootDocument.id)}
-            description="AI 先读总入口，再按 Markdown 链接选择下一层 doc-id。"
-            detailHref={detailHref}
-            document={rootDocument}
-            label="总入口"
-            variant="root-node"
-          />
-        ) : (
-          <div className="document-graph-node root-node">
-            <span className="document-graph-node-label">总索引文档</span>
-            <strong>等待建立总入口</strong>
-            <span>建议补齐带 doc_id 的 AGENTS.md 或 AI_CONTEXT_INDEX.md。</span>
-          </div>
-        )}
-      </div>
-
-      <div className="document-graph-routes">
-        {routes.length > 0 ? (
-          routes.map((route) => (
-            <section className="document-graph-route" key={route.id}>
-              <DocumentGraphNode
-                childCount={route.documents.length}
-                command={readCommand(route.branchDocument.id)}
-                description={descriptionForDocument(route.branchDocument)}
-                detailHref={detailHref}
-                document={route.branchDocument}
-                label={route.relation}
-                variant="branch-node"
-              />
-              {route.documents.length > 0 ? (
-                <>
-                  <div className="document-graph-connector" aria-hidden="true" />
-                  <div className="document-graph-leaf-column">
-                    <div className="document-graph-leaves-title">
-                      <span>下一层文档</span>
-                      <strong>{route.documents.length}</strong>
-                    </div>
-                    <div className="document-graph-leaves">
-                      {route.documents.map((linkedDocument) => (
-                        <DocumentGraphNode
-                          command={readCommand(linkedDocument.document.id)}
-                          description={descriptionForDocument(linkedDocument.document)}
-                          detailHref={detailHref}
-                          document={linkedDocument.document}
-                          key={`${route.id}-${linkedDocument.document.id}`}
-                          label={linkedDocument.label}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </>
-              ) : null}
-            </section>
-          ))
-        ) : (
-          <div className="document-graph-empty panel">
-            <h2 className="section-title">没有解析到下一层链接</h2>
-            <p className="page-subtitle">
-              在总入口 Markdown 中添加本地链接，例如
-              {" "}
-              <code>[数据库信息](./rob-english-word-workforce-database-info.md)</code>
-              ，然后重新运行同步命令。
-            </p>
-          </div>
-        )}
-
-        {unlinkedDocuments.length > 0 ? (
-          <section className="document-graph-route">
-            <DocumentGraphNode
-              childCount={unlinkedDocuments.length}
-              command={readCommand(unlinkedDocuments[0].id)}
-              description="这些文档已入库，但还没有被总入口或下一层文档链接到。"
+    <div className="document-health-map">
+      {hierarchy ? (
+        <div className="document-hierarchy-scroll">
+          <div className="document-hierarchy-tree">
+            <DocumentTreeBranch
               detailHref={detailHref}
-              document={unlinkedDocuments[0]}
-              label="未关联文档"
-              variant="branch-node"
+              keyPath={hierarchy.document.id}
+              node={hierarchy}
             />
-            {unlinkedDocuments.length > 1 ? (
-              <>
-                <div className="document-graph-connector" aria-hidden="true" />
-                <div className="document-graph-leaf-column">
-                  <div className="document-graph-leaves-title">
-                    <span>待补链接</span>
-                    <strong>{unlinkedDocuments.length - 1}</strong>
-                  </div>
-                  <div className="document-graph-leaves">
-                    {unlinkedDocuments.slice(1).map((document) => (
-                      <DocumentGraphNode
-                        command={readCommand(document.id)}
-                        description={descriptionForDocument(document)}
-                        detailHref={detailHref}
-                        document={document}
-                        key={`unlinked-${document.id}`}
-                      />
-                    ))}
-                  </div>
+          </div>
+        </div>
+      ) : (
+        <div className="document-graph-empty panel">
+          <h2 className="section-title">等待建立 AGENTS.md 入口</h2>
+          <p className="page-subtitle">同步映射目录后，入口和下一层链接会显示在这里。</p>
+        </div>
+      )}
+
+      {orphans.length > 0 ? (
+        <section className="document-health-section orphan-section">
+          <div className="document-health-heading">
+            <div>
+              <span>Not reachable from AGENTS.md</span>
+              <h3>Orphan documents</h3>
+            </div>
+            <strong>{orphans.length}</strong>
+          </div>
+          <div className="document-depth-nodes">
+            {orphans.map((document) => (
+              <DocumentGraphNode
+                detailHref={detailHref}
+                document={document}
+                key={document.id}
+                label="未关联文档"
+                variant="orphan-node"
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {brokenLinks.length > 0 ? (
+        <section className="document-health-section broken-section">
+          <div className="document-health-heading">
+            <div>
+              <span>Markdown target could not be resolved</span>
+              <h3>Broken links</h3>
+            </div>
+            <strong>{brokenLinks.length}</strong>
+          </div>
+          <div className="broken-link-list">
+            {brokenLinks.map(({ source, link }) => (
+              <article
+                className="broken-link-item"
+                key={`${source.id}-${link.sort_order}-${link.target_path}`}
+              >
+                <div>
+                  <strong>{link.label || link.target_path}</strong>
+                  <span>from {source.title}</span>
                 </div>
-              </>
-            ) : null}
-          </section>
-        ) : null}
-      </div>
+                <code>{link.target_path}</code>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+function DocumentTreeBranch({
+  detailHref,
+  keyPath,
+  node,
+}: Readonly<{
+  detailHref: (document: DocumentSummary) => string;
+  keyPath: string;
+  node: DocumentHierarchyNode;
+}>) {
+  const depth = node.document.graph_depth ?? 1;
+  const variant = node.isReference
+    ? "reference-node"
+    : depth === 1
+      ? "root-node"
+      : node.children.length > 0
+        ? "branch-node"
+        : "leaf-node";
+  const label = node.isReference
+    ? `${node.edgeLabel ?? labelForDocument(node.document)} · 引用`
+    : node.edgeLabel ?? "总入口";
+
+  return (
+    <div className="document-hierarchy-branch">
+      <DocumentGraphNode
+        childCount={node.isReference ? undefined : node.children.length}
+        detailHref={detailHref}
+        document={node.document}
+        label={label}
+        variant={variant}
+      />
+      {node.children.length > 0 ? (
+        <>
+          <div className="document-hierarchy-connector" aria-hidden="true" />
+          <div className="document-hierarchy-children">
+            {node.children.map((child, index) => {
+              const childKey = `${keyPath}-${child.document.id}-${index}`;
+              return (
+                <div className="document-hierarchy-child" key={childKey}>
+                  <DocumentTreeBranch
+                    detailHref={detailHref}
+                    keyPath={childKey}
+                    node={child}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
 
 function DocumentGraphNode({
   childCount,
-  command,
-  description,
   detailHref,
   document,
   label,
   variant,
 }: Readonly<{
   childCount?: number;
-  command?: string;
-  description?: string;
   detailHref: (document: DocumentSummary) => string;
   document: DocumentSummary;
   label?: string;
@@ -187,89 +174,16 @@ function DocumentGraphNode({
         <span className="document-graph-node-preview">预览</span>
       </span>
       <strong>{document.title}</strong>
-      <span>{document.id}</span>
-      {description ? (
-        <small className="document-graph-node-description">{description}</small>
-      ) : null}
+      <span>{document.source_path}</span>
       <div className="document-graph-node-meta">
-        <small>{document.project_slug}</small>
+        <small>{document.id}</small>
         {childCount !== undefined ? <small>下一步 {childCount}</small> : null}
       </div>
-      {command ? <code className="document-graph-node-command">{command}</code> : null}
+      <code className="document-graph-node-command">document_id: {document.id}</code>
     </Link>
   );
 }
 
-function pickRootDocument(documents: DocumentSummary[], project?: string) {
-  const agentDocuments = documents.filter((document) => document.doc_type === "agent_index");
-  return (
-    agentDocuments.find((document) => project && document.project_slug === project) ??
-    agentDocuments.find((document) => document.project_slug.includes("workforce")) ??
-    agentDocuments[0] ??
-    documents[0] ??
-    null
-  );
-}
-
-function linkedDocuments(
-  document: DocumentSummary,
-  documentById: Map<string, DocumentSummary>
-): LinkedDocument[] {
-  return (document.links ?? [])
-    .filter((link) => link.target_document_id !== null)
-    .sort((left, right) => left.sort_order - right.sort_order)
-    .map((link) => {
-      const targetDocument = documentById.get(link.target_document_id ?? "");
-      if (!targetDocument) {
-        return null;
-      }
-      return {
-        document: targetDocument,
-        label: link.label,
-      };
-    })
-    .filter((link): link is LinkedDocument => link !== null);
-}
-
-function isConnected(document: DocumentSummary, routes: GraphRoute[]) {
-  return routes.some(
-    (route) =>
-      route.branchDocument.id === document.id ||
-      route.documents.some((linkedDocument) => linkedDocument.document.id === document.id)
-  );
-}
-
 function labelForDocument(document: DocumentSummary) {
-  return docTypeLabels[document.doc_type] ?? document.doc_type;
+  return document.doc_type === "agent_index" ? "AI 入口" : document.doc_type;
 }
-
-function descriptionForDocument(document: DocumentSummary) {
-  if (document.doc_type === "agent_index") {
-    return "AI 入口索引，说明下一层文档和读取方式。";
-  }
-  if (document.doc_type === "subprojects_overview") {
-    return "大项目下的子项目清单和职责入口。";
-  }
-  if (document.doc_type === "project_overview") {
-    return "子项目作用、用途和主要功能概览。";
-  }
-  if (document.doc_type === "database_info") {
-    return "数据库连接、库名账号、端口和排查入口。";
-  }
-  if (document.doc_type === "flow_overview") {
-    return "项目间调用方向、数据流转和排查路径总览。";
-  }
-  return "稳定说明文档，摘要不足时再读取全文。";
-}
-
-function readCommand(documentId: string) {
-  return `ctx read ${documentId}`;
-}
-
-const docTypeLabels: Record<string, string> = {
-  agent_index: "AI 入口",
-  database_info: "数据库信息",
-  flow_overview: "链路流转",
-  project_overview: "项目概览",
-  subprojects_overview: "子项目总览",
-};

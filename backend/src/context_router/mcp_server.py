@@ -9,9 +9,6 @@ import httpx
 
 DEFAULT_API_URL = "http://127.0.0.1:8000"
 PROTOCOL_VERSION = "2024-11-05"
-CURRENT_TRACE_ID: str | None = None
-CURRENT_DOCUMENT_ID: str | None = None
-CURRENT_DEPTH = 0
 
 
 TOOLS = [
@@ -21,17 +18,12 @@ TOOLS = [
         "inputSchema": {
             "type": "object",
             "properties": {
+                "task": {"type": "string", "minLength": 1},
+                "cwd": {"type": "string", "minLength": 1},
                 "project": {"type": "string"},
-                "task": {"type": "string"},
-                "area": {"type": "string"},
-                "cwd": {"type": "string"},
-                "entrypoint_path": {"type": "string"},
-                "entrypoint_rule": {"type": "string"},
-                "route_hint": {"type": "string"},
                 "agent_name": {"type": "string"},
-                "max_documents": {"type": "integer", "minimum": 1, "maximum": 20},
             },
-            "required": ["project"],
+            "required": ["task", "cwd"],
         },
     },
     {
@@ -40,16 +32,18 @@ TOOLS = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "document_id": {"type": "string"},
+                "trace_id": {"type": "string", "minLength": 1},
+                "document_id": {"type": "string", "minLength": 1},
+                "parent_document_id": {"type": "string"},
             },
-            "required": ["document_id"],
+            "required": ["trace_id", "document_id"],
         },
     },
 ]
 
 
 def api_url() -> str:
-    return os.environ.get("CTX_API_URL", DEFAULT_API_URL).rstrip("/")
+    return os.environ.get("CONTEXT_ROUTER_API_URL", DEFAULT_API_URL).rstrip("/")
 
 
 def _request_json(
@@ -97,65 +91,74 @@ def handle_request(message: dict[str, Any]) -> dict[str, Any] | None:
     return _error(message_id, code=-32601, message=f"Unknown method: {method}")
 
 
-def _call_tool(params: dict[str, Any]) -> dict[str, Any]:
+def _call_tool(params: Any) -> dict[str, Any]:
+    if not isinstance(params, dict):
+        return _text_result("Invalid arguments: tool call params must be an object", is_error=True)
+
     name = params.get("name")
     arguments = params.get("arguments") or {}
+    if not isinstance(arguments, dict):
+        return _text_result("Invalid arguments: arguments must be an object", is_error=True)
+
     try:
         if name == "prepare_task_context":
             return _text_result(_prepare_task_context(arguments))
         if name == "read_context_document":
             return _text_result(_read_context_document(arguments))
+    except (KeyError, TypeError, ValueError) as exc:
+        return _text_result(f"Invalid arguments: {exc}", is_error=True)
     except httpx.HTTPError as exc:
         return _text_result(f"Context router API error: {exc}", is_error=True)
+    except Exception as exc:  # Keep one malformed request from terminating the stdio server.
+        return _text_result(
+            f"Unexpected Context Router error: {type(exc).__name__}",
+            is_error=True,
+        )
 
     return _text_result(f"Unknown tool: {name}", is_error=True)
 
 
 def _prepare_task_context(arguments: dict[str, Any]) -> str:
-    global CURRENT_DEPTH, CURRENT_DOCUMENT_ID, CURRENT_TRACE_ID
     body = _request_json(
         "POST",
         "/api/context/prepare",
         json_body={
-            "project": arguments["project"],
-            "task": arguments.get("task", ""),
-            "area": arguments.get("area"),
-            "cwd": arguments.get("cwd"),
-            "entrypoint_path": arguments.get("entrypoint_path"),
-            "entrypoint_rule": arguments.get("entrypoint_rule"),
-            "route_hint": arguments.get("route_hint"),
+            "project": _optional_string(arguments, "project"),
+            "task": _required_string(arguments, "task"),
+            "cwd": _required_string(arguments, "cwd"),
             "source": "mcp",
-            "agent_name": arguments.get("agent_name"),
-            "max_documents": arguments.get("max_documents", 5),
-            "output_format": "markdown",
+            "agent_name": _optional_string(arguments, "agent_name"),
+            "max_documents": 3,
+            "output_format": "json",
         },
     )
-    CURRENT_TRACE_ID = body.get("trace_id")
-    CURRENT_DOCUMENT_ID = None
-    CURRENT_DEPTH = 0
-    return body["markdown"]
+    result = {
+        "trace_id": body["trace_id"],
+        "project": body["project"],
+        "task": body["task"],
+        "documents": body.get("documents", []),
+    }
+    return json.dumps(result, ensure_ascii=False)
 
 
 def _read_context_document(arguments: dict[str, Any]) -> str:
-    global CURRENT_DEPTH, CURRENT_DOCUMENT_ID, CURRENT_TRACE_ID
-    document_id = arguments["document_id"]
-    params = {"source": "mcp"}
-    if CURRENT_TRACE_ID:
-        params["trace_id"] = CURRENT_TRACE_ID
-    if CURRENT_DOCUMENT_ID and CURRENT_DOCUMENT_ID != document_id:
-        params["parent_document_id"] = CURRENT_DOCUMENT_ID
-    next_depth = CURRENT_DEPTH + 1 if "parent_document_id" in params else 1
-    params["depth"] = next_depth
+    trace_id = _required_string(arguments, "trace_id")
+    document_id = _required_string(arguments, "document_id")
+    params = {
+        "trace_id": trace_id,
+        "source": "mcp",
+    }
+    parent_document_id = _optional_string(arguments, "parent_document_id")
+    if parent_document_id:
+        params["parent_document_id"] = parent_document_id
 
     body = _request_json(
         "GET",
         f"/api/documents/{document_id}",
         params=params,
     )
-    CURRENT_TRACE_ID = body.get("trace_id") or CURRENT_TRACE_ID
-    CURRENT_DOCUMENT_ID = body["id"]
-    CURRENT_DEPTH = next_depth
-    metadata = {
+    result = {
+        "trace_id": body.get("trace_id"),
         "document_id": body["id"],
         "title": body["title"],
         "source_path": body.get("source_path"),
@@ -163,8 +166,33 @@ def _read_context_document(arguments: dict[str, Any]) -> str:
         "area": body.get("area"),
         "tags": body.get("tags", []),
         "status": body.get("status"),
+        "content_markdown": body["content_markdown"],
+        "links": [
+            {
+                "document_id": link["target_document_id"],
+                "label": link["label"],
+            }
+            for link in body.get("links", [])
+            if link.get("target_document_id")
+        ],
     }
-    return f"{json.dumps(metadata, ensure_ascii=False, indent=2)}\n\n{body['content_markdown']}"
+    return json.dumps(result, ensure_ascii=False)
+
+
+def _required_string(arguments: dict[str, Any], name: str) -> str:
+    value = arguments.get(name)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{name} must be a non-empty string")
+    return value.strip()
+
+
+def _optional_string(arguments: dict[str, Any], name: str) -> str | None:
+    value = arguments.get(name)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"{name} must be a string")
+    return value.strip() or None
 
 
 def _text_result(text: str, *, is_error: bool = False) -> dict[str, Any]:

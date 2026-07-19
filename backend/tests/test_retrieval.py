@@ -218,7 +218,7 @@ def test_retrieval_prefers_usage_step_over_noisy_child_entry_for_prepare_task() 
                 area="agent",
                 tags=["prepare", "context"],
                 content_markdown=(
-                    "# 准备任务上下文\n本文件说明 AI 什么时候使用 ctx prepare 准备任务上下文。"
+                    "# 准备任务上下文\n本文件说明 AI 什么时候使用 MCP 准备任务上下文。"
                 ),
             ),
         )
@@ -234,7 +234,8 @@ def test_retrieval_prefers_usage_step_over_noisy_child_entry_for_prepare_task() 
                 tags=["context", "routing"],
                 content_markdown=(
                     "# AI_CONTEXT_INDEX\n"
-                    "ctx prepare ctx prepare ctx prepare ctx prepare ctx prepare "
+                    "prepare_task_context prepare_task_context prepare_task_context "
+                    "prepare_task_context prepare_task_context "
                     "web react dashboard route."
                 ),
             ),
@@ -244,7 +245,7 @@ def test_retrieval_prefers_usage_step_over_noisy_child_entry_for_prepare_task() 
         results = retrieve_documents(
             session,
             project=parent,
-            task="开发新功能前 AI 如何使用 ctx prepare 准备任务上下文",
+            task="开发新功能前 AI 如何使用 prepare_task_context 准备任务上下文",
             max_documents=2,
         )
 
@@ -277,7 +278,9 @@ def test_retrieval_prefers_requested_area_route_for_parent_project() -> None:
                 doc_type="area_route",
                 area="backend",
                 tags=["backend", "api"],
-                content_markdown="# 后端路由\nFastAPI ctx prepare ctx read trace CLI MCP。",
+                content_markdown=(
+                    "# 后端路由\nFastAPI prepare_task_context read_context_document trace MCP。"
+                ),
             ),
         )
         upsert_document(
@@ -290,7 +293,9 @@ def test_retrieval_prefers_requested_area_route_for_parent_project() -> None:
                 doc_type="routing_index",
                 area="agent",
                 tags=["context", "routing"],
-                content_markdown="backend backend backend API API agent model ctx prepare.",
+                content_markdown=(
+                    "backend backend backend API API agent model prepare_task_context."
+                ),
             ),
         )
         session.commit()
@@ -298,7 +303,7 @@ def test_retrieval_prefers_requested_area_route_for_parent_project() -> None:
         results = retrieve_documents(
             session,
             project=parent,
-            task="修改后端 API ctx prepare trace 逻辑",
+            task="修改后端 API prepare_task_context trace 逻辑",
             area="backend",
             max_documents=2,
         )
@@ -348,7 +353,7 @@ def test_retrieval_matches_chinese_phrase_variants_with_bigrams() -> None:
                 doc_type="routing_index",
                 area="agent",
                 tags=["context", "routing"],
-                content_markdown="AI_CONTEXT_INDEX AGENTS.md 子项目 入口 ctx prepare。",
+                content_markdown=("AI_CONTEXT_INDEX AGENTS.md 子项目 入口 prepare_task_context。"),
             ),
         )
         session.commit()

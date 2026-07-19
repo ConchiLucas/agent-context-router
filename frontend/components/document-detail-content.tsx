@@ -26,8 +26,8 @@ export function DocumentDetailContent({
           <DocumentMetadata document={document} />
         </div>
         <div className="document-detail-command">
-          <h2 className="section-title">Read Command</h2>
-          <pre style={commandBlockStyle}>{`ctx read ${document.id}`}</pre>
+          <h2 className="section-title">MCP Document ID</h2>
+          <pre style={commandBlockStyle}>{document.id}</pre>
         </div>
       </section>
 

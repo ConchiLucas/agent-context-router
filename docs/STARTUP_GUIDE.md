@@ -23,6 +23,26 @@ docker compose up -d
 
 Mac 上还需要确认 Docker Desktop 已开启开机启动；否则系统启动时 Docker 没有运行，容器也不会被自动拉起。
 
+## 文档目录挂载
+
+本地默认使用仓库内 `document-sources/`，Compose 以只读方式挂载到 backend 的 `/documents`。每个子目录必须包含根 `AGENTS.md` 和 `docs/`。
+
+服务器把所有项目文档放在一个宿主机目录，例如 `/srv/ai-docs`，然后创建 `.env`：
+
+```text
+CONTEXT_ROUTER_DOCUMENTS_HOST_ROOT=/srv/ai-docs
+CONTEXT_ROUTER_DOCUMENTS_CONTAINER_ROOT=/documents
+```
+
+首次配置或修改 host root 后必须重建服务，使 bind mount 生效：
+
+```bash
+docker compose up -d --force-recreate backend frontend
+docker compose exec backend uv run alembic upgrade head
+```
+
+Projects 页面只选择 `/documents` 的直接子目录名，不接受宿主机路径或容器绝对路径。
+
 ## 服务管理
 
 - 本地服务生命周期统一使用 Docker Compose 管理，并且命令都在项目根目录执行。
@@ -58,8 +78,11 @@ docker compose exec backend uv run --extra dev ruff format --check .
 
 ```bash
 docker compose exec frontend npm run lint
+docker compose exec frontend npm test
 docker compose exec frontend npm run build
 ```
+
+`npm run build` 在一次性临时副本中构建，不会覆盖正在运行的开发服务 `.next` 缓存或改写源码配置。
 
 ## 数据库
 
