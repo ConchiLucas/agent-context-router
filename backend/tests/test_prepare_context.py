@@ -22,7 +22,7 @@ def test_prepare_context_returns_ranked_docs_and_records_trace() -> None:
     Base.metadata.create_all(engine)
 
     with TestingSession() as session:
-        project = Project(slug="my-app", name="My App")
+        project = Project(slug="my-app", name="My App", root_path="/repo/my-app")
         session.add(project)
         session.flush()
         upsert_document(
@@ -53,33 +53,22 @@ def test_prepare_context_returns_ranked_docs_and_records_trace() -> None:
     response = client.post(
         "/api/context/prepare",
         json={
-            "project": "my-app",
             "task": "修复 payments webhook timeout",
-            "area": "payments",
             "cwd": "/repo/my-app",
-            "entrypoint_path": "AI_CONTEXT_INDEX.md",
-            "entrypoint_rule": "payments tasks",
-            "route_hint": "payments",
-            "source": "cli",
+            "source": "mcp",
             "agent_name": "codex",
             "max_documents": 3,
-            "output_format": "markdown",
+            "output_format": "json",
         },
     )
 
     assert response.status_code == 200
     body = response.json()
     assert body["project"] == "my-app"
-    assert body["area"] == "payments"
-    assert body["entrypoint_path"] == "AI_CONTEXT_INDEX.md"
-    assert body["entrypoint_rule"] == "payments tasks"
-    assert body["route_hint"] == "payments"
+    assert body["area"] is None
     assert body["documents"][0]["document_id"] == "payments-webhook-timeout-history"
     assert body["trace_id"].startswith("ctx_")
     assert "trace_id:" not in body["markdown"]
-    assert "area: payments" in body["markdown"]
-    assert "entrypoint_path: AI_CONTEXT_INDEX.md" in body["markdown"]
-    assert "ctx read payments-webhook-timeout-history" in body["markdown"]
 
     with TestingSession() as session:
         trace = session.scalar(select(Trace).where(Trace.id == body["trace_id"]))
@@ -95,13 +84,39 @@ def test_prepare_context_returns_ranked_docs_and_records_trace() -> None:
 
         assert trace is not None
         assert trace.task == "修复 payments webhook timeout"
-        assert trace.area == "payments"
-        assert trace.entrypoint_path == "AI_CONTEXT_INDEX.md"
-        assert trace.entrypoint_rule == "payments tasks"
-        assert trace.route_hint == "payments"
-        assert trace.source == "cli"
+        assert trace.area is None
+        assert trace.entrypoint_path is None
+        assert trace.entrypoint_rule is None
+        assert trace.route_hint is None
+        assert trace.source == "mcp"
         assert trace.agent_name == "codex"
         assert event is not None
-        assert event.payload["area"] == "payments"
-        assert event.payload["entrypoint_path"] == "AI_CONTEXT_INDEX.md"
+        assert event.payload["project"] == "my-app"
+        assert event.payload["max_documents"] == 3
+        assert event.payload["duration_ms"] >= 0
         assert len(list(hits)) == 1
+
+
+def test_prepare_context_requires_real_task_and_cwd() -> None:
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(engine)
+
+    def override_session() -> Generator[Session, None, None]:
+        with TestingSession() as session:
+            yield session
+
+    app = create_app()
+    app.dependency_overrides[get_session] = override_session
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/context/prepare",
+        json={"task": "", "cwd": ""},
+    )
+
+    assert response.status_code == 422

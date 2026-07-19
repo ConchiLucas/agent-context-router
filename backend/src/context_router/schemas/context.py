@@ -2,17 +2,17 @@ from pydantic import BaseModel, Field
 
 
 class PrepareContextRequest(BaseModel):
-    project: str
-    task: str = ""
+    project: str | None = None
+    task: str = Field(min_length=1)
     area: str | None = None
-    cwd: str | None = None
+    cwd: str = Field(min_length=1)
     entrypoint_path: str | None = None
     entrypoint_rule: str | None = None
     route_hint: str | None = None
     source: str | None = None
     agent_name: str | None = None
-    max_documents: int = Field(default=5, ge=1, le=20)
-    output_format: str = "markdown"
+    max_documents: int = Field(default=3, ge=1, le=3)
+    output_format: str = "json"
 
 
 class ContextDocument(BaseModel):
