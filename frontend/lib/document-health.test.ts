@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { groupDocumentsByDepth, mappingStatusLabel, syncSummaryText } from "./document-health";
+import {
+  groupDocumentsByDepth,
+  mappingNoticeText,
+  mappingStatusLabel,
+  syncSummaryText,
+} from "./document-health";
 import type { DocumentSummary } from "./types";
 
 test("mappingStatusLabel exposes actionable project states", () => {
@@ -10,6 +15,14 @@ test("mappingStatusLabel exposes actionable project states", () => {
   assert.equal(mappingStatusLabel("ready"), "Ready");
   assert.equal(mappingStatusLabel("invalid"), "Invalid mapping");
   assert.equal(mappingStatusLabel("sync_failed"), "Sync failed");
+});
+
+test("mappingNoticeText hides sync-required notice after the project is ready", () => {
+  assert.equal(
+    mappingNoticeText("Mapping saved. Sync required.", "not_synced"),
+    "Mapping saved. Sync required.",
+  );
+  assert.equal(mappingNoticeText("Mapping saved. Sync required.", "ready"), "");
 });
 
 test("syncSummaryText includes reachable orphan and broken counts", () => {

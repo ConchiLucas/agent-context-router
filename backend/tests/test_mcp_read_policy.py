@@ -134,6 +134,7 @@ def test_first_mcp_read_must_be_prepared_agents_without_parent(tmp_path, monkeyp
             "label": "Business",
             "relation_type": "markdown_link",
             "sort_order": 0,
+            "is_broken": False,
         }
     ]
     with testing_session() as session:

@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { eventDurationMs, readDocumentIds } from "./task-trace";
+import {
+  entryReturnLabel,
+  eventDurationMs,
+  payloadDisplay,
+  readDocumentIds,
+} from "./task-trace";
 import type { TraceEvent } from "./types";
 
 const events: TraceEvent[] = [
@@ -32,4 +37,14 @@ test("readDocumentIds returns only documents actually read by MCP", () => {
 test("eventDurationMs accepts only numeric durations", () => {
   assert.equal(eventDurationMs(events[0]), 12.45);
   assert.equal(eventDurationMs(events[2]), null);
+});
+
+test("entryReturnLabel describes prepare output without candidate terminology", () => {
+  assert.equal(entryReturnLabel(0), "0 entries returned");
+  assert.equal(entryReturnLabel(1), "1 entry returned");
+});
+
+test("payloadDisplay keeps numeric read depth visible", () => {
+  assert.equal(payloadDisplay({ ...events[1], payload: { depth: 2 } }, "depth"), "2");
+  assert.equal(payloadDisplay(events[1], "missing"), "");
 });

@@ -8,7 +8,9 @@
 Codex / Antigravity
   -> MCP stdio server
   -> FastAPI internal API
-  -> retrieval / project resolution / document reader
+  -> cwd / Project.root_path 识别代码项目
+  -> Project.docs_path 定位只读文档目录
+  -> AGENTS.md 入口和按链接读取策略
   -> PostgreSQL
 
 Developer browser
@@ -26,9 +28,10 @@ mcp_server.py:_prepare_task_context
   -> POST /api/context/prepare
   -> api/context.py:prepare_context
   -> services/project_resolution.py:resolve_project
-  -> services/retrieval.py:retrieve_documents
+  -> services/document_graph.py:project_entry_document
+  -> services/local_document_reader.py 实时读取 AGENTS.md
   -> traces + retrieval_hits + trace_events(prepare)
-  -> 最多 3 个候选文档 + trace_id
+  -> 唯一 AGENTS.md 入口 + trace_id
 ```
 
 ### read_context_document
@@ -37,8 +40,9 @@ mcp_server.py:_prepare_task_context
 mcp_server.py:_read_context_document
   -> GET /api/documents/{document_id}?trace_id=...&source=mcp
   -> api/documents.py:read_document
-  -> services/local_document_reader.py
-  -> 校验 trace 和 parent_document_id
+  -> services/document_graph.py:authorize_mcp_read
+  -> 校验 trace project、active/reachable、已读 parent 和直接链接
+  -> services/local_document_reader.py 实时读取映射文件
   -> trace_events(read，含 depth 和 duration_ms)
 ```
 
@@ -48,9 +52,10 @@ mcp_server.py:_read_context_document
 | --- | --- | --- | --- |
 | Dashboard | `frontend/app/page.tsx` | projects/documents/traces GET | 汇总 MCP 任务和文档指标 |
 | Projects | `frontend/app/projects/page.tsx` | `GET/POST /api/projects` | 网页新增项目、查看项目卡片 |
-| Project detail | `frontend/app/projects/[slug]/page.tsx` | `GET /api/projects/{slug}` | 项目统计和 MCP 文档模板 |
-| Sync Documents | `project-link-reload-button.tsx` | `POST /api/projects/{slug}/documents/sync-local` | 扫描本地 Markdown 和链接 |
-| Documents | `frontend/app/documents/` | `GET /api/documents` | 文档清单、关系图、正文 |
+| Project detail | `frontend/app/projects/[slug]/page.tsx` | `GET /api/projects/{slug}` | 映射、同步和文档健康状态 |
+| Map Documents | `project-document-controls.tsx` | `GET /api/document-mappings/candidates`、`PUT /api/projects/{slug}/document-mapping` | 选择 `/documents` 直接子目录 |
+| Sync Documents | `project-link-reload-button.tsx` | `POST /api/projects/{slug}/documents/sync-local` | 扫描映射下的 AGENTS.md、docs/**/*.md 和链接 |
+| Documents | `frontend/app/documents/` | `GET /api/documents` | 可达层级、孤立文档、断链和正文 |
 | Tasks | `frontend/app/tasks/page.tsx` | `GET /api/traces?source=mcp` | 外层 MCP 任务列表 |
 | Task detail | `frontend/app/tasks/[traceId]/page.tsx` | `GET /api/traces/{trace_id}` | prepare/read 调用链详情 |
 
@@ -63,6 +68,8 @@ mcp_server.py:_read_context_document
 | `GET /api/traces` | `api/traces.py` | Tasks 列表数据 |
 | `GET /api/traces/{id}` | `api/traces.py` | Tasks 详情数据 |
 | `GET/POST /api/projects` | `api/projects.py` | 项目列表和创建 |
+| `GET /api/document-mappings/candidates` | `api/document_mappings.py` | 可用文档目录及占用状态 |
+| `PUT /api/projects/{slug}/document-mapping` | `api/projects.py` | 保存唯一相对 docs_path |
 | `POST /api/projects/{slug}/documents/sync-local` | `api/documents.py` | 同步 Markdown 索引 |
 
 不存在 Usage、feedback 或 CLI runtime API。
@@ -83,16 +90,16 @@ mcp_server.py:_read_context_document
 3. 确认 cwd 位于 root path 下。
 4. 多项目匹配时检查最长路径是否是目标项目。
 
-### 候选不准确
+### prepare 没有返回入口
 
-1. 检查文档是否 active、是否已 Sync Documents。
-2. 检查 title、document_id、area、tags 是否具体。
-3. 查看 `services/retrieval.py` 的打分与父子项目范围。
-4. 在 Tasks 详情比较 `Returned only` 与 `Read by AI`。
+1. 检查 Project 是否已映射且状态不是 invalid。
+2. 检查映射根是否有普通文件 `AGENTS.md` 和目录 `docs/`。
+3. 点击 Sync Documents，检查入口是否 active、reachable、depth=1。
+4. 在 Tasks 详情确认 prepare 是否产生错误或返回入口。
 
 ### 文档读取失败
 
-1. 检查 document_id 是否属于 prepare 返回候选或项目索引。
+1. 首次读取只能是 prepare 返回的 AGENTS.md；后续 document_id 必须是已读 parent 的直接链接。
 2. 检查 trace_id 是否存在。
 3. parent_document_id 必须是同一 trace 中更早的 read。
-4. 本地 Markdown 路径必须位于项目 root path 内。
+4. 映射文件必须位于 `/documents/<docs_path>` 内，不能是软链接或越界路径。

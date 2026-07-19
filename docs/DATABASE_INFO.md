@@ -59,7 +59,7 @@ postgresql+psycopg://context_router:context_router@postgres:5432/context_router
 已知当前 migration 版本：
 
 ```text
-20260703_0007
+20260719_0008
 ```
 
 核心表：
@@ -81,6 +81,10 @@ id
 slug
 name
 root_path
+docs_path
+last_synced_at
+last_sync_status
+last_sync_summary
 description
 parent_project_id
 created_at
@@ -99,11 +103,19 @@ area
 tags
 status
 content_markdown
+is_reachable
+graph_depth
 created_at
 updated_at
 ```
 
-当前受管文档只保存稳定入口和说明类文档。当前主要类型：
+`root_path` 只用于 cwd 识别代码项目；唯一 `docs_path` 定位 `/documents` 下的直接子目录。`last_sync_summary` 保存 indexed、reachable、orphan、broken_links、pruned 计数。
+
+`documents.status="removed"` 是保留历史 Task 引用的 tombstone：普通 Documents 列表默认排除，但旧 `retrieval_hits` 和事件仍能展示标题。tombstone 的 `is_reachable=false`、`graph_depth=null`。
+
+`document_links` 保存同步解析出的 Markdown 链接；无法解析的目标保留 `target_document_id=null`，用于 Web 展示 broken link。
+
+当前受管文档来自映射根的 `AGENTS.md` 和 `docs/**/*.md`。入口强制为 `agent_index`，其余类型来自 front matter。
 
 ```text
 agent_index
@@ -135,7 +147,7 @@ created_at
 
 `trace_events` 保存客观 MCP 调用事件。当前运行时主要写入 `prepare` 和 `read`，payload 中可包含 `duration_ms`、`document_id`、`parent_document_id` 和 `depth`。
 
-`retrieval_hits` 保存 prepare 返回的候选文档、rank、score、reason 和是否返回。Tasks 详情把它与 read 事件对照为 `Read by AI` 或 `Returned only`。
+`retrieval_hits` 保存 prepare 返回的 AGENTS.md 入口，并维持历史引用。Tasks 详情把它与 read 事件对照为 `Entry read` 或 `Entry returned`。
 
 `usage_cards` 是旧版本 Usage 功能的历史表。当前没有对应 API 或页面，migration 和表暂时保留兼容：
 

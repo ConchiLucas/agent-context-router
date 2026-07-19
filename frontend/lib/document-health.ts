@@ -12,6 +12,10 @@ export function mappingStatusLabel(status: string) {
   return MAPPING_STATUS_LABELS[status] ?? status;
 }
 
+export function mappingNoticeText(notice: string, mappingStatus: string) {
+  return mappingStatus === "not_synced" ? notice : "";
+}
+
 export function syncSummaryText(summary: SyncSummary) {
   return [
     `${summary.indexed} indexed`,

@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { getTasks } from "@/lib/api";
+import { entryReturnLabel } from "@/lib/task-trace";
 
 type TaskListProps = Readonly<{
   filters?: Record<string, string | undefined>;
@@ -39,7 +40,7 @@ export async function TaskList({ filters = {}, showHeader = true }: TaskListProp
               <div className="task-row-meta">
                 <span className="badge">{task.project_slug}</span>
                 <span>{task.agent_name ?? "unknown AI"}</span>
-                <span>{task.returned_document_count} candidates</span>
+                <span>{entryReturnLabel(task.returned_document_count)}</span>
                 <span>{task.read_event_count} reads</span>
                 <span>{formatDuration(task.mcp_duration_ms)}</span>
               </div>

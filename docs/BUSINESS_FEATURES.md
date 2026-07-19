@@ -5,19 +5,20 @@
 本项目只解决两个问题：
 
 1. 让 Codex、Antigravity 等 AI 比全仓库盲搜更快地定位稳定项目文档。
-2. 让开发者看到 AI 获取了哪些候选文档、实际读了哪些文档，以及阅读的父子链路。
+2. 让开发者看到 AI 是否获取了入口、实际读了哪些文档，以及阅读的父子链路。
 
 项目不判断任务是否成功，不要求开发者反馈，也不要求 AI填写不读或停止阅读的原因。
 
 ## 2. 项目与文档
 
-- 每个业务项目保存 slug、名称、root path、描述和可选父项目。
-- 文档源仍在各自项目仓库，Context Router 数据库只保存索引、内容缓存和关系。
-- Projects 页面可以新增项目并同步 root path 下的 Markdown。
-- Documents 页面展示文档清单、关系图、元数据和正文。
+- 每个业务项目保存 slug、名称、代码 `root_path`、文档 `docs_path`、描述和可选父项目。
+- `root_path` 只负责根据 AI 的 cwd 识别代码项目；`docs_path` 是 `/documents` 下唯一、直接子目录名。
+- 每个文档目录只扫描根 `AGENTS.md` 和 `docs/**/*.md`，不扫描代码目录或其他文件夹。
+- Projects 页面选择映射、手动同步索引，并展示 reachable、orphan、broken links 和最后同步时间。
+- Documents 页面展示按最短可达深度分层的文档图、孤立文档、断链、元数据和实时正文。
 - 父项目查询可以包含子项目文档。
 
-root path 同时用于 MCP 的 cwd 自动识别。多个项目都匹配时选择路径最长、最具体的项目。
+多个代码项目都匹配 cwd 时选择 `root_path` 最长、最具体的项目。
 
 ## 3. MCP 上下文准备
 
@@ -28,7 +29,7 @@ root path 同时用于 MCP 的 cwd 自动识别。多个项目都匹配时选择
 - `project`：可选，覆盖 cwd 自动识别。
 - `agent_name`：可选，调用工具名称。
 
-后端检索项目及子项目中的 active 文档，最多返回 3 份候选文档，并创建独立 trace。每次调用互不共享状态。
+后端解析项目后只返回该 Project 已同步、active、reachable 的根 `AGENTS.md`，并创建独立 trace。每次调用互不共享状态。
 
 ## 4. MCP 文档读取
 
@@ -38,20 +39,20 @@ root path 同时用于 MCP 的 cwd 自动识别。多个项目都匹配时选择
 - `document_id`：必填，准备读取的文档。
 - `parent_document_id`：可选，表示从已读父文档继续向下。
 
-后端校验 trace、文档和 parent，自动计算 depth 并记录服务端耗时。没有 trace 的 MCP read 会被拒绝。
+首次 read 只能读取 prepare 返回的入口。后续 read 要求 parent 已在同一 trace 中读取，且目标是 parent 的直接有效 Markdown 链接。后端按实际调用计算 depth 并记录耗时；没有 trace 或越级读取会被拒绝。
 
 ## 5. Tasks 可观察链路
 
 Tasks 外层列表只展示 `source=mcp` 的任务：
 
 - 任务文本、项目、AI 工具、时间。
-- 候选文档数、实际 read 数、MCP 总耗时。
+- 返回入口数、实际 read 数、MCP 总耗时。
 
 任务详情展示：
 
-- `prepare_task_context` 请求及返回候选文档。
-- 每份候选文档是 `Read by AI` 还是 `Returned only`。
-- 每次 `read_context_document` 的 document_id、parent_document_id 和耗时。
+- `prepare_task_context` 请求及返回入口。
+- 入口是 `Entry read` 还是 `Entry returned`。
+- 每次 `read_context_document` 的 document_id、parent_document_id、实际 depth 和耗时。
 
 页面不展示反馈，不推测“为什么没读”，也不把 Web 管理读取记作 AI 任务。
 
@@ -74,5 +75,5 @@ Tasks 外层列表只展示 `source=mcp` 的任务：
 - 不做任务完成度和成功率评分。
 - 不做人工反馈系统。
 - 不强制 AI 每次调用 MCP。
-- 不把数据库作为项目文档的唯一编辑源。
+- 不把数据库作为项目文档编辑源；数据库只保存索引、图状态和历史链路引用。
 - 不提供开发者命令行产品入口。

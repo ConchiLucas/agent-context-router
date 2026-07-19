@@ -20,5 +20,9 @@ node_modules/
 out/
 coverage/
 
+# Mounted project documents
+document-sources/*
+!document-sources/.gitkeep
+
 # IDEs
 .idea/

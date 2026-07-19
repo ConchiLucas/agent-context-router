@@ -16,7 +16,7 @@
 | 页面到 API、数据库链路 | [前后端链路速查](./FRONTEND_BACKEND_FLOW.md) | `frontend/lib/api.ts`, `backend/src/context_router/api/` |
 | 数据库、migration、排查数据 | [数据库信息](./DATABASE_INFO.md) | `backend/src/context_router/db/`, `backend/alembic/` |
 | MCP 工具协议 | [业务功能说明](./BUSINESS_FEATURES.md) | `backend/src/context_router/mcp_server.py` |
-| 检索排序、候选文档 | [前后端链路速查](./FRONTEND_BACKEND_FLOW.md) | `backend/src/context_router/services/retrieval.py` |
+| 文档映射、同步和读取策略 | [前后端链路速查](./FRONTEND_BACKEND_FLOW.md) | `backend/src/context_router/services/document_mapping.py`, `document_graph.py` |
 | Tasks 列表与调用链详情 | [前后端链路速查](./FRONTEND_BACKEND_FLOW.md) | `frontend/app/tasks/`, `frontend/components/task-*` |
 | 项目和文档网页管理 | [业务功能说明](./BUSINESS_FEATURES.md) | `frontend/app/projects/`, `backend/src/context_router/api/projects.py` |
 
@@ -28,5 +28,5 @@
 - read 必须显式携带 trace_id；parent_document_id 只能指向同一 trace 中已读文档。
 - 项目默认按 cwd 的最长 root path 匹配。
 - Tasks 页面只展示 MCP 来源的任务和客观事件，不记录反馈或停止阅读原因。
-- 候选文档最多 3 份。
+- prepare 只返回映射文档项目的 AGENTS.md；后续 read 只能沿已读 parent 的直接链接继续。
 - 历史数据库列和 migration 暂不删除。

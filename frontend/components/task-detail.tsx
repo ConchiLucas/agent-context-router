@@ -1,6 +1,11 @@
 import Link from "next/link";
 
-import { eventDurationMs, payloadString, readDocumentIds } from "@/lib/task-trace";
+import {
+  eventDurationMs,
+  payloadDisplay,
+  payloadString,
+  readDocumentIds,
+} from "@/lib/task-trace";
 import type { TraceDetail, TraceEvent } from "@/lib/types";
 
 export function TaskDetail({ task }: Readonly<{ task: TraceDetail }>) {
@@ -86,7 +91,7 @@ export function TaskDetail({ task }: Readonly<{ task: TraceDetail }>) {
                     label="Parent"
                     value={payloadString(event, "parent_document_id") || "task root"}
                   />
-                  <Fact label="Read depth" value={payloadString(event, "depth") || "—"} />
+                  <Fact label="Read depth" value={payloadDisplay(event, "depth") || "—"} />
                 </div>
               </ChainStep>
             ))

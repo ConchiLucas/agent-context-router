@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { ProjectLinkReloadButton } from "@/components/project-link-reload-button";
+import { mappingNoticeText } from "@/lib/document-health";
 import type {
   DocumentMappingCandidate,
   DocumentMappingCandidateListResponse,
@@ -171,7 +172,11 @@ export function ProjectDocumentControls({ project }: ProjectDocumentControlsProp
           )}
         </div>
       ) : null}
-      {notice ? <span className="project-sync-status success">{notice}</span> : null}
+      {mappingNoticeText(notice, project.mapping_status) ? (
+        <span className="project-sync-status success">
+          {mappingNoticeText(notice, project.mapping_status)}
+        </span>
+      ) : null}
     </div>
   );
 }

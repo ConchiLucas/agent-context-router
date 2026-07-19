@@ -18,3 +18,12 @@ export function payloadString(event: TraceEvent, key: string) {
   const value = event.payload[key];
   return typeof value === "string" ? value : "";
 }
+
+export function payloadDisplay(event: TraceEvent, key: string) {
+  const value = event.payload[key];
+  return typeof value === "string" || typeof value === "number" ? String(value) : "";
+}
+
+export function entryReturnLabel(count: number) {
+  return `${count} ${count === 1 ? "entry" : "entries"} returned`;
+}
