@@ -1,76 +1,35 @@
 from datetime import datetime
-from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, StringConstraints
-
-NonBlankString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+from pydantic import BaseModel, Field
 
 
 class ProjectCreate(BaseModel):
-    slug: NonBlankString
-    name: NonBlankString
-    root_path: NonBlankString
-    description: str = ""
-    parent_slug: str | None = None
+    name: str = Field(min_length=1, max_length=120)
+    agents_path: str = Field(min_length=1)
 
 
-class DocumentMappingRequest(BaseModel):
-    docs_path: NonBlankString
-
-
-class DocumentMappingResponse(BaseModel):
-    project_slug: str
-    docs_path: str
-    last_synced_at: datetime | None
-    last_sync_status: str
-    last_sync_summary: dict[str, Any]
-
-
-class DocumentMappingCandidateResponse(BaseModel):
-    docs_path: str
-    markdown_count: int
-    mapped_project_slug: str | None
-
-
-class DocumentMappingCandidateListResponse(BaseModel):
-    candidates: list[DocumentMappingCandidateResponse]
-
-
-class SyncSummary(BaseModel):
-    indexed: int = 0
-    reachable: int = 0
-    orphan: int = 0
-    broken_links: int = 0
-    pruned: int = 0
-
-
-class ProjectResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class ProjectSummary(BaseModel):
     id: str
-    slug: str
     name: str
-    root_path: str | None
-    docs_path: str | None
+    agents_path: str
+    node_count: int
+    refreshed_at: datetime | None
+    error: str | None
+
+
+class DocumentTreeNode(BaseModel):
+    id: str
     description: str
-    parent_slug: str | None
-    mapping_status: str
-    last_synced_at: datetime | None
-    last_sync_status: str
-    sync_summary: SyncSummary
+    path: str
+    relative_path: str | None
+    error: str | None
+    children: list["DocumentTreeNode"]
 
 
-class ProjectSummary(ProjectResponse):
-    document_count: int
-    active_document_count: int
-    trace_count: int
-    child_project_count: int
-
-
-class ProjectListResponse(BaseModel):
-    projects: list[ProjectSummary]
-
-
-class ProjectDetailResponse(ProjectSummary):
-    children: list[ProjectSummary]
-    routing_template: str
+class DocumentDetail(BaseModel):
+    id: str
+    description: str
+    path: str
+    relative_path: str | None
+    content: str
+    error: str | None

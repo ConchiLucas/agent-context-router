@@ -1,0 +1,20 @@
+services:
+  agent-context-router-web:
+    build:
+      context: ../../../..
+      dockerfile: deploy/frontend/web_next/local_full/Dockerfile
+      args:
+        NEXT_PUBLIC_CONTEXT_ROUTER_API_URL: http://127.0.0.1:10061
+    image: agent-context-router-web:1.0.0
+    container_name: agent-context-router-web
+    restart: "no"
+    ports:
+      - "6061:3000"
+    environment:
+      CONTEXT_ROUTER_INTERNAL_API_URL: http://agent-context-router-backend:8000
+      NEXT_PUBLIC_CONTEXT_ROUTER_API_URL: http://127.0.0.1:10061
+
+networks:
+  default:
+    name: vibedeploy-shared
+    external: true

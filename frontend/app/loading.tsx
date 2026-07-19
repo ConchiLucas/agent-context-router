@@ -1,8 +1,4 @@
 export default function Loading() {
-  return (
-    <div className="route-loading" role="status">
-      <span className="route-loading-bar" />
-      <span>Loading</span>
-    </div>
-  );
+  return <main className="page-shell">正在加载文档项目…</main>;
 }
+

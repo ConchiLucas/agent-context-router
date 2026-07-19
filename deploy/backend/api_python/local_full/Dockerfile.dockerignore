@@ -1,0 +1,9 @@
+*
+!README.md
+!backend/**
+!deploy/backend/api_python/local_full/**
+backend/.venv
+backend/.pytest_cache
+backend/.ruff_cache
+backend/**/__pycache__
+backend/**/*.pyc

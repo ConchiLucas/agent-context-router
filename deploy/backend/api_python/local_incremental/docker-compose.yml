@@ -1,0 +1,21 @@
+services:
+  agent-context-router-backend:
+    build:
+      context: ../../../..
+      dockerfile: deploy/backend/api_python/local_incremental/Dockerfile
+    image: agent-context-router-backend:1.0.0
+    container_name: agent-context-router-backend
+    restart: "no"
+    ports:
+      - "10061:8000"
+    environment:
+      CONTEXT_ROUTER_DATABASE_URL: postgresql+psycopg://context_router:context_router@agent-context-router-postgres-1:5432/context_router
+      CONTEXT_ROUTER_WORKSPACE_HOST_ROOT: /Users/conchi/workforce
+      CONTEXT_ROUTER_WORKSPACE_CONTAINER_ROOT: /workspace
+    volumes:
+      - /Users/conchi/workforce:/workspace:ro
+
+networks:
+  default:
+    name: vibedeploy-shared
+    external: true

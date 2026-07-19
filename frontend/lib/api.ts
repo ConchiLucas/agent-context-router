@@ -1,76 +1,59 @@
 import type {
   DocumentDetail,
-  DocumentListResponse,
-  ProjectDetail,
-  ProjectListResponse,
-  TraceDetail,
-  TraceListResponse,
+  DocumentTreeNode,
+  ProjectCreate,
+  ProjectSummary,
 } from "@/lib/types";
 
-const PUBLIC_API_BASE_URL =
-  process.env.NEXT_PUBLIC_CONTEXT_ROUTER_API_URL ?? "http://127.0.0.1:8000";
-const SERVER_API_BASE_URL =
-  process.env.CONTEXT_ROUTER_INTERNAL_API_URL ?? PUBLIC_API_BASE_URL;
+const API_URL =
+  process.env.NEXT_PUBLIC_CONTEXT_ROUTER_API_URL ?? "http://127.0.0.1:49173";
 
-function apiBaseUrl() {
-  return typeof window === "undefined" ? SERVER_API_BASE_URL : PUBLIC_API_BASE_URL;
-}
-
-export async function fetchJson<T>(path: string): Promise<T> {
-  const response = await fetch(`${apiBaseUrl()}${path}`, {
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_URL}${path}`, {
+    ...init,
     headers: {
-      Accept: "application/json",
+      "Content-Type": "application/json",
+      ...init?.headers,
     },
-    cache: "no-store",
   });
 
   if (!response.ok) {
-    throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+    const payload = (await response.json().catch(() => null)) as {
+      detail?: string;
+    } | null;
+    throw new Error(payload?.detail ?? `请求失败（${response.status}）`);
   }
 
-  return response.json() as Promise<T>;
+  return (await response.json()) as T;
 }
 
-export async function getProjects(options: { includeChildren?: boolean } = {}) {
-  const params = new URLSearchParams();
-  if (options.includeChildren) {
-    params.set("include_children", "true");
-  }
-  const query = params.toString();
-  return fetchJson<ProjectListResponse>(`/api/projects${query ? `?${query}` : ""}`);
+export function listProjects(): Promise<ProjectSummary[]> {
+  return request<ProjectSummary[]>("/api/projects");
 }
 
-export async function getProject(slug: string) {
-  return fetchJson<ProjectDetail>(`/api/projects/${slug}`);
+export function createProject(payload: ProjectCreate): Promise<ProjectSummary> {
+  return request<ProjectSummary>("/api/projects", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
-export async function getDocuments(filters: Record<string, string | undefined> = {}) {
-  const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(filters)) {
-    if (value) {
-      params.set(key, value);
-    }
-  }
-  const query = params.toString();
-  return fetchJson<DocumentListResponse>(`/api/documents${query ? `?${query}` : ""}`);
+export function refreshProject(projectId: string): Promise<ProjectSummary> {
+  return request<ProjectSummary>(`/api/projects/${projectId}/refresh`, {
+    method: "POST",
+  });
 }
 
-export async function getDocument(documentId: string) {
-  return fetchJson<DocumentDetail>(`/api/documents/${encodeURIComponent(documentId)}?untracked=true`);
+export function getProjectTree(projectId: string): Promise<DocumentTreeNode> {
+  return request<DocumentTreeNode>(`/api/projects/${projectId}/tree`);
 }
 
-export async function getTasks(filters: Record<string, string | undefined> = {}) {
-  const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(filters)) {
-    if (value) {
-      params.set(key, value);
-    }
-  }
-  params.set("source", "mcp");
-  const query = params.toString();
-  return fetchJson<TraceListResponse>(`/api/traces${query ? `?${query}` : ""}`);
+export function getDocumentDetail(
+  projectId: string,
+  documentId: string,
+): Promise<DocumentDetail> {
+  return request<DocumentDetail>(
+    `/api/projects/${projectId}/documents/${documentId}`,
+  );
 }
 
-export async function getTask(traceId: string) {
-  return fetchJson<TraceDetail>(`/api/traces/${traceId}`);
-}

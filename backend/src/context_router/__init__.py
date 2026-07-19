@@ -1,1 +1,1 @@
-"""Agent Context Router backend package."""
+"""Agent Context Router backend."""

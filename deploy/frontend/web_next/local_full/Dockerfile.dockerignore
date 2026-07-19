@@ -1,0 +1,5 @@
+*
+!frontend/**
+!deploy/frontend/web_next/local_full/**
+frontend/node_modules
+frontend/.next
