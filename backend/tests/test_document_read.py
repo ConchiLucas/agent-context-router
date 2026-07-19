@@ -77,7 +77,7 @@ def test_read_document_records_trace_event_when_trace_id_is_provided(tmp_path, m
 
     response = client.get(
         "/api/documents/payments-runbook",
-        params={"trace_id": "ctx_test_001", "source": "mcp"},
+        params={"trace_id": "ctx_test_001"},
     )
 
     assert response.status_code == 200
@@ -89,7 +89,7 @@ def test_read_document_records_trace_event_when_trace_id_is_provided(tmp_path, m
         assert event.payload["document_id"] == "payments-runbook"
         assert event.payload["parent_document_id"] is None
         assert event.payload["depth"] == 1
-        assert event.payload["source"] == "mcp"
+        assert event.payload["source"] is None
         assert event.payload["duration_ms"] >= 0
 
 
@@ -166,14 +166,13 @@ def test_read_document_records_tree_parent_and_depth(tmp_path, monkeypatch) -> N
 
     root_response = client.get(
         "/api/documents/root-index",
-        params={"trace_id": "ctx_test_001", "source": "mcp"},
+        params={"trace_id": "ctx_test_001"},
     )
     child_response = client.get(
         "/api/documents/payments-runbook",
         params={
             "trace_id": "ctx_test_001",
             "parent_document_id": "root-index",
-            "source": "mcp",
         },
     )
 
@@ -240,7 +239,7 @@ def test_read_document_marks_prepare_followup_read(tmp_path, monkeypatch) -> Non
 
     response = client.get(
         "/api/documents/root-index",
-        params={"trace_id": "ctx_test_001", "source": "mcp"},
+        params={"trace_id": "ctx_test_001"},
     )
 
     assert response.status_code == 200

@@ -17,6 +17,11 @@ from context_router.schemas.documents import (
     DocumentSyncResponse,
     DocumentUpsertResponse,
 )
+from context_router.services.document_graph import (
+    DocumentGraphError,
+    ReadDecision,
+    authorize_mcp_read,
+)
 from context_router.services.document_mapping import DocumentMappingError
 from context_router.services.document_store import upsert_document
 from context_router.services.local_document_reader import (
@@ -162,6 +167,22 @@ def read_document(
     if document is None:
         raise HTTPException(status_code=404, detail=f"Document not found: {document_id}")
 
+    trace: Trace | None = None
+    read_decision: ReadDecision | None = None
+    if source == "mcp":
+        trace = session.scalar(select(Trace).where(Trace.id == trace_id))
+        if trace is None:
+            raise HTTPException(status_code=404, detail=f"Trace not found: {trace_id}")
+        try:
+            read_decision = authorize_mcp_read(
+                session,
+                trace=trace,
+                document=document,
+                parent_document_id=parent_document_id,
+            )
+        except DocumentGraphError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     try:
         content_markdown = read_document_content(document)
     except LocalDocumentNotFoundError as exc:
@@ -171,18 +192,29 @@ def read_document(
 
     resolved_trace_id: str | None = None
     if not untracked:
-        trace = _resolve_or_create_trace(
-            session,
-            document=document,
-            trace_id=trace_id,
-            source=source,
-        )
+        if trace is None:
+            trace = _resolve_or_create_trace(
+                session,
+                document=document,
+                trace_id=trace_id,
+                source=source,
+            )
         resolved_trace_id = trace.id
-        depth = _derive_read_depth(
-            session,
-            trace=trace,
-            parent_document_id=parent_document_id,
-        )
+        if read_decision is not None:
+            depth = read_decision.depth
+            read_mode = read_decision.read_mode
+        else:
+            depth = _derive_read_depth(
+                session,
+                trace=trace,
+                parent_document_id=parent_document_id,
+            )
+            read_mode = _read_mode(
+                session=session,
+                trace=trace,
+                requested_trace_id=trace_id,
+                parent_document_id=parent_document_id,
+            )
         duration_ms = round((perf_counter() - started_at) * 1000, 3)
         session.add(
             TraceEvent(
@@ -196,12 +228,7 @@ def read_document(
                     "parent_document_id": parent_document_id,
                     "depth": depth,
                     "source": source,
-                    "read_mode": _read_mode(
-                        session=session,
-                        trace=trace,
-                        requested_trace_id=trace_id,
-                        parent_document_id=parent_document_id,
-                    ),
+                    "read_mode": read_mode,
                     "duration_ms": duration_ms,
                 },
             )
@@ -218,11 +245,15 @@ def read_document(
         tags=document.tags,
         status=document.status,
         content_markdown=content_markdown,
-        links=_document_links(document),
+        links=_document_links(document, for_mcp=source == "mcp"),
     )
 
 
-def _document_links(document: Document) -> list[DocumentLinkSummary]:
+def _document_links(
+    document: Document,
+    *,
+    for_mcp: bool = False,
+) -> list[DocumentLinkSummary]:
     return [
         DocumentLinkSummary(
             target_document_id=link.target_document_id,
@@ -232,6 +263,13 @@ def _document_links(document: Document) -> list[DocumentLinkSummary]:
             sort_order=link.sort_order,
         )
         for link in sorted(document.outgoing_links, key=lambda item: item.sort_order)
+        if not for_mcp
+        or (
+            link.target_document is not None
+            and link.target_document.project_id == document.project_id
+            and link.target_document.status == "active"
+            and link.target_document.is_reachable
+        )
     ]
 
 

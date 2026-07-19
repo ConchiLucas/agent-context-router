@@ -1,15 +1,29 @@
 from __future__ import annotations
 
 from collections import deque
+from dataclasses import dataclass
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from context_router.db.models import Document, DocumentLink, Project
+from context_router.db.models import (
+    Document,
+    DocumentLink,
+    Project,
+    RetrievalHit,
+    Trace,
+    TraceEvent,
+)
 
 
 class DocumentGraphError(ValueError):
     pass
+
+
+@dataclass(frozen=True)
+class ReadDecision:
+    depth: int
+    read_mode: str
 
 
 def shortest_reachable_depths(
@@ -60,3 +74,61 @@ def is_direct_document_link(
         .limit(1)
     )
     return link_id is not None
+
+
+def authorize_mcp_read(
+    session: Session,
+    *,
+    trace: Trace,
+    document: Document,
+    parent_document_id: str | None,
+) -> ReadDecision:
+    if document.project_id != trace.project_id:
+        raise DocumentGraphError("Document does not belong to this task project")
+    if document.status != "active" or not document.is_reachable:
+        raise DocumentGraphError("Document is not reachable from mapped AGENTS.md")
+
+    read_events = session.scalars(
+        select(TraceEvent)
+        .where(
+            TraceEvent.trace_id == trace.id,
+            TraceEvent.event_type == "read",
+        )
+        .order_by(TraceEvent.created_at)
+    ).all()
+    if not read_events:
+        if parent_document_id is not None:
+            raise DocumentGraphError("The first document read cannot have a parent")
+        entry_hit = session.scalar(
+            select(RetrievalHit.id).where(
+                RetrievalHit.trace_id == trace.id,
+                RetrievalHit.document_id == document.id,
+            )
+        )
+        if entry_hit is None or document.source_path != "AGENTS.md":
+            raise DocumentGraphError("The first document read must be mapped AGENTS.md")
+        return ReadDecision(depth=1, read_mode="entry_read")
+
+    if parent_document_id is None:
+        raise DocumentGraphError("A parent document is required after the entry read")
+    parent_event = next(
+        (
+            event
+            for event in reversed(read_events)
+            if event.payload.get("document_id") == parent_document_id
+        ),
+        None,
+    )
+    if parent_event is None:
+        raise DocumentGraphError("Parent document was not read in this task")
+    if not is_direct_document_link(
+        session,
+        source_document_id=parent_document_id,
+        target_document_id=document.id,
+    ):
+        raise DocumentGraphError("Requested document is not a direct link from its parent")
+    try:
+        parent_depth = int(parent_event.payload.get("depth") or 1)
+    except (TypeError, ValueError):
+        parent_depth = 1
+    return ReadDecision(depth=parent_depth + 1, read_mode="tree_read")

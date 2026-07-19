@@ -5,61 +5,58 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from context_router.config import settings
 from context_router.db.models import Base, Project, Trace, TraceEvent
 from context_router.db.session import get_session
 from context_router.main import create_app
-from context_router.schemas.documents import DocumentCreate
-from context_router.services.document_store import upsert_document
 
 
-def test_trace_detail_records_objective_mcp_lifecycle() -> None:
+def _test_client(testing_session):
+    def override_session() -> Generator[Session, None, None]:
+        with testing_session() as session:
+            yield session
+
+    app = create_app()
+    app.dependency_overrides[get_session] = override_session
+    return TestClient(app)
+
+
+def test_trace_detail_records_objective_mcp_lifecycle(tmp_path, monkeypatch) -> None:
     engine = create_engine(
         "sqlite+pysqlite:///:memory:",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    testing_session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     Base.metadata.create_all(engine)
+    documents_root = tmp_path / "documents"
+    project_docs = documents_root / "my-app-docs"
+    (project_docs / "docs").mkdir(parents=True)
+    (project_docs / "AGENTS.md").write_text(
+        """---
+doc_id: my-app-entry
+title: My App entry
+---
 
-    with TestingSession() as session:
-        project = Project(slug="my-app", name="My App", root_path="/repo/my-app")
-        session.add(project)
-        session.flush()
-        upsert_document(
-            session,
-            project=project,
-            document=DocumentCreate(
-                id="payments-runbook",
-                title="Payments runbook",
-                source_path="docs/payments.md",
-                doc_type="runbook",
-                area="payments",
-                tags=["webhook", "timeout"],
-                content_markdown="# Payments\nWebhook timeout fixes require retry tests.",
-            ),
-        )
-        upsert_document(
-            session,
-            project=project,
-            document=DocumentCreate(
-                id="frontend-notes",
-                title="Frontend notes",
-                source_path="docs/frontend.md",
-                doc_type="architecture",
-                area="frontend",
-                tags=["react"],
-                content_markdown="# Frontend\nReact layout notes.",
-            ),
+# My App entry
+
+Project rules.
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(settings, "documents_container_root", str(documents_root))
+    with testing_session() as session:
+        session.add(
+            Project(
+                slug="my-app",
+                name="My App",
+                root_path="/repo/my-app",
+                docs_path="my-app-docs",
+            )
         )
         session.commit()
-
-    def override_session() -> Generator[Session, None, None]:
-        with TestingSession() as session:
-            yield session
-
-    app = create_app()
-    app.dependency_overrides[get_session] = override_session
-    client = TestClient(app)
+    client = _test_client(testing_session)
+    assert client.post("/api/projects/my-app/documents/sync-local", json={}).status_code == 200
 
     prepare_response = client.post(
         "/api/context/prepare",
@@ -68,8 +65,8 @@ def test_trace_detail_records_objective_mcp_lifecycle() -> None:
             "task": "fix payments webhook timeout",
             "area": "payments",
             "cwd": "/repo/my-app",
-            "entrypoint_path": "AI_CONTEXT_INDEX.md",
-            "entrypoint_rule": "payments tasks",
+            "entrypoint_path": "AGENTS.md",
+            "entrypoint_rule": "mapped entry",
             "route_hint": "payments",
             "source": "mcp",
             "agent_name": "codex",
@@ -78,14 +75,13 @@ def test_trace_detail_records_objective_mcp_lifecycle() -> None:
     )
     assert prepare_response.status_code == 200
     trace_id = prepare_response.json()["trace_id"]
-
     read_response = client.get(
-        "/api/documents/payments-runbook",
+        "/api/documents/my-app-entry",
         params={"trace_id": trace_id, "source": "mcp"},
     )
     assert read_response.status_code == 200
 
-    with TestingSession() as session:
+    with testing_session() as session:
         session.add(
             TraceEvent(
                 trace_id=trace_id,
@@ -98,24 +94,19 @@ def test_trace_detail_records_objective_mcp_lifecycle() -> None:
     detail_response = client.get(f"/api/traces/{trace_id}")
     assert detail_response.status_code == 200
     detail = detail_response.json()
-
     assert detail["id"] == trace_id
     assert detail["project"]["slug"] == "my-app"
     assert detail["task"] == "fix payments webhook timeout"
     assert detail["area"] == "payments"
-    assert detail["entrypoint_path"] == "AI_CONTEXT_INDEX.md"
-    assert detail["entrypoint_rule"] == "payments tasks"
+    assert detail["entrypoint_path"] == "AGENTS.md"
+    assert detail["entrypoint_rule"] == "mapped entry"
     assert detail["route_hint"] == "payments"
     assert detail["source"] == "mcp"
     assert detail["agent_name"] == "codex"
-    assert detail["retrieval_hits"][0]["document_id"] == "payments-runbook"
-    assert detail["retrieval_hits"][0]["document_title"] == "Payments runbook"
+    assert detail["retrieval_hits"][0]["document_id"] == "my-app-entry"
+    assert detail["retrieval_hits"][0]["document_title"] == "My App entry"
     assert "feedback" not in detail["retrieval_hits"][0]
-    assert detail["events"][0]["event_type"] == "prepare"
-    assert [event["event_type"] for event in detail["events"]] == [
-        "prepare",
-        "read",
-    ]
+    assert [event["event_type"] for event in detail["events"]] == ["prepare", "read"]
     expected_mcp_duration_ms = round(
         sum(event["payload"]["duration_ms"] for event in detail["events"]),
         3,
@@ -137,7 +128,6 @@ def test_trace_detail_records_objective_mcp_lifecycle() -> None:
     area_response = client.get("/api/traces", params={"area": "payments"})
     assert area_response.status_code == 200
     assert area_response.json()["traces"][0]["id"] == trace_id
-
     source_response = client.get("/api/traces", params={"source": "mcp"})
     assert source_response.status_code == 200
     assert source_response.json()["traces"][0]["id"] == trace_id
@@ -149,24 +139,14 @@ def test_usage_and_feedback_endpoints_are_removed() -> None:
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    testing_session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     Base.metadata.create_all(engine)
-
-    def override_session() -> Generator[Session, None, None]:
-        with TestingSession() as session:
-            yield session
-
-    app = create_app()
-    app.dependency_overrides[get_session] = override_session
-    client = TestClient(app)
+    client = _test_client(testing_session)
 
     usage_response = client.get("/api/usage/cards")
     feedback_response = client.post(
         "/api/traces/ctx_missing/feedback",
-        json={
-            "document_id": "missing-doc",
-            "feedback": "useful",
-        },
+        json={"document_id": "missing-doc", "feedback": "useful"},
     )
 
     assert usage_response.status_code == 404
@@ -179,15 +159,18 @@ def test_trace_list_project_filter_includes_child_projects() -> None:
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    testing_session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     Base.metadata.create_all(engine)
-
-    with TestingSession() as session:
+    with testing_session() as session:
         parent = Project(slug="workspace", name="Workspace")
         other = Project(slug="other", name="Other")
         session.add_all([parent, other])
         session.flush()
-        child = Project(slug="workspace-api", name="Workspace API", parent_project_id=parent.id)
+        child = Project(
+            slug="workspace-api",
+            name="Workspace API",
+            parent_project_id=parent.id,
+        )
         session.add(child)
         session.flush()
         session.add_all(
@@ -198,14 +181,7 @@ def test_trace_list_project_filter_includes_child_projects() -> None:
             ]
         )
         session.commit()
-
-    def override_session() -> Generator[Session, None, None]:
-        with TestingSession() as session:
-            yield session
-
-    app = create_app()
-    app.dependency_overrides[get_session] = override_session
-    client = TestClient(app)
+    client = _test_client(testing_session)
 
     response = client.get("/api/traces", params={"project": "workspace"})
 
