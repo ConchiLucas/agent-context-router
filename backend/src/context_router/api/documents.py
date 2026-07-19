@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from time import perf_counter
 from typing import Annotated
 
@@ -13,17 +14,17 @@ from context_router.schemas.documents import (
     DocumentListResponse,
     DocumentReadResponse,
     DocumentSummary,
-    DocumentSyncRequest,
     DocumentSyncResponse,
     DocumentUpsertResponse,
 )
+from context_router.services.document_mapping import DocumentMappingError
 from context_router.services.document_store import upsert_document
 from context_router.services.local_document_reader import (
     LocalDocumentAccessError,
     LocalDocumentNotFoundError,
     read_document_content,
 )
-from context_router.services.markdown_sync import sync_markdown_documents
+from context_router.services.markdown_sync import MarkdownSyncError, sync_mapped_documents
 from context_router.services.tracing import new_trace_id
 
 router = APIRouter(prefix="/api/projects/{project_slug}/documents", tags=["documents"])
@@ -48,7 +49,6 @@ def create_or_update_document(
 @router.post("/sync-local", response_model=DocumentSyncResponse)
 def sync_local_documents(
     project_slug: str,
-    request: DocumentSyncRequest,
     session: Annotated[Session, Depends(get_session)],
 ) -> DocumentSyncResponse:
     project = session.scalar(select(Project).where(Project.slug == project_slug))
@@ -56,20 +56,26 @@ def sync_local_documents(
         raise HTTPException(status_code=404, detail=f"Project not found: {project_slug}")
 
     try:
-        result = sync_markdown_documents(
-            session,
-            project=project,
-            docs_dir=request.docs_dir,
-            prune=request.prune,
-        )
-    except (FileNotFoundError, NotADirectoryError) as exc:
+        result = sync_mapped_documents(session, project=project)
+    except (DocumentMappingError, MarkdownSyncError) as exc:
+        session.rollback()
+        failed_project = session.scalar(select(Project).where(Project.slug == project_slug))
+        if failed_project is not None:
+            failed_project.last_sync_status = "failed"
+            session.commit()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    project.last_synced_at = datetime.now(UTC)
+    project.last_sync_status = "success"
+    project.last_sync_summary = result.summary
     session.commit()
     return DocumentSyncResponse(
         project_slug=project.slug,
-        docs_dir=str(result.docs_dir),
+        docs_path=result.docs_path,
         indexed_count=len(result.indexed_document_ids),
+        reachable_count=result.reachable_count,
+        orphan_count=result.orphan_count,
+        broken_link_count=result.broken_link_count,
         link_count=result.link_count,
         pruned_count=len(result.pruned_document_ids),
         indexed_document_ids=result.indexed_document_ids,

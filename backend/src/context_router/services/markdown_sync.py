@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import unquote
@@ -8,10 +10,15 @@ from urllib.parse import unquote
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from context_router.config import settings
 from context_router.db.models import Document, DocumentLink, Project, RetrievalHit
 from context_router.schemas.documents import DocumentCreate
+from context_router.services.document_graph import shortest_reachable_depths
+from context_router.services.document_mapping import resolve_document_root
 from context_router.services.document_store import upsert_document
+
+
+class MarkdownSyncError(ValueError):
+    pass
 
 
 @dataclass(frozen=True)
@@ -19,7 +26,7 @@ class MarkdownDocument:
     doc_id: str
     title: str
     source_path: Path
-    display_source_path: Path
+    relative_path: str
     doc_type: str
     area: str | None
     tags: list[str]
@@ -30,36 +37,57 @@ class MarkdownDocument:
 class MarkdownLink:
     label: str
     target_path: Path
+    target_display_path: str
     sort_order: int
+    is_safe_target: bool
 
 
 @dataclass(frozen=True)
 class DocumentSyncResult:
-    docs_dir: Path
+    docs_path: str
     indexed_document_ids: list[str]
+    reachable_count: int
+    orphan_count: int
+    broken_link_count: int
     link_count: int
     pruned_document_ids: list[str] = field(default_factory=list)
+
+    @property
+    def summary(self) -> dict[str, int]:
+        return {
+            "indexed": len(self.indexed_document_ids),
+            "reachable": self.reachable_count,
+            "orphan": self.orphan_count,
+            "broken_links": self.broken_link_count,
+            "pruned": len(self.pruned_document_ids),
+        }
 
 
 FRONT_MATTER_PATTERN = re.compile(r"\A---\s*\n(?P<meta>.*?)\n---\s*\n?", re.DOTALL)
 HEADING_PATTERN = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
-MARKDOWN_LINK_PATTERN = re.compile(r"(?<!!)\[([^\]]+)\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
+MARKDOWN_LINK_PATTERN = re.compile(r'(?<!!)\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)')
 
 
-def sync_markdown_documents(
+def sync_mapped_documents(
     session: Session,
     *,
     project: Project,
-    docs_dir: str,
-    prune: bool = False,
 ) -> DocumentSyncResult:
-    resolved_docs_dir = _resolve_docs_dir(docs_dir, project=project)
-    markdown_documents = _load_markdown_documents(resolved_docs_dir)
+    document_root = resolve_document_root(project)
+    markdown_documents = [
+        _parse_required_document(path, document_root=document_root)
+        for path in _iter_markdown_paths(document_root)
+    ]
+    _validate_unique_document_ids(
+        session,
+        project=project,
+        documents=markdown_documents,
+    )
+
     path_to_doc_id = {
         document.source_path.resolve(strict=False): document.doc_id
         for document in markdown_documents
     }
-
     indexed_document_ids: list[str] = []
     for markdown_document in markdown_documents:
         upsert_document(
@@ -68,7 +96,7 @@ def sync_markdown_documents(
             document=DocumentCreate(
                 id=markdown_document.doc_id,
                 title=markdown_document.title,
-                source_path=str(markdown_document.display_source_path),
+                source_path=markdown_document.relative_path,
                 doc_type=markdown_document.doc_type,
                 area=markdown_document.area,
                 tags=markdown_document.tags,
@@ -82,14 +110,28 @@ def sync_markdown_documents(
         delete(DocumentLink).where(DocumentLink.source_document_id.in_(indexed_document_ids))
     )
 
+    outgoing: dict[str, list[str]] = {document_id: [] for document_id in indexed_document_ids}
     link_count = 0
+    broken_link_count = 0
     for markdown_document in markdown_documents:
-        for link in _extract_markdown_links(markdown_document):
+        for link in _extract_markdown_links(
+            markdown_document,
+            document_root=document_root,
+        ):
+            target_document_id = (
+                path_to_doc_id.get(link.target_path.resolve(strict=False))
+                if link.is_safe_target
+                else None
+            )
+            if target_document_id is None:
+                broken_link_count += 1
+            else:
+                outgoing[markdown_document.doc_id].append(target_document_id)
             session.add(
                 DocumentLink(
                     source_document_id=markdown_document.doc_id,
-                    target_document_id=path_to_doc_id.get(link.target_path.resolve(strict=False)),
-                    target_path=str(_to_display_path(link.target_path)),
+                    target_document_id=target_document_id,
+                    target_path=link.target_display_path,
                     label=link.label,
                     relation_type="markdown_link",
                     sort_order=link.sort_order,
@@ -97,85 +139,238 @@ def sync_markdown_documents(
             )
             link_count += 1
 
-    pruned_document_ids: list[str] = []
-    if prune:
-        pruned_document_ids = _prune_project_documents(
-            session=session,
-            project=project,
-            keep_document_ids=set(indexed_document_ids),
-        )
+    root_document = markdown_documents[0]
+    depths = shortest_reachable_depths(
+        root_id=root_document.doc_id,
+        outgoing=outgoing,
+    )
+    indexed_documents = session.scalars(
+        select(Document).where(Document.id.in_(indexed_document_ids))
+    ).all()
+    for document in indexed_documents:
+        document.graph_depth = depths.get(document.id)
+        document.is_reachable = document.id in depths
 
+    pruned_document_ids = _prune_project_documents(
+        session=session,
+        project=project,
+        keep_document_ids=set(indexed_document_ids),
+    )
     session.flush()
     return DocumentSyncResult(
-        docs_dir=resolved_docs_dir,
+        docs_path=project.docs_path or "",
         indexed_document_ids=indexed_document_ids,
+        reachable_count=len(depths),
+        orphan_count=len(indexed_document_ids) - len(depths),
+        broken_link_count=broken_link_count,
         link_count=link_count,
         pruned_document_ids=pruned_document_ids,
     )
 
 
-def _resolve_docs_dir(docs_dir: str, *, project: Project) -> Path:
-    path = Path(docs_dir).expanduser()
-    if path.is_absolute():
-        mapped_path = _to_container_path(path)
-        return mapped_path if mapped_path.exists() else path
-
-    candidates = [
-        *[project_root / path for project_root in _project_root_candidates(project)],
-        Path.cwd() / path,
-        Path.cwd().parent / path,
-    ]
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
-    return candidates[0]
-
-
-def _load_markdown_documents(docs_dir: Path) -> list[MarkdownDocument]:
-    if not docs_dir.exists():
-        raise FileNotFoundError(f"Docs directory not found: {docs_dir}")
-    if not docs_dir.is_dir():
-        raise NotADirectoryError(f"Docs path is not a directory: {docs_dir}")
-
-    documents: list[MarkdownDocument] = []
-    for path in _iter_markdown_paths(docs_dir):
-        parsed = _parse_markdown_document(path)
-        if parsed is not None:
-            documents.append(parsed)
-    return documents
+def _iter_markdown_paths(document_root: Path) -> list[Path]:
+    root_agent = document_root / "AGENTS.md"
+    docs_root = document_root / "docs"
+    markdown_paths: list[Path] = []
+    for current_root, directory_names, file_names in os.walk(
+        docs_root,
+        followlinks=False,
+    ):
+        current_path = Path(current_root)
+        directory_names[:] = sorted(
+            name for name in directory_names if not (current_path / name).is_symlink()
+        )
+        for file_name in sorted(file_names):
+            path = current_path / file_name
+            if path.suffix.lower() == ".md" and path.is_file() and not path.is_symlink():
+                markdown_paths.append(path)
+    return [root_agent, *sorted(markdown_paths)]
 
 
-def _iter_markdown_paths(docs_dir: Path) -> list[Path]:
-    root_agent = docs_dir / "AGENTS.md"
-    docs_child_dir = docs_dir / "docs"
-    if root_agent.exists() and docs_child_dir.is_dir():
-        return [root_agent, *sorted(docs_child_dir.rglob("*.md"))]
-    return sorted(docs_dir.rglob("*.md"))
+def _parse_required_document(path: Path, *, document_root: Path) -> MarkdownDocument:
+    try:
+        raw_content = path.read_text(encoding="utf-8")
+    except FileNotFoundError as exc:
+        raise MarkdownSyncError(
+            f"Mapped Markdown file not found: {_display_path(path, document_root)}"
+        ) from exc
 
-
-def _parse_markdown_document(path: Path) -> MarkdownDocument | None:
-    raw_content = path.read_text(encoding="utf-8")
     match = FRONT_MATTER_PATTERN.match(raw_content)
     if match is None:
-        return None
-
+        raise MarkdownSyncError(
+            f"Markdown file requires front matter with doc_id: {_display_path(path, document_root)}"
+        )
     metadata = _parse_front_matter(match.group("meta"))
-    doc_id = metadata.get("doc_id")
+    doc_id = metadata.get("doc_id", "").strip()
     if not doc_id:
-        return None
+        raise MarkdownSyncError(
+            f"Markdown file requires non-empty doc_id: {_display_path(path, document_root)}"
+        )
 
     content = raw_content[match.end() :].lstrip()
-    title = metadata.get("title") or _first_heading(content) or path.stem.replace("-", " ").title()
+    relative_path = _display_path(path, document_root)
     return MarkdownDocument(
         doc_id=doc_id,
-        title=title,
+        title=metadata.get("title")
+        or _first_heading(content)
+        or path.stem.replace("-", " ").title(),
         source_path=path,
-        display_source_path=_to_display_path(path),
-        doc_type=metadata.get("doc_type") or "readme",
+        relative_path=relative_path,
+        doc_type=(
+            "agent_index" if relative_path == "AGENTS.md" else metadata.get("doc_type") or "readme"
+        ),
         area=metadata.get("area"),
         tags=_parse_tags(metadata.get("tags")),
         content_markdown=content,
     )
+
+
+def _validate_unique_document_ids(
+    session: Session,
+    *,
+    project: Project,
+    documents: list[MarkdownDocument],
+) -> None:
+    counts = Counter(document.doc_id for document in documents)
+    duplicates = sorted(doc_id for doc_id, count in counts.items() if count > 1)
+    if duplicates:
+        conflicts = [
+            f"{doc_id}: "
+            + ", ".join(
+                document.relative_path for document in documents if document.doc_id == doc_id
+            )
+            for doc_id in duplicates
+        ]
+        raise MarkdownSyncError(f"Duplicate doc_id in mapped directory: {'; '.join(conflicts)}")
+
+    incoming_ids = list(counts)
+    conflicts = session.scalars(
+        select(Document).where(
+            Document.id.in_(incoming_ids),
+            Document.project_id != project.id,
+        )
+    ).all()
+    if conflicts:
+        conflict = sorted(conflicts, key=lambda document: document.id)[0]
+        raise MarkdownSyncError(
+            f"doc_id {conflict.id} is already used by project: {conflict.project.slug}"
+        )
+
+
+def _extract_markdown_links(
+    document: MarkdownDocument,
+    *,
+    document_root: Path,
+) -> list[MarkdownLink]:
+    links: list[MarkdownLink] = []
+    for match in MARKDOWN_LINK_PATTERN.finditer(document.content_markdown):
+        raw_target = match.group(2).strip()
+        if _is_external_or_anchor_link(raw_target):
+            continue
+        decoded_target = unquote(raw_target.split("#", 1)[0])
+        if not decoded_target.lower().endswith(".md"):
+            continue
+        unresolved_target = document.source_path.parent / decoded_target
+        target_path = Path(os.path.abspath(unresolved_target))
+        links.append(
+            MarkdownLink(
+                label=match.group(1).strip(),
+                target_path=target_path,
+                target_display_path=_link_display_path(
+                    target_path,
+                    raw_target=decoded_target,
+                    document_root=document_root,
+                ),
+                sort_order=len(links),
+                is_safe_target=_is_safe_link_target(
+                    target_path,
+                    document_root=document_root,
+                ),
+            )
+        )
+    return links
+
+
+def _link_display_path(
+    target_path: Path,
+    *,
+    raw_target: str,
+    document_root: Path,
+) -> str:
+    try:
+        relative = target_path.relative_to(document_root.resolve(strict=True))
+    except (FileNotFoundError, ValueError):
+        return raw_target
+    if relative == Path("AGENTS.md"):
+        return relative.as_posix()
+    if not relative.parts or relative.parts[0] != "docs":
+        return raw_target
+    return relative.as_posix()
+
+
+def _is_safe_link_target(target_path: Path, *, document_root: Path) -> bool:
+    root = document_root.resolve(strict=True)
+    try:
+        relative = target_path.relative_to(root)
+    except ValueError:
+        return False
+    if relative != Path("AGENTS.md") and (not relative.parts or relative.parts[0] != "docs"):
+        return False
+
+    current = root
+    for part in relative.parts:
+        current = current / part
+        if current.is_symlink():
+            return False
+    return True
+
+
+def _is_external_or_anchor_link(target: str) -> bool:
+    lowered = target.lower()
+    return (
+        lowered.startswith("#")
+        or lowered.startswith("http://")
+        or lowered.startswith("https://")
+        or lowered.startswith("mailto:")
+    )
+
+
+def _prune_project_documents(
+    *,
+    session: Session,
+    project: Project,
+    keep_document_ids: set[str],
+) -> list[str]:
+    existing_documents = session.scalars(
+        select(Document).where(
+            Document.project_id == project.id,
+            Document.id.not_in(keep_document_ids),
+            Document.status != "removed",
+        )
+    ).all()
+    stale_ids = sorted(document.id for document in existing_documents)
+    if not stale_ids:
+        return []
+
+    session.execute(
+        delete(DocumentLink).where(
+            DocumentLink.source_document_id.in_(stale_ids)
+            | DocumentLink.target_document_id.in_(stale_ids)
+        )
+    )
+    referenced_ids = set(
+        session.scalars(
+            select(RetrievalHit.document_id).where(RetrievalHit.document_id.in_(stale_ids))
+        ).all()
+    )
+    for document in existing_documents:
+        if document.id in referenced_ids:
+            document.status = "removed"
+            document.is_reachable = False
+            document.graph_depth = None
+        else:
+            session.delete(document)
+    return stale_ids
 
 
 def _parse_front_matter(raw_metadata: str) -> dict[str, str]:
@@ -200,102 +395,11 @@ def _parse_tags(raw_tags: str | None) -> list[str]:
 
 def _first_heading(content: str) -> str | None:
     match = HEADING_PATTERN.search(content)
-    if match is None:
-        return None
-    return match.group(1).strip()
+    return match.group(1).strip() if match else None
 
 
-def _extract_markdown_links(document: MarkdownDocument) -> list[MarkdownLink]:
-    links: list[MarkdownLink] = []
-    for match in MARKDOWN_LINK_PATTERN.finditer(document.content_markdown):
-        target = match.group(2).strip()
-        if _is_external_or_anchor_link(target):
-            continue
-        target_without_fragment = target.split("#", 1)[0]
-        if not target_without_fragment.endswith(".md"):
-            continue
-        target_path = document.source_path.parent / unquote(target_without_fragment)
-        links.append(
-            MarkdownLink(
-                label=match.group(1).strip(),
-                target_path=target_path.resolve(strict=False),
-                sort_order=len(links),
-            )
-        )
-    return links
-
-
-def _is_external_or_anchor_link(target: str) -> bool:
-    lowered = target.lower()
-    return (
-        lowered.startswith("#")
-        or lowered.startswith("http://")
-        or lowered.startswith("https://")
-        or lowered.startswith("mailto:")
-    )
-
-
-def _prune_project_documents(
-    *,
-    session: Session,
-    project: Project,
-    keep_document_ids: set[str],
-) -> list[str]:
-    existing_ids = set(
-        session.scalars(select(Document.id).where(Document.project_id == project.id)).all()
-    )
-    stale_ids = sorted(existing_ids - keep_document_ids)
-    if not stale_ids:
-        return []
-
-    session.execute(
-        delete(DocumentLink).where(
-            DocumentLink.source_document_id.in_(stale_ids)
-            | DocumentLink.target_document_id.in_(stale_ids)
-        )
-    )
-    session.execute(delete(RetrievalHit).where(RetrievalHit.document_id.in_(stale_ids)))
-    session.execute(delete(Document).where(Document.id.in_(stale_ids)))
-    return stale_ids
-
-
-def _project_root_candidates(project: Project) -> list[Path]:
-    if not project.root_path:
-        return []
-
-    host_root = Path(project.root_path).expanduser()
-    candidates = [host_root]
-    mapped_root = _to_container_path(host_root)
-    if mapped_root != host_root:
-        candidates.insert(0, mapped_root)
-    return candidates
-
-
-def _to_container_path(path: Path) -> Path:
-    host_root = settings.workspace_host_root
-    container_root = settings.workspace_container_root
-    if not host_root or not container_root:
-        return path
-
+def _display_path(path: Path, document_root: Path) -> str:
     try:
-        relative = path.resolve(strict=False).relative_to(
-            Path(host_root).expanduser().resolve(strict=False)
-        )
-    except ValueError:
-        return path
-    return Path(container_root).expanduser() / relative
-
-
-def _to_display_path(path: Path) -> Path:
-    host_root = settings.workspace_host_root
-    container_root = settings.workspace_container_root
-    if not host_root or not container_root:
-        return path
-
-    try:
-        relative = path.resolve(strict=False).relative_to(
-            Path(container_root).expanduser().resolve(strict=False)
-        )
-    except ValueError:
-        return path
-    return Path(host_root).expanduser() / relative
+        return path.resolve(strict=False).relative_to(document_root.resolve(strict=True)).as_posix()
+    except (FileNotFoundError, ValueError):
+        return str(path)

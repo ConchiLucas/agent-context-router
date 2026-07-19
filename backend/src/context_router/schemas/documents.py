@@ -24,15 +24,13 @@ class DocumentLinkSummary(BaseModel):
     sort_order: int
 
 
-class DocumentSyncRequest(BaseModel):
-    docs_dir: str = "docs"
-    prune: bool = False
-
-
 class DocumentSyncResponse(BaseModel):
     project_slug: str
-    docs_dir: str
+    docs_path: str
     indexed_count: int
+    reachable_count: int
+    orphan_count: int
+    broken_link_count: int
     link_count: int
     pruned_count: int
     indexed_document_ids: list[str]
