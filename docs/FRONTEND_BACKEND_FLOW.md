@@ -35,7 +35,7 @@ Codex / Antigravity
 | 打开全屏树 | `document-tree.tsx` | `GET /api/projects/{id}/tree` |
 | 点击节点查看详情 | `markdown-viewer.tsx` | `GET /api/projects/{id}/documents/{document_id}` |
 | 查看 MCP JSON | `project-dashboard.tsx` | `POST /api/projects/{id}/prepare-preview` |
-| 查看调用记录 | `project-dashboard.tsx` | `GET /api/projects/{id}/tasks`、`GET /api/tasks/{task_id}/document-reads` |
+| 查看调用记录 | `project-dashboard.tsx`、`task-history.ts` | `GET /api/projects/{id}/tasks`、`GET /api/tasks/{task_id}/document-reads` |
 
 ## 后端代码
 
@@ -67,3 +67,5 @@ app/page.tsx
 ```
 
 Markdown 解析器只生成 React 元素，不使用 `dangerouslySetInnerHTML`，也不执行文档里的原始 HTML。
+
+调用记录通过 `task-history.ts` 同时生成两种序号：按 `read_call_id -> position` 展开的全局文档顺序用于调用列表；按 read call 分组的调用批次号用于完整文档树节点角标。同一批量请求的文档共享批次号，并在调用列表同一行横向展示；同一文档被多次调用时在树节点展示多个批次号。

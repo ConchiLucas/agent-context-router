@@ -4,6 +4,7 @@ interface DocumentTreeProps {
   node: DocumentTreeNode;
   selectedId: string | null;
   onSelect: (node: DocumentTreeNode) => void;
+  callNumbersByDocumentId?: ReadonlyMap<string, number[]>;
 }
 
 function filename(path: string): string {
@@ -36,7 +37,10 @@ export function DocumentTree({
   node,
   selectedId,
   onSelect,
+  callNumbersByDocumentId,
 }: DocumentTreeProps) {
+  const callNumbers = callNumbersByDocumentId?.get(node.id) ?? [];
+
   return (
     <li className="document-tree-item">
       <button
@@ -44,9 +48,23 @@ export function DocumentTree({
         className="document-node"
         data-selected={selectedId === node.id}
         data-error={Boolean(node.error)}
+        data-has-call-numbers={callNumbers.length > 0}
         onClick={() => onSelect(node)}
         title={node.description}
       >
+        {callNumbers.length > 0 ? (
+          <span className="document-call-badges" aria-label="MCP 调用批次">
+            {callNumbers.map((callNumber) => (
+              <span
+                className="document-call-badge"
+                aria-label={`第 ${callNumber} 次 MCP 调用`}
+                key={callNumber}
+              >
+                {callNumber}
+              </span>
+            ))}
+          </span>
+        ) : null}
         <span>{nodeLabel(node)}</span>
         <code>{filename(node.path)}</code>
         {node.error ? <small>{node.error}</small> : null}
@@ -62,6 +80,7 @@ export function DocumentTree({
                   node={child}
                   selectedId={selectedId}
                   onSelect={onSelect}
+                  callNumbersByDocumentId={callNumbersByDocumentId}
                 />
               ))}
             </ul>

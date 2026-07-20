@@ -23,6 +23,11 @@ import {
   prepareProjectPreview,
   refreshProject,
 } from "@/lib/api";
+import {
+  buildDocumentCallNumbers,
+  buildTaskReadRows,
+  buildTaskReadSteps,
+} from "@/lib/task-history";
 import type {
   ContextTaskReadHistory,
   ContextTaskSummary,
@@ -61,11 +66,25 @@ export function ProjectDashboard() {
     null,
   );
   const [historyTasks, setHistoryTasks] = useState<ContextTaskSummary[]>([]);
+  const [selectedHistoryTaskId, setSelectedHistoryTaskId] = useState<
+    number | null
+  >(null);
   const [history, setHistory] = useState<ContextTaskReadHistory | null>(null);
+  const [historyTree, setHistoryTree] = useState<DocumentTreeNode | null>(null);
+  const [historyView, setHistoryView] = useState<"tree" | "list">("tree");
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [draggingHistory, setDraggingHistory] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const treeViewportRef = useRef<HTMLDivElement>(null);
+  const historyViewportRef = useRef<HTMLElement>(null);
   const treeDragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    scrollLeft: number;
+    scrollTop: number;
+  } | null>(null);
+  const historyDragRef = useRef<{
     pointerId: number;
     startX: number;
     startY: number;
@@ -104,6 +123,22 @@ export function ProjectDashboard() {
 
     return () => window.cancelAnimationFrame(frame);
   }, [activeProject, tree]);
+
+  useEffect(() => {
+    if (!historyProject || !history) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      const viewport = historyViewportRef.current;
+      if (!viewport) return;
+      viewport.scrollLeft = Math.max(
+        0,
+        (viewport.scrollWidth - viewport.clientWidth) / 2,
+      );
+      viewport.scrollTop = 0;
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [historyProject, history]);
 
   async function loadTree(project: ProjectSummary) {
     setBusyProjectId(project.id);
@@ -173,6 +208,7 @@ export function ProjectDashboard() {
   }
 
   async function selectHistoryTask(taskId: number) {
+    setSelectedHistoryTaskId(taskId);
     setHistoryLoading(true);
     setHistory(null);
     try {
@@ -189,14 +225,22 @@ export function ProjectDashboard() {
     setBusyProjectId(project.id);
     setHistoryProject(project);
     setHistoryTasks([]);
+    setSelectedHistoryTaskId(null);
     setHistory(null);
+    setHistoryTree(null);
+    setHistoryView("tree");
     setHistoryLoading(true);
     try {
-      const tasks = await listProjectTasks(project.id);
+      const [tasks, projectTree] = await Promise.all([
+        listProjectTasks(project.id),
+        getProjectTree(project.id),
+      ]);
       setHistoryTasks(tasks);
+      setHistoryTree(projectTree);
       const initialTask =
         tasks.find((task) => task.read_call_count > 0) ?? tasks[0];
       if (initialTask) {
+        setSelectedHistoryTaskId(initialTask.task_id);
         setHistory(await getTaskDocumentReads(initialTask.task_id));
       }
       setError(null);
@@ -249,8 +293,47 @@ export function ProjectDashboard() {
   function closeTaskHistory() {
     setHistoryProject(null);
     setHistoryTasks([]);
+    setSelectedHistoryTaskId(null);
     setHistory(null);
+    setHistoryTree(null);
+    setHistoryView("tree");
     setHistoryLoading(false);
+  }
+
+  function startHistoryDrag(event: ReactPointerEvent<HTMLElement>) {
+    if ((event.target as HTMLElement).closest("button, select")) return;
+
+    const viewport = event.currentTarget;
+    historyDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      scrollLeft: viewport.scrollLeft,
+      scrollTop: viewport.scrollTop,
+    };
+    viewport.setPointerCapture(event.pointerId);
+    setDraggingHistory(true);
+  }
+
+  function moveHistory(event: ReactPointerEvent<HTMLElement>) {
+    const drag = historyDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    event.currentTarget.scrollLeft =
+      drag.scrollLeft - (event.clientX - drag.startX);
+    event.currentTarget.scrollTop =
+      drag.scrollTop - (event.clientY - drag.startY);
+  }
+
+  function endHistoryDrag(event: ReactPointerEvent<HTMLElement>) {
+    const drag = historyDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    historyDragRef.current = null;
+    setDraggingHistory(false);
   }
 
   function startTreeDrag(event: ReactPointerEvent<HTMLDivElement>) {
@@ -288,6 +371,14 @@ export function ProjectDashboard() {
     treeDragRef.current = null;
     setDraggingTree(false);
   }
+
+  const selectedHistoryTask =
+    historyTasks.find((task) => task.task_id === selectedHistoryTaskId) ?? null;
+  const historySteps = history ? buildTaskReadSteps(history.calls) : [];
+  const historyRows = history ? buildTaskReadRows(history.calls) : [];
+  const historyCallNumbers = history
+    ? buildDocumentCallNumbers(history.calls)
+    : new Map<string, number[]>();
 
   return (
     <>
@@ -437,19 +528,68 @@ export function ProjectDashboard() {
       ) : null}
 
       {historyProject ? (
-        <div className="mcp-json-modal" role="presentation">
-          <section
-            className="task-history-panel"
-            role="dialog"
-            aria-modal="true"
-            aria-label={`${historyProject.name} MCP 调用记录`}
-          >
-            <header className="mcp-json-header">
-              <div>
-                <span className="file-chip">MCP 调用记录</span>
-                <h2>{historyProject.name}</h2>
-                <p>文档读取按调用时间和请求位置从上到下排列</p>
+        <div
+          className="task-history-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${historyProject.name} MCP 调用记录`}
+        >
+          <header className="tree-toolbar-overlay">
+            <div className="tree-project-summary task-history-summary">
+              <h2>{historyProject.name}</h2>
+              {selectedHistoryTask ? (
+                <>
+                  <p>
+                    任务 #{selectedHistoryTask.task_id} · {history?.calls.length ?? 0} 次 MCP 调用 · {historySteps.length} 个读取步骤
+                  </p>
+                  <strong>{selectedHistoryTask.task}</strong>
+                </>
+              ) : (
+                <p>当前项目还没有 MCP 任务</p>
+              )}
+            </div>
+            <div className="tree-toolbar-actions">
+              <div className="task-history-tabs" role="tablist" aria-label="调用记录视图">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={historyView === "tree"}
+                  className="task-history-tab"
+                  data-active={historyView === "tree"}
+                  onClick={() => setHistoryView("tree")}
+                >
+                  文档树
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={historyView === "list"}
+                  className="task-history-tab"
+                  data-active={historyView === "list"}
+                  onClick={() => setHistoryView("list")}
+                >
+                  调用列表
+                </button>
               </div>
+              {historyTasks.length > 0 ? (
+                <label className="task-history-selector">
+                  <span>切换任务</span>
+                  <select
+                    aria-label="切换 MCP 任务"
+                    value={selectedHistoryTaskId ?? ""}
+                    disabled={historyLoading}
+                    onChange={(event) =>
+                      void selectHistoryTask(Number(event.target.value))
+                    }
+                  >
+                    {historyTasks.map((task) => (
+                      <option value={task.task_id} key={task.task_id}>
+                        #{task.task_id} · {task.agent_name ?? "未标记 Agent"} · {task.task}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
               <button
                 type="button"
                 className="close-button"
@@ -458,84 +598,102 @@ export function ProjectDashboard() {
               >
                 ×
               </button>
-            </header>
+            </div>
+          </header>
 
-            <div className="task-history-layout">
-              <aside className="task-history-tasks" aria-label="任务列表">
-                {historyTasks.length === 0 && !historyLoading ? (
-                  <p className="empty-message">当前项目还没有 MCP 任务。</p>
-                ) : null}
-                {historyTasks.map((task) => (
-                  <button
-                    type="button"
-                    className="task-history-task"
-                    data-selected={history?.task_id === task.task_id}
-                    key={task.task_id}
-                    onClick={() => void selectHistoryTask(task.task_id)}
-                  >
-                    <span>任务 #{task.task_id}</span>
-                    <strong>{task.task}</strong>
-                    <small>
-                      {task.agent_name ?? "未标记 Agent"} · {task.read_call_count} 次读取
-                    </small>
-                    <small>{formattedTime(task.created_at)}</small>
-                  </button>
-                ))}
-              </aside>
-
-              <section className="task-read-chain" aria-label="文档读取顺序">
-                {historyLoading ? (
-                  <p className="empty-message">正在读取任务调用记录…</p>
-                ) : null}
-                {!historyLoading && history && history.calls.length === 0 ? (
-                  <div className="empty-state task-history-empty">
-                    <h3>这个任务还没有读取文档</h3>
-                    <p>调用 read_context_document 后，记录会显示在这里。</p>
-                  </div>
-                ) : null}
-                {!historyLoading && history ? (
-                  <div className="task-read-calls">
-                    {history.calls.map((call, callIndex) => (
-                      <article className="task-read-call" key={call.read_call_id}>
-                        <header>
-                          <div>
-                            <span>第 {callIndex + 1} 次调用</span>
-                            <code>read_call_id: {call.read_call_id}</code>
-                          </div>
-                          <time>{formattedTime(call.created_at)}</time>
-                        </header>
-                        <ol>
-                          {call.documents.map((document) => (
-                            <li
-                              data-status={document.status}
-                              key={`${call.read_call_id}-${document.position}`}
-                            >
-                              <span className="read-position">
-                                {document.position}
-                              </span>
-                              <div>
-                                <strong>
-                                  {document.path ?? document.document_id}
-                                </strong>
-                                {document.section ? (
-                                  <small>章节：{document.section}</small>
-                                ) : null}
-                                {document.status === "error" ? (
-                                  <small className="read-error">
-                                    读取失败：{document.error_code}
-                                  </small>
-                                ) : (
-                                  <small>读取成功</small>
-                                )}
-                              </div>
-                            </li>
-                          ))}
-                        </ol>
-                      </article>
-                    ))}
-                  </div>
-                ) : null}
-              </section>
+          <section
+            ref={historyViewportRef}
+            className="task-history-viewport"
+            data-dragging={draggingHistory}
+            aria-label="可拖动的文档读取调用链"
+            onPointerDown={startHistoryDrag}
+            onPointerMove={moveHistory}
+            onPointerUp={endHistoryDrag}
+            onPointerCancel={endHistoryDrag}
+          >
+            <div
+              className={`task-history-world task-history-${historyView}-world`}
+            >
+              {historyLoading ? (
+                <p className="task-history-message">正在读取任务调用记录…</p>
+              ) : null}
+              {!historyLoading && historyTasks.length === 0 ? (
+                <div className="empty-state task-history-empty">
+                  <h3>当前项目还没有 MCP 任务</h3>
+                </div>
+              ) : null}
+              {!historyLoading &&
+              historyView === "list" &&
+              history &&
+              historySteps.length === 0 ? (
+                <div className="empty-state task-history-empty">
+                  <h3>这个任务还没有读取文档</h3>
+                  <p>调用 read_context_document 后，记录会显示在这里。</p>
+                </div>
+              ) : null}
+              {!historyLoading &&
+              historyView === "list" &&
+              historySteps.length > 0 ? (
+                <div className="task-history-flow">
+                  {historyRows.map((row) => (
+                    <section
+                      className="task-history-call-row"
+                      aria-label={`第 ${row.callNumber} 次 MCP 调用`}
+                      key={row.readCallId}
+                    >
+                      {row.steps.map((step) => (
+                        <article
+                          className="task-history-node"
+                          data-status={step.document.status}
+                          key={`${step.readCallId}-${step.document.position}`}
+                        >
+                          <span
+                            className="task-history-sequence"
+                            aria-label={`调用顺序 ${step.sequence}`}
+                          >
+                            {step.sequence}
+                          </span>
+                          <span className="file-chip">
+                            第 {step.callNumber} 次 MCP 调用
+                          </span>
+                          <strong>
+                            {step.document.path ?? step.document.document_id}
+                          </strong>
+                          {step.document.section ? (
+                            <small>章节：{step.document.section}</small>
+                          ) : null}
+                          <code>
+                            read_call_id: {step.readCallId} · position: {step.document.position}
+                          </code>
+                          <small>{formattedTime(step.createdAt)}</small>
+                          {step.document.status === "error" ? (
+                            <small className="read-error">
+                              读取失败：{step.document.error_code}
+                            </small>
+                          ) : (
+                            <small>读取成功</small>
+                          )}
+                        </article>
+                      ))}
+                    </section>
+                  ))}
+                </div>
+              ) : null}
+              {!historyLoading &&
+              historyView === "tree" &&
+              historyTasks.length > 0 &&
+              historyTree ? (
+                <div className="tree-content">
+                  <ul className="document-tree">
+                    <DocumentTree
+                      node={historyTree}
+                      selectedId={null}
+                      onSelect={() => undefined}
+                      callNumbersByDocumentId={historyCallNumbers}
+                    />
+                  </ul>
+                </div>
+              ) : null}
             </div>
           </section>
         </div>
