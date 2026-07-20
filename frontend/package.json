@@ -6,6 +6,7 @@
     "dev": "next dev",
     "lint": "eslint . --max-warnings=0",
     "build": "sh scripts/build-isolated.sh",
+    "build:docker": "next build",
     "test": "tsx --test lib/*.test.ts"
   },
   "dependencies": {

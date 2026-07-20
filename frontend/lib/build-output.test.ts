@@ -17,3 +17,7 @@ test("production build uses an output directory isolated from the dev server", a
   );
   assert.match(buildScript, /cd "\$build_dir"/);
 });
+
+test("Docker build writes Next output in its working directory", () => {
+  assert.equal(packageJson.scripts["build:docker"], "next build");
+});
