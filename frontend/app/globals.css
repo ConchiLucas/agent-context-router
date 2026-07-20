@@ -403,7 +403,7 @@ h1 {
 }
 
 .document-tree,
-.document-tree ul {
+.document-tree-row {
   display: flex;
   position: relative;
   justify-content: center;
@@ -412,11 +412,33 @@ h1 {
   list-style: none;
 }
 
-.document-tree ul {
+.document-children-rows {
+  display: grid;
+  position: relative;
+  gap: 46px;
+  justify-items: center;
   padding-top: 38px;
 }
 
-.document-tree li {
+.document-children-rows::before {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  height: 57px;
+  border-left: 1px solid var(--border-strong);
+  content: "";
+}
+
+.document-tree-row:not(:first-child)::before {
+  position: absolute;
+  top: -46px;
+  left: 50%;
+  height: 65px;
+  border-left: 1px solid var(--border-strong);
+  content: "";
+}
+
+.document-tree-item {
   display: flex;
   position: relative;
   padding: 0 8px;
@@ -424,8 +446,8 @@ h1 {
   flex-direction: column;
 }
 
-.document-tree li::before,
-.document-tree li::after {
+.document-tree-row > .document-tree-item::before,
+.document-tree-row > .document-tree-item::after {
   position: absolute;
   top: 19px;
   width: 50%;
@@ -434,43 +456,32 @@ h1 {
   content: "";
 }
 
-.document-tree li::before {
+.document-tree-row > .document-tree-item::before {
   right: 50%;
   border-right: 1px solid var(--border-strong);
 }
 
-.document-tree li::after {
+.document-tree-row > .document-tree-item::after {
   left: 50%;
   border-left: 1px solid var(--border-strong);
 }
 
-.document-tree li:only-child::before,
-.document-tree li:only-child::after,
-.document-tree > li::before,
-.document-tree > li::after {
+.document-tree-row > .document-tree-item:only-child::before,
+.document-tree-row > .document-tree-item:only-child::after {
   display: none;
 }
 
-.document-tree li:first-child::before,
-.document-tree li:last-child::after {
+.document-tree-row > .document-tree-item:first-child::before,
+.document-tree-row > .document-tree-item:last-child::after {
   border-top: 0;
 }
 
-.document-tree li:first-child::before {
+.document-tree-row > .document-tree-item:first-child::before {
   border-right: 1px solid var(--border-strong);
 }
 
-.document-tree li:last-child::after {
+.document-tree-row > .document-tree-item:last-child::after {
   border-left: 1px solid var(--border-strong);
-}
-
-.document-tree ul::before {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  height: 38px;
-  border-left: 1px solid var(--border-strong);
-  content: "";
 }
 
 .document-node {

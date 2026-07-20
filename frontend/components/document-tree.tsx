@@ -24,13 +24,21 @@ function nodeLabel(node: DocumentTreeNode): string {
   return firstPhrase;
 }
 
+function rowsOfFour(nodes: DocumentTreeNode[]): DocumentTreeNode[][] {
+  const rows: DocumentTreeNode[][] = [];
+  for (let index = 0; index < nodes.length; index += 4) {
+    rows.push(nodes.slice(index, index + 4));
+  }
+  return rows;
+}
+
 export function DocumentTree({
   node,
   selectedId,
   onSelect,
 }: DocumentTreeProps) {
   return (
-    <li>
+    <li className="document-tree-item">
       <button
         type="button"
         className="document-node"
@@ -45,16 +53,20 @@ export function DocumentTree({
       </button>
 
       {node.children.length > 0 ? (
-        <ul>
-          {node.children.map((child, index) => (
-            <DocumentTree
-              key={`${child.id}-${index}`}
-              node={child}
-              selectedId={selectedId}
-              onSelect={onSelect}
-            />
+        <div className="document-children-rows">
+          {rowsOfFour(node.children).map((row, rowIndex) => (
+            <ul className="document-tree-row" key={`row-${rowIndex}`}>
+              {row.map((child, index) => (
+                <DocumentTree
+                  key={`${child.id}-${index}`}
+                  node={child}
+                  selectedId={selectedId}
+                  onSelect={onSelect}
+                />
+              ))}
+            </ul>
           ))}
-        </ul>
+        </div>
       ) : null}
     </li>
   );
