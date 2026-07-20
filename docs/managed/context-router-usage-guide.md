@@ -3,9 +3,10 @@
 ## AI 使用原则
 
 - 新窗口遇到业务规则、启动、数据库或跨层链路任务时，调用 `prepare_task_context(task, cwd, agent_name)`。
-- 最多返回 3 份候选文档；只读取任务真正需要的内容。
-- 读取时调用 `read_context_document(trace_id, document_id)`。
-- 从已读文档继续向下时，补充 `parent_document_id`。
+- prepare 返回 cwd 对应项目的完整文档树；先用 title、summary 和 path 建立全局认知。
+- 选择文档后调用 `read_context_document(task_id, requests)`；task_id 必须来自当前 prepare，不跨任务复用。
+- requests 可同时包含多个 document_id 和可选 section，返回顺序严格保持输入顺序。
+- 完整树不等于完整正文，不要一次读取所有 Markdown 内容。
 - 明确文件、符号或纯源码定位可以直接检索项目目录。
 - MCP 没有合适候选时继续正常完成任务，不要求说明停止原因。
 

@@ -18,6 +18,11 @@ def test_builds_recursive_tree_and_caches_full_content(tmp_path: Path) -> None:
     write_document(
         root,
         """
+---
+title: 项目入口
+summary: 项目文档入口说明。
+---
+
 # AGENTS.md
 
 ## 下级文档
@@ -44,6 +49,8 @@ def test_builds_recursive_tree_and_caches_full_content(tmp_path: Path) -> None:
     cache = build_document_cache(root)
 
     assert cache.root.children[0].children[0].description == "API 文档"
+    assert cache.root.title == "项目入口"
+    assert cache.root.summary == "项目文档入口说明。"
     leaf_id = cache.root.children[0].children[0].id
     assert cache.documents[leaf_id].content.endswith("完整的 Markdown 内容。")
 

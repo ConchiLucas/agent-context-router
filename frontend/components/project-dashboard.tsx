@@ -17,12 +17,18 @@ import {
   createProject,
   getDocumentDetail,
   getProjectTree,
+  getTaskDocumentReads,
   listProjects,
+  listProjectTasks,
+  prepareProjectPreview,
   refreshProject,
 } from "@/lib/api";
 import type {
+  ContextTaskReadHistory,
+  ContextTaskSummary,
   DocumentDetail,
   DocumentTreeNode,
+  PrepareTaskContextResult,
   ProjectSummary,
 } from "@/lib/types";
 
@@ -47,6 +53,16 @@ export function ProjectDashboard() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [draggingTree, setDraggingTree] = useState(false);
   const [busyProjectId, setBusyProjectId] = useState<string | null>(null);
+  const [mcpPreviewProject, setMcpPreviewProject] =
+    useState<ProjectSummary | null>(null);
+  const [mcpPreview, setMcpPreview] =
+    useState<PrepareTaskContextResult | null>(null);
+  const [historyProject, setHistoryProject] = useState<ProjectSummary | null>(
+    null,
+  );
+  const [historyTasks, setHistoryTasks] = useState<ContextTaskSummary[]>([]);
+  const [history, setHistory] = useState<ContextTaskReadHistory | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const treeViewportRef = useRef<HTMLDivElement>(null);
   const treeDragRef = useRef<{
@@ -141,6 +157,58 @@ export function ProjectDashboard() {
     }
   }
 
+  async function showMcpPreview(project: ProjectSummary) {
+    setBusyProjectId(project.id);
+    setMcpPreviewProject(project);
+    setMcpPreview(null);
+    try {
+      setMcpPreview(await prepareProjectPreview(project.id));
+      setError(null);
+    } catch (requestError) {
+      setMcpPreviewProject(null);
+      setError((requestError as Error).message);
+    } finally {
+      setBusyProjectId(null);
+    }
+  }
+
+  async function selectHistoryTask(taskId: number) {
+    setHistoryLoading(true);
+    setHistory(null);
+    try {
+      setHistory(await getTaskDocumentReads(taskId));
+      setError(null);
+    } catch (requestError) {
+      setError((requestError as Error).message);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  async function showTaskHistory(project: ProjectSummary) {
+    setBusyProjectId(project.id);
+    setHistoryProject(project);
+    setHistoryTasks([]);
+    setHistory(null);
+    setHistoryLoading(true);
+    try {
+      const tasks = await listProjectTasks(project.id);
+      setHistoryTasks(tasks);
+      const initialTask =
+        tasks.find((task) => task.read_call_count > 0) ?? tasks[0];
+      if (initialTask) {
+        setHistory(await getTaskDocumentReads(initialTask.task_id));
+      }
+      setError(null);
+    } catch (requestError) {
+      setHistoryProject(null);
+      setError((requestError as Error).message);
+    } finally {
+      setHistoryLoading(false);
+      setBusyProjectId(null);
+    }
+  }
+
   async function submitProject(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusyProjectId("new");
@@ -171,6 +239,18 @@ export function ProjectDashboard() {
   function closeDetail() {
     setDetail(null);
     setSelectedId(null);
+  }
+
+  function closeMcpPreview() {
+    setMcpPreviewProject(null);
+    setMcpPreview(null);
+  }
+
+  function closeTaskHistory() {
+    setHistoryProject(null);
+    setHistoryTasks([]);
+    setHistory(null);
+    setHistoryLoading(false);
   }
 
   function startTreeDrag(event: ReactPointerEvent<HTMLDivElement>) {
@@ -211,14 +291,7 @@ export function ProjectDashboard() {
 
   return (
     <>
-      <header className="page-header">
-        <div>
-          <p className="eyebrow">AGENTS.md DOCUMENT MAP</p>
-          <h1>文档索引项目</h1>
-          <p className="page-intro">
-            从每个项目的 AGENTS.md 开始，手动刷新并查看完整递归文档树。
-          </p>
-        </div>
+      <div className="page-actions">
         <button
           type="button"
           className="primary-button"
@@ -226,7 +299,7 @@ export function ProjectDashboard() {
         >
           {showCreate ? "取消添加" : "添加项目"}
         </button>
-      </header>
+      </div>
 
       {showCreate ? (
         <form className="create-project-form" onSubmit={submitProject}>
@@ -299,6 +372,25 @@ export function ProjectDashboard() {
               </button>
               <button
                 type="button"
+                className="secondary-button"
+                disabled={busyProjectId === project.id}
+                onClick={() => void showTaskHistory(project)}
+              >
+                查看调用记录
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={busyProjectId === project.id}
+                onClick={() => void showMcpPreview(project)}
+              >
+                {busyProjectId === project.id &&
+                mcpPreviewProject?.id === project.id
+                  ? "正在生成…"
+                  : "查看 MCP JSON"}
+              </button>
+              <button
+                type="button"
                 className="primary-button"
                 disabled={busyProjectId === project.id}
                 onClick={() => void loadTree(project)}
@@ -309,6 +401,145 @@ export function ProjectDashboard() {
           </article>
         ))}
       </section>
+
+      {mcpPreviewProject ? (
+        <div className="mcp-json-modal" role="presentation">
+          <section
+            className="mcp-json-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${mcpPreviewProject.name} MCP JSON`}
+          >
+            <header className="mcp-json-header">
+              <div>
+                <span className="file-chip">MCP JSON</span>
+                <h2>{mcpPreviewProject.name}</h2>
+                <p>与 prepare_task_context 工具返回的数据结构一致</p>
+              </div>
+              <button
+                type="button"
+                className="close-button"
+                aria-label="关闭 MCP JSON"
+                onClick={closeMcpPreview}
+              >
+                ×
+              </button>
+            </header>
+            {mcpPreview ? (
+              <pre className="mcp-json-output">
+                <code>{JSON.stringify(mcpPreview, null, 2)}</code>
+              </pre>
+            ) : (
+              <p className="empty-message">正在生成完整文档树 JSON…</p>
+            )}
+          </section>
+        </div>
+      ) : null}
+
+      {historyProject ? (
+        <div className="mcp-json-modal" role="presentation">
+          <section
+            className="task-history-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${historyProject.name} MCP 调用记录`}
+          >
+            <header className="mcp-json-header">
+              <div>
+                <span className="file-chip">MCP 调用记录</span>
+                <h2>{historyProject.name}</h2>
+                <p>文档读取按调用时间和请求位置从上到下排列</p>
+              </div>
+              <button
+                type="button"
+                className="close-button"
+                aria-label="关闭 MCP 调用记录"
+                onClick={closeTaskHistory}
+              >
+                ×
+              </button>
+            </header>
+
+            <div className="task-history-layout">
+              <aside className="task-history-tasks" aria-label="任务列表">
+                {historyTasks.length === 0 && !historyLoading ? (
+                  <p className="empty-message">当前项目还没有 MCP 任务。</p>
+                ) : null}
+                {historyTasks.map((task) => (
+                  <button
+                    type="button"
+                    className="task-history-task"
+                    data-selected={history?.task_id === task.task_id}
+                    key={task.task_id}
+                    onClick={() => void selectHistoryTask(task.task_id)}
+                  >
+                    <span>任务 #{task.task_id}</span>
+                    <strong>{task.task}</strong>
+                    <small>
+                      {task.agent_name ?? "未标记 Agent"} · {task.read_call_count} 次读取
+                    </small>
+                    <small>{formattedTime(task.created_at)}</small>
+                  </button>
+                ))}
+              </aside>
+
+              <section className="task-read-chain" aria-label="文档读取顺序">
+                {historyLoading ? (
+                  <p className="empty-message">正在读取任务调用记录…</p>
+                ) : null}
+                {!historyLoading && history && history.calls.length === 0 ? (
+                  <div className="empty-state task-history-empty">
+                    <h3>这个任务还没有读取文档</h3>
+                    <p>调用 read_context_document 后，记录会显示在这里。</p>
+                  </div>
+                ) : null}
+                {!historyLoading && history ? (
+                  <div className="task-read-calls">
+                    {history.calls.map((call, callIndex) => (
+                      <article className="task-read-call" key={call.read_call_id}>
+                        <header>
+                          <div>
+                            <span>第 {callIndex + 1} 次调用</span>
+                            <code>read_call_id: {call.read_call_id}</code>
+                          </div>
+                          <time>{formattedTime(call.created_at)}</time>
+                        </header>
+                        <ol>
+                          {call.documents.map((document) => (
+                            <li
+                              data-status={document.status}
+                              key={`${call.read_call_id}-${document.position}`}
+                            >
+                              <span className="read-position">
+                                {document.position}
+                              </span>
+                              <div>
+                                <strong>
+                                  {document.path ?? document.document_id}
+                                </strong>
+                                {document.section ? (
+                                  <small>章节：{document.section}</small>
+                                ) : null}
+                                {document.status === "error" ? (
+                                  <small className="read-error">
+                                    读取失败：{document.error_code}
+                                  </small>
+                                ) : (
+                                  <small>读取成功</small>
+                                )}
+                              </div>
+                            </li>
+                          ))}
+                        </ol>
+                      </article>
+                    ))}
+                  </div>
+                ) : null}
+              </section>
+            </div>
+          </section>
+        </div>
+      ) : null}
 
       {activeProject && tree ? (
         <div className="tree-modal" role="dialog" aria-modal="true">

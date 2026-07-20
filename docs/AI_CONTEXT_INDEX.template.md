@@ -5,10 +5,11 @@
 ## Context Router 使用规则
 
 - 任务依赖业务规则、启动、数据库或跨层链路时，调用 MCP `prepare_task_context(task, cwd, agent_name)`。
-- prepare 返回当前映射项目的本 AGENTS.md 入口；先调用 `read_context_document(trace_id, document_id)` 读取它。
-- 从本文档链接继续读取下一层时，必须传本入口的 `parent_document_id`；之后逐层传已读父文档。
+- prepare 返回当前映射项目的完整文档树，通过显式 title、summary 和 path 建立全局认知。
+- 根据完整树选择文档后调用 `read_context_document(task_id, requests)`；task_id 必须使用当前 prepare 返回值，不跨任务复用。
 - 明确文件或纯源码定位可以直接检索仓库，不强制调用 MCP。
-- 不要一次读取全部文档。
+- 不要因为 prepare 返回完整树就一次读取全部正文。
+- 一次 read 可读取多个文档或指定 section，requests 顺序就是返回和记录顺序。
 
 ## 文档索引
 

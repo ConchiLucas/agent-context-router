@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from context_router.schemas.projects import DocumentDetail, DocumentTreeNode
+from context_router.services.document_metadata import parse_document_metadata
 
 CHILDREN_HEADING = "## 下级文档"
 TABLE_HEADER = ("功能说明", "相对路径")
@@ -30,6 +31,8 @@ class CachedDocument:
     path: str
     relative_path: str | None
     content: str
+    title: str | None = None
+    summary: str | None = None
     error: str | None = None
 
     def to_detail(self) -> DocumentDetail:
@@ -49,6 +52,8 @@ class CachedTreeNode:
     description: str
     path: str
     relative_path: str | None
+    title: str | None = None
+    summary: str | None = None
     error: str | None = None
     children: list[CachedTreeNode] = field(default_factory=list)
 
@@ -67,6 +72,12 @@ class CachedTreeNode:
 class DocumentCache:
     root: CachedTreeNode
     documents: dict[str, CachedDocument]
+    project_root: Path
+
+
+def _combine_errors(*errors: str | None) -> str | None:
+    present = [error for error in errors if error]
+    return "；".join(present) or None
 
 
 def _table_cells(line: str) -> list[str]:
@@ -235,16 +246,23 @@ def build_document_cache(root_path: Path) -> DocumentCache:
         )
         documents[node_id] = document
 
+        metadata = parse_document_metadata(content)
+        document.title = metadata.title
+        document.summary = metadata.summary
+        document.error = metadata.error
+
         try:
             mappings = parse_child_mappings(content)
         except DocumentTreeError as exc:
-            document.error = str(exc)
+            document.error = _combine_errors(document.error, str(exc))
             return CachedTreeNode(
                 id=node_id,
                 description=description,
                 path=str(current_path),
                 relative_path=relative_path,
-                error=str(exc),
+                title=metadata.title,
+                summary=metadata.summary,
+                error=document.error,
             )
 
         node = CachedTreeNode(
@@ -252,6 +270,9 @@ def build_document_cache(root_path: Path) -> DocumentCache:
             description=description,
             path=str(current_path),
             relative_path=relative_path,
+            title=metadata.title,
+            summary=metadata.summary,
+            error=metadata.error,
         )
         next_ancestors = ancestors | {current_path}
         allowed_root = current_path.parent.resolve()
@@ -326,4 +347,8 @@ def build_document_cache(root_path: Path) -> DocumentCache:
         relative_path=None,
         ancestors=frozenset(),
     )
-    return DocumentCache(root=root, documents=documents)
+    return DocumentCache(
+        root=root,
+        documents=documents,
+        project_root=resolved_root.parent,
+    )

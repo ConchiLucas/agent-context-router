@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -34,6 +35,16 @@ class ProjectState:
     error: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class ProjectSnapshot:
+    id: str
+    project_key: str
+    name: str
+    agents_path: str
+    resolved_agents_path: Path
+    cache: DocumentCache
+
+
 class ProjectRegistry:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
@@ -59,6 +70,35 @@ class ProjectRegistry:
         if not resolved.is_file():
             raise ProjectRegistryError(f"找不到入口文件：{agents_path}")
         return resolved
+
+    def _resolve_cwd(self, cwd: str) -> Path:
+        source = Path(cwd.strip()).expanduser()
+        if not source.is_absolute():
+            raise ProjectRegistryError("cwd 必须是绝对路径")
+
+        try:
+            relative = source.relative_to(self._settings.workspace_host_root)
+        except ValueError:
+            return source.resolve()
+        return (self._settings.workspace_container_root / relative).resolve()
+
+    @staticmethod
+    def _project_key(agents_path: str) -> str:
+        normalized_path = str(Path(agents_path).expanduser())
+        return hashlib.sha256(normalized_path.encode()).hexdigest()
+
+    @classmethod
+    def _snapshot(cls, project: ProjectState) -> ProjectSnapshot:
+        if project.cache is None:
+            raise ProjectRegistryError("项目尚未刷新映射")
+        return ProjectSnapshot(
+            id=project.id,
+            project_key=cls._project_key(project.agents_path),
+            name=project.name,
+            agents_path=project.agents_path,
+            resolved_agents_path=project.resolved_agents_path,
+            cache=project.cache,
+        )
 
     @staticmethod
     def _summary(project: ProjectState) -> ProjectSummary:
@@ -132,6 +172,37 @@ class ProjectRegistry:
             if project.cache is None:
                 raise ProjectRegistryError("项目尚未刷新映射")
             return project.cache.root.to_schema()
+
+    def get_snapshot(self, project_id: str) -> ProjectSnapshot:
+        with self._lock:
+            project = self._projects.get(project_id)
+            if project is None:
+                raise ProjectRegistryError("项目不存在")
+            return self._snapshot(project)
+
+    def find_project_for_cwd(self, cwd: str) -> ProjectSnapshot:
+        resolved_cwd = self._resolve_cwd(cwd)
+        with self._lock:
+            candidates = [
+                project
+                for project in self._projects.values()
+                if resolved_cwd == project.resolved_agents_path.parent
+                or project.resolved_agents_path.parent in resolved_cwd.parents
+            ]
+            if not candidates:
+                raise ProjectRegistryError("cwd 没有匹配已注册项目")
+            project = max(
+                candidates,
+                key=lambda item: len(item.resolved_agents_path.parent.parts),
+            )
+            return self._snapshot(project)
+
+    def get_snapshot_by_project_key(self, project_key: str) -> ProjectSnapshot:
+        with self._lock:
+            for project in self._projects.values():
+                if self._project_key(project.agents_path) == project_key:
+                    return self._snapshot(project)
+        raise ProjectRegistryError("任务绑定的项目不存在")
 
     def get_document(self, project_id: str, document_id: str) -> DocumentDetail:
         with self._lock:

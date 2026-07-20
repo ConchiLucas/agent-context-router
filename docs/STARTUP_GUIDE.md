@@ -5,7 +5,7 @@
 - 前后端服务、测试、lint 和 build 都通过当前目录的 `docker-compose.yml` 执行。
 - 不在宿主机直接运行 `uvicorn`、`next dev`、`pytest` 或 `npm run build`。
 - 修改后端代码后，验证前执行 `docker compose restart backend`。
-- 本版本不使用数据库，也不执行 migration。
+- 使用宿主机已有的 PostgreSQL；migration 仍通过后端 Docker Compose 容器执行。
 
 ## 启动
 
@@ -20,6 +20,7 @@ docker compose up -d --force-recreate backend frontend
 | Frontend | `http://127.0.0.1:49174` |
 | Backend | `http://127.0.0.1:49173` |
 | OpenAPI | `http://127.0.0.1:49173/docs` |
+| MCP | `http://127.0.0.1:49173/mcp` |
 
 服务均配置 `restart: unless-stopped`。
 
@@ -41,6 +42,22 @@ CONTEXT_ROUTER_DEFAULT_AGENTS_PATH=/Users/conchi/workforce/.../AGENTS.md
 ```
 
 修改挂载路径或默认项目后需要重建容器。
+
+## PostgreSQL 与 migration
+
+在 `.env` 中配置宿主机 PostgreSQL：
+
+```text
+CONTEXT_ROUTER_DATABASE_URL=postgresql://USER:PASSWORD@host.docker.internal:5432/context_router
+```
+
+首次启动或 migration 变化后执行：
+
+```bash
+docker compose exec backend uv run alembic upgrade head
+```
+
+数据库保存 MCP task、read call 和单次调用内的文档顺序，不保存 Markdown 正文。数据库未配置时后端仍可启动，但 prepare/read MCP、卡片 JSON 预览和调用记录不可用。
 
 ## 服务管理
 
@@ -68,4 +85,3 @@ docker compose exec frontend npm run build
 ```
 
 `npm run build` 使用临时目录，不覆盖正在运行的 Next.js 开发缓存。
-

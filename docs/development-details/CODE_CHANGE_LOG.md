@@ -11,6 +11,18 @@
 
 ## 记录
 
+### 2026-07-20
+
+- 新增无状态 `read_context_document(task_id, requests)` MCP：一次读取最多 10 个完整 Markdown 或精确 ATX 章节，返回顺序与请求数组一致，并限制在 task 绑定项目的当前内存缓存内。
+- 新增 migration `20260720_0002`、`mcp_document_read_calls` 和 `mcp_document_read_items`；read_call_id 由 PostgreSQL identity 生成，单次顺序使用 position，不使用客户端 sequence 或任务锁，数据库不保存正文。
+- Projects 卡片新增“查看调用记录”，通过任务列表和读取历史 API 按 read_call_id、position 纵向展示多次调用；同次读取文档不绘制关系线。
+- 新增 Streamable HTTP MCP `/mcp` 和无状态 `prepare_task_context(task, cwd, agent_name?)`；按 cwd 最长前缀定位项目并返回完整文档树，不做 Top N 检索、排名或正文返回。
+- Markdown 映射刷新时安全解析 YAML Front Matter 的显式 title 和 summary；没有 summary 时省略字段，不从 H1、第一段或文件名兜底生成。
+- 引入宿主机 PostgreSQL 任务存储和 Alembic migration `20260720_0001`；`mcp_tasks.id` 作为服务端 task_id，由 identity 自动生成，不使用客户端序号或每任务锁。
+- 当前应用使用独立的 `agent_context_router_alembic_version` 版本表，避免覆盖复用数据库中已有的历史 `alembic_version` 链。
+- Projects 卡片新增“查看 MCP JSON”，通过 `POST /api/projects/{id}/prepare-preview` 复用同一个 prepare service，并以 JSON 弹层展示完整结果。
+- 后端服务端口限制为 `127.0.0.1:49173`，MCP 不接受任意文档路径，只访问已注册项目的当前内存缓存。
+
 ### 2026-07-19
 
 - 产品层改为 MCP-only，保留 FastAPI HTTP API 作为 MCP 与 Web 的内部实现；删除旧命令行入口、依赖、脚本和测试。

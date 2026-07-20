@@ -33,6 +33,17 @@
 6. 正文普通链接不参与层级映射。
 7. 文件缺失、格式错误和循环引用在树节点上显示错误。
 
+参与 MCP 全局认知的文档可以在文件开头显式声明：
+
+```markdown
+---
+title: 启动与开发规范
+summary: 说明项目前后端启动、测试、构建和 migration 的统一方式。
+---
+```
+
+title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 summary 的普通文档仍保留在树中。
+
 ## 内存缓存与刷新
 
 - 首次添加项目时立即递归读取所有文档。
@@ -49,10 +60,22 @@
 - 文档树使用全屏可拖动画布和矩形节点，从上到下展示层级；同一父节点的直接子节点每行最多显示 4 个，超出后换行向下延伸。
 - 点击节点后，通过独立详情抽屉展示 Markdown 标题、表格、列表、代码块和引用。
 - Markdown 渲染不执行原始 HTML 或脚本。
+- 项目卡片支持查看 MCP JSON，结果与 `prepare_task_context` 返回结构一致。
+- 项目卡片支持查看 MCP 调用记录；任务、读取调用和单次批量文档按实际顺序纵向展示，不绘制文档关系线。
+
+## MCP
+
+- 提供 `prepare_task_context(task, cwd, agent_name?)` 和 `read_context_document(task_id, requests)`。
+- 服务端按 cwd 最长前缀匹配项目，并返回完整文档树。
+- prepare 不搜索、不排名、不截断，也不返回正文。
+- 每次成功调用由 PostgreSQL 生成 task_id。
+- read 必须携带当前任务的 task_id，一次支持 1 到 10 个文档或精确章节，并保持请求数组顺序。
+- 每次 read 由 PostgreSQL 生成 read_call_id；客户端不传 sequence，服务端不使用任务锁。
+- 数据库记录读取顺序和状态，不保存 Markdown 正文。
 
 ## 非目标
 
 - 不实时监听文件变动。
-- 不做数据库持久化。
+- 不持久化项目配置、文档树或 Markdown 正文。
 - 不扫描没有被“下级文档”表格引用的 Markdown。
 - 不使用大模型解析文档层级。

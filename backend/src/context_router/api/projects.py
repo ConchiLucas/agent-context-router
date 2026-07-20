@@ -1,10 +1,15 @@
 from fastapi import APIRouter, HTTPException, Request, status
 
+from context_router.schemas.context import PrepareTaskContextResult
 from context_router.schemas.projects import (
     DocumentDetail,
     DocumentTreeNode,
     ProjectCreate,
     ProjectSummary,
+)
+from context_router.services.context_preparation import (
+    ContextPreparationError,
+    ContextPreparationService,
 )
 from context_router.services.project_registry import ProjectRegistry, ProjectRegistryError
 
@@ -13,6 +18,10 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 
 def _registry(request: Request) -> ProjectRegistry:
     return request.app.state.project_registry
+
+
+def _context_service(request: Request) -> ContextPreparationService:
+    return request.app.state.context_preparation_service
 
 
 def _http_error(exc: ProjectRegistryError) -> HTTPException:
@@ -49,6 +58,24 @@ def get_project_tree(project_id: str, request: Request) -> DocumentTreeNode:
         return _registry(request).get_tree(project_id)
     except ProjectRegistryError as exc:
         raise _http_error(exc) from exc
+
+
+@router.post(
+    "/{project_id}/prepare-preview",
+    response_model=PrepareTaskContextResult,
+    response_model_exclude_none=True,
+)
+def prepare_project_preview(
+    project_id: str,
+    request: Request,
+) -> PrepareTaskContextResult:
+    try:
+        return _context_service(request).prepare_for_project(project_id)
+    except ContextPreparationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
 
 
 @router.get(

@@ -1,6 +1,9 @@
 import type {
+  ContextTaskReadHistory,
+  ContextTaskSummary,
   DocumentDetail,
   DocumentTreeNode,
+  PrepareTaskContextResult,
   ProjectCreate,
   ProjectSummary,
 } from "@/lib/types";
@@ -57,3 +60,25 @@ export function getDocumentDetail(
   );
 }
 
+export function prepareProjectPreview(
+  projectId: string,
+): Promise<PrepareTaskContextResult> {
+  return request<PrepareTaskContextResult>(
+    `/api/projects/${projectId}/prepare-preview`,
+    { method: "POST" },
+  );
+}
+
+export function listProjectTasks(
+  projectId: string,
+): Promise<ContextTaskSummary[]> {
+  return request<ContextTaskSummary[]>(`/api/projects/${projectId}/tasks`);
+}
+
+export function getTaskDocumentReads(
+  taskId: number,
+): Promise<ContextTaskReadHistory> {
+  return request<ContextTaskReadHistory>(
+    `/api/tasks/${taskId}/document-reads`,
+  );
+}
