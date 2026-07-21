@@ -1,11 +1,13 @@
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 
 from context_router.schemas.context import PrepareTaskContextResult
 from context_router.schemas.projects import (
     DocumentDetail,
     DocumentTreeNode,
     ProjectCreate,
+    ProjectEnabledUpdate,
     ProjectSummary,
+    ProjectUpdate,
 )
 from context_router.services.context_preparation import (
     ContextPreparationError,
@@ -42,6 +44,46 @@ def create_project(payload: ProjectCreate, request: Request) -> ProjectSummary:
         )
     except ProjectRegistryError as exc:
         raise _http_error(exc) from exc
+
+
+@router.put("/{project_id}", response_model=ProjectSummary)
+def update_project(
+    project_id: str,
+    payload: ProjectUpdate,
+    request: Request,
+) -> ProjectSummary:
+    try:
+        return _registry(request).update_project(
+            project_id,
+            name=payload.name,
+            agents_path=payload.agents_path,
+        )
+    except ProjectRegistryError as exc:
+        raise _http_error(exc) from exc
+
+
+@router.patch("/{project_id}/enabled", response_model=ProjectSummary)
+def set_project_enabled(
+    project_id: str,
+    payload: ProjectEnabledUpdate,
+    request: Request,
+) -> ProjectSummary:
+    try:
+        return _registry(request).set_project_enabled(
+            project_id,
+            enabled=payload.enabled,
+        )
+    except ProjectRegistryError as exc:
+        raise _http_error(exc) from exc
+
+
+@router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_project(project_id: str, request: Request) -> Response:
+    try:
+        _registry(request).delete_project(project_id)
+    except ProjectRegistryError as exc:
+        raise _http_error(exc) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/{project_id}/refresh", response_model=ProjectSummary)

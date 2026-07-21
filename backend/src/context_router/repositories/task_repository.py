@@ -42,7 +42,13 @@ class TaskWriter(Protocol):
 class TaskReader(Protocol):
     def get_task(self, task_id: int) -> TaskRecord: ...
 
-    def list_tasks(self, project_key: str, *, limit: int = 30) -> list[TaskListRecord]: ...
+    def list_tasks(
+        self,
+        project_key: str,
+        *,
+        limit: int = 30,
+        include_system: bool = False,
+    ) -> list[TaskListRecord]: ...
 
 
 class TaskStore(TaskWriter, TaskReader, Protocol):
@@ -117,7 +123,13 @@ class PostgresTaskRepository:
             created_at=row[6],
         )
 
-    def list_tasks(self, project_key: str, *, limit: int = 30) -> list[TaskListRecord]:
+    def list_tasks(
+        self,
+        project_key: str,
+        *,
+        limit: int = 30,
+        include_system: bool = False,
+    ) -> list[TaskListRecord]:
         if not self._database_url:
             raise TaskRepositoryError("任务数据库尚未配置")
 
@@ -139,11 +151,12 @@ class PostgresTaskRepository:
                     LEFT JOIN mcp_document_read_calls AS read_call
                         ON read_call.task_id = task.id
                     WHERE task.project_key = %s
+                      AND (%s OR task.agent_name IS DISTINCT FROM 'connection-test')
                     GROUP BY task.id
                     ORDER BY task.id DESC
                     LIMIT %s
                     """,
-                    (project_key, safe_limit),
+                    (project_key, include_system, safe_limit),
                 ).fetchall()
         except psycopg.Error as exc:
             raise TaskRepositoryError("任务列表读取失败") from exc

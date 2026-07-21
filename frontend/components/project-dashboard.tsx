@@ -13,8 +13,10 @@ import type {
 
 import { DocumentTree } from "@/components/document-tree";
 import { MarkdownViewer } from "@/components/markdown-viewer";
+import { McpIntegrationPanel } from "@/components/mcp-integration-panel";
 import {
   createProject,
+  deleteProject,
   getDocumentDetail,
   getProjectTree,
   getTaskDocumentReads,
@@ -22,6 +24,8 @@ import {
   listProjectTasks,
   prepareProjectPreview,
   refreshProject,
+  setProjectEnabled,
+  updateProject,
 } from "@/lib/api";
 import {
   buildDocumentCallNumbers,
@@ -52,6 +56,17 @@ export function ProjectDashboard() {
   const [detail, setDetail] = useState<DocumentDetail | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [showMcpIntegration, setShowMcpIntegration] = useState(false);
+  const [editingProject, setEditingProject] = useState<ProjectSummary | null>(
+    null,
+  );
+  const [editName, setEditName] = useState("");
+  const [editAgentsPath, setEditAgentsPath] = useState("");
+  const [deletingProject, setDeletingProject] =
+    useState<ProjectSummary | null>(null);
+  const [actionsProject, setActionsProject] = useState<ProjectSummary | null>(
+    null,
+  );
   const [name, setName] = useState("");
   const [agentsPath, setAgentsPath] = useState("");
   const [loading, setLoading] = useState(true);
@@ -273,6 +288,75 @@ export function ProjectDashboard() {
     }
   }
 
+  function startEditingProject(project: ProjectSummary) {
+    setEditingProject(project);
+    setEditName(project.name);
+    setEditAgentsPath(project.agents_path);
+  }
+
+  async function submitProjectUpdate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingProject) return;
+    setBusyProjectId(editingProject.id);
+    try {
+      const updated = await updateProject(editingProject.id, {
+        name: editName.trim(),
+        agents_path: editAgentsPath.trim(),
+      });
+      setProjects((current) =>
+        current.map((project) =>
+          project.id === updated.id ? updated : project,
+        ),
+      );
+      if (activeProject?.id === updated.id) closeTree();
+      if (historyProject?.id === updated.id) closeTaskHistory();
+      setEditingProject(null);
+      setError(null);
+    } catch (requestError) {
+      setError((requestError as Error).message);
+    } finally {
+      setBusyProjectId(null);
+    }
+  }
+
+  async function toggleProject(project: ProjectSummary) {
+    setBusyProjectId(project.id);
+    try {
+      const updated = await setProjectEnabled(project.id, !project.enabled);
+      setProjects((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item)),
+      );
+      if (!updated.enabled && activeProject?.id === updated.id) closeTree();
+      if (!updated.enabled && historyProject?.id === updated.id) {
+        closeTaskHistory();
+      }
+      setError(null);
+    } catch (requestError) {
+      setError((requestError as Error).message);
+    } finally {
+      setBusyProjectId(null);
+    }
+  }
+
+  async function confirmProjectDeletion() {
+    if (!deletingProject) return;
+    setBusyProjectId(deletingProject.id);
+    try {
+      await deleteProject(deletingProject.id);
+      setProjects((current) =>
+        current.filter((project) => project.id !== deletingProject.id),
+      );
+      if (activeProject?.id === deletingProject.id) closeTree();
+      if (historyProject?.id === deletingProject.id) closeTaskHistory();
+      setDeletingProject(null);
+      setError(null);
+    } catch (requestError) {
+      setError((requestError as Error).message);
+    } finally {
+      setBusyProjectId(null);
+    }
+  }
+
   function closeTree() {
     setActiveProject(null);
     setTree(null);
@@ -385,6 +469,13 @@ export function ProjectDashboard() {
       <div className="page-actions">
         <button
           type="button"
+          className="secondary-button"
+          onClick={() => setShowMcpIntegration(true)}
+        >
+          MCP 接入
+        </button>
+        <button
+          type="button"
           className="primary-button"
           onClick={() => setShowCreate((visible) => !visible)}
         >
@@ -439,13 +530,25 @@ export function ProjectDashboard() {
 
       <section className="project-grid" aria-label="文档项目列表">
         {projects.map((project) => (
-          <article className="project-card" key={project.id}>
+          <article
+            className="project-card"
+            data-enabled={project.enabled}
+            key={project.id}
+          >
             <div className="project-card-heading">
               <div>
                 <span className="file-chip">AGENTS.md</span>
                 <h2>{project.name}</h2>
               </div>
-              <span className="node-count">{project.node_count} 个节点</span>
+              <div className="project-card-statuses">
+                <span
+                  className="project-status-chip"
+                  data-enabled={project.enabled}
+                >
+                  {project.enabled ? "已启用" : "已停用"}
+                </span>
+                <span className="node-count">{project.node_count} 个节点</span>
+              </div>
             </div>
             <code className="project-path">{project.agents_path}</code>
             <p className="refresh-time">
@@ -457,33 +560,22 @@ export function ProjectDashboard() {
                 type="button"
                 className="secondary-button"
                 disabled={busyProjectId === project.id}
-                onClick={() => void refresh(project)}
+                onClick={() => setActionsProject(project)}
               >
-                刷新映射
+                更多操作
               </button>
               <button
                 type="button"
                 className="secondary-button"
-                disabled={busyProjectId === project.id}
+                disabled={busyProjectId === project.id || !project.enabled}
                 onClick={() => void showTaskHistory(project)}
               >
                 查看调用记录
               </button>
               <button
                 type="button"
-                className="secondary-button"
-                disabled={busyProjectId === project.id}
-                onClick={() => void showMcpPreview(project)}
-              >
-                {busyProjectId === project.id &&
-                mcpPreviewProject?.id === project.id
-                  ? "正在生成…"
-                  : "查看 MCP JSON"}
-              </button>
-              <button
-                type="button"
                 className="primary-button"
-                disabled={busyProjectId === project.id}
+                disabled={busyProjectId === project.id || !project.enabled}
                 onClick={() => void loadTree(project)}
               >
                 {busyProjectId === project.id ? "正在读取…" : "查看文档树"}
@@ -492,6 +584,195 @@ export function ProjectDashboard() {
           </article>
         ))}
       </section>
+
+      {showMcpIntegration ? (
+        <McpIntegrationPanel
+          projects={projects}
+          onClose={() => setShowMcpIntegration(false)}
+        />
+      ) : null}
+
+      {actionsProject ? (
+        <div className="project-settings-modal" role="presentation">
+          <section
+            className="project-actions-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`更多操作 ${actionsProject.name}`}
+          >
+            <header>
+              <div>
+                <span className="file-chip">项目操作</span>
+                <h2>{actionsProject.name}</h2>
+                <code>{actionsProject.agents_path}</code>
+              </div>
+              <button
+                type="button"
+                className="close-button"
+                aria-label="关闭更多操作"
+                onClick={() => setActionsProject(null)}
+              >
+                ×
+              </button>
+            </header>
+            <div className="project-actions-grid">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  setActionsProject(null);
+                  startEditingProject(actionsProject);
+                }}
+              >
+                编辑项目
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={busyProjectId === actionsProject.id}
+                onClick={() => {
+                  setActionsProject(null);
+                  void toggleProject(actionsProject);
+                }}
+              >
+                {actionsProject.enabled ? "停用项目" : "启用项目"}
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={
+                  busyProjectId === actionsProject.id || !actionsProject.enabled
+                }
+                onClick={() => {
+                  setActionsProject(null);
+                  void refresh(actionsProject);
+                }}
+              >
+                刷新映射
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={
+                  busyProjectId === actionsProject.id || !actionsProject.enabled
+                }
+                onClick={() => {
+                  setActionsProject(null);
+                  void showMcpPreview(actionsProject);
+                }}
+              >
+                查看 MCP JSON
+              </button>
+              <button
+                type="button"
+                className="danger-button project-actions-delete"
+                disabled={busyProjectId === actionsProject.id}
+                onClick={() => {
+                  setActionsProject(null);
+                  setDeletingProject(actionsProject);
+                }}
+              >
+                删除项目
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {editingProject ? (
+        <div className="project-settings-modal" role="presentation">
+          <form
+            className="project-settings-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`编辑项目 ${editingProject.name}`}
+            onSubmit={submitProjectUpdate}
+          >
+            <header>
+              <div>
+                <span className="file-chip">项目配置</span>
+                <h2>编辑项目</h2>
+                <p>保存前会重新读取 AGENTS.md 并验证完整文档树。</p>
+              </div>
+              <button
+                type="button"
+                className="close-button"
+                aria-label="关闭项目编辑"
+                onClick={() => setEditingProject(null)}
+              >
+                ×
+              </button>
+            </header>
+            <label>
+              项目名称
+              <input
+                value={editName}
+                required
+                onChange={(event) => setEditName(event.target.value)}
+              />
+            </label>
+            <label>
+              AGENTS.md 绝对路径
+              <input
+                value={editAgentsPath}
+                required
+                onChange={(event) => setEditAgentsPath(event.target.value)}
+              />
+            </label>
+            <footer>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setEditingProject(null)}
+              >
+                取消
+              </button>
+              <button
+                type="submit"
+                className="primary-button"
+                disabled={busyProjectId === editingProject.id}
+              >
+                {busyProjectId === editingProject.id ? "正在验证…" : "保存配置"}
+              </button>
+            </footer>
+          </form>
+        </div>
+      ) : null}
+
+      {deletingProject ? (
+        <div className="project-settings-modal" role="presentation">
+          <section
+            className="project-delete-panel"
+            role="alertdialog"
+            aria-modal="true"
+            aria-label={`删除项目 ${deletingProject.name}`}
+          >
+            <span className="file-chip">删除项目配置</span>
+            <h2>确定删除“{deletingProject.name}”吗？</h2>
+            <p>
+              只删除 Context Router 中保存的项目配置，不会删除磁盘上的 AGENTS.md、文档或历史 MCP 调用记录。
+              如果这个路径仍由默认项目环境变量声明，后端下次启动时会重新创建它。
+            </p>
+            <footer>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setDeletingProject(null)}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="danger-button"
+                disabled={busyProjectId === deletingProject.id}
+                onClick={() => void confirmProjectDeletion()}
+              >
+                {busyProjectId === deletingProject.id ? "正在删除…" : "确认删除"}
+              </button>
+            </footer>
+          </section>
+        </div>
+      ) : null}
 
       {mcpPreviewProject ? (
         <div className="mcp-json-modal" role="presentation">

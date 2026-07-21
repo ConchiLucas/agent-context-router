@@ -42,7 +42,7 @@ CONTEXT_ROUTER_DEFAULT_AGENTS_PATH=/absolute/workspace/root/project/AGENTS.md
 CONTEXT_ROUTER_DATABASE_URL=postgresql://USER:PASSWORD@host.docker.internal:5432/context_router
 ```
 
-页面也可以临时添加多个项目。当前版本的项目配置、文档树和 Markdown 内容都保存在后端进程内；后端重启后，页面临时添加的项目会清空，环境变量配置的默认项目会重新加载。
+页面可以长期维护多个项目。项目名称、AGENTS.md 路径和启停状态保存在 PostgreSQL；后端重启时从数据库恢复配置并重新构建内存文档树。Markdown 内容仍只从本地磁盘读取，不写入数据库。
 
 ## MCP 工具
 

@@ -3,9 +3,12 @@ import type {
   ContextTaskSummary,
   DocumentDetail,
   DocumentTreeNode,
+  McpIntegrationInfo,
+  McpIntegrationTestResult,
   PrepareTaskContextResult,
   ProjectCreate,
   ProjectSummary,
+  ProjectUpdate,
 } from "@/lib/types";
 
 const API_URL =
@@ -27,6 +30,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(payload?.detail ?? `请求失败（${response.status}）`);
   }
 
+  if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
 
@@ -45,6 +49,30 @@ export function refreshProject(projectId: string): Promise<ProjectSummary> {
   return request<ProjectSummary>(`/api/projects/${projectId}/refresh`, {
     method: "POST",
   });
+}
+
+export function updateProject(
+  projectId: string,
+  payload: ProjectUpdate,
+): Promise<ProjectSummary> {
+  return request<ProjectSummary>(`/api/projects/${projectId}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function setProjectEnabled(
+  projectId: string,
+  enabled: boolean,
+): Promise<ProjectSummary> {
+  return request<ProjectSummary>(`/api/projects/${projectId}/enabled`, {
+    method: "PATCH",
+    body: JSON.stringify({ enabled }),
+  });
+}
+
+export async function deleteProject(projectId: string): Promise<void> {
+  await request<unknown>(`/api/projects/${projectId}`, { method: "DELETE" });
 }
 
 export function getProjectTree(projectId: string): Promise<DocumentTreeNode> {
@@ -81,4 +109,17 @@ export function getTaskDocumentReads(
   return request<ContextTaskReadHistory>(
     `/api/tasks/${taskId}/document-reads`,
   );
+}
+
+export function getMcpIntegration(): Promise<McpIntegrationInfo> {
+  return request<McpIntegrationInfo>("/api/mcp/integration");
+}
+
+export function runMcpIntegrationTest(
+  projectId: string,
+): Promise<McpIntegrationTestResult> {
+  return request<McpIntegrationTestResult>("/api/mcp/integration/tests", {
+    method: "POST",
+    body: JSON.stringify({ project_id: projectId }),
+  });
 }

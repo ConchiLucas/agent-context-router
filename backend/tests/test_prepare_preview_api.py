@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from context_router.config import Settings
 from context_router.main import create_app
+from context_router.repositories.project_repository import InMemoryProjectRepository
 
 
 class FakeTaskRepository:
@@ -39,6 +40,7 @@ summary: 项目导航。
             default_agents_path=None,
         ),
         task_repository=FakeTaskRepository(),
+        project_repository=InMemoryProjectRepository(),
     )
 
     with TestClient(app) as client:

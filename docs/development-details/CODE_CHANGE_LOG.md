@@ -13,6 +13,13 @@
 
 ### 2026-07-21
 
+- 收敛 Projects 卡片操作区，只保留“更多操作”“查看调用记录”“查看文档树”三个入口；编辑、停用/启用、刷新映射、查看 MCP JSON 和删除移入独立操作弹窗。
+- 新增 migration `20260721_0003` 和 `document_projects` 表，持久化稳定项目 ID、名称、AGENTS.md 路径与启停状态；后端启动时恢复配置并为启用项目从磁盘重建内存树。
+- 项目 API 和卡片新增编辑、停用/启用、删除能力；编辑或启用先验证完整文档树再写入数据库，路径失效的持久化项目仍保留错误卡片，停用项目不参与 MCP cwd 匹配。
+- 默认环境变量项目首次启动时写入项目表；数据库或 migration 暂不可用时保留内存默认项目作为启动降级，不持久化文档树和 Markdown 正文。
+- 新增全局“MCP 接入与测试”面板，提供连接信息、Codex TOML、Antigravity JSON 和端到端连接测试四个 Tab；客户端配置由公开 MCP URL 动态生成并支持复制。
+- 新增 `GET /api/mcp/integration` 与 `POST /api/mcp/integration/tests`；测试通过 MCP Streamable HTTP Client 真实执行 PostgreSQL、initialize、tools/list、项目匹配、prepare 和入口 read 六阶段，只返回阶段元数据，不暴露连接串或 Markdown 正文。
+- 接入测试任务统一使用 `connection-test` Agent，普通项目任务列表默认过滤系统测试记录，`include_system=true` 可显式包含；本次无数据库 migration。
 - 调用列表改为按 MCP read call 逐行布局，同一次批量读取的多个文档卡片横向并排，跨批次全局读取顺序角标保持不变。
 - 调用记录弹窗新增“文档树 / 调用列表”Tab；树视图复用完整文档层级并按 MCP read call 批次在被读取节点右上角标号，未读取节点继续展示，同一文档支持多个批次角标；原全局读取顺序列表保留。
 - 调用记录弹窗改为与文档树一致的全屏网格画布；保留任务切换，并把多次 read 及单次批量 position 展开为全局步骤，在每张文档卡片右上角显示 `1、2、3…` 顺序角标。

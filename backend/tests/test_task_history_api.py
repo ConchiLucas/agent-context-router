@@ -10,6 +10,7 @@ from context_router.repositories.document_read_repository import (
     DocumentReadItemRecord,
     DocumentReadItemWrite,
 )
+from context_router.repositories.project_repository import InMemoryProjectRepository
 from context_router.repositories.task_repository import TaskListRecord, TaskRecord
 
 
@@ -34,9 +35,16 @@ class FakeTaskStore:
             created_at=self.created_at,
         )
 
-    def list_tasks(self, project_key: str, *, limit: int = 30) -> list[TaskListRecord]:
+    def list_tasks(
+        self,
+        project_key: str,
+        *,
+        limit: int = 30,
+        include_system: bool = False,
+    ) -> list[TaskListRecord]:
         assert project_key == self.project_key
         assert limit == 30
+        assert include_system is False
         task = self.get_task(12)
         return [
             TaskListRecord(
@@ -100,6 +108,7 @@ def test_lists_project_tasks_and_ordered_read_history(tmp_path: Path) -> None:
         ),
         task_repository=task_store,
         document_read_repository=read_store,
+        project_repository=InMemoryProjectRepository(),
     )
 
     with TestClient(app) as client:

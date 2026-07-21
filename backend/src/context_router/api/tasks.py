@@ -44,10 +44,15 @@ def list_project_tasks(
     project_id: str,
     request: Request,
     limit: int = Query(default=30, ge=1, le=100),
+    include_system: bool = Query(default=False),
 ) -> list[ContextTaskSummary]:
     try:
         project = _registry(request).get_snapshot(project_id)
-        records = _task_repository(request).list_tasks(project.project_key, limit=limit)
+        records = _task_repository(request).list_tasks(
+            project.project_key,
+            limit=limit,
+            include_system=include_system,
+        )
     except (ProjectRegistryError, TaskRepositoryError) as exc:
         raise _bad_request(str(exc)) from exc
 

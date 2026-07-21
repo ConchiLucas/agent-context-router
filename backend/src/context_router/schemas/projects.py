@@ -8,10 +8,20 @@ class ProjectCreate(BaseModel):
     agents_path: str = Field(min_length=1)
 
 
+class ProjectUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    agents_path: str = Field(min_length=1)
+
+
+class ProjectEnabledUpdate(BaseModel):
+    enabled: bool
+
+
 class ProjectSummary(BaseModel):
     id: str
     name: str
     agents_path: str
+    enabled: bool
     node_count: int
     refreshed_at: datetime | None
     error: str | None

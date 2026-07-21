@@ -16,30 +16,41 @@ from context_router.services.context_preparation import (
     ContextPreparationService,
 )
 
+MCP_SERVER_NAME = "Context Router"
+MCP_SERVER_INSTRUCTIONS = (
+    "Call prepare_task_context once at the start of a new project task. Preserve the "
+    "returned task_id and pass it to every read_context_document call for that task. "
+    "Call prepare again for a new conversation when no task_id is available."
+)
+PREPARE_TOOL_NAME = "prepare_task_context"
+PREPARE_TOOL_DESCRIPTION = (
+    "Locate the registered project for cwd, create a server-side task number, and "
+    "return its complete document tree. Summaries are only returned when explicitly "
+    "declared in Markdown Front Matter."
+)
+READ_TOOL_NAME = "read_context_document"
+READ_TOOL_DESCRIPTION = (
+    "Read one or more Markdown documents or exact ATX-heading sections from the project "
+    "selected by prepare_task_context. task_id must be the value returned for the current "
+    "task. Results preserve request order and every call is recorded server-side."
+)
+
 
 def create_context_router_mcp(
     preparation_service: ContextPreparationService,
     document_read_service: ContextDocumentReadService,
 ) -> FastMCP:
     server = FastMCP(
-        name="Context Router",
-        instructions=(
-            "Call prepare_task_context once at the start of a new project task. Preserve the "
-            "returned task_id and pass it to every read_context_document call for that task. "
-            "Call prepare again for a new conversation when no task_id is available."
-        ),
+        name=MCP_SERVER_NAME,
+        instructions=MCP_SERVER_INSTRUCTIONS,
         streamable_http_path="/",
         stateless_http=True,
         json_response=True,
     )
 
     @server.tool(
-        name="prepare_task_context",
-        description=(
-            "Locate the registered project for cwd, create a server-side task number, and "
-            "return its complete document tree. Summaries are only returned when explicitly "
-            "declared in Markdown Front Matter."
-        ),
+        name=PREPARE_TOOL_NAME,
+        description=PREPARE_TOOL_DESCRIPTION,
     )
     def prepare_task_context(
         task: Annotated[str, Field(min_length=1, max_length=4000)],
@@ -53,12 +64,8 @@ def create_context_router_mcp(
         return result.model_dump(exclude_none=True)
 
     @server.tool(
-        name="read_context_document",
-        description=(
-            "Read one or more Markdown documents or exact ATX-heading sections from the project "
-            "selected by prepare_task_context. task_id must be the value returned for the current "
-            "task. Results preserve request order and every call is recorded server-side."
-        ),
+        name=READ_TOOL_NAME,
+        description=READ_TOOL_DESCRIPTION,
     )
     def read_context_document(
         task_id: Annotated[int, Field(ge=1)],
