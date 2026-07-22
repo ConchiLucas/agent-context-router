@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from context_router.config import Settings
 from context_router.repositories.project_repository import (
+    DEFAULT_PROJECT_TYPE,
     ProjectRepositoryError,
     ProjectStore,
 )
@@ -32,6 +33,7 @@ class ProjectRegistryError(ValueError):
 class ProjectState:
     id: str
     name: str
+    project_type: str
     agents_path: str
     resolved_agents_path: Path
     enabled: bool = True
@@ -123,6 +125,7 @@ class ProjectRegistry:
         return ProjectSummary(
             id=project.id,
             name=project.name,
+            project_type=project.project_type,
             agents_path=project.agents_path,
             enabled=project.enabled,
             node_count=len(project.cache.documents) if project.cache else 0,
@@ -161,6 +164,7 @@ class ProjectRegistry:
             restored[record.id] = ProjectState(
                 id=record.id,
                 name=record.name,
+                project_type=record.project_type,
                 agents_path=record.agents_path,
                 resolved_agents_path=resolved_path,
                 enabled=record.enabled,
@@ -185,13 +189,17 @@ class ProjectRegistry:
         self,
         *,
         name: str,
+        project_type: str = DEFAULT_PROJECT_TYPE,
         agents_path: str,
         persist: bool = True,
     ) -> ProjectSummary:
         normalized_name = name.strip()
+        normalized_type = project_type.strip()
         normalized_path = agents_path.strip()
         if not normalized_name:
             raise ProjectRegistryError("项目名称不能为空")
+        if not normalized_type:
+            raise ProjectRegistryError("项目类型不能为空")
 
         resolved_path = self._resolve_agents_path(normalized_path)
         try:
@@ -211,6 +219,7 @@ class ProjectRegistry:
                 self._project_repository.create_project(
                     project_id=project_id,
                     name=normalized_name,
+                    project_type=normalized_type,
                     agents_path=normalized_path,
                     enabled=True,
                 )
@@ -221,6 +230,7 @@ class ProjectRegistry:
             project = ProjectState(
                 id=project_id,
                 name=normalized_name,
+                project_type=normalized_type,
                 agents_path=normalized_path,
                 resolved_agents_path=resolved_path,
                 cache=new_cache,
@@ -234,12 +244,16 @@ class ProjectRegistry:
         project_id: str,
         *,
         name: str,
+        project_type: str | None = None,
         agents_path: str,
     ) -> ProjectSummary:
         normalized_name = name.strip()
+        normalized_type = project_type.strip() if project_type is not None else None
         normalized_path = agents_path.strip()
         if not normalized_name:
             raise ProjectRegistryError("项目名称不能为空")
+        if normalized_type == "":
+            raise ProjectRegistryError("项目类型不能为空")
         resolved_path = self._resolve_agents_path(normalized_path)
         try:
             new_cache = build_document_cache(resolved_path)
@@ -250,6 +264,7 @@ class ProjectRegistry:
             project = self._projects.get(project_id)
             if project is None:
                 raise ProjectRegistryError("项目不存在")
+            resolved_type = normalized_type or project.project_type
             if any(
                 item.id != project_id and item.resolved_agents_path == resolved_path
                 for item in self._projects.values()
@@ -261,6 +276,7 @@ class ProjectRegistry:
                 self._project_repository.update_project(
                     project_id,
                     name=normalized_name,
+                    project_type=resolved_type,
                     agents_path=normalized_path,
                 )
             except ProjectRepositoryError as exc:
@@ -268,6 +284,7 @@ class ProjectRegistry:
 
         with self._lock:
             project.name = normalized_name
+            project.project_type = resolved_type
             project.agents_path = normalized_path
             project.resolved_agents_path = resolved_path
             project.cache = new_cache if project.enabled else None

@@ -9,6 +9,15 @@ import type {
   ProjectCreate,
   ProjectSummary,
   ProjectUpdate,
+  DataSourceDatabasePayload,
+  DataSourceDatabaseSyncResult,
+  DataSourceDatabaseSummary,
+  DataSourcePasswordReveal,
+  DataSourcePayload,
+  DataSourceSummary,
+  ProjectDatabaseLinkPayload,
+  ProjectDatabaseLinkSummary,
+  ProjectDataSourceOptions,
 } from "@/lib/types";
 
 const API_URL =
@@ -122,4 +131,136 @@ export function runMcpIntegrationTest(
     method: "POST",
     body: JSON.stringify({ project_id: projectId }),
   });
+}
+
+export function listDataSources(): Promise<DataSourceSummary[]> {
+  return request<DataSourceSummary[]>("/api/data-sources");
+}
+
+export function createDataSource(
+  payload: DataSourcePayload,
+): Promise<DataSourceSummary> {
+  return request<DataSourceSummary>("/api/data-sources", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateDataSource(
+  dataSourceId: string,
+  payload: DataSourcePayload,
+): Promise<DataSourceSummary> {
+  return request<DataSourceSummary>(`/api/data-sources/${dataSourceId}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteDataSource(dataSourceId: string): Promise<void> {
+  await request<unknown>(`/api/data-sources/${dataSourceId}`, {
+    method: "DELETE",
+  });
+}
+
+export function revealDataSourcePassword(
+  dataSourceId: string,
+): Promise<DataSourcePasswordReveal> {
+  return request<DataSourcePasswordReveal>(
+    `/api/data-sources/${dataSourceId}/reveal-password`,
+    { method: "POST", cache: "no-store" },
+  );
+}
+
+export function listDataSourceDatabases(
+  dataSourceId: string,
+): Promise<DataSourceDatabaseSummary[]> {
+  return request<DataSourceDatabaseSummary[]>(
+    `/api/data-sources/${dataSourceId}/databases`,
+  );
+}
+
+export function syncDataSourceDatabases(
+  dataSourceId: string,
+): Promise<DataSourceDatabaseSyncResult> {
+  return request<DataSourceDatabaseSyncResult>(
+    `/api/data-sources/${dataSourceId}/databases/sync`,
+    { method: "POST" },
+  );
+}
+
+export function createDataSourceDatabase(
+  dataSourceId: string,
+  payload: DataSourceDatabasePayload,
+): Promise<DataSourceDatabaseSummary> {
+  return request<DataSourceDatabaseSummary>(
+    `/api/data-sources/${dataSourceId}/databases`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
+export function updateDataSourceDatabase(
+  dataSourceId: string,
+  databaseId: string,
+  payload: DataSourceDatabasePayload,
+): Promise<DataSourceDatabaseSummary> {
+  return request<DataSourceDatabaseSummary>(
+    `/api/data-sources/${dataSourceId}/databases/${databaseId}`,
+    { method: "PUT", body: JSON.stringify(payload) },
+  );
+}
+
+export async function deleteDataSourceDatabase(
+  dataSourceId: string,
+  databaseId: string,
+): Promise<void> {
+  await request<unknown>(
+    `/api/data-sources/${dataSourceId}/databases/${databaseId}`,
+    { method: "DELETE" },
+  );
+}
+
+export function listDatabaseProjects(
+  databaseId: string,
+): Promise<ProjectDatabaseLinkSummary[]> {
+  return request<ProjectDatabaseLinkSummary[]>(
+    `/api/data-sources/databases/${databaseId}/projects`,
+  );
+}
+
+export function getProjectDataSourceOptions(
+  projectId: string,
+): Promise<ProjectDataSourceOptions> {
+  return request<ProjectDataSourceOptions>(
+    `/api/projects/${projectId}/data-source-options`,
+  );
+}
+
+export function replaceProjectDatabases(
+  projectId: string,
+  databaseIds: string[],
+): Promise<ProjectDataSourceOptions> {
+  return request<ProjectDataSourceOptions>(`/api/projects/${projectId}/databases`, {
+    method: "PUT",
+    body: JSON.stringify({ database_ids: databaseIds }),
+  });
+}
+
+export function createDatabaseProjectLink(
+  databaseId: string,
+  payload: ProjectDatabaseLinkPayload,
+): Promise<ProjectDatabaseLinkSummary> {
+  return request<ProjectDatabaseLinkSummary>(
+    `/api/data-sources/databases/${databaseId}/projects`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
+export async function deleteDatabaseProjectLink(
+  databaseId: string,
+  linkId: string,
+): Promise<void> {
+  await request<unknown>(
+    `/api/data-sources/databases/${databaseId}/projects/${linkId}`,
+    { method: "DELETE" },
+  );
 }

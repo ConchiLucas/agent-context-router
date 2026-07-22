@@ -18,12 +18,14 @@ import {
   createProject,
   deleteProject,
   getDocumentDetail,
+  getProjectDataSourceOptions,
   getProjectTree,
   getTaskDocumentReads,
   listProjects,
   listProjectTasks,
   prepareProjectPreview,
   refreshProject,
+  replaceProjectDatabases,
   setProjectEnabled,
   updateProject,
 } from "@/lib/api";
@@ -38,8 +40,13 @@ import type {
   DocumentDetail,
   DocumentTreeNode,
   PrepareTaskContextResult,
+  ProjectDataSourceOptions,
   ProjectSummary,
 } from "@/lib/types";
+
+const ALL_PROJECT_TYPES = "__all__";
+const ALL_DATA_SOURCE_CATEGORIES = "__all__";
+const DEFAULT_PROJECT_TYPE = "公司项目";
 
 function formattedTime(value: string | null): string {
   if (!value) return "尚未刷新";
@@ -99,6 +106,8 @@ function DocumentDetailDrawer({
 
 export function ProjectDashboard() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [selectedProjectType, setSelectedProjectType] =
+    useState(ALL_PROJECT_TYPES);
   const [activeProject, setActiveProject] = useState<ProjectSummary | null>(null);
   const [tree, setTree] = useState<DocumentTreeNode | null>(null);
   const [detail, setDetail] = useState<DocumentDetail | null>(null);
@@ -109,13 +118,30 @@ export function ProjectDashboard() {
     null,
   );
   const [editName, setEditName] = useState("");
+  const [editProjectType, setEditProjectType] = useState("");
   const [editAgentsPath, setEditAgentsPath] = useState("");
   const [deletingProject, setDeletingProject] =
     useState<ProjectSummary | null>(null);
   const [actionsProject, setActionsProject] = useState<ProjectSummary | null>(
     null,
   );
+  const [dataSourceProject, setDataSourceProject] =
+    useState<ProjectSummary | null>(null);
+  const [dataSourceOptions, setDataSourceOptions] =
+    useState<ProjectDataSourceOptions | null>(null);
+  const [selectedDatabaseIds, setSelectedDatabaseIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [selectedDataSourceCategory, setSelectedDataSourceCategory] = useState(
+    ALL_DATA_SOURCE_CATEGORIES,
+  );
+  const [activeDataSourceId, setActiveDataSourceId] = useState<string | null>(
+    null,
+  );
+  const [dataSourceAccessLoading, setDataSourceAccessLoading] = useState(false);
+  const [dataSourceAccessSaving, setDataSourceAccessSaving] = useState(false);
   const [name, setName] = useState("");
+  const [projectType, setProjectType] = useState(DEFAULT_PROJECT_TYPE);
   const [agentsPath, setAgentsPath] = useState("");
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -170,6 +196,15 @@ export function ProjectDashboard() {
   useEffect(() => {
     void loadProjects();
   }, [loadProjects]);
+
+  useEffect(() => {
+    if (
+      selectedProjectType !== ALL_PROJECT_TYPES &&
+      !projects.some((project) => project.project_type === selectedProjectType)
+    ) {
+      setSelectedProjectType(ALL_PROJECT_TYPES);
+    }
+  }, [projects, selectedProjectType]);
 
   useEffect(() => {
     if (!activeProject || !tree) return;
@@ -273,6 +308,115 @@ export function ProjectDashboard() {
     }
   }
 
+  async function openProjectDataSources(project: ProjectSummary) {
+    setDataSourceProject(project);
+    setDataSourceOptions(null);
+    setSelectedDatabaseIds(new Set());
+    setSelectedDataSourceCategory(ALL_DATA_SOURCE_CATEGORIES);
+    setActiveDataSourceId(null);
+    setDataSourceAccessLoading(true);
+    try {
+      const options = await getProjectDataSourceOptions(project.id);
+      const selectedIds = new Set(
+        options.sources.flatMap((source) =>
+          source.databases
+            .filter((database) => database.selected)
+            .map((database) => database.id),
+        ),
+      );
+      const initialSource =
+        options.sources.find((source) =>
+          source.databases.some((database) => selectedIds.has(database.id)),
+        ) ?? options.sources[0];
+      setDataSourceOptions(options);
+      setSelectedDatabaseIds(selectedIds);
+      setActiveDataSourceId(initialSource?.id ?? null);
+      setError(null);
+    } catch (requestError) {
+      setDataSourceProject(null);
+      setError((requestError as Error).message);
+    } finally {
+      setDataSourceAccessLoading(false);
+    }
+  }
+
+  function closeProjectDataSources() {
+    if (dataSourceAccessSaving) return;
+    setDataSourceProject(null);
+    setDataSourceOptions(null);
+    setSelectedDatabaseIds(new Set());
+    setSelectedDataSourceCategory(ALL_DATA_SOURCE_CATEGORIES);
+    setActiveDataSourceId(null);
+  }
+
+  function selectDataSourceCategory(category: string) {
+    setSelectedDataSourceCategory(category);
+    if (!dataSourceOptions) return;
+    const visibleSources =
+      category === ALL_DATA_SOURCE_CATEGORIES
+        ? dataSourceOptions.sources
+        : dataSourceOptions.sources.filter(
+            (source) => source.category === category,
+          );
+    if (!visibleSources.some((source) => source.id === activeDataSourceId)) {
+      setActiveDataSourceId(visibleSources[0]?.id ?? null);
+    }
+  }
+
+  function toggleProjectDatabase(databaseId: string) {
+    setSelectedDatabaseIds((current) => {
+      const next = new Set(current);
+      if (next.has(databaseId)) next.delete(databaseId);
+      else next.add(databaseId);
+      return next;
+    });
+  }
+
+  function selectAllSourceDatabases(sourceId: string) {
+    if (!dataSourceOptions) return;
+    const source = dataSourceOptions.sources.find((item) => item.id === sourceId);
+    if (!source?.enabled) return;
+    setSelectedDatabaseIds((current) => {
+      const next = new Set(current);
+      source.databases.forEach((database) => {
+        if (database.available) next.add(database.id);
+      });
+      return next;
+    });
+  }
+
+  function clearSourceDatabases(sourceId: string) {
+    if (!dataSourceOptions) return;
+    const source = dataSourceOptions.sources.find((item) => item.id === sourceId);
+    if (!source) return;
+    setSelectedDatabaseIds((current) => {
+      const next = new Set(current);
+      source.databases.forEach((database) => next.delete(database.id));
+      return next;
+    });
+  }
+
+  async function saveProjectDataSources() {
+    if (!dataSourceProject) return;
+    setDataSourceAccessSaving(true);
+    try {
+      await replaceProjectDatabases(
+        dataSourceProject.id,
+        Array.from(selectedDatabaseIds),
+      );
+      setError(null);
+      setDataSourceProject(null);
+      setDataSourceOptions(null);
+      setSelectedDatabaseIds(new Set());
+      setSelectedDataSourceCategory(ALL_DATA_SOURCE_CATEGORIES);
+      setActiveDataSourceId(null);
+    } catch (requestError) {
+      setError((requestError as Error).message);
+    } finally {
+      setDataSourceAccessSaving(false);
+    }
+  }
+
   async function selectHistoryTask(taskId: number) {
     setSelectedHistoryTaskId(taskId);
     setHistoryLoading(true);
@@ -327,11 +471,14 @@ export function ProjectDashboard() {
     try {
       const project = await createProject({
         name: name.trim(),
+        project_type: projectType.trim(),
         agents_path: agentsPath.trim(),
       });
       setProjects((current) => [...current, project]);
       setName("");
+      setProjectType(DEFAULT_PROJECT_TYPE);
       setAgentsPath("");
+      setSelectedProjectType(project.project_type);
       setShowCreate(false);
       setError(null);
     } catch (requestError) {
@@ -344,6 +491,7 @@ export function ProjectDashboard() {
   function startEditingProject(project: ProjectSummary) {
     setEditingProject(project);
     setEditName(project.name);
+    setEditProjectType(project.project_type);
     setEditAgentsPath(project.agents_path);
   }
 
@@ -354,6 +502,7 @@ export function ProjectDashboard() {
     try {
       const updated = await updateProject(editingProject.id, {
         name: editName.trim(),
+        project_type: editProjectType.trim(),
         agents_path: editAgentsPath.trim(),
       });
       setProjects((current) =>
@@ -363,6 +512,7 @@ export function ProjectDashboard() {
       );
       if (activeProject?.id === updated.id) closeTree();
       if (historyProject?.id === updated.id) closeTaskHistory();
+      setSelectedProjectType(updated.project_type);
       setEditingProject(null);
       setError(null);
     } catch (requestError) {
@@ -517,9 +667,73 @@ export function ProjectDashboard() {
   const historyCallNumbers = history
     ? buildDocumentCallNumbers(history.calls)
     : new Map<string, number[]>();
+  const projectTypes = Array.from(
+    new Set(projects.map((project) => project.project_type)),
+  ).sort((left, right) => left.localeCompare(right, "zh-CN"));
+  const visibleProjects =
+    selectedProjectType === ALL_PROJECT_TYPES
+      ? projects
+      : projects.filter(
+          (project) => project.project_type === selectedProjectType,
+        );
+  const dataSourceCategories = dataSourceOptions
+    ? Array.from(
+        new Set(dataSourceOptions.sources.map((source) => source.category)),
+      ).sort((left, right) => left.localeCompare(right, "zh-CN"))
+    : [];
+  const visibleDataSources = dataSourceOptions
+    ? selectedDataSourceCategory === ALL_DATA_SOURCE_CATEGORIES
+      ? dataSourceOptions.sources
+      : dataSourceOptions.sources.filter(
+          (source) => source.category === selectedDataSourceCategory,
+        )
+    : [];
+  const activeDataSource =
+    visibleDataSources.find((source) => source.id === activeDataSourceId) ??
+    visibleDataSources[0] ??
+    null;
+  const selectedDataSourceCount = dataSourceOptions
+    ? dataSourceOptions.sources.filter((source) =>
+        source.databases.some((database) =>
+          selectedDatabaseIds.has(database.id),
+        ),
+      ).length
+    : 0;
 
   return (
     <>
+      <nav
+        className="project-type-tabs"
+        role="tablist"
+        aria-label="项目类型"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={selectedProjectType === ALL_PROJECT_TYPES}
+          data-active={selectedProjectType === ALL_PROJECT_TYPES}
+          onClick={() => setSelectedProjectType(ALL_PROJECT_TYPES)}
+        >
+          <span>全部项目</span>
+          <small>{projects.length}</small>
+        </button>
+        {projectTypes.map((type) => (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={selectedProjectType === type}
+            data-active={selectedProjectType === type}
+            key={type}
+            onClick={() => setSelectedProjectType(type)}
+          >
+            <span>{type}</span>
+            <small>
+              {projects.filter((project) => project.project_type === type).length}
+            </small>
+          </button>
+        ))}
+      </nav>
+
       <div className="page-actions">
         <button
           type="button"
@@ -545,6 +759,16 @@ export function ProjectDashboard() {
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="例如：攀枝花多式联运"
+              required
+            />
+          </label>
+          <label>
+            项目类型
+            <input
+              value={projectType}
+              onChange={(event) => setProjectType(event.target.value)}
+              placeholder="例如：业务系统"
+              maxLength={60}
               required
             />
           </label>
@@ -582,8 +806,15 @@ export function ProjectDashboard() {
         </div>
       ) : null}
 
+      {!loading && projects.length > 0 && visibleProjects.length === 0 ? (
+        <div className="empty-state">
+          <h2>这个类型还没有项目</h2>
+          <p>可以添加项目，或编辑已有项目的项目类型。</p>
+        </div>
+      ) : null}
+
       <section className="project-grid" aria-label="文档项目列表">
-        {projects.map((project) => (
+        {visibleProjects.map((project) => (
           <article
             className="project-card"
             data-enabled={project.enabled}
@@ -591,7 +822,10 @@ export function ProjectDashboard() {
           >
             <div className="project-card-heading">
               <div>
-                <span className="file-chip">AGENTS.md</span>
+                <div className="project-card-chips">
+                  <span className="file-chip">AGENTS.md</span>
+                  <span className="project-type-chip">{project.project_type}</span>
+                </div>
                 <h2>{project.name}</h2>
               </div>
               <div className="project-card-statuses">
@@ -719,6 +953,18 @@ export function ProjectDashboard() {
               </button>
               <button
                 type="button"
+                className="secondary-button project-actions-data-source"
+                disabled={busyProjectId === actionsProject.id}
+                onClick={() => {
+                  const project = actionsProject;
+                  setActionsProject(null);
+                  void openProjectDataSources(project);
+                }}
+              >
+                管理数据源
+              </button>
+              <button
+                type="button"
                 className="danger-button project-actions-delete"
                 disabled={busyProjectId === actionsProject.id}
                 onClick={() => {
@@ -729,6 +975,235 @@ export function ProjectDashboard() {
                 删除项目
               </button>
             </div>
+          </section>
+        </div>
+      ) : null}
+
+      {dataSourceProject ? (
+        <div
+          className="project-settings-modal project-data-source-modal"
+          role="presentation"
+        >
+          <section
+            className="project-data-source-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`管理项目数据源 ${dataSourceProject.name}`}
+          >
+            <header>
+              <span className="file-chip">数据源授权</span>
+              <button
+                type="button"
+                className="close-button"
+                aria-label="关闭项目数据源管理"
+                disabled={dataSourceAccessSaving}
+                onClick={closeProjectDataSources}
+              >
+                ×
+              </button>
+            </header>
+
+            {dataSourceAccessLoading ? (
+              <p className="empty-message">正在读取数据源和数据库清单…</p>
+            ) : dataSourceOptions ? (
+              <>
+                <div className="project-data-source-summary">
+                  <div>
+                    <strong>
+                      已选择 {selectedDataSourceCount} 个数据源 · {selectedDatabaseIds.size} 个数据库
+                    </strong>
+                    <span>保存后整批替换当前项目关联，新关联默认只读。</span>
+                  </div>
+                </div>
+
+                {dataSourceOptions.sources.length > 0 ? (
+                  <>
+                    <nav
+                      className="data-source-category-tabs project-data-source-tabs"
+                      role="tablist"
+                      aria-label="数据源分类"
+                    >
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={
+                          selectedDataSourceCategory ===
+                          ALL_DATA_SOURCE_CATEGORIES
+                        }
+                        data-active={
+                          selectedDataSourceCategory ===
+                          ALL_DATA_SOURCE_CATEGORIES
+                        }
+                        onClick={() =>
+                          selectDataSourceCategory(ALL_DATA_SOURCE_CATEGORIES)
+                        }
+                      >
+                        <span>全部数据源</span>
+                        <small>{dataSourceOptions.sources.length}</small>
+                      </button>
+                      {dataSourceCategories.map((category) => (
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={
+                            selectedDataSourceCategory === category
+                          }
+                          data-active={selectedDataSourceCategory === category}
+                          key={category}
+                          onClick={() => selectDataSourceCategory(category)}
+                        >
+                          <span>{category}</span>
+                          <small>
+                            {
+                              dataSourceOptions.sources.filter(
+                                (source) => source.category === category,
+                              ).length
+                            }
+                          </small>
+                        </button>
+                      ))}
+                    </nav>
+
+                    <div className="project-data-source-layout">
+                      <aside
+                        className="project-source-selector"
+                        aria-label="选择数据源"
+                      >
+                        {visibleDataSources.map((source) => {
+                          const selectedCount = source.databases.filter(
+                            (database) =>
+                              selectedDatabaseIds.has(database.id),
+                          ).length;
+                          return (
+                            <button
+                              type="button"
+                              data-active={activeDataSource?.id === source.id}
+                              key={source.id}
+                              onClick={() => setActiveDataSourceId(source.id)}
+                            >
+                              <span>
+                                <strong>{source.name}</strong>
+                                <small>
+                                  {source.engine.toUpperCase()} · {source.databases.length} 个数据库
+                                </small>
+                              </span>
+                              <span className="project-source-count">
+                                {selectedCount}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </aside>
+
+                      <section className="project-database-selector">
+                        {activeDataSource ? (
+                          <>
+                            <header>
+                              <div>
+                                <h3>{activeDataSource.name}</h3>
+                                <p>
+                                  {activeDataSource.category} · {activeDataSource.enabled ? "连接已启用" : "连接已停用"}
+                                </p>
+                              </div>
+                              <div className="project-database-actions">
+                                <button
+                                  type="button"
+                                  className="secondary-button"
+                                  disabled={!activeDataSource.enabled}
+                                  onClick={() =>
+                                    selectAllSourceDatabases(activeDataSource.id)
+                                  }
+                                >
+                                  全选可用库
+                                </button>
+                                <button
+                                  type="button"
+                                  className="secondary-button"
+                                  onClick={() =>
+                                    clearSourceDatabases(activeDataSource.id)
+                                  }
+                                >
+                                  清空当前
+                                </button>
+                              </div>
+                            </header>
+
+                            {activeDataSource.databases.length > 0 ? (
+                              <div className="project-database-options">
+                                {activeDataSource.databases.map((database) => {
+                                  const selected = selectedDatabaseIds.has(
+                                    database.id,
+                                  );
+                                  const unavailable =
+                                    !activeDataSource.enabled ||
+                                    !database.available;
+                                  return (
+                                    <label
+                                      data-disabled={!selected && unavailable}
+                                      data-selected={selected}
+                                      key={database.id}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={selected}
+                                        disabled={!selected && unavailable}
+                                        onChange={() =>
+                                          toggleProjectDatabase(database.id)
+                                        }
+                                      />
+                                      <span>
+                                        <strong>{database.display_name}</strong>
+                                        <code>{database.remote_name}</code>
+                                      </span>
+                                      <small>
+                                        {database.available ? database.namespace_type : "不可用"}
+                                      </small>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className="project-data-source-empty">
+                                <h3>这个数据源还没有数据库清单</h3>
+                                <p>请先到数据源管理中测试连接并刷新数据库。</p>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="project-data-source-empty">
+                            <h3>当前分类下没有数据源</h3>
+                          </div>
+                        )}
+                      </section>
+                    </div>
+                  </>
+                ) : (
+                  <div className="project-data-source-empty">
+                    <h3>还没有可选择的数据源</h3>
+                    <p>请先到数据源管理中添加连接并刷新数据库清单。</p>
+                  </div>
+                )}
+
+                <footer>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={dataSourceAccessSaving}
+                    onClick={closeProjectDataSources}
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    disabled={dataSourceAccessSaving}
+                    onClick={() => void saveProjectDataSources()}
+                  >
+                    {dataSourceAccessSaving ? "正在保存…" : "保存关联"}
+                  </button>
+                </footer>
+              </>
+            ) : null}
           </section>
         </div>
       ) : null}
@@ -763,6 +1238,15 @@ export function ProjectDashboard() {
                 value={editName}
                 required
                 onChange={(event) => setEditName(event.target.value)}
+              />
+            </label>
+            <label>
+              项目类型
+              <input
+                value={editProjectType}
+                required
+                maxLength={60}
+                onChange={(event) => setEditProjectType(event.target.value)}
               />
             </label>
             <label>

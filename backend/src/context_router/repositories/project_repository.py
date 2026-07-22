@@ -6,6 +6,8 @@ from typing import Protocol
 
 import psycopg
 
+DEFAULT_PROJECT_TYPE = "公司项目"
+
 
 class ProjectRepositoryError(RuntimeError):
     pass
@@ -15,6 +17,7 @@ class ProjectRepositoryError(RuntimeError):
 class ProjectRecord:
     id: str
     name: str
+    project_type: str
     agents_path: str
     enabled: bool
     created_at: datetime
@@ -29,11 +32,19 @@ class ProjectStore(Protocol):
         *,
         project_id: str,
         name: str,
+        project_type: str,
         agents_path: str,
         enabled: bool,
     ) -> None: ...
 
-    def update_project(self, project_id: str, *, name: str, agents_path: str) -> None: ...
+    def update_project(
+        self,
+        project_id: str,
+        *,
+        name: str,
+        project_type: str,
+        agents_path: str,
+    ) -> None: ...
 
     def set_project_enabled(self, project_id: str, *, enabled: bool) -> None: ...
 
@@ -52,6 +63,7 @@ class InMemoryProjectRepository:
         *,
         project_id: str,
         name: str,
+        project_type: str = DEFAULT_PROJECT_TYPE,
         agents_path: str,
         enabled: bool,
     ) -> None:
@@ -61,13 +73,21 @@ class InMemoryProjectRepository:
         self._projects[project_id] = ProjectRecord(
             id=project_id,
             name=name,
+            project_type=project_type,
             agents_path=agents_path,
             enabled=enabled,
             created_at=now,
             updated_at=now,
         )
 
-    def update_project(self, project_id: str, *, name: str, agents_path: str) -> None:
+    def update_project(
+        self,
+        project_id: str,
+        *,
+        name: str,
+        project_type: str,
+        agents_path: str,
+    ) -> None:
         record = self._get(project_id)
         if any(
             item.id != project_id and item.agents_path == agents_path
@@ -77,6 +97,7 @@ class InMemoryProjectRepository:
         self._projects[project_id] = replace(
             record,
             name=name,
+            project_type=project_type,
             agents_path=agents_path,
             updated_at=datetime.now(UTC),
         )
@@ -109,7 +130,7 @@ class PostgresProjectRepository:
             with psycopg.connect(self._database_url) as connection:
                 rows = connection.execute(
                     """
-                    SELECT id, name, agents_path, enabled, created_at, updated_at
+                    SELECT id, name, project_type, agents_path, enabled, created_at, updated_at
                     FROM document_projects
                     ORDER BY created_at, id
                     """
@@ -123,6 +144,7 @@ class PostgresProjectRepository:
         *,
         project_id: str,
         name: str,
+        project_type: str = DEFAULT_PROJECT_TYPE,
         agents_path: str,
         enabled: bool,
     ) -> None:
@@ -130,26 +152,35 @@ class PostgresProjectRepository:
             with psycopg.connect(self._database_url) as connection:
                 connection.execute(
                     """
-                    INSERT INTO document_projects (id, name, agents_path, enabled)
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO document_projects
+                    (id, name, project_type, agents_path, enabled)
+                    VALUES (%s, %s, %s, %s, %s)
                     """,
-                    (project_id, name, agents_path, enabled),
+                    (project_id, name, project_type, agents_path, enabled),
                 )
         except psycopg.errors.UniqueViolation as exc:
             raise ProjectRepositoryError("这个 AGENTS.md 已经添加") from exc
         except psycopg.Error as exc:
             raise ProjectRepositoryError("项目配置写入失败") from exc
 
-    def update_project(self, project_id: str, *, name: str, agents_path: str) -> None:
+    def update_project(
+        self,
+        project_id: str,
+        *,
+        name: str,
+        project_type: str,
+        agents_path: str,
+    ) -> None:
         try:
             with psycopg.connect(self._database_url) as connection:
                 cursor = connection.execute(
                     """
                     UPDATE document_projects
-                    SET name = %s, agents_path = %s, updated_at = CURRENT_TIMESTAMP
+                    SET name = %s, project_type = %s, agents_path = %s,
+                        updated_at = CURRENT_TIMESTAMP
                     WHERE id = %s
                     """,
-                    (name, agents_path, project_id),
+                    (name, project_type, agents_path, project_id),
                 )
                 if cursor.rowcount == 0:
                     raise ProjectRepositoryError("项目不存在")
@@ -197,8 +228,9 @@ class PostgresProjectRepository:
         return ProjectRecord(
             id=str(row[0]),
             name=str(row[1]),
-            agents_path=str(row[2]),
-            enabled=bool(row[3]),
-            created_at=row[4],  # type: ignore[arg-type]
-            updated_at=row[5],  # type: ignore[arg-type]
+            project_type=str(row[2]),
+            agents_path=str(row[3]),
+            enabled=bool(row[4]),
+            created_at=row[5],  # type: ignore[arg-type]
+            updated_at=row[6],  # type: ignore[arg-type]
         )

@@ -1,10 +1,5 @@
-import { ProjectDashboard } from "@/components/project-dashboard";
+import { AppShell } from "@/components/app-shell";
 
 export default function HomePage() {
-  return (
-    <main className="page-shell">
-      <ProjectDashboard />
-    </main>
-  );
+  return <AppShell />;
 }
-

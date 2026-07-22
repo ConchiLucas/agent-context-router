@@ -3,8 +3,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "文档树",
-  description: "以 AGENTS.md 为入口的递归文档索引",
+  title: "Agent Context Router",
+  description: "项目上下文与数据库 MCP 管理工作台",
 };
 
 export default function RootLayout({
@@ -18,4 +18,3 @@ export default function RootLayout({
     </html>
   );
 }
-

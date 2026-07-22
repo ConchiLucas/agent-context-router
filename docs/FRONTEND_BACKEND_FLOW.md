@@ -32,6 +32,10 @@ Codex / Antigravity
 | 页面行为 | 前端 | 后端 API |
 | --- | --- | --- |
 | 加载项目卡片 | `project-dashboard.tsx` | `GET /api/projects` |
+| 按项目类型切换卡片 | `project-dashboard.tsx` | 复用 `GET /api/projects` 返回的 `project_type` 在前端筛选 |
+| 按数据源分类切换卡片 | `data-source-dashboard.tsx` | 复用 `GET /api/data-sources` 返回的 `category` 在前端筛选 |
+| 按需查看数据源密码 | `data-source-dashboard.tsx` | `POST /api/data-sources/{id}/reveal-password`，响应禁止缓存 |
+| 同步 MySQL/MariaDB/PostgreSQL 全部可见库 | `data-source-dashboard.tsx` | `POST /api/data-sources/{id}/databases/sync` -> `SHOW DATABASES` / `pg_database` -> 事务 upsert 清单 |
 | 添加项目 | `project-dashboard.tsx` | `POST /api/projects` |
 | 编辑项目 | `project-dashboard.tsx` | `PUT /api/projects/{id}` |
 | 停用/启用项目 | `project-dashboard.tsx` | `PATCH /api/projects/{id}/enabled` |
@@ -41,6 +45,8 @@ Codex / Antigravity
 | 点击节点查看详情 | `markdown-viewer.tsx` | `GET /api/projects/{id}/documents/{document_id}` |
 | 查看 MCP JSON | `project-dashboard.tsx` | `POST /api/projects/{id}/prepare-preview` |
 | 查看调用记录 | `project-dashboard.tsx`、`task-history.ts` | `GET /api/projects/{id}/tasks`、`GET /api/tasks/{task_id}/document-reads` |
+| 加载项目可选数据源和库 | `project-dashboard.tsx` | `GET /api/projects/{id}/data-source-options` |
+| 整批保存项目数据库关联 | `project-dashboard.tsx` | `PUT /api/projects/{id}/databases` |
 | 打开 MCP 接入面板 | `mcp-integration-panel.tsx` | `GET /api/mcp/integration` |
 | 执行 MCP 连接测试 | `mcp-integration-panel.tsx` | `POST /api/mcp/integration/tests` |
 
@@ -54,7 +60,11 @@ api/projects.py
 ```
 
 - `ProjectRegistry` 管理多个进程内项目和每个项目的当前缓存。
-- `project_repository.py` 持久化稳定项目配置；后端启动时读取所有项目，启用项目从磁盘重建缓存，停用或路径失效项目保留配置但不参与 cwd 匹配。
+- `project_repository.py` 持久化稳定项目配置及项目类型；后端启动时读取所有项目，启用项目从磁盘重建缓存，停用或路径失效项目保留配置但不参与 cwd 匹配。
+- 项目类型仅用于管理页面分类和筛选，不参与 MCP 的 cwd 项目匹配。
+- 数据源分类由 `data_sources.category` 独立持久化，仅用于数据源管理页面分类和筛选，不复用项目类型。
+- 数据源列表始终过滤口令；只有编辑弹窗的眼睛按钮调用独立接口读取明文密码。MySQL/MariaDB/PostgreSQL 自动同步通过 `database_discovery.py` 连接远端，保留已有记录 ID 和项目关联，新增可见库并把本次未发现的旧库标记为不可用。
+- 项目侧数据源选择接口按数据源分组返回数据库清单且不返回连接口令；批量保存使用单个数据库事务替换该项目关联，保留仍被选中的既有策略，新关联使用默认只读限制。
 - 项目新增、编辑、启停和删除先完成必要的磁盘验证与数据库写入，再原子更新注册表；数据库写入失败时不改变当前内存项目。
 - `build_document_cache` 负责递归读取、路径校验、循环检测和正文缓存。
 - 刷新完成后，`ProjectRegistry` 一次性替换该项目的 `DocumentCache`。

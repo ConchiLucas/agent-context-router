@@ -1,6 +1,7 @@
 export interface ProjectSummary {
   id: string;
   name: string;
+  project_type: string;
   agents_path: string;
   enabled: boolean;
   node_count: number;
@@ -28,12 +29,122 @@ export interface DocumentDetail {
 
 export interface ProjectCreate {
   name: string;
+  project_type: string;
   agents_path: string;
 }
 
 export interface ProjectUpdate {
   name: string;
+  project_type: string;
   agents_path: string;
+}
+
+export type DatabaseEngine =
+  | "mysql"
+  | "mariadb"
+  | "postgresql"
+  | "sqlserver"
+  | "sqlite"
+  | "oracle"
+  | "clickhouse";
+
+export interface DataSourcePayload {
+  name: string;
+  category: string;
+  engine: DatabaseEngine;
+  description: string;
+  connection_config: Record<string, string | number | boolean>;
+  enabled: boolean;
+}
+
+export interface DataSourceSummary extends DataSourcePayload {
+  id: string;
+  config_version: number;
+  database_count: number;
+  project_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DataSourcePasswordReveal {
+  password: string;
+}
+
+export interface DataSourceDatabasePayload {
+  remote_name: string;
+  display_name: string;
+  namespace_type: "database" | "schema" | "file";
+  available: boolean;
+  system_database: boolean;
+  metadata: Record<string, string | number | boolean>;
+}
+
+export interface DataSourceDatabaseSummary
+  extends DataSourceDatabasePayload {
+  id: string;
+  data_source_id: string;
+  project_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DataSourceDatabaseSyncResult {
+  discovered_count: number;
+  created_count: number;
+  unavailable_count: number;
+  databases: DataSourceDatabaseSummary[];
+}
+
+export interface ProjectDatabaseLinkPayload {
+  project_id: string;
+  alias: string;
+  purpose: string;
+  enabled: boolean;
+  readonly: boolean;
+  allowed_schemas: string[];
+  max_rows: number;
+  max_result_bytes: number;
+  query_timeout_ms: number;
+}
+
+export interface ProjectDatabaseLinkSummary
+  extends ProjectDatabaseLinkPayload {
+  id: string;
+  project_name: string;
+  database_id: string;
+  database_name: string;
+  data_source_id: string;
+  data_source_name: string;
+  engine: DatabaseEngine;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectDatabaseOption {
+  id: string;
+  remote_name: string;
+  display_name: string;
+  namespace_type: "database" | "schema" | "file";
+  available: boolean;
+  selected: boolean;
+  link_id: string | null;
+}
+
+export interface ProjectDataSourceOption {
+  id: string;
+  name: string;
+  category: string;
+  engine: DatabaseEngine;
+  enabled: boolean;
+  databases: ProjectDatabaseOption[];
+}
+
+export interface ProjectDataSourceOptions {
+  project_id: string;
+  project_name: string;
+  selected_source_count: number;
+  selected_database_count: number;
+  sources: ProjectDataSourceOption[];
 }
 
 export interface ContextDocumentNode {

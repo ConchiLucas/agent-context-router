@@ -5,11 +5,17 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from context_router.api.data_sources import router as data_sources_router
 from context_router.api.mcp_integration import router as mcp_integration_router
 from context_router.api.projects import router as projects_router
 from context_router.api.tasks import router as tasks_router
 from context_router.config import Settings
 from context_router.mcp_server import create_context_router_mcp
+from context_router.repositories.data_source_repository import (
+    DataSourceStore,
+    InMemoryDataSourceRepository,
+    PostgresDataSourceRepository,
+)
 from context_router.repositories.document_read_repository import (
     DocumentReadStore,
     PostgresDocumentReadRepository,
@@ -33,6 +39,7 @@ def create_app(
     task_repository: TaskStore | None = None,
     document_read_repository: DocumentReadStore | None = None,
     project_repository: ProjectStore | None = None,
+    data_source_repository: DataSourceStore | None = None,
 ) -> FastAPI:
     resolved_settings = settings or Settings()
     resolved_project_repository = project_repository or (
@@ -41,6 +48,11 @@ def create_app(
         else InMemoryProjectRepository()
     )
     registry = ProjectRegistry(resolved_settings, resolved_project_repository)
+    resolved_data_source_repository = data_source_repository or (
+        PostgresDataSourceRepository(resolved_settings.database_url)
+        if resolved_settings.database_url
+        else InMemoryDataSourceRepository()
+    )
     resolved_task_repository = task_repository or PostgresTaskRepository(
         resolved_settings.database_url
     )
@@ -100,6 +112,7 @@ def create_app(
     app.state.document_read_repository = resolved_read_repository
     app.state.project_repository = resolved_project_repository
     app.state.mcp_integration_service = mcp_integration_service
+    app.state.data_source_repository = resolved_data_source_repository
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -109,6 +122,7 @@ def create_app(
     app.include_router(projects_router, prefix=resolved_settings.api_prefix)
     app.include_router(tasks_router, prefix=resolved_settings.api_prefix)
     app.include_router(mcp_integration_router, prefix=resolved_settings.api_prefix)
+    app.include_router(data_sources_router, prefix=resolved_settings.api_prefix)
 
     @app.get("/health")
     def health() -> dict[str, str]:

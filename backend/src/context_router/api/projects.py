@@ -40,6 +40,7 @@ def create_project(payload: ProjectCreate, request: Request) -> ProjectSummary:
     try:
         return _registry(request).add_project(
             name=payload.name,
+            project_type=payload.project_type,
             agents_path=payload.agents_path,
         )
     except ProjectRegistryError as exc:
@@ -56,6 +57,7 @@ def update_project(
         return _registry(request).update_project(
             project_id,
             name=payload.name,
+            project_type=payload.project_type,
             agents_path=payload.agents_path,
         )
     except ProjectRegistryError as exc:

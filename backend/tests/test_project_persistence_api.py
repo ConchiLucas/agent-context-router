@@ -30,7 +30,11 @@ def test_project_configuration_crud_api(tmp_path: Path) -> None:
         project_id = created.json()["id"]
         updated = client.put(
             f"/api/projects/{project_id}",
-            json={"name": "更新后的项目", "agents_path": str(root)},
+            json={
+                "name": "更新后的项目",
+                "project_type": "交通物流",
+                "agents_path": str(root),
+            },
         )
         disabled = client.patch(
             f"/api/projects/{project_id}/enabled",
@@ -42,8 +46,10 @@ def test_project_configuration_crud_api(tmp_path: Path) -> None:
 
     assert created.status_code == 201
     assert created.json()["enabled"] is True
+    assert created.json()["project_type"] == "公司项目"
     assert updated.status_code == 200
     assert updated.json()["name"] == "更新后的项目"
+    assert updated.json()["project_type"] == "交通物流"
     assert disabled.status_code == 200
     assert disabled.json()["enabled"] is False
     assert listed.json()[0]["id"] == project_id

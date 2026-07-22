@@ -66,6 +66,7 @@ def test_project_configuration_survives_registry_recreation(tmp_path: Path) -> N
     repository = InMemoryProjectRepository()
     first_registry = ProjectRegistry(settings, repository)
     created = first_registry.add_project(name="原项目", agents_path=str(root))
+    assert created.project_type == "公司项目"
     first_registry.set_project_enabled(created.id, enabled=False)
 
     second_registry = ProjectRegistry(settings, repository)
@@ -83,15 +84,17 @@ def test_project_configuration_survives_registry_recreation(tmp_path: Path) -> N
     updated = second_registry.update_project(
         created.id,
         name="新项目名",
+        project_type="业务系统",
         agents_path=str(root),
     )
     assert updated.name == "新项目名"
+    assert updated.project_type == "业务系统"
 
     third_registry = ProjectRegistry(settings, repository)
     reloaded = third_registry.load_persisted_projects()
-    assert [(project.id, project.name, project.enabled) for project in reloaded] == [
-        (created.id, "新项目名", True)
-    ]
+    assert [
+        (project.id, project.name, project.project_type, project.enabled) for project in reloaded
+    ] == [(created.id, "新项目名", "业务系统", True)]
 
     third_registry.delete_project(created.id)
     assert ProjectRegistry(settings, repository).load_persisted_projects() == []
