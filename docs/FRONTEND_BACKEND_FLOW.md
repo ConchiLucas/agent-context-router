@@ -80,6 +80,6 @@ app/page.tsx
 
 Markdown 解析器只生成 React 元素，不使用 `dangerouslySetInnerHTML`，也不执行文档里的原始 HTML。
 
-调用记录通过 `task-history.ts` 同时生成两种序号：按 `read_call_id -> position` 展开的全局文档顺序用于调用列表；按 read call 分组的调用批次号用于完整文档树节点角标。同一批量请求的文档共享批次号，并在调用列表同一行横向展示；同一文档被多次调用时在树节点展示多个批次号。
+调用记录通过 `task-history.ts` 同时生成两种序号：按 `read_call_id -> position` 展开的全局文档顺序用于调用列表；按 read call 分组的调用批次号用于完整文档树节点角标。同一批量请求的文档共享批次号，并在调用列表同一行横向展示；同一文档被多次调用时在树节点展示多个批次号。调用记录树节点和读取成功的调用列表卡片均与普通文档树复用 `GET /api/projects/{id}/documents/{document_id}` 和同一个 Markdown 详情抽屉。
 
 MCP 接入信息和测试结果通过 `lib/api.ts` 获取；公开 MCP URL 由后端配置统一提供，前端不按浏览器地址猜测。端到端测试任务的 `agent_name` 固定为 `connection-test`，任务列表默认过滤这类记录。

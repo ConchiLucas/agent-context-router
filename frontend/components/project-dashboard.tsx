@@ -49,6 +49,54 @@ function formattedTime(value: string | null): string {
   }).format(new Date(value));
 }
 
+interface DocumentDetailDrawerProps {
+  detail: DocumentDetail | null;
+  loading: boolean;
+  onClose: () => void;
+}
+
+function DocumentDetailDrawer({
+  detail,
+  loading,
+  onClose,
+}: DocumentDetailDrawerProps) {
+  return (
+    <aside
+      className="document-detail-drawer"
+      role="dialog"
+      aria-label="Markdown 文档详情"
+    >
+      <button
+        type="button"
+        className="close-button detail-close-button"
+        aria-label="关闭文档详情"
+        onClick={onClose}
+      >
+        ×
+      </button>
+      {loading ? (
+        <p className="empty-message">正在读取内存中的文档内容…</p>
+      ) : detail ? (
+        <>
+          <header className="document-detail-header">
+            <div>
+              <span className="file-chip">Markdown</span>
+              <h2>{detail.description}</h2>
+            </div>
+            <code>{detail.relative_path ?? detail.path}</code>
+          </header>
+          {detail.error ? (
+            <div className="error-banner">{detail.error}</div>
+          ) : null}
+          <MarkdownViewer content={detail.content} />
+        </>
+      ) : (
+        <p className="empty-message">文档内容读取失败。</p>
+      )}
+    </aside>
+  );
+}
+
 export function ProjectDashboard() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [activeProject, setActiveProject] = useState<ProjectSummary | null>(null);
@@ -171,13 +219,16 @@ export function ProjectDashboard() {
     }
   }
 
-  async function selectDocument(node: DocumentTreeNode) {
-    if (!activeProject) return;
-    setSelectedId(node.id);
+  async function selectDocument(
+    project: ProjectSummary,
+    documentId: string,
+  ) {
+    setSelectedId(documentId);
     setDetail(null);
     setDetailLoading(true);
     try {
-      setDetail(await getDocumentDetail(activeProject.id, node.id));
+      setDetail(await getDocumentDetail(project.id, documentId));
+      setError(null);
     } catch (requestError) {
       setError((requestError as Error).message);
     } finally {
@@ -226,6 +277,7 @@ export function ProjectDashboard() {
     setSelectedHistoryTaskId(taskId);
     setHistoryLoading(true);
     setHistory(null);
+    closeDetail();
     try {
       setHistory(await getTaskDocumentReads(taskId));
       setError(null);
@@ -244,6 +296,7 @@ export function ProjectDashboard() {
     setHistory(null);
     setHistoryTree(null);
     setHistoryView("tree");
+    closeDetail();
     setHistoryLoading(true);
     try {
       const [tasks, projectTree] = await Promise.all([
@@ -382,6 +435,7 @@ export function ProjectDashboard() {
     setHistoryTree(null);
     setHistoryView("tree");
     setHistoryLoading(false);
+    closeDetail();
   }
 
   function startHistoryDrag(event: ReactPointerEvent<HTMLElement>) {
@@ -837,7 +891,10 @@ export function ProjectDashboard() {
                   aria-selected={historyView === "tree"}
                   className="task-history-tab"
                   data-active={historyView === "tree"}
-                  onClick={() => setHistoryView("tree")}
+                  onClick={() => {
+                    closeDetail();
+                    setHistoryView("tree");
+                  }}
                 >
                   文档树
                 </button>
@@ -847,7 +904,10 @@ export function ProjectDashboard() {
                   aria-selected={historyView === "list"}
                   className="task-history-tab"
                   data-active={historyView === "list"}
-                  onClick={() => setHistoryView("list")}
+                  onClick={() => {
+                    closeDetail();
+                    setHistoryView("list");
+                  }}
                 >
                   调用列表
                 </button>
@@ -923,10 +983,18 @@ export function ProjectDashboard() {
                       key={row.readCallId}
                     >
                       {row.steps.map((step) => (
-                        <article
+                        <button
+                          type="button"
                           className="task-history-node"
                           data-status={step.document.status}
+                          disabled={step.document.status === "error"}
                           key={`${step.readCallId}-${step.document.position}`}
+                          onClick={() =>
+                            void selectDocument(
+                              historyProject,
+                              step.document.document_id,
+                            )
+                          }
                         >
                           <span
                             className="task-history-sequence"
@@ -954,7 +1022,7 @@ export function ProjectDashboard() {
                           ) : (
                             <small>读取成功</small>
                           )}
-                        </article>
+                        </button>
                       ))}
                     </section>
                   ))}
@@ -968,8 +1036,10 @@ export function ProjectDashboard() {
                   <ul className="document-tree">
                     <DocumentTree
                       node={historyTree}
-                      selectedId={null}
-                      onSelect={() => undefined}
+                      selectedId={selectedId}
+                      onSelect={(node) =>
+                        void selectDocument(historyProject, node.id)
+                      }
                       callNumbersByDocumentId={historyCallNumbers}
                     />
                   </ul>
@@ -977,6 +1047,14 @@ export function ProjectDashboard() {
               ) : null}
             </div>
           </section>
+
+          {selectedId ? (
+            <DocumentDetailDrawer
+              detail={detail}
+              loading={detailLoading}
+              onClose={closeDetail}
+            />
+          ) : null}
         </div>
       ) : null}
 
@@ -1027,7 +1105,9 @@ export function ProjectDashboard() {
                   <DocumentTree
                     node={tree}
                     selectedId={selectedId}
-                    onSelect={(node) => void selectDocument(node)}
+                    onSelect={(node) =>
+                      void selectDocument(activeProject, node.id)
+                    }
                   />
                 </ul>
               </div>
@@ -1035,39 +1115,11 @@ export function ProjectDashboard() {
           </section>
 
           {selectedId ? (
-            <aside
-              className="document-detail-drawer"
-              role="dialog"
-              aria-label="Markdown 文档详情"
-            >
-              <button
-                type="button"
-                className="close-button detail-close-button"
-                aria-label="关闭文档详情"
-                onClick={closeDetail}
-              >
-                ×
-              </button>
-              {detailLoading ? (
-                <p className="empty-message">正在读取内存中的文档内容…</p>
-              ) : detail ? (
-                <>
-                  <header className="document-detail-header">
-                    <div>
-                      <span className="file-chip">Markdown</span>
-                      <h2>{detail.description}</h2>
-                    </div>
-                    <code>{detail.relative_path ?? detail.path}</code>
-                  </header>
-                  {detail.error ? (
-                    <div className="error-banner">{detail.error}</div>
-                  ) : null}
-                  <MarkdownViewer content={detail.content} />
-                </>
-              ) : (
-                <p className="empty-message">文档内容读取失败。</p>
-              )}
-            </aside>
+            <DocumentDetailDrawer
+              detail={detail}
+              loading={detailLoading}
+              onClose={closeDetail}
+            />
           ) : null}
         </div>
       ) : null}
