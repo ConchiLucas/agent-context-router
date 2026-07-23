@@ -44,6 +44,17 @@ def test_mcp_exposes_four_stable_context_tools() -> None:
         "search_database_objects",
         "execute_database_query",
     ]
+    assert tools[0].annotations is not None
+    assert tools[0].annotations.readOnlyHint is True
+    assert tools[0].annotations.destructiveHint is False
+    assert tools[0].annotations.idempotentHint is False
+    assert tools[0].annotations.openWorldHint is False
+    for tool in tools[1:]:
+        assert tool.annotations is not None
+        assert tool.annotations.readOnlyHint is True
+        assert tool.annotations.destructiveHint is False
+        assert tool.annotations.idempotentHint is True
+        assert tool.annotations.openWorldHint is False
     search_schema = tools[2].inputSchema
     query_schema = tools[3].inputSchema
     assert search_schema["required"] == ["task_id", "database", "object_type"]

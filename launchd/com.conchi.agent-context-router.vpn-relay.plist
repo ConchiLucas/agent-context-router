@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.conchi.agent-context-router.vpn-relay</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>/Users/conchi/workforce/python_workforce/agent-context-router/scripts/vpn_tcp_relay.py</string>
+    <string>--forward</string>
+    <string>48306:192.168.0.219:8306</string>
+    <string>--forward</string>
+    <string>49030:192.168.0.227:9030</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>StandardOutPath</key>
+  <string>/tmp/agent-context-router-vpn-relay.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/agent-context-router-vpn-relay.error.log</string>
+</dict>
+</plist>

@@ -83,6 +83,31 @@ PostgreSQL 保存项目、数据源、数据库清单、项目数据库关联及
 
 数据库未配置时后端和 `/health` 仍可启动，项目配置退化为当前进程内存；但 task_id 持久化、prepare/read 的完整 MCP 工作流、卡片 JSON 预览和持久化调用记录不可用。业务数据源离线不会阻止后端启动，也不会阻止文档 prepare/read；连接只在测试、同步、对象搜索或查询时延迟建立。
 
+## Docker Desktop 与公司 VPN 数据库
+
+macOS 主机可通过公司 VPN 访问数据库时，Docker Desktop 虚拟网络不一定继承对应路由。典型现象是宿主机 TCP 探测成功，而 backend 容器连接同一内网地址超时。此时使用仓库内的 localhost TCP relay：
+
+```bash
+launchctl bootstrap "gui/$(id -u)" \
+  ./launchd/com.conchi.agent-context-router.vpn-relay.plist
+```
+
+该 relay 只监听宿主机 `127.0.0.1`，不会暴露到局域网；Docker Desktop 仍可通过 `host.docker.internal` 访问。当前映射为：
+
+| 容器数据源地址 | 宿主机经 VPN 转发到 |
+| --- | --- |
+| `host.docker.internal:48306` | `192.168.0.219:8306`（Test/UAT MySQL） |
+| `host.docker.internal:49030` | `192.168.0.227:9030`（ODS） |
+
+relay 由当前 macOS 登录会话的 launchd 托管，Context Router 或 Codex 重启不会中断它。查看与停止：
+
+```bash
+launchctl print "gui/$(id -u)/com.conchi.agent-context-router.vpn-relay"
+launchctl bootout "gui/$(id -u)/com.conchi.agent-context-router.vpn-relay"
+```
+
+如需登录后自动加载，可把 plist 安装到 `~/Library/LaunchAgents/`。上游 VPN 断开时 relay 仍保持监听，但数据库连接测试会失败；VPN 恢复后无需重启 relay。
+
 ## ClickHouse integration profile
 
 根 Compose 提供固定版本 `clickhouse/clickhouse-server:24.8.14.39-alpine` 的 `clickhouse-test` 服务，只在 `integration` profile 中启动，不属于日常前后端依赖：

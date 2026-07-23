@@ -4,6 +4,7 @@ from typing import Annotated, Any, Literal
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
+from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from context_router.database.errors import DatabaseAccessError
@@ -49,6 +50,24 @@ EXECUTE_DATABASE_TOOL_DESCRIPTION = (
     "Execute exactly one bounded read-only SQL statement against a database alias returned "
     "by prepare_task_context. Connection details and query limits are enforced server-side."
 )
+PREPARE_TOOL_ANNOTATIONS = ToolAnnotations(
+    readOnlyHint=True,
+    destructiveHint=False,
+    idempotentHint=False,
+    openWorldHint=False,
+)
+READ_TOOL_ANNOTATIONS = ToolAnnotations(
+    readOnlyHint=True,
+    destructiveHint=False,
+    idempotentHint=True,
+    openWorldHint=False,
+)
+DATABASE_TOOL_ANNOTATIONS = ToolAnnotations(
+    readOnlyHint=True,
+    destructiveHint=False,
+    idempotentHint=True,
+    openWorldHint=False,
+)
 
 
 def create_context_router_mcp(
@@ -68,6 +87,7 @@ def create_context_router_mcp(
     @server.tool(
         name=PREPARE_TOOL_NAME,
         description=PREPARE_TOOL_DESCRIPTION,
+        annotations=PREPARE_TOOL_ANNOTATIONS,
     )
     def prepare_task_context(
         task: Annotated[str, Field(min_length=1, max_length=4000)],
@@ -83,6 +103,7 @@ def create_context_router_mcp(
     @server.tool(
         name=READ_TOOL_NAME,
         description=READ_TOOL_DESCRIPTION,
+        annotations=READ_TOOL_ANNOTATIONS,
     )
     def read_context_document(
         task_id: Annotated[int, Field(ge=1)],
@@ -100,6 +121,7 @@ def create_context_router_mcp(
     @server.tool(
         name=SEARCH_DATABASE_TOOL_NAME,
         description=SEARCH_DATABASE_TOOL_DESCRIPTION,
+        annotations=DATABASE_TOOL_ANNOTATIONS,
     )
     def search_database_objects(
         task_id: Annotated[int, Field(ge=1)],
@@ -133,6 +155,7 @@ def create_context_router_mcp(
     @server.tool(
         name=EXECUTE_DATABASE_TOOL_NAME,
         description=EXECUTE_DATABASE_TOOL_DESCRIPTION,
+        annotations=DATABASE_TOOL_ANNOTATIONS,
     )
     def execute_database_query(
         task_id: Annotated[int, Field(ge=1)],
