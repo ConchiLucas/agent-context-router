@@ -9,6 +9,18 @@
 
 ## 记录
 
+### 2026-07-22
+
+- MCP 工具集合固定为 `prepare_task_context`、`read_context_document`、`search_database_objects`、`execute_database_query` 四个；数据源增删不生成动态工具，保证 Codex 和 Antigravity 的工具发现结果稳定。
+- 数据库访问统一经过 `task_id -> project_key -> 当前 project -> 项目内 mcp_alias -> live policy`。MCP 参数不接受 project/source/database ID、Host、DSN、口令或客户端自定义查询限制。
+- `mcp_alias` 与人类展示 alias 分离，在项目内大小写无关唯一。prepare 只返回可用只读数据库的最小摘要，不连接远端业务数据库。
+- 项目数据库选择与 alias 使用单次批量事务更新；事务内先释放旧 alias 再写入最终集合，以支持 A/B 互换并避免前端多请求造成部分状态。
+- 第一版数据库 MCP 永久只读：SQLGlot fail-closed AST 与作用域校验、数据库只读事务/ClickHouse readonly settings、只读数据库账号共同构成防护；写 SQL、事务会话和自定义 SQL 工具不在本轮范围。
+- Connector 使用静态 Registry 和能力矩阵；Manager lazy 创建、single-flight、发布前 ping、按 source version 与 database update 失效、lease/retiring、每 Source 并发限制和 LRU。应用启动不连接业务数据库，lifespan 退出统一关闭。
+- 查询结果按最终 compact JSON UTF-8 字节和行数双重预算，复杂类型递归转为合法 JSON；完整 SQL 和结果不持久化，只记录 SQL SHA-256 与调用元数据。
+- ClickHouse V1 使用官方 HTTP/HTTPS Client，支持连接测试、`system.databases` 同步、渐进对象搜索和有界只读查询；未实现 Connector 的 Engine 只允许配置，不在 UI 中伪装成可查询。
+- 本项目是本机单用户工具，不增加 OAuth/RBAC；Backend 与 Frontend 端口必须只绑定 `127.0.0.1`。若未来暴露到局域网或公网，必须重新评审鉴权、TLS、CORS 和 task_id 的安全语义。
+
 ### 2026-07-19
 
 - 采用“产品 MCP-only、HTTP API 内部保留”的边界，AI 只感知两个 MCP 工具，开发者只使用 Web 查看和管理。

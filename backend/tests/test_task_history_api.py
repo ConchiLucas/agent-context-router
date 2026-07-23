@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from context_router.config import Settings
 from context_router.main import create_app
+from context_router.repositories.database_call_repository import DatabaseCallRecord
 from context_router.repositories.document_read_repository import (
     DocumentReadCallRecord,
     DocumentReadItemRecord,
@@ -93,12 +94,43 @@ class FakeReadStore:
         ]
 
 
+class FakeDatabaseCallStore:
+    def __init__(self, created_at: datetime) -> None:
+        self.created_at = created_at
+
+    def create_call(self, call) -> int:
+        return 41
+
+    def list_calls(self, task_id: int) -> list[DatabaseCallRecord]:
+        assert task_id == 12
+        return [
+            DatabaseCallRecord(
+                id=41,
+                task_id=12,
+                operation="execute_query",
+                database_alias="analytics",
+                engine="clickhouse",
+                status="ok",
+                object_type=None,
+                statement_type="select",
+                sql_sha256="a" * 64,
+                duration_ms=18,
+                returned_count=3,
+                result_bytes=128,
+                truncated=False,
+                error_code=None,
+                created_at=self.created_at,
+            )
+        ]
+
+
 def test_lists_project_tasks_and_ordered_read_history(tmp_path: Path) -> None:
     root = tmp_path / "project" / "AGENTS.md"
     root.parent.mkdir(parents=True)
     root.write_text("# 项目入口", encoding="utf-8")
     task_store = FakeTaskStore()
     read_store = FakeReadStore(task_store.created_at)
+    database_call_store = FakeDatabaseCallStore(task_store.created_at)
     app = create_app(
         Settings(
             workspace_host_root=tmp_path,
@@ -108,6 +140,7 @@ def test_lists_project_tasks_and_ordered_read_history(tmp_path: Path) -> None:
         ),
         task_repository=task_store,
         document_read_repository=read_store,
+        database_call_repository=database_call_store,
         project_repository=InMemoryProjectRepository(),
     )
 
@@ -134,3 +167,19 @@ def test_lists_project_tasks_and_ordered_read_history(tmp_path: Path) -> None:
             "status": "ok",
         }
     ]
+    assert history.json()["database_calls"] == [
+        {
+            "database_call_id": 41,
+            "operation": "execute_query",
+            "database": "analytics",
+            "engine": "clickhouse",
+            "status": "ok",
+            "statement_type": "select",
+            "duration_ms": 18,
+            "returned_count": 3,
+            "result_bytes": 128,
+            "truncated": False,
+            "created_at": task_store.created_at.isoformat().replace("+00:00", "Z"),
+        }
+    ]
+    assert "sql_sha256" not in history.text

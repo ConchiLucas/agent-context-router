@@ -15,11 +15,15 @@ from mcp.types import CallToolResult
 
 from context_router.config import Settings
 from context_router.mcp_server import (
+    EXECUTE_DATABASE_TOOL_DESCRIPTION,
+    EXECUTE_DATABASE_TOOL_NAME,
     MCP_SERVER_NAME,
     PREPARE_TOOL_DESCRIPTION,
     PREPARE_TOOL_NAME,
     READ_TOOL_DESCRIPTION,
     READ_TOOL_NAME,
+    SEARCH_DATABASE_TOOL_DESCRIPTION,
+    SEARCH_DATABASE_TOOL_NAME,
 )
 from context_router.schemas.mcp_integration import (
     McpClientConfig,
@@ -62,6 +66,14 @@ class McpIntegrationService:
             tools=[
                 McpToolInfo(name=PREPARE_TOOL_NAME, description=PREPARE_TOOL_DESCRIPTION),
                 McpToolInfo(name=READ_TOOL_NAME, description=READ_TOOL_DESCRIPTION),
+                McpToolInfo(
+                    name=SEARCH_DATABASE_TOOL_NAME,
+                    description=SEARCH_DATABASE_TOOL_DESCRIPTION,
+                ),
+                McpToolInfo(
+                    name=EXECUTE_DATABASE_TOOL_NAME,
+                    description=EXECUTE_DATABASE_TOOL_DESCRIPTION,
+                ),
             ],
             clients=[
                 McpClientConfig(
@@ -162,9 +174,20 @@ class McpIntegrationService:
                         async def list_tools() -> str:
                             result = await session.list_tools()
                             names = [tool.name for tool in result.tools]
-                            missing = {PREPARE_TOOL_NAME, READ_TOOL_NAME}.difference(names)
+                            expected = {
+                                PREPARE_TOOL_NAME,
+                                READ_TOOL_NAME,
+                                SEARCH_DATABASE_TOOL_NAME,
+                                EXECUTE_DATABASE_TOOL_NAME,
+                            }
+                            missing = expected.difference(names)
                             if missing:
                                 raise McpIntegrationError(f"缺少工具：{', '.join(sorted(missing))}")
+                            unexpected = set(names).difference(expected)
+                            if unexpected:
+                                raise McpIntegrationError(
+                                    f"发现未约定工具：{', '.join(sorted(unexpected))}"
+                                )
                             return f"发现 {len(names)} 个工具：{', '.join(names)}"
 
                         await add_stage("tools", "工具发现", list_tools)

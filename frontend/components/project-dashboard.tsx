@@ -30,6 +30,11 @@ import {
   updateProject,
 } from "@/lib/api";
 import {
+  buildSelectedDatabaseAliases,
+  buildTaskContextTimeline,
+  validateDatabaseAliases,
+} from "@/lib/database-access";
+import {
   buildDocumentCallNumbers,
   buildTaskReadRows,
   buildTaskReadSteps,
@@ -132,6 +137,9 @@ export function ProjectDashboard() {
   const [selectedDatabaseIds, setSelectedDatabaseIds] = useState<Set<string>>(
     new Set(),
   );
+  const [databaseAliasDrafts, setDatabaseAliasDrafts] = useState<
+    Record<string, string>
+  >({});
   const [selectedDataSourceCategory, setSelectedDataSourceCategory] = useState(
     ALL_DATA_SOURCE_CATEGORIES,
   );
@@ -330,6 +338,15 @@ export function ProjectDashboard() {
         ) ?? options.sources[0];
       setDataSourceOptions(options);
       setSelectedDatabaseIds(selectedIds);
+      setDatabaseAliasDrafts(
+        Object.fromEntries(
+          options.sources.flatMap((source) =>
+            source.databases
+              .filter((database) => database.link_id && database.mcp_alias)
+              .map((database) => [database.id, database.mcp_alias as string]),
+          ),
+        ),
+      );
       setActiveDataSourceId(initialSource?.id ?? null);
       setError(null);
     } catch (requestError) {
@@ -345,6 +362,7 @@ export function ProjectDashboard() {
     setDataSourceProject(null);
     setDataSourceOptions(null);
     setSelectedDatabaseIds(new Set());
+    setDatabaseAliasDrafts({});
     setSelectedDataSourceCategory(ALL_DATA_SOURCE_CATEGORIES);
     setActiveDataSourceId(null);
   }
@@ -398,16 +416,26 @@ export function ProjectDashboard() {
 
   async function saveProjectDataSources() {
     if (!dataSourceProject) return;
+    if (Object.keys(databaseAliasErrors).length > 0) {
+      setError("请先修正 MCP 别名格式或重复问题。");
+      return;
+    }
     setDataSourceAccessSaving(true);
     try {
+      const mcpAliases = buildSelectedDatabaseAliases(
+        selectedDatabaseIds,
+        databaseAliasDrafts,
+      );
       await replaceProjectDatabases(
         dataSourceProject.id,
         Array.from(selectedDatabaseIds),
+        mcpAliases,
       );
       setError(null);
       setDataSourceProject(null);
       setDataSourceOptions(null);
       setSelectedDatabaseIds(new Set());
+      setDatabaseAliasDrafts({});
       setSelectedDataSourceCategory(ALL_DATA_SOURCE_CATEGORIES);
       setActiveDataSourceId(null);
     } catch (requestError) {
@@ -449,8 +477,7 @@ export function ProjectDashboard() {
       ]);
       setHistoryTasks(tasks);
       setHistoryTree(projectTree);
-      const initialTask =
-        tasks.find((task) => task.read_call_count > 0) ?? tasks[0];
+      const initialTask = tasks[0];
       if (initialTask) {
         setSelectedHistoryTaskId(initialTask.task_id);
         setHistory(await getTaskDocumentReads(initialTask.task_id));
@@ -664,6 +691,9 @@ export function ProjectDashboard() {
     historyTasks.find((task) => task.task_id === selectedHistoryTaskId) ?? null;
   const historySteps = history ? buildTaskReadSteps(history.calls) : [];
   const historyRows = history ? buildTaskReadRows(history.calls) : [];
+  const historyTimeline = history
+    ? buildTaskContextTimeline(historyRows, history.database_calls)
+    : [];
   const historyCallNumbers = history
     ? buildDocumentCallNumbers(history.calls)
     : new Map<string, number[]>();
@@ -699,6 +729,20 @@ export function ProjectDashboard() {
         ),
       ).length
     : 0;
+  const databaseAliasErrors = validateDatabaseAliases(
+    dataSourceOptions
+      ? dataSourceOptions.sources.flatMap((source) =>
+          source.databases
+            .filter((database) => selectedDatabaseIds.has(database.id))
+            .map((database) => ({
+              databaseId: database.id,
+              value:
+                databaseAliasDrafts[database.id] ?? database.mcp_alias ?? "",
+              required: Boolean(database.link_id),
+            })),
+        )
+      : [],
+  );
 
   return (
     <>
@@ -1012,7 +1056,14 @@ export function ProjectDashboard() {
                     <strong>
                       已选择 {selectedDataSourceCount} 个数据源 · {selectedDatabaseIds.size} 个数据库
                     </strong>
-                    <span>保存后整批替换当前项目关联，新关联默认只读。</span>
+                    <span>
+                      保存后整批替换当前项目关联，新关联默认只读；历史关联若不是只读，不会向 MCP 暴露。
+                    </span>
+                    {Object.keys(databaseAliasErrors).length > 0 ? (
+                      <span className="database-alias-summary-error" role="alert">
+                        有 {Object.keys(databaseAliasErrors).length} 个 MCP 别名需要修正
+                      </span>
+                    ) : null}
                   </div>
                 </div>
 
@@ -1138,27 +1189,64 @@ export function ProjectDashboard() {
                                     !activeDataSource.enabled ||
                                     !database.available;
                                   return (
-                                    <label
+                                    <div
+                                      className="project-database-option"
                                       data-disabled={!selected && unavailable}
                                       data-selected={selected}
                                       key={database.id}
                                     >
                                       <input
+                                        id={`project-database-${database.id}`}
                                         type="checkbox"
                                         checked={selected}
                                         disabled={!selected && unavailable}
+                                        aria-label={`选择 ${database.display_name || database.remote_name}`}
                                         onChange={() =>
                                           toggleProjectDatabase(database.id)
                                         }
                                       />
-                                      <span>
-                                        <strong>{database.display_name}</strong>
-                                        <code>{database.remote_name}</code>
-                                      </span>
+                                      <div className="project-database-option-main">
+                                        <label htmlFor={`project-database-${database.id}`}>
+                                          <strong>{database.display_name || database.remote_name}</strong>
+                                          <code>{database.remote_name}</code>
+                                        </label>
+                                        {selected ? (
+                                          <label className="database-alias-field">
+                                            <span>MCP 别名</span>
+                                          <input
+                                            aria-label={`${database.display_name || database.remote_name} MCP 别名`}
+                                            aria-invalid={Boolean(databaseAliasErrors[database.id])}
+                                            aria-describedby={
+                                              databaseAliasErrors[database.id]
+                                                ? `database-alias-error-${database.id}`
+                                                : undefined
+                                            }
+                                            className="database-alias-input"
+                                            maxLength={64}
+                                            value={databaseAliasDrafts[database.id] ?? database.mcp_alias ?? ""}
+                                            onChange={(event) =>
+                                              setDatabaseAliasDrafts((current) => ({
+                                                ...current,
+                                                [database.id]: event.target.value,
+                                              }))
+                                            }
+                                            placeholder={database.link_id ? "MCP 别名" : "留空则自动生成"}
+                                          />
+                                            {databaseAliasErrors[database.id] ? (
+                                              <small
+                                                className="database-alias-error"
+                                                id={`database-alias-error-${database.id}`}
+                                              >
+                                                {databaseAliasErrors[database.id]}
+                                              </small>
+                                            ) : null}
+                                          </label>
+                                        ) : null}
+                                      </div>
                                       <small>
                                         {database.available ? database.namespace_type : "不可用"}
                                       </small>
-                                    </label>
+                                    </div>
                                   );
                                 })}
                               </div>
@@ -1196,7 +1284,10 @@ export function ProjectDashboard() {
                   <button
                     type="button"
                     className="primary-button"
-                    disabled={dataSourceAccessSaving}
+                    disabled={
+                      dataSourceAccessSaving ||
+                      Object.keys(databaseAliasErrors).length > 0
+                    }
                     onClick={() => void saveProjectDataSources()}
                   >
                     {dataSourceAccessSaving ? "正在保存…" : "保存关联"}
@@ -1359,7 +1450,7 @@ export function ProjectDashboard() {
               {selectedHistoryTask ? (
                 <>
                   <p>
-                    任务 #{selectedHistoryTask.task_id} · {history?.calls.length ?? 0} 次 MCP 调用 · {historySteps.length} 个读取步骤
+                    任务 #{selectedHistoryTask.task_id} · {(history?.calls.length ?? 0) + (history?.database_calls.length ?? 0)} 次 MCP 调用 · {historySteps.length} 个文档读取步骤
                   </p>
                   <strong>{selectedHistoryTask.task}</strong>
                 </>
@@ -1450,66 +1541,115 @@ export function ProjectDashboard() {
               {!historyLoading &&
               historyView === "list" &&
               history &&
-              historySteps.length === 0 ? (
+              historySteps.length === 0 &&
+              history.database_calls.length === 0 ? (
                 <div className="empty-state task-history-empty">
-                  <h3>这个任务还没有读取文档</h3>
-                  <p>调用 read_context_document 后，记录会显示在这里。</p>
+                  <h3>这个任务还没有上下文调用</h3>
+                  <p>读取文档或查询数据库后，记录会显示在这里。</p>
                 </div>
               ) : null}
               {!historyLoading &&
               historyView === "list" &&
-              historySteps.length > 0 ? (
+              history &&
+              (historySteps.length > 0 || history.database_calls.length > 0) ? (
                 <div className="task-history-flow">
-                  {historyRows.map((row) => (
-                    <section
-                      className="task-history-call-row"
-                      aria-label={`第 ${row.callNumber} 次 MCP 调用`}
-                      key={row.readCallId}
-                    >
-                      {row.steps.map((step) => (
-                        <button
-                          type="button"
-                          className="task-history-node"
-                          data-status={step.document.status}
-                          disabled={step.document.status === "error"}
-                          key={`${step.readCallId}-${step.document.position}`}
-                          onClick={() =>
-                            void selectDocument(
-                              historyProject,
-                              step.document.document_id,
-                            )
-                          }
+                  {historyTimeline.map((item) => {
+                    if (item.kind === "read") {
+                      return (
+                        <section
+                          className="task-history-call-row"
+                          aria-label={`第 ${item.eventNumber} 次上下文调用：文档读取`}
+                          key={`read-${item.row.readCallId}`}
                         >
-                          <span
-                            className="task-history-sequence"
-                            aria-label={`调用顺序 ${step.sequence}`}
-                          >
-                            {step.sequence}
-                          </span>
+                          {item.row.steps.map((step) => (
+                            <button
+                              type="button"
+                              className="task-history-node"
+                              data-status={step.document.status}
+                              disabled={step.document.status === "error"}
+                              key={`${step.readCallId}-${step.document.position}`}
+                              onClick={() =>
+                                void selectDocument(
+                                  historyProject,
+                                  step.document.document_id,
+                                )
+                              }
+                            >
+                              <span
+                                className="task-history-sequence"
+                                aria-label={`文档读取顺序 ${step.sequence}`}
+                              >
+                                {step.sequence}
+                              </span>
+                              <span className="file-chip">
+                                第 {item.eventNumber} 次上下文调用 · 文档读取
+                              </span>
+                              <strong>
+                                {step.document.path ?? step.document.document_id}
+                              </strong>
+                              {step.document.section ? (
+                                <small>章节：{step.document.section}</small>
+                              ) : null}
+                              <code>
+                                read_call_id: {step.readCallId} · position: {step.document.position}
+                              </code>
+                              <small>{formattedTime(step.createdAt)}</small>
+                              {step.document.status === "error" ? (
+                                <small className="read-error">
+                                  读取失败：{step.document.error_code}
+                                </small>
+                              ) : (
+                                <small>读取成功</small>
+                              )}
+                            </button>
+                          ))}
+                        </section>
+                      );
+                    }
+
+                    const call = item.call;
+                    return (
+                      <section
+                        className="task-history-call-row"
+                        aria-label={`第 ${item.eventNumber} 次上下文调用：数据库调用`}
+                        key={`database-${call.database_call_id}`}
+                      >
+                        <article
+                          className="task-history-node"
+                          data-status={call.status === "ok" ? "ok" : "error"}
+                        >
                           <span className="file-chip">
-                            第 {step.callNumber} 次 MCP 调用
+                            第 {item.eventNumber} 次上下文调用 · 数据库
                           </span>
                           <strong>
-                            {step.document.path ?? step.document.document_id}
+                            {call.operation === "search_objects"
+                              ? "搜索数据库对象"
+                              : "执行只读查询"}
+                            {" · "}
+                            {call.database}
                           </strong>
-                          {step.document.section ? (
-                            <small>章节：{step.document.section}</small>
-                          ) : null}
+                          <small>
+                            {call.engine.toUpperCase()} · {call.object_type ?? call.statement_type ?? "只读操作"}
+                          </small>
                           <code>
-                            read_call_id: {step.readCallId} · position: {step.document.position}
+                            database_call_id: {call.database_call_id} · 返回 {call.returned_count ?? 0} 项
                           </code>
-                          <small>{formattedTime(step.createdAt)}</small>
-                          {step.document.status === "error" ? (
+                          <small>
+                            {formattedTime(call.created_at)} · {call.duration_ms ?? 0} ms · {call.result_bytes ?? 0} bytes
+                          </small>
+                          {call.status === "error" ? (
                             <small className="read-error">
-                              读取失败：{step.document.error_code}
+                              调用失败：{call.error_code ?? "unknown_error"}
                             </small>
+                          ) : call.truncated ? (
+                            <small>结果已按安全预算截断</small>
                           ) : (
-                            <small>读取成功</small>
+                            <small>调用成功</small>
                           )}
-                        </button>
-                      ))}
-                    </section>
-                  ))}
+                        </article>
+                      </section>
+                    );
+                  })}
                 </div>
               ) : null}
               {!historyLoading &&

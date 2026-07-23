@@ -70,6 +70,22 @@ export interface DataSourcePasswordReveal {
   password: string;
 }
 
+export interface DataSourceEngineCapability {
+  engine: DatabaseEngine;
+  configurable: boolean;
+  discoverable: boolean;
+  searchable: boolean;
+  queryable: boolean;
+}
+
+export interface DataSourceConnectionTestResult {
+  engine: DatabaseEngine;
+  status: "passed" | "failed";
+  duration_ms: number;
+  error_code?: string;
+  message: string;
+}
+
 export interface DataSourceDatabasePayload {
   remote_name: string;
   display_name: string;
@@ -98,6 +114,7 @@ export interface DataSourceDatabaseSyncResult {
 export interface ProjectDatabaseLinkPayload {
   project_id: string;
   alias: string;
+  mcp_alias?: string | null;
   purpose: string;
   enabled: boolean;
   readonly: boolean;
@@ -128,6 +145,7 @@ export interface ProjectDatabaseOption {
   available: boolean;
   selected: boolean;
   link_id: string | null;
+  mcp_alias: string | null;
 }
 
 export interface ProjectDataSourceOption {
@@ -162,10 +180,21 @@ export interface PreparedProject {
   node_count: number;
 }
 
+export interface PreparedDatabase {
+  database: string;
+  engine: string;
+  name: string;
+  purpose: string;
+  readonly: boolean;
+  capabilities: string[];
+}
+
 export interface PrepareTaskContextResult {
   task_id: number;
   project: PreparedProject;
   documents: ContextDocumentNode;
+  databases: PreparedDatabase[];
+  warnings?: string[];
 }
 
 export interface ContextTaskSummary {
@@ -192,6 +221,22 @@ export interface ContextReadHistoryCall {
   documents: ContextReadHistoryItem[];
 }
 
+export interface ContextDatabaseCallHistoryItem {
+  database_call_id: number;
+  operation: "search_objects" | "execute_query";
+  database: string;
+  engine: string;
+  status: "ok" | "error";
+  object_type?: string;
+  statement_type?: string;
+  duration_ms?: number;
+  returned_count?: number;
+  result_bytes?: number;
+  truncated?: boolean;
+  error_code?: string;
+  created_at: string;
+}
+
 export interface ContextTaskReadHistory {
   task_id: number;
   task: string;
@@ -199,6 +244,7 @@ export interface ContextTaskReadHistory {
   agent_name?: string;
   created_at: string;
   calls: ContextReadHistoryCall[];
+  database_calls: ContextDatabaseCallHistoryItem[];
 }
 
 export interface McpServiceInfo {

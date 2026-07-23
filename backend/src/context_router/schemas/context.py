@@ -20,10 +20,21 @@ class PreparedProject(BaseModel):
     node_count: int
 
 
+class PreparedDatabase(BaseModel):
+    database: str
+    engine: str
+    name: str
+    purpose: str
+    readonly: bool = True
+    capabilities: list[str] = Field(default_factory=list)
+
+
 class PrepareTaskContextResult(BaseModel):
     task_id: int
     project: PreparedProject
     documents: ContextDocumentNode
+    databases: list[PreparedDatabase] = Field(default_factory=list)
+    warnings: list[str] | None = None
 
 
 class ContextDocumentReadRequest(BaseModel):
@@ -76,6 +87,22 @@ class ContextReadHistoryCall(BaseModel):
     documents: list[ContextReadHistoryItem]
 
 
+class ContextDatabaseCallHistoryItem(BaseModel):
+    database_call_id: int
+    operation: str
+    database: str
+    engine: str
+    status: str
+    object_type: str | None = None
+    statement_type: str | None = None
+    duration_ms: int | None = None
+    returned_count: int | None = None
+    result_bytes: int | None = None
+    truncated: bool | None = None
+    error_code: str | None = None
+    created_at: datetime
+
+
 class ContextTaskReadHistory(BaseModel):
     task_id: int
     task: str
@@ -83,3 +110,4 @@ class ContextTaskReadHistory(BaseModel):
     agent_name: str | None = None
     created_at: datetime
     calls: list[ContextReadHistoryCall]
+    database_calls: list[ContextDatabaseCallHistoryItem] = Field(default_factory=list)

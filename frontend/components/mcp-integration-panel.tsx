@@ -64,8 +64,8 @@ function ClientConfigGuide({
       <div className="integration-note">
         <strong>接入后怎么用</strong>
         <p>
-          新任务先调用 <code>prepare_task_context</code> 获取完整文档树和 task_id，
-          再按需调用 <code>read_context_document</code>。没有匹配项目时，客户端继续使用普通源码检索。
+          新任务先调用 <code>prepare_task_context</code> 获取文档树、task_id 和项目可用数据库别名；
+          再按需读取文档、搜索数据库对象或执行有界只读查询。没有匹配项目时，客户端继续使用普通源码检索。
         </p>
       </div>
     </section>
@@ -134,6 +134,10 @@ export function McpIntegrationPanel({
   const antigravity = info?.clients.find(
     (client) => client.client === "antigravity",
   );
+  const databaseToolsAvailable = Boolean(
+    info?.tools.some((tool) => tool.name === "search_database_objects") &&
+      info.tools.some((tool) => tool.name === "execute_database_query"),
+  );
 
   return (
     <div className="mcp-integration-modal" role="presentation">
@@ -147,7 +151,7 @@ export function McpIntegrationPanel({
           <div>
             <span className="file-chip">Streamable HTTP</span>
             <h2>MCP 接入与测试</h2>
-            <p>复制客户端配置，并从当前服务真实验证完整文档读取链路。</p>
+            <p>复制客户端配置，并从当前服务验证文档与数据库上下文能力。</p>
           </div>
           <button
             type="button"
@@ -216,6 +220,10 @@ export function McpIntegrationPanel({
                   <span>可匹配项目</span>
                   <strong>{info.readiness.project_count} 个</strong>
                 </article>
+                <article data-ready={databaseToolsAvailable}>
+                  <span>数据库工具</span>
+                  <strong>{databaseToolsAvailable ? "已注册" : "未注册"}</strong>
+                </article>
               </section>
 
               <section className="integration-tools">
@@ -232,6 +240,14 @@ export function McpIntegrationPanel({
                     </div>
                   </article>
                 ))}
+                <div className="integration-note">
+                  <strong>数据库可用性</strong>
+                  <p>
+                    工具列表固定不随数据源变化；当前任务真正可用的数据库，以
+                    <code> prepare_task_context </code>
+                    返回的 databases 列表为准。
+                  </p>
+                </div>
               </section>
             </div>
           ) : null}
@@ -259,7 +275,7 @@ export function McpIntegrationPanel({
                   <span className="file-chip">端到端验证</span>
                   <h3>选择一个项目执行真实 MCP 调用</h3>
                   <p>
-                    测试会创建一条隐藏的 connection-test 任务，读取入口文档，但不会在接口中返回正文。
+                    测试会创建一条隐藏的 connection-test 任务并读取入口文档，不返回正文，也不会执行任何业务数据库查询。
                   </p>
                 </div>
                 <label>

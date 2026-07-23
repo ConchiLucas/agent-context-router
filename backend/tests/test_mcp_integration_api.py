@@ -42,6 +42,8 @@ def test_mcp_integration_returns_client_configs_and_readiness(tmp_path: Path) ->
     assert [tool["name"] for tool in payload["tools"]] == [
         "prepare_task_context",
         "read_context_document",
+        "search_database_objects",
+        "execute_database_query",
     ]
     assert payload["readiness"] == {
         "database_configured": True,

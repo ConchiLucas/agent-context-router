@@ -28,12 +28,32 @@ services:
       CONTEXT_ROUTER_INTERNAL_API_URL: http://backend:8000
       NEXT_PUBLIC_CONTEXT_ROUTER_API_URL: http://127.0.0.1:49173
     ports:
-      - "49174:3000"
+      - "127.0.0.1:49174:3000"
     volumes:
       - .:/app
       - frontend_node_modules:/app/frontend/node_modules
     depends_on:
       - backend
+
+  clickhouse-test:
+    image: clickhouse/clickhouse-server:24.8.14.39-alpine
+    profiles:
+      - integration
+    environment:
+      CLICKHOUSE_DB: context_router_test
+      CLICKHOUSE_USER: context_router_admin
+      CLICKHOUSE_PASSWORD: context_router_admin
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          clickhouse-client --user context_router_admin
+          --password context_router_admin --query 'SELECT 1'
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
 
 volumes:
   frontend_node_modules:

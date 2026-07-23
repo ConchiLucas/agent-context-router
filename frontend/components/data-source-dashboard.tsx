@@ -8,17 +8,25 @@ import {
   deleteDataSource,
   deleteDataSourceDatabase,
   listDataSourceDatabases,
+  listDataSourceEngineCapabilities,
   listDataSources,
   revealDataSourcePassword,
   syncDataSourceDatabases,
+  testDataSourceConnection,
   updateDataSource,
 } from "@/lib/api";
 import type {
   DatabaseEngine,
+  DataSourceEngineCapability,
   DataSourceDatabaseSummary,
   DataSourcePayload,
   DataSourceSummary,
 } from "@/lib/types";
+import {
+  clickHouseConfigFromFields,
+  clickHouseFieldsFromConfig,
+  supportsConnectionTest,
+} from "@/lib/database-access";
 
 const ENGINES: { value: DatabaseEngine; label: string; port?: number }[] = [
   { value: "mysql", label: "MySQL", port: 3306 },
@@ -43,6 +51,11 @@ interface SourceFormState {
   password: string;
   serviceName: string;
   filePath: string;
+  secure: boolean;
+  verify: boolean;
+  bootstrapDatabase: string;
+  connectTimeoutSeconds: string;
+  sendReceiveTimeoutSeconds: string;
   enabled: boolean;
 }
 
@@ -57,6 +70,11 @@ const EMPTY_SOURCE: SourceFormState = {
   password: "",
   serviceName: "",
   filePath: "",
+  secure: false,
+  verify: true,
+  bootstrapDatabase: "default",
+  connectTimeoutSeconds: "8",
+  sendReceiveTimeoutSeconds: "15",
   enabled: true,
 };
 
@@ -75,6 +93,7 @@ function endpoint(source: DataSourceSummary): string {
 
 function sourceForm(source?: DataSourceSummary): SourceFormState {
   if (!source) return { ...EMPTY_SOURCE };
+  const clickHouseFields = clickHouseFieldsFromConfig(source.connection_config);
   return {
     name: source.name,
     category: source.category,
@@ -86,6 +105,7 @@ function sourceForm(source?: DataSourceSummary): SourceFormState {
     password: "",
     serviceName: String(source.connection_config.service_name ?? ""),
     filePath: String(source.connection_config.file_path ?? ""),
+    ...clickHouseFields,
     enabled: source.enabled,
   };
 }
@@ -102,6 +122,9 @@ function sourcePayload(form: SourceFormState): DataSourcePayload {
     if (form.engine === "oracle" && form.serviceName) {
       connection_config.service_name = form.serviceName.trim();
     }
+    if (form.engine === "clickhouse") {
+      Object.assign(connection_config, clickHouseConfigFromFields(form));
+    }
   }
   return {
     name: form.name.trim(),
@@ -115,6 +138,9 @@ function sourcePayload(form: SourceFormState): DataSourcePayload {
 
 export function DataSourceDashboard() {
   const [sources, setSources] = useState<DataSourceSummary[]>([]);
+  const [engineCapabilities, setEngineCapabilities] = useState<
+    DataSourceEngineCapability[]
+  >([]);
   const [selectedCategory, setSelectedCategory] = useState(
     ALL_DATA_SOURCE_CATEGORIES,
   );
@@ -147,7 +173,10 @@ export function DataSourceDashboard() {
   }, []);
 
   useEffect(() => {
-    void loadSources()
+    void Promise.all([
+      loadSources(),
+      listDataSourceEngineCapabilities().then(setEngineCapabilities),
+    ])
       .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "读取失败"))
       .finally(() => setLoading(false));
   }, [loadSources]);
@@ -236,6 +265,24 @@ export function DataSourceDashboard() {
       await loadSources();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "数据源删除失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function testSourceConnection(source: DataSourceSummary) {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await testDataSourceConnection(source.id);
+      if (result.status === "passed") {
+        setNotice(`${source.name} 连接成功（${result.duration_ms} ms）。`);
+      } else {
+        setError(`${result.message}${result.error_code ? `（${result.error_code}）` : ""}`);
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "连接测试失败");
     } finally {
       setBusy(false);
     }
@@ -364,6 +411,14 @@ export function DataSourceDashboard() {
                 <div className="data-source-card-chips">
                   <span className="engine-chip">{engineLabel(source.engine)}</span>
                   <span className="data-source-category-chip">{source.category}</span>
+                  <span className="data-source-category-chip">
+                    {engineCapabilities.length === 0
+                      ? "能力状态未加载"
+                      : engineCapabilities.find((item) => item.engine === source.engine)
+                            ?.queryable
+                        ? "MCP 可查询"
+                        : "仅配置管理，暂不支持 MCP 查询"}
+                  </span>
                 </div>
                 <h2>{source.name}</h2>
               </div>
@@ -380,6 +435,11 @@ export function DataSourceDashboard() {
             </div>
             <div className="data-source-actions">
               <button type="button" className="secondary-button" onClick={() => openSourceEditor(source)}>编辑连接</button>
+              {supportsConnectionTest(
+                engineCapabilities.find((item) => item.engine === source.engine),
+              ) ? (
+                <button type="button" className="secondary-button" disabled={busy} onClick={() => void testSourceConnection(source)}>测试连接</button>
+              ) : null}
               <button type="button" className="secondary-button" onClick={() => setSelectedSource(source)}>管理数据库</button>
               <button type="button" className="danger-text-button" disabled={busy} onClick={() => void removeSource(source)}>删除</button>
             </div>
@@ -437,6 +497,16 @@ export function DataSourceDashboard() {
                     </span>
                   </label>
                   {form.engine === "oracle" ? <label className="wide-field">Service Name<input value={form.serviceName} onChange={(e) => setForm({ ...form, serviceName: e.target.value })} /></label> : null}
+                  {form.engine === "clickhouse" ? (
+                    <>
+                      <label>启动数据库<input value={form.bootstrapDatabase} onChange={(e) => setForm({ ...form, bootstrapDatabase: e.target.value })} placeholder="default" required /></label>
+                      <label>连接超时（秒）<input type="number" min="1" max="60" value={form.connectTimeoutSeconds} onChange={(e) => setForm({ ...form, connectTimeoutSeconds: e.target.value })} required /></label>
+                      <label>读写超时（秒）<input type="number" min="1" max="300" value={form.sendReceiveTimeoutSeconds} onChange={(e) => setForm({ ...form, sendReceiveTimeoutSeconds: e.target.value })} required /></label>
+                      <label className="checkbox-field"><input type="checkbox" checked={form.secure} onChange={(e) => setForm({ ...form, secure: e.target.checked })} />使用 HTTPS/TLS</label>
+                      <label className="checkbox-field"><input type="checkbox" checked={form.verify} onChange={(e) => setForm({ ...form, verify: e.target.checked })} />校验证书</label>
+                      <p className="wide-field form-help">后端运行在 Docker 中；连接宿主机 ClickHouse 时请填写 host.docker.internal。</p>
+                    </>
+                  ) : null}
                 </>
               )}
               <label className="wide-field">说明<textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="例如：订单系统本地开发库" /></label>
@@ -455,9 +525,9 @@ export function DataSourceDashboard() {
               <button type="button" className="close-button" aria-label="关闭数据库管理" onClick={() => setSelectedSource(null)}>×</button>
             </header>
             <div className="source-detail-toolbar">
-              <div><strong>数据库清单</strong><span>MySQL、MariaDB 和 PostgreSQL 可从连接同步全部可见库，也可以继续手工维护。</span></div>
+              <div><strong>数据库清单</strong><span>MySQL、MariaDB、PostgreSQL 和 ClickHouse 可从连接同步全部可见库，也可以继续手工维护。</span></div>
               <div className="source-detail-actions">
-                {selectedSource.engine === "mysql" || selectedSource.engine === "mariadb" || selectedSource.engine === "postgresql" ? (
+                {engineCapabilities.find((item) => item.engine === selectedSource.engine)?.discoverable ? (
                   <button type="button" className="secondary-button" disabled={syncingDatabases} onClick={() => void syncSelectedSourceDatabases()}>
                     {syncingDatabases ? "正在同步…" : "同步全部库"}
                   </button>

@@ -2,7 +2,7 @@
 
 ## 产品目标
 
-让开发者把多个项目的 `AGENTS.md` 注册成项目卡片，并直观看到从入口开始的递归 Markdown 文档树。点击任意节点时，直接展示刷新时已经读取到内存的 Markdown 正文。
+让开发者把多个项目的 `AGENTS.md` 注册成项目卡片，并把项目文档和项目授权的只读数据库统一提供给本地 Codex、Antigravity 等 MCP 客户端。文档从入口递归形成 Markdown 树；数据库按项目别名暴露渐进 Schema 搜索和有界只读查询，不把连接信息交给 Agent。
 
 ## 项目
 
@@ -66,25 +66,34 @@ title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 sum
 - 点击节点后，通过独立详情抽屉展示 Markdown 标题、表格、列表、代码块和引用。
 - Markdown 渲染不执行原始 HTML 或脚本。
 - 项目卡片支持查看 MCP JSON，结果与 `prepare_task_context` 返回结构一致。
-- 项目卡片支持查看 MCP 调用记录，并在同一个全屏网格画布中切换“文档树”和“调用列表”：文档树保留全部节点，在被读取节点右上角标记第几次 MCP 调用，点击任意树节点可打开与普通文档树一致的 Markdown 详情；调用列表按 MCP 调用逐行展示，同一次批量读取的文档横向排在同一行，右上角用 `1、2、3…` 标记跨批次的全局文档顺序，读取成功的记录卡片也可点击查看对应 Markdown。
+- 项目卡片支持查看 MCP 调用记录，并在同一个全屏网格画布中切换“文档树”和“调用列表”：文档树保留全部节点，在被读取节点右上角标记文档读取批次；调用列表按时间合并文档读取和数据库调用，同一次批量读取的文档横向排在同一行。数据库调用只展示操作、项目内别名、Engine、对象或语句类型、耗时、返回数量、结果字节数、截断状态和稳定错误码。
 - 首页提供全局“MCP 接入”面板，集中展示服务地址、工具能力、Codex/Antigravity 配置模板和连接测试；客户端配置由后端按公开 MCP URL 生成，可直接复制。
 - 数据源管理以物理连接为单位维护 MySQL、MariaDB、PostgreSQL、SQL Server、SQLite、Oracle 和 ClickHouse；数据源分类与项目类型相互独立，可使用“自己服务器、公司内网服务器、本机电脑”等分类，未填写时默认归入“本机电脑”。
 - 数据源页面移除大标题说明区，顶部使用“全部数据源 / 动态数据源分类”Tab 筛选连接卡片；新增和编辑连接时可以维护分类。每个连接下只维护数据库清单，不在数据源页面反向选择项目。
 - 数据源编辑密码默认不随列表接口下发；用户点击密码框右侧眼睛后，通过独立 no-store 接口按需读取当前连接的明文密码，再次点击恢复隐藏。
-- MySQL/MariaDB 数据源通过 `SHOW DATABASES`、PostgreSQL 通过 `pg_database` 同步当前账号可见的全部库；同步保留既有库 ID 和项目关联，新增远端库，远端不再可见的旧库只标记为不可用，系统库单独标识。
+- MySQL/MariaDB 数据源通过 `SHOW DATABASES`、PostgreSQL 通过 `pg_database`、ClickHouse 通过 `system.databases` 同步当前账号可见的全部库；同步保留既有库 ID 和项目关联，新增远端库，远端不再可见的旧库只标记为不可用，系统库单独标识。
+- 数据源页面从后端能力接口读取真实能力。MySQL、MariaDB、PostgreSQL 和 ClickHouse 当前支持连接测试、数据库同步、对象搜索和只读查询；SQL Server、SQLite、Oracle 仍只支持配置管理，不会被标记为 MCP 可查询。
+- ClickHouse 连接可配置 HTTP/HTTPS、证书校验、启动数据库、连接超时和读写超时。后端运行在 Docker 中时，访问宿主机服务使用 `host.docker.internal`；连接测试只返回状态、耗时和短错误码，不返回密码、DSN 或驱动堆栈。
 - 项目在“管理数据源”弹窗中按独立的数据源分类筛选连接，选中某个数据源后多选其中的数据库；保存时以一次事务整批替换该项目的数据库关联，未改动的既有关联继续保留原查询策略。
-- 项目数据库关联默认只读、最多返回 1000 行、结果上限 2 MB、查询超时 15 秒；这些策略已经持久化，后续数据库 MCP 查询层直接读取，不需要客户端携带连接信息。
+- 每个项目数据库关联拥有项目内唯一、大小写无关匹配的 `mcp_alias`，格式为 `^[a-z][a-z0-9_-]{0,63}$`。Agent 只使用 prepare 返回的别名；数据源 ID、远端库名、Host、账号和密码不会进入 MCP 参数。
+- 项目数据库弹窗把数据库选择和全部 `mcp_alias` 作为一次事务保存；别名 A/B 互换不会经过冲突的中间状态，请求失败也不会留下部分更新。
+- 项目数据库关联默认只读、最多返回 1000 行、结果上限 2 MB、查询超时 15 秒；这些策略持久化后由服务端和全局硬上限共同收紧。停用项目、关联或数据源、不可用库、系统库、非只读关联以及没有 Connector 的 Engine 都不会出现在 prepare 的数据库清单中。
 
 ## MCP
 
-- 提供 `prepare_task_context(task, cwd, agent_name?)` 和 `read_context_document(task_id, requests)`。
+- MCP 固定提供四个工具：`prepare_task_context`、`read_context_document`、`search_database_objects` 和 `execute_database_query`。数据源增删或停用不会改变 `tools/list`。
 - 服务端按 cwd 最长前缀匹配项目，并返回完整文档树。
-- prepare 不搜索、不排名、不截断，也不返回正文。
-- 每次成功调用由 PostgreSQL 生成 task_id。
+- prepare 不搜索、不排名、不截断，也不返回正文；它同时返回当前项目可用于 MCP 的数据库别名、Engine、用途和能力摘要。prepare 只读取本地配置，不连接业务数据库；数据库摘要暂时失败时以 warning 降级，文档上下文仍可返回。
+- 每次成功调用 prepare 都由 PostgreSQL 生成独立 task_id。
 - read 必须携带当前任务的 task_id，一次支持 1 到 10 个文档或精确章节，并保持请求数组顺序。
 - 每次 read 由 PostgreSQL 生成 read_call_id；客户端不传 sequence，服务端不使用任务锁。
-- 数据库记录读取顺序和状态，不保存 Markdown 正文。
+- 所有数据库调用固定经过 `task_id -> task 绑定项目 -> 当前项目 mcp_alias -> 当前连接与查询策略 -> Connector`；不能跨项目复用 task_id 或直接提交连接参数。
+- `search_database_objects` 支持 schema、table、view、column、index，并以 `names -> summary -> full` 渐进增加细节。客户端可传 glob pattern、schema、table 和 limit；服务端还会按细节级别、结果字节数和项目策略截断。
+- `execute_database_query` 只接受一条可安全解析的只读 SQL。服务端拒绝写操作、多语句、跨库访问、外部表函数以及文件/网络访问函数，并同时施加行数、结果字节数、超时和数据库侧只读约束。返回值明确携带截断状态，不把截断结果伪装成完整结果。
+- Connector 按当前数据源配置和数据库版本延迟创建并有界缓存；prepare、文档 read 和 `/health` 不依赖业务数据库在线。
+- 数据库保存文档读取顺序和数据库调用客观元数据；不保存 Markdown 正文、完整 SQL、SQL 参数、Schema 搜索结果或查询结果集。查询审计仅保存 SQL SHA-256 摘要。
 - 接入面板的端到端测试真实执行 PostgreSQL 检查、MCP initialize、tools/list、项目 cwd 匹配、prepare 和入口文档 read；页面只接收任务号、调用号、阶段耗时和正文字符数，不返回 Markdown 正文。
+- 接入面板测试不会执行项目业务数据库查询；真实 ClickHouse 查询由独立 Docker Compose integration profile 验证。
 - 接入测试使用 `agent_name=connection-test` 创建系统任务，普通调用记录默认隐藏，可通过任务列表接口的 `include_system=true` 显式查看。
 
 ## 非目标
@@ -95,3 +104,4 @@ title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 sum
 - 不使用大模型解析文档层级。
 - 不自动修改 Codex 或 Antigravity 的本地配置，也不负责重启客户端。
 - 当前接入面板不处理远程 HTTPS、鉴权、Skill 安装和全局模糊检索。
+- 不提供数据库写入、DDL、DBA 运维、跨数据库联邦查询或任意外部表函数。

@@ -1,6 +1,13 @@
 from datetime import UTC, datetime
 
-from context_router.repositories.data_source_repository import DataSourceRecord
+import psycopg
+import pymysql
+import pytest
+
+from context_router.repositories.data_source_repository import (
+    DataSourceRecord,
+    DataSourceRepositoryError,
+)
 from context_router.services.database_discovery import discover_databases
 
 
@@ -28,6 +35,27 @@ class FakeConnection:
 
     def cursor(self) -> FakeCursor:
         return self.cursor_instance
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class FakeClickHouseResult:
+    result_rows = [
+        ("analytics",),
+        ("INFORMATION_SCHEMA",),
+        ("system",),
+    ]
+
+
+class FakeClickHouseClient:
+    def __init__(self) -> None:
+        self.statement = ""
+        self.closed = False
+
+    def query(self, statement: str) -> FakeClickHouseResult:
+        self.statement = statement
+        return FakeClickHouseResult()
 
     def close(self) -> None:
         self.closed = True
@@ -132,3 +160,117 @@ def test_postgresql_discovery_lists_non_template_databases(monkeypatch) -> None:
     ]
     assert databases[0].system_database is False
     assert databases[1].system_database is True
+
+
+def test_clickhouse_discovery_uses_catalog_and_secure_connection(monkeypatch) -> None:
+    client = FakeClickHouseClient()
+    captured: dict[str, object] = {}
+
+    def fake_get_client(**kwargs):
+        captured.update(kwargs)
+        return client
+
+    monkeypatch.setattr("clickhouse_connect.get_client", fake_get_client)
+    now = datetime.now(UTC)
+    source = DataSourceRecord(
+        id="source-clickhouse",
+        name="ClickHouse",
+        category="本机电脑",
+        engine="clickhouse",
+        description="",
+        connection_config={
+            "host": "clickhouse.example.com",
+            "port": 8443,
+            "username": "reader",
+            "password": "secret",
+            "secure": True,
+            "verify": True,
+            "bootstrap_database": "default",
+        },
+        enabled=True,
+        config_version=1,
+        database_count=0,
+        project_count=0,
+        created_at=now,
+        updated_at=now,
+    )
+
+    databases = discover_databases(source)
+
+    assert captured == {
+        "host": "clickhouse.example.com",
+        "port": 8443,
+        "username": "reader",
+        "password": "secret",
+        "database": "default",
+        "secure": True,
+        "verify": True,
+        "connect_timeout": 8.0,
+        "send_receive_timeout": 15.0,
+    }
+    assert client.statement == "SELECT name FROM system.databases ORDER BY name"
+    assert client.closed is True
+    assert [database.name for database in databases] == [
+        "analytics",
+        "INFORMATION_SCHEMA",
+        "system",
+    ]
+    assert databases[0].system_database is False
+    assert databases[1].system_database is True
+    assert databases[2].system_database is True
+
+
+@pytest.mark.parametrize(
+    ("engine", "patch_target", "driver_error", "public_message"),
+    [
+        (
+            "mysql",
+            "pymysql.connect",
+            pymysql.MySQLError("driver leaked mysql://reader:private@db.internal"),
+            "MySQL 数据库清单读取失败",
+        ),
+        (
+            "postgresql",
+            "psycopg.connect",
+            psycopg.OperationalError("driver leaked postgresql://reader:private@db.internal"),
+            "PostgreSQL 数据库清单读取失败",
+        ),
+    ],
+)
+def test_relational_discovery_errors_are_sanitized(
+    engine: str,
+    patch_target: str,
+    driver_error: Exception,
+    public_message: str,
+    monkeypatch,
+) -> None:
+    def fail(**kwargs):
+        raise driver_error
+
+    monkeypatch.setattr(patch_target, fail)
+    now = datetime.now(UTC)
+    source = DataSourceRecord(
+        id=f"source-{engine}",
+        name=engine,
+        category="本机电脑",
+        engine=engine,
+        description="",
+        connection_config={
+            "host": "db.internal",
+            "username": "reader",
+            "password": "private",
+        },
+        enabled=True,
+        config_version=1,
+        database_count=0,
+        project_count=0,
+        created_at=now,
+        updated_at=now,
+    )
+
+    with pytest.raises(DataSourceRepositoryError) as captured:
+        discover_databases(source)
+
+    assert str(captured.value) == public_message
+    assert "private" not in str(captured.value)
+    assert "db.internal" not in str(captured.value)

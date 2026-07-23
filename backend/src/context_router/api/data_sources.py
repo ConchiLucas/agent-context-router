@@ -1,10 +1,15 @@
 from dataclasses import replace
 from datetime import UTC, datetime
+from time import perf_counter
 from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
+from context_router.database.errors import DatabaseConnectorError
+from context_router.database.manager import ConnectorManager
+from context_router.database.models import ConnectorSpec
+from context_router.database.registry import ConnectorRegistry, ConnectorRegistryError
 from context_router.repositories.data_source_repository import (
     DataSourceDatabaseRecord,
     DataSourceRecord,
@@ -13,14 +18,17 @@ from context_router.repositories.data_source_repository import (
     ProjectDatabaseLinkRecord,
 )
 from context_router.schemas.data_sources import (
+    DataSourceConnectionTestResult,
     DataSourceCreate,
     DataSourceDatabaseCreate,
     DataSourceDatabaseSummary,
     DataSourceDatabaseSyncResult,
     DataSourceDatabaseUpdate,
+    DataSourceEngineCapability,
     DataSourcePasswordReveal,
     DataSourceSummary,
     DataSourceUpdate,
+    ProjectDatabaseAliasUpdate,
     ProjectDatabaseLinkCreate,
     ProjectDatabaseLinkSummary,
     ProjectDatabaseLinkUpdate,
@@ -42,6 +50,14 @@ def _store(request: Request) -> DataSourceStore:
 
 def _registry(request: Request) -> ProjectRegistry:
     return request.app.state.project_registry
+
+
+def _connector_registry(request: Request) -> ConnectorRegistry:
+    return request.app.state.connector_registry
+
+
+def _connector_manager(request: Request) -> ConnectorManager:
+    return request.app.state.connector_manager
 
 
 def _http_error(exc: DataSourceRepositoryError) -> HTTPException:
@@ -108,6 +124,7 @@ def _project_data_source_options(request: Request, project_id: str) -> ProjectDa
                     available=database.available,
                     selected=link is not None,
                     link_id=link.id if link is not None else None,
+                    mcp_alias=link.mcp_alias if link is not None else None,
                 )
             )
         sources.append(
@@ -135,6 +152,45 @@ def list_data_sources(request: Request) -> list[DataSourceSummary]:
         return [_source_summary(item) for item in _store(request).list_data_sources()]
     except DataSourceRepositoryError as exc:
         raise _http_error(exc) from exc
+
+
+@router.get("/data-source-engines", response_model=list[DataSourceEngineCapability])
+def list_data_source_engine_capabilities(request: Request) -> list[DataSourceEngineCapability]:
+    engines = ("mysql", "mariadb", "postgresql", "sqlserver", "sqlite", "oracle", "clickhouse")
+    result: list[DataSourceEngineCapability] = []
+    registry = _connector_registry(request)
+    for engine in engines:
+        try:
+            capabilities = registry.capabilities(engine)
+        except ConnectorRegistryError:
+            result.append(
+                DataSourceEngineCapability(
+                    engine=engine,
+                    configurable=True,
+                    discoverable=False,
+                    searchable=False,
+                    queryable=False,
+                )
+            )
+            continue
+        result.append(
+            DataSourceEngineCapability(
+                engine=engine,
+                configurable=True,
+                discoverable=capabilities.discover_databases,
+                searchable=any(
+                    (
+                        capabilities.search_schemas,
+                        capabilities.search_tables,
+                        capabilities.search_views,
+                        capabilities.search_columns,
+                        capabilities.search_indexes,
+                    )
+                ),
+                queryable=capabilities.execute_readonly_query,
+            )
+        )
+    return result
 
 
 @router.post(
@@ -183,6 +239,7 @@ def update_data_source(
             updated_at=datetime.now(UTC),
         )
         _store(request).update_data_source(record)
+        _connector_manager(request).invalidate_source(data_source_id)
         return _source_summary(_store(request).get_data_source(data_source_id))
     except DataSourceRepositoryError as exc:
         raise _http_error(exc) from exc
@@ -209,13 +266,80 @@ def reveal_data_source_password(
         raise _http_error(exc) from exc
 
 
+@router.post(
+    "/data-sources/{data_source_id}/test",
+    response_model=DataSourceConnectionTestResult,
+)
+def test_data_source_connection(
+    data_source_id: str,
+    request: Request,
+) -> DataSourceConnectionTestResult:
+    started = perf_counter()
+    try:
+        source = _store(request).get_data_source(data_source_id)
+        remote_name = _connection_test_database(source)
+        connector = _connector_registry(request).create(
+            ConnectorSpec(
+                data_source_id=source.id,
+                config_version=source.config_version,
+                database_id=f"connection-test-{source.id}",
+                database_updated_at=source.updated_at,
+                engine=source.engine,
+                remote_name=remote_name,
+                connection_config=source.connection_config,
+            )
+        )
+        try:
+            connector.ping()
+        finally:
+            connector.close()
+        return DataSourceConnectionTestResult(
+            engine=source.engine,
+            status="passed",
+            duration_ms=round((perf_counter() - started) * 1000),
+            message="连接成功",
+        )
+    except DataSourceRepositoryError as exc:
+        raise _http_error(exc) from exc
+    except (ConnectorRegistryError, DatabaseConnectorError) as exc:
+        engine = source.engine if "source" in locals() else "clickhouse"
+        return DataSourceConnectionTestResult(
+            engine=engine,
+            status="failed",
+            duration_ms=round((perf_counter() - started) * 1000),
+            error_code=getattr(exc, "code", "connection_failed"),
+            message="连接失败；请检查主机、端口、账号和 TLS 配置",
+        )
+    except Exception:
+        engine = source.engine if "source" in locals() else "clickhouse"
+        return DataSourceConnectionTestResult(
+            engine=engine,
+            status="failed",
+            duration_ms=round((perf_counter() - started) * 1000),
+            error_code="connection_failed",
+            message="连接失败；请检查主机、端口、账号和 TLS 配置",
+        )
+
+
 @router.delete("/data-sources/{data_source_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_data_source(data_source_id: str, request: Request) -> Response:
     try:
+        _connector_manager(request).invalidate_source(data_source_id)
         _store(request).delete_data_source(data_source_id)
     except DataSourceRepositoryError as exc:
         raise _http_error(exc) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def _connection_test_database(source: DataSourceRecord) -> str:
+    config = source.connection_config
+    if source.engine == "clickhouse":
+        return str(config.get("bootstrap_database") or "default")
+    if source.engine == "postgresql":
+        return str(config.get("database") or config.get("dbname") or "postgres")
+    if source.engine in {"mysql", "mariadb"}:
+        return str(config.get("database") or "information_schema")
+    return "connection_test"
 
 
 @router.get(
@@ -243,7 +367,10 @@ def sync_databases(
         existing = store.list_databases(data_source_id)
         existing_names = {database.remote_name for database in existing}
         discovered = discover_databases(source)
-        discovery_method = "pg_database" if source.engine == "postgresql" else "SHOW DATABASES"
+        discovery_method = {
+            "postgresql": "pg_database",
+            "clickhouse": "system.databases",
+        }.get(source.engine, "SHOW DATABASES")
         now = datetime.now(UTC)
         records = [
             DataSourceDatabaseRecord(
@@ -262,6 +389,7 @@ def sync_databases(
             for database in discovered
         ]
         store.sync_databases(data_source_id, records)
+        _connector_manager(request).invalidate_source(data_source_id)
         databases = store.list_databases(data_source_id)
         return DataSourceDatabaseSyncResult(
             discovered_count=len(discovered),
@@ -327,6 +455,7 @@ def update_database(
             updated_at=datetime.now(UTC),
         )
         _store(request).update_database(record)
+        _connector_manager(request).invalidate_source(data_source_id)
         return _database_summary(_store(request).get_database(database_id))
     except DataSourceRepositoryError as exc:
         raise _http_error(exc) from exc
@@ -341,6 +470,7 @@ def delete_database(data_source_id: str, database_id: str, request: Request) -> 
         database = _store(request).get_database(database_id)
         if database.data_source_id != data_source_id:
             raise DataSourceRepositoryError("数据库不属于这个数据源")
+        _connector_manager(request).invalidate_source(data_source_id)
         _store(request).delete_database(database_id)
     except DataSourceRepositoryError as exc:
         raise _http_error(exc) from exc
@@ -382,6 +512,7 @@ def create_database_project_link(
             data_source_name=source.name,
             engine=source.engine,
             alias=payload.alias.strip(),
+            mcp_alias=payload.mcp_alias,
             purpose=payload.purpose.strip(),
             enabled=payload.enabled,
             readonly=payload.readonly,
@@ -392,8 +523,8 @@ def create_database_project_link(
             created_at=now,
             updated_at=now,
         )
-        _store(request).create_link(record)
-        return _link_summary(record)
+        saved_record = _store(request).create_link(record)
+        return _link_summary(saved_record)
     except DataSourceRepositoryError as exc:
         raise _http_error(exc) from exc
 
@@ -425,6 +556,7 @@ def update_database_project_link(
             project_id=payload.project_id,
             project_name=project_name,
             alias=payload.alias.strip(),
+            mcp_alias=payload.mcp_alias or previous.mcp_alias,
             purpose=payload.purpose.strip(),
             enabled=payload.enabled,
             readonly=payload.readonly,
@@ -434,8 +566,8 @@ def update_database_project_link(
             query_timeout_ms=payload.query_timeout_ms,
             updated_at=datetime.now(UTC),
         )
-        _store(request).update_link(record)
-        return _link_summary(record)
+        saved_record = _store(request).update_link(record)
+        return _link_summary(saved_record)
     except DataSourceRepositoryError as exc:
         raise _http_error(exc) from exc
 
@@ -468,6 +600,40 @@ def list_project_databases(project_id: str, request: Request) -> list[ProjectDat
         raise _http_error(exc) from exc
 
 
+@router.patch(
+    "/projects/{project_id}/databases/{link_id}/mcp-alias",
+    response_model=ProjectDatabaseLinkSummary,
+)
+def update_project_database_mcp_alias(
+    project_id: str,
+    link_id: str,
+    payload: ProjectDatabaseAliasUpdate,
+    request: Request,
+) -> ProjectDatabaseLinkSummary:
+    try:
+        _project_name(request, project_id)
+        previous = next(
+            (
+                link
+                for link in _store(request).list_links(project_id=project_id)
+                if link.id == link_id
+            ),
+            None,
+        )
+        if previous is None:
+            raise DataSourceRepositoryError("项目数据库关联不存在")
+        saved = _store(request).update_link(
+            replace(
+                previous,
+                mcp_alias=payload.mcp_alias,
+                updated_at=datetime.now(UTC),
+            )
+        )
+        return _link_summary(saved)
+    except DataSourceRepositoryError as exc:
+        raise _http_error(exc) from exc
+
+
 @router.get(
     "/projects/{project_id}/data-source-options",
     response_model=ProjectDataSourceOptions,
@@ -492,6 +658,9 @@ def replace_project_databases(
         project_name = _project_name(request, project_id)
         if len(payload.database_ids) != len(set(payload.database_ids)):
             raise DataSourceRepositoryError("数据库选择中存在重复项")
+        unexpected_aliases = set(payload.mcp_aliases).difference(payload.database_ids)
+        if unexpected_aliases:
+            raise DataSourceRepositoryError("MCP 别名包含未选择的数据库")
 
         store = _store(request)
         sources = store.list_data_sources()
@@ -512,8 +681,19 @@ def replace_project_databases(
         records: list[ProjectDatabaseLinkRecord] = []
         for database_id in payload.database_ids:
             existing = existing_by_database.get(database_id)
+            requested_alias = payload.mcp_aliases.get(database_id)
             if existing is not None:
-                records.append(existing)
+                records.append(
+                    replace(
+                        existing,
+                        mcp_alias=requested_alias or existing.mcp_alias,
+                        updated_at=(
+                            now
+                            if requested_alias and requested_alias != existing.mcp_alias
+                            else existing.updated_at
+                        ),
+                    )
+                )
                 continue
             database = database_by_id[database_id]
             source = source_by_id[database.data_source_id]
@@ -532,6 +712,7 @@ def replace_project_databases(
                     data_source_name=source.name,
                     engine=source.engine,
                     alias=database.display_name or database.remote_name,
+                    mcp_alias=requested_alias,
                     purpose="项目数据源访问",
                     enabled=True,
                     readonly=True,

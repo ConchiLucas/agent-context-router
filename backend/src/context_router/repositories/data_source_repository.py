@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import re
+import unicodedata
 from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any, Protocol
@@ -10,6 +13,87 @@ from psycopg.types.json import Jsonb
 
 class DataSourceRepositoryError(RuntimeError):
     pass
+
+
+_MCP_ALIAS_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
+_INVALID_ALIAS_CHARACTERS = re.compile(r"[^a-z0-9]+")
+
+
+def _normalize_alias_candidate(value: str) -> str | None:
+    normalized = unicodedata.normalize("NFKD", value)
+    ascii_value = normalized.encode("ascii", "ignore").decode("ascii").lower()
+    slug = _INVALID_ALIAS_CHARACTERS.sub("_", ascii_value).strip("_")
+    if not slug:
+        return None
+    if not slug[0].isalpha():
+        slug = f"db_{slug}"
+    return slug[:64].rstrip("_")
+
+
+def _stable_link_token(link_id: str) -> str:
+    normalized = re.sub(r"[^a-z0-9]", "", link_id.lower())
+    if len(normalized) >= 8:
+        return normalized
+    return hashlib.sha256(link_id.encode()).hexdigest()
+
+
+def _generate_mcp_alias(
+    *,
+    record: ProjectDatabaseLinkRecord,
+    database: DataSourceDatabaseRecord,
+    used_aliases: set[str],
+) -> str:
+    base = next(
+        (
+            candidate
+            for candidate in (
+                _normalize_alias_candidate(record.alias),
+                _normalize_alias_candidate(database.display_name),
+                _normalize_alias_candidate(database.remote_name),
+            )
+            if candidate is not None
+        ),
+        f"db_{_stable_link_token(record.id)[:8]}",
+    )
+    if base.casefold() not in used_aliases:
+        return base
+
+    token = _stable_link_token(record.id)
+    suffix_candidates = [token[:length] for length in range(8, len(token) + 1, 4)]
+    digest = hashlib.sha256(record.id.encode()).hexdigest()
+    suffix_candidates.extend(digest[:length] for length in range(8, len(digest) + 1, 4))
+    for suffix in suffix_candidates:
+        candidate = f"{base[: 63 - len(suffix)].rstrip('_')}_{suffix}"
+        if candidate.casefold() not in used_aliases:
+            return candidate
+    raise DataSourceRepositoryError("无法生成唯一的 MCP 数据库别名")
+
+
+def _prepare_link_alias(
+    record: ProjectDatabaseLinkRecord,
+    *,
+    database: DataSourceDatabaseRecord,
+    used_aliases: set[str],
+) -> ProjectDatabaseLinkRecord:
+    if record.mcp_alias is None:
+        mcp_alias = _generate_mcp_alias(
+            record=record,
+            database=database,
+            used_aliases=used_aliases,
+        )
+    else:
+        mcp_alias = record.mcp_alias.strip()
+        if not _MCP_ALIAS_PATTERN.fullmatch(mcp_alias):
+            raise DataSourceRepositoryError("MCP 数据库别名格式不正确")
+        if mcp_alias.casefold() in used_aliases:
+            raise DataSourceRepositoryError("项目内 MCP 数据库别名已存在")
+    return replace(record, mcp_alias=mcp_alias)
+
+
+def _link_alias_key(record: ProjectDatabaseLinkRecord) -> str:
+    if record.mcp_alias is None:
+        raise DataSourceRepositoryError("项目数据库尚未配置 MCP 别名")
+    return record.mcp_alias.casefold()
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +138,7 @@ class ProjectDatabaseLinkRecord:
     data_source_name: str
     engine: str
     alias: str
+    mcp_alias: str | None
     purpose: str
     enabled: bool
     readonly: bool
@@ -63,6 +148,44 @@ class ProjectDatabaseLinkRecord:
     query_timeout_ms: int
     created_at: datetime
     updated_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedProjectDatabase:
+    link_id: str
+    project_id: str
+    project_name: str
+    project_enabled: bool
+    mcp_alias: str
+    alias: str
+    purpose: str
+    link_enabled: bool
+    readonly: bool
+    allowed_schemas: list[str]
+    max_rows: int
+    max_result_bytes: int
+    query_timeout_ms: int
+    link_created_at: datetime
+    link_updated_at: datetime
+    database_id: str
+    database_remote_name: str
+    database_display_name: str
+    namespace_type: str
+    database_available: bool
+    database_system: bool
+    database_metadata: dict[str, Any]
+    database_created_at: datetime
+    database_updated_at: datetime
+    data_source_id: str
+    data_source_name: str
+    data_source_category: str
+    engine: str
+    data_source_description: str
+    connection_config: dict[str, Any]
+    source_enabled: bool
+    config_version: int
+    source_created_at: datetime
+    source_updated_at: datetime
 
 
 class DataSourceStore(Protocol):
@@ -82,12 +205,16 @@ class DataSourceStore(Protocol):
     def list_links(
         self, *, project_id: str | None = None, database_id: str | None = None
     ) -> list[ProjectDatabaseLinkRecord]: ...
-    def create_link(self, record: ProjectDatabaseLinkRecord) -> None: ...
-    def update_link(self, record: ProjectDatabaseLinkRecord) -> None: ...
+    def get_project_database_by_alias(
+        self, *, project_id: str, mcp_alias: str
+    ) -> ResolvedProjectDatabase: ...
+    def list_project_databases_for_mcp(self, project_id: str) -> list[ResolvedProjectDatabase]: ...
+    def create_link(self, record: ProjectDatabaseLinkRecord) -> ProjectDatabaseLinkRecord: ...
+    def update_link(self, record: ProjectDatabaseLinkRecord) -> ProjectDatabaseLinkRecord: ...
     def delete_link(self, link_id: str) -> None: ...
     def replace_project_links(
         self, project_id: str, records: list[ProjectDatabaseLinkRecord]
-    ) -> None: ...
+    ) -> list[ProjectDatabaseLinkRecord]: ...
 
 
 class InMemoryDataSourceRepository:
@@ -214,19 +341,73 @@ class InMemoryDataSourceRepository:
             and (database_id is None or item.database_id == database_id)
         ]
 
-    def create_link(self, record: ProjectDatabaseLinkRecord) -> None:
-        self.get_database(record.database_id)
+    def get_project_database_by_alias(
+        self, *, project_id: str, mcp_alias: str
+    ) -> ResolvedProjectDatabase:
+        matches = [
+            link
+            for link in self._links.values()
+            if link.project_id == project_id
+            and link.mcp_alias is not None
+            and link.mcp_alias.casefold() == mcp_alias.casefold()
+        ]
+        if len(matches) != 1:
+            raise DataSourceRepositoryError("项目数据库不存在")
+        return self._resolved_record(matches[0])
+
+    def list_project_databases_for_mcp(self, project_id: str) -> list[ResolvedProjectDatabase]:
+        records = [
+            self._resolved_record(link)
+            for link in self._links.values()
+            if link.project_id == project_id and link.mcp_alias is not None
+        ]
+        return sorted(records, key=lambda item: (item.mcp_alias.casefold(), item.link_id))
+
+    def create_link(self, record: ProjectDatabaseLinkRecord) -> ProjectDatabaseLinkRecord:
+        database = self.get_database(record.database_id)
         if any(
             item.project_id == record.project_id and item.database_id == record.database_id
             for item in self._links.values()
         ):
             raise DataSourceRepositoryError("项目已经关联这个数据库")
-        self._links[record.id] = record
+        used_aliases = {
+            item.mcp_alias.casefold()
+            for item in self._links.values()
+            if item.project_id == record.project_id and item.mcp_alias is not None
+        }
+        saved_record = _prepare_link_alias(
+            record,
+            database=database,
+            used_aliases=used_aliases,
+        )
+        self._links[saved_record.id] = saved_record
+        return saved_record
 
-    def update_link(self, record: ProjectDatabaseLinkRecord) -> None:
+    def update_link(self, record: ProjectDatabaseLinkRecord) -> ProjectDatabaseLinkRecord:
         if record.id not in self._links:
             raise DataSourceRepositoryError("项目数据库关联不存在")
-        self._links[record.id] = record
+        database = self.get_database(record.database_id)
+        if any(
+            item.id != record.id
+            and item.project_id == record.project_id
+            and item.database_id == record.database_id
+            for item in self._links.values()
+        ):
+            raise DataSourceRepositoryError("项目已经关联这个数据库")
+        used_aliases = {
+            item.mcp_alias.casefold()
+            for item in self._links.values()
+            if item.id != record.id
+            and item.project_id == record.project_id
+            and item.mcp_alias is not None
+        }
+        saved_record = _prepare_link_alias(
+            record,
+            database=database,
+            used_aliases=used_aliases,
+        )
+        self._links[saved_record.id] = saved_record
+        return saved_record
 
     def delete_link(self, link_id: str) -> None:
         if link_id not in self._links:
@@ -235,10 +416,43 @@ class InMemoryDataSourceRepository:
 
     def replace_project_links(
         self, project_id: str, records: list[ProjectDatabaseLinkRecord]
-    ) -> None:
+    ) -> list[ProjectDatabaseLinkRecord]:
+        if any(record.project_id != project_id for record in records):
+            raise DataSourceRepositoryError("项目数据库关联不属于当前项目")
+        if len({record.database_id for record in records}) != len(records):
+            raise DataSourceRepositoryError("项目数据库关联中存在重复数据库")
+
+        database_by_id = {
+            record.database_id: self.get_database(record.database_id) for record in records
+        }
+        used_aliases: set[str] = set()
+        saved_by_id: dict[str, ProjectDatabaseLinkRecord] = {}
+        for record in records:
+            if record.mcp_alias is None:
+                continue
+            saved = _prepare_link_alias(
+                record,
+                database=database_by_id[record.database_id],
+                used_aliases=used_aliases,
+            )
+            saved_by_id[record.id] = saved
+            used_aliases.add(_link_alias_key(saved))
+        for record in records:
+            if record.id in saved_by_id:
+                continue
+            saved = _prepare_link_alias(
+                record,
+                database=database_by_id[record.database_id],
+                used_aliases=used_aliases,
+            )
+            saved_by_id[record.id] = saved
+            used_aliases.add(_link_alias_key(saved))
+
+        saved_records = [saved_by_id[record.id] for record in records]
         retained = {key: item for key, item in self._links.items() if item.project_id != project_id}
-        retained.update({record.id: record for record in records})
+        retained.update({record.id: record for record in saved_records})
         self._links = retained
+        return saved_records
 
     def _hydrate_source(self, record: DataSourceRecord) -> DataSourceRecord:
         database_ids = {
@@ -257,6 +471,52 @@ class InMemoryDataSourceRepository:
         return replace(
             record,
             project_count=sum(1 for item in self._links.values() if item.database_id == record.id),
+        )
+
+    def _resolved_record(self, link: ProjectDatabaseLinkRecord) -> ResolvedProjectDatabase:
+        if link.mcp_alias is None:
+            raise DataSourceRepositoryError("项目数据库尚未配置 MCP 别名")
+        database = self._databases.get(link.database_id)
+        if database is None:
+            raise DataSourceRepositoryError("数据库不存在")
+        source = self._sources.get(database.data_source_id)
+        if source is None:
+            raise DataSourceRepositoryError("数据源不存在")
+        return ResolvedProjectDatabase(
+            link_id=link.id,
+            project_id=link.project_id,
+            project_name=link.project_name,
+            project_enabled=True,
+            mcp_alias=link.mcp_alias,
+            alias=link.alias,
+            purpose=link.purpose,
+            link_enabled=link.enabled,
+            readonly=link.readonly,
+            allowed_schemas=list(link.allowed_schemas),
+            max_rows=link.max_rows,
+            max_result_bytes=link.max_result_bytes,
+            query_timeout_ms=link.query_timeout_ms,
+            link_created_at=link.created_at,
+            link_updated_at=link.updated_at,
+            database_id=database.id,
+            database_remote_name=database.remote_name,
+            database_display_name=database.display_name,
+            namespace_type=database.namespace_type,
+            database_available=database.available,
+            database_system=database.system_database,
+            database_metadata=dict(database.metadata),
+            database_created_at=database.created_at,
+            database_updated_at=database.updated_at,
+            data_source_id=source.id,
+            data_source_name=source.name,
+            data_source_category=source.category,
+            engine=source.engine,
+            data_source_description=source.description,
+            connection_config=dict(source.connection_config),
+            source_enabled=source.enabled,
+            config_version=source.config_version,
+            source_created_at=source.created_at,
+            source_updated_at=source.updated_at,
         )
 
 
@@ -467,70 +727,147 @@ class PostgresDataSourceRepository:
             ).fetchall()
         return [self._link_record(row) for row in rows]
 
-    def create_link(self, record: ProjectDatabaseLinkRecord) -> None:
+    def get_project_database_by_alias(
+        self, *, project_id: str, mcp_alias: str
+    ) -> ResolvedProjectDatabase:
+        with self._connect("项目数据库关联读取失败") as connection:
+            row = connection.execute(
+                self._resolved_select()
+                + " WHERE link.project_id=%s AND lower(link.mcp_alias)=lower(%s)",
+                (project_id, mcp_alias),
+            ).fetchone()
+        if row is None:
+            raise DataSourceRepositoryError("项目数据库不存在")
+        return self._resolved_record(row)
+
+    def list_project_databases_for_mcp(self, project_id: str) -> list[ResolvedProjectDatabase]:
+        with self._connect("项目数据库关联读取失败") as connection:
+            rows = connection.execute(
+                self._resolved_select()
+                + " WHERE link.project_id=%s AND link.mcp_alias IS NOT NULL"
+                + " ORDER BY lower(link.mcp_alias), link.id",
+                (project_id,),
+            ).fetchall()
+        return [self._resolved_record(row) for row in rows]
+
+    def create_link(self, record: ProjectDatabaseLinkRecord) -> ProjectDatabaseLinkRecord:
+        database = self.get_database(record.database_id)
         try:
             with psycopg.connect(self._database_url) as connection:
                 connection.execute(
+                    "SELECT id FROM document_projects WHERE id=%s FOR UPDATE",
+                    (record.project_id,),
+                )
+                used_aliases = {
+                    str(row[0]).casefold()
+                    for row in connection.execute(
+                        """SELECT mcp_alias FROM project_databases
+                        WHERE project_id=%s AND mcp_alias IS NOT NULL""",
+                        (record.project_id,),
+                    ).fetchall()
+                }
+                saved_record = _prepare_link_alias(
+                    record,
+                    database=database,
+                    used_aliases=used_aliases,
+                )
+                connection.execute(
                     """INSERT INTO project_databases
-                    (id, project_id, database_id, alias, purpose, enabled, readonly,
+                    (id, project_id, database_id, alias, mcp_alias, purpose, enabled, readonly,
                      allowed_schemas, max_rows, max_result_bytes, query_timeout_ms)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                     (
-                        record.id,
-                        record.project_id,
-                        record.database_id,
-                        record.alias,
-                        record.purpose,
-                        record.enabled,
-                        record.readonly,
-                        Jsonb(record.allowed_schemas),
-                        record.max_rows,
-                        record.max_result_bytes,
-                        record.query_timeout_ms,
+                        saved_record.id,
+                        saved_record.project_id,
+                        saved_record.database_id,
+                        saved_record.alias,
+                        saved_record.mcp_alias,
+                        saved_record.purpose,
+                        saved_record.enabled,
+                        saved_record.readonly,
+                        Jsonb(saved_record.allowed_schemas),
+                        saved_record.max_rows,
+                        saved_record.max_result_bytes,
+                        saved_record.query_timeout_ms,
                     ),
                 )
         except psycopg.errors.UniqueViolation as exc:
-            raise DataSourceRepositoryError("项目已经关联这个数据库") from exc
+            raise DataSourceRepositoryError(self._link_unique_error(exc)) from exc
         except psycopg.errors.ForeignKeyViolation as exc:
             raise DataSourceRepositoryError("项目或数据库不存在") from exc
+        except DataSourceRepositoryError:
+            raise
         except psycopg.Error as exc:
             raise DataSourceRepositoryError("项目数据库关联写入失败") from exc
+        return saved_record
 
-    def update_link(self, record: ProjectDatabaseLinkRecord) -> None:
+    def update_link(self, record: ProjectDatabaseLinkRecord) -> ProjectDatabaseLinkRecord:
+        database = self.get_database(record.database_id)
         try:
             with psycopg.connect(self._database_url) as connection:
+                connection.execute(
+                    "SELECT id FROM document_projects WHERE id=%s FOR UPDATE",
+                    (record.project_id,),
+                )
+                used_aliases = {
+                    str(row[0]).casefold()
+                    for row in connection.execute(
+                        """SELECT mcp_alias FROM project_databases
+                        WHERE project_id=%s AND id<>%s AND mcp_alias IS NOT NULL""",
+                        (record.project_id, record.id),
+                    ).fetchall()
+                }
+                saved_record = _prepare_link_alias(
+                    record,
+                    database=database,
+                    used_aliases=used_aliases,
+                )
                 cursor = connection.execute(
-                    """UPDATE project_databases SET alias=%s, purpose=%s, enabled=%s,
-                    readonly=%s, allowed_schemas=%s, max_rows=%s, max_result_bytes=%s,
-                    query_timeout_ms=%s, updated_at=CURRENT_TIMESTAMP WHERE id=%s""",
+                    """UPDATE project_databases SET project_id=%s, alias=%s, mcp_alias=%s,
+                    purpose=%s, enabled=%s, readonly=%s, allowed_schemas=%s, max_rows=%s,
+                    max_result_bytes=%s, query_timeout_ms=%s,
+                    updated_at=CURRENT_TIMESTAMP WHERE id=%s""",
                     (
-                        record.alias,
-                        record.purpose,
-                        record.enabled,
-                        record.readonly,
-                        Jsonb(record.allowed_schemas),
-                        record.max_rows,
-                        record.max_result_bytes,
-                        record.query_timeout_ms,
-                        record.id,
+                        saved_record.project_id,
+                        saved_record.alias,
+                        saved_record.mcp_alias,
+                        saved_record.purpose,
+                        saved_record.enabled,
+                        saved_record.readonly,
+                        Jsonb(saved_record.allowed_schemas),
+                        saved_record.max_rows,
+                        saved_record.max_result_bytes,
+                        saved_record.query_timeout_ms,
+                        saved_record.id,
                     ),
                 )
                 if cursor.rowcount == 0:
                     raise DataSourceRepositoryError("项目数据库关联不存在")
+        except psycopg.errors.UniqueViolation as exc:
+            raise DataSourceRepositoryError(self._link_unique_error(exc)) from exc
         except DataSourceRepositoryError:
             raise
         except psycopg.Error as exc:
             raise DataSourceRepositoryError("项目数据库关联更新失败") from exc
+        return saved_record
 
     def delete_link(self, link_id: str) -> None:
         self._delete("project_databases", link_id, "项目数据库关联不存在", "项目数据库关联删除失败")
 
     def replace_project_links(
         self, project_id: str, records: list[ProjectDatabaseLinkRecord]
-    ) -> None:
+    ) -> list[ProjectDatabaseLinkRecord]:
+        if any(record.project_id != project_id for record in records):
+            raise DataSourceRepositoryError("项目数据库关联不属于当前项目")
+        if len({record.database_id for record in records}) != len(records):
+            raise DataSourceRepositoryError("项目数据库关联中存在重复数据库")
         database_ids = [record.database_id for record in records]
         try:
             with psycopg.connect(self._database_url) as connection:
+                connection.execute(
+                    "SELECT id FROM document_projects WHERE id=%s FOR UPDATE",
+                    (project_id,),
+                )
                 if database_ids:
                     connection.execute(
                         """DELETE FROM project_databases
@@ -542,31 +879,70 @@ class PostgresDataSourceRepository:
                         "DELETE FROM project_databases WHERE project_id=%s",
                         (project_id,),
                     )
+
+                databases = self._load_databases_for_alias(connection, database_ids)
+                if len(databases) != len(set(database_ids)):
+                    raise DataSourceRepositoryError("项目或数据库不存在")
+                used_aliases: set[str] = set()
+                saved_by_id: dict[str, ProjectDatabaseLinkRecord] = {}
                 for record in records:
+                    if record.mcp_alias is None:
+                        continue
+                    saved = _prepare_link_alias(
+                        record,
+                        database=databases[record.database_id],
+                        used_aliases=used_aliases,
+                    )
+                    saved_by_id[record.id] = saved
+                    used_aliases.add(_link_alias_key(saved))
+                for record in records:
+                    if record.id in saved_by_id:
+                        continue
+                    saved = _prepare_link_alias(
+                        record,
+                        database=databases[record.database_id],
+                        used_aliases=used_aliases,
+                    )
+                    saved_by_id[record.id] = saved
+                    used_aliases.add(_link_alias_key(saved))
+
+                saved_records = [saved_by_id[record.id] for record in records]
+                connection.execute(
+                    "UPDATE project_databases SET mcp_alias=NULL WHERE project_id=%s",
+                    (project_id,),
+                )
+                for saved_record in saved_records:
                     connection.execute(
                         """INSERT INTO project_databases
-                        (id, project_id, database_id, alias, purpose, enabled, readonly,
+                        (id, project_id, database_id, alias, mcp_alias, purpose, enabled, readonly,
                          allowed_schemas, max_rows, max_result_bytes, query_timeout_ms)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                        ON CONFLICT (project_id, database_id) DO NOTHING""",
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        ON CONFLICT (project_id, database_id) DO UPDATE SET
+                          mcp_alias=EXCLUDED.mcp_alias""",
                         (
-                            record.id,
-                            record.project_id,
-                            record.database_id,
-                            record.alias,
-                            record.purpose,
-                            record.enabled,
-                            record.readonly,
-                            Jsonb(record.allowed_schemas),
-                            record.max_rows,
-                            record.max_result_bytes,
-                            record.query_timeout_ms,
+                            saved_record.id,
+                            saved_record.project_id,
+                            saved_record.database_id,
+                            saved_record.alias,
+                            saved_record.mcp_alias,
+                            saved_record.purpose,
+                            saved_record.enabled,
+                            saved_record.readonly,
+                            Jsonb(saved_record.allowed_schemas),
+                            saved_record.max_rows,
+                            saved_record.max_result_bytes,
+                            saved_record.query_timeout_ms,
                         ),
                     )
+        except psycopg.errors.UniqueViolation as exc:
+            raise DataSourceRepositoryError(self._link_unique_error(exc)) from exc
         except psycopg.errors.ForeignKeyViolation as exc:
             raise DataSourceRepositoryError("项目或数据库不存在") from exc
+        except DataSourceRepositoryError:
+            raise
         except psycopg.Error as exc:
             raise DataSourceRepositoryError("项目数据库关联批量更新失败") from exc
+        return saved_records
 
     def _delete(self, table: str, record_id: str, missing: str, failed: str) -> None:
         try:
@@ -584,6 +960,41 @@ class PostgresDataSourceRepository:
             return psycopg.connect(self._database_url)
         except psycopg.Error as exc:
             raise DataSourceRepositoryError(message) from exc
+
+    @staticmethod
+    def _load_databases_for_alias(
+        connection: psycopg.Connection[Any], database_ids: list[str]
+    ) -> dict[str, DataSourceDatabaseRecord]:
+        if not database_ids:
+            return {}
+        rows = connection.execute(
+            """SELECT id, data_source_id, remote_name, display_name, namespace_type,
+            available, system_database, metadata, created_at, updated_at
+            FROM data_source_databases WHERE id=ANY(%s)""",
+            (database_ids,),
+        ).fetchall()
+        return {
+            str(row[0]): DataSourceDatabaseRecord(
+                id=str(row[0]),
+                data_source_id=str(row[1]),
+                remote_name=str(row[2]),
+                display_name=str(row[3]),
+                namespace_type=str(row[4]),
+                available=bool(row[5]),
+                system_database=bool(row[6]),
+                metadata=dict(row[7]),
+                project_count=0,
+                created_at=row[8],
+                updated_at=row[9],
+            )
+            for row in rows
+        }
+
+    @staticmethod
+    def _link_unique_error(exc: psycopg.errors.UniqueViolation) -> str:
+        if exc.diag.constraint_name == "uq_project_databases_project_mcp_alias":
+            return "项目内 MCP 数据库别名已存在"
+        return "项目已经关联这个数据库"
 
     @staticmethod
     def _source_select() -> str:
@@ -608,8 +1019,27 @@ class PostgresDataSourceRepository:
     def _link_select() -> str:
         return """SELECT link.id, link.project_id, project.name, link.database_id,
         database.remote_name, source.id, source.name, source.engine, link.alias,
-        link.purpose, link.enabled, link.readonly, link.allowed_schemas, link.max_rows,
-        link.max_result_bytes, link.query_timeout_ms, link.created_at, link.updated_at
+        link.mcp_alias, link.purpose, link.enabled, link.readonly, link.allowed_schemas,
+        link.max_rows, link.max_result_bytes, link.query_timeout_ms,
+        link.created_at, link.updated_at
+        FROM project_databases AS link
+        JOIN document_projects AS project ON project.id=link.project_id
+        JOIN data_source_databases AS database ON database.id=link.database_id
+        JOIN data_sources AS source ON source.id=database.data_source_id"""
+
+    @staticmethod
+    def _resolved_select() -> str:
+        return """SELECT
+        link.id, link.project_id, project.name, project.enabled, link.mcp_alias,
+        link.alias, link.purpose, link.enabled, link.readonly, link.allowed_schemas,
+        link.max_rows, link.max_result_bytes, link.query_timeout_ms,
+        link.created_at, link.updated_at,
+        database.id, database.remote_name, database.display_name,
+        database.namespace_type, database.available, database.system_database,
+        database.metadata, database.created_at, database.updated_at,
+        source.id, source.name, source.category, source.engine, source.description,
+        source.connection_config, source.enabled, source.config_version,
+        source.created_at, source.updated_at
         FROM project_databases AS link
         JOIN document_projects AS project ON project.id=link.project_id
         JOIN data_source_databases AS database ON database.id=link.database_id
@@ -660,13 +1090,55 @@ class PostgresDataSourceRepository:
             str(row[6]),
             str(row[7]),
             str(row[8]),
-            str(row[9]),
-            bool(row[10]),
+            str(row[9]) if row[9] is not None else None,
+            str(row[10]),
             bool(row[11]),
-            list(row[12]),
-            int(row[13]),
+            bool(row[12]),
+            list(row[13]),
             int(row[14]),
             int(row[15]),
-            row[16],
+            int(row[16]),
             row[17],
+            row[18],
+        )
+
+    @staticmethod
+    def _resolved_record(row: tuple[object, ...]) -> ResolvedProjectDatabase:
+        if row[4] is None:
+            raise DataSourceRepositoryError("项目数据库尚未配置 MCP 别名")
+        return ResolvedProjectDatabase(
+            link_id=str(row[0]),
+            project_id=str(row[1]),
+            project_name=str(row[2]),
+            project_enabled=bool(row[3]),
+            mcp_alias=str(row[4]),
+            alias=str(row[5]),
+            purpose=str(row[6]),
+            link_enabled=bool(row[7]),
+            readonly=bool(row[8]),
+            allowed_schemas=list(row[9]),
+            max_rows=int(row[10]),
+            max_result_bytes=int(row[11]),
+            query_timeout_ms=int(row[12]),
+            link_created_at=row[13],
+            link_updated_at=row[14],
+            database_id=str(row[15]),
+            database_remote_name=str(row[16]),
+            database_display_name=str(row[17]),
+            namespace_type=str(row[18]),
+            database_available=bool(row[19]),
+            database_system=bool(row[20]),
+            database_metadata=dict(row[21]),
+            database_created_at=row[22],
+            database_updated_at=row[23],
+            data_source_id=str(row[24]),
+            data_source_name=str(row[25]),
+            data_source_category=str(row[26]),
+            engine=str(row[27]),
+            data_source_description=str(row[28]),
+            connection_config=dict(row[29]),
+            source_enabled=bool(row[30]),
+            config_version=int(row[31]),
+            source_created_at=row[32],
+            source_updated_at=row[33],
         )

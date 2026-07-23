@@ -13,6 +13,13 @@
 
 ### 2026-07-22
 
+- 新增 migration `20260722_0008`：为 `project_databases` 增加稳定、项目内大小写无关唯一的 `mcp_alias` 并回填旧关联；新增 `mcp_database_calls`，只记录数据库对象搜索/查询元数据与 SQL SHA-256，不保存 SQL 或结果。
+- 新增数据库 Connector 核心层：静态 Registry、能力矩阵、lazy ConnectorManager、single-flight、lease/retiring、配置失效、LRU、每 Source 并发限制和应用退出关闭；实现 ClickHouse、PostgreSQL、MySQL/MariaDB Connector。
+- 新增 SQLGlot fail-closed 只读与作用域校验，拒绝多语句、写操作、跨库/未授权 Schema、系统目录、ClickHouse SETTINGS/FORMAT/OUTFILE 与外部文件/网络 table function；查询结果增加行数、最终 JSON 字节和复杂类型规范化预算。
+- MCP 从两个静态工具扩展为四个，新增 `search_database_objects` 与 `execute_database_query`；prepare 返回当前项目可用只读数据库的最小摘要，数据库调用统一按 `task_id -> project -> mcp_alias -> live policy` 路由。
+- 数据源管理新增 Engine 能力接口、连接测试、ClickHouse TLS/verify/bootstrap database/timeout 配置和 `system.databases` 同步；项目数据库支持编辑 MCP alias，Tasks 历史合并展示文档读取与数据库调用。
+- 项目数据库选择与 MCP alias 改为单请求原子保存，支持 alias 互换；关系型 Connector 的 names/summary/full 元数据按细节分层并批量加载完整结构。
+- 根 Compose 增加固定版本 ClickHouse integration profile；后端补充 Connector、策略、结果预算、管理生命周期、API、MCP、真实 migration 往返和真实 ClickHouse 集成测试，前端补充配置 round-trip、能力和 alias 校验测试。
 - 项目数据源授权改为全屏弹窗，移除视口四周留白、圆角与阴影，数据源和数据库选择区使用完整可用高度并保持内部滚动。
 - 精简项目数据源授权弹窗顶部，移除重复的项目名称与操作说明，保留“数据源授权”标识和关闭入口，直接展示选择摘要与数据源分类。
 - PostgreSQL 数据源同步接入 `pg_database`，过滤模板库并同步当前账号可见、允许连接的数据库；复用既有事务 upsert 和“本次未发现”标记逻辑。本地 PostgreSQL 已从手工维护的 1 个库同步为与 Navicat 一致的 13 个库。

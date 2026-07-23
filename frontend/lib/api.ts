@@ -10,6 +10,8 @@ import type {
   ProjectSummary,
   ProjectUpdate,
   DataSourceDatabasePayload,
+  DataSourceConnectionTestResult,
+  DataSourceEngineCapability,
   DataSourceDatabaseSyncResult,
   DataSourceDatabaseSummary,
   DataSourcePasswordReveal,
@@ -137,6 +139,21 @@ export function listDataSources(): Promise<DataSourceSummary[]> {
   return request<DataSourceSummary[]>("/api/data-sources");
 }
 
+export function listDataSourceEngineCapabilities(): Promise<
+  DataSourceEngineCapability[]
+> {
+  return request<DataSourceEngineCapability[]>("/api/data-source-engines");
+}
+
+export function testDataSourceConnection(
+  dataSourceId: string,
+): Promise<DataSourceConnectionTestResult> {
+  return request<DataSourceConnectionTestResult>(
+    `/api/data-sources/${dataSourceId}/test`,
+    { method: "POST" },
+  );
+}
+
 export function createDataSource(
   payload: DataSourcePayload,
 ): Promise<DataSourceSummary> {
@@ -238,11 +255,26 @@ export function getProjectDataSourceOptions(
 export function replaceProjectDatabases(
   projectId: string,
   databaseIds: string[],
+  mcpAliases: Record<string, string> = {},
 ): Promise<ProjectDataSourceOptions> {
   return request<ProjectDataSourceOptions>(`/api/projects/${projectId}/databases`, {
     method: "PUT",
-    body: JSON.stringify({ database_ids: databaseIds }),
+    body: JSON.stringify({ database_ids: databaseIds, mcp_aliases: mcpAliases }),
   });
+}
+
+export function updateProjectDatabaseAlias(
+  projectId: string,
+  linkId: string,
+  mcpAlias: string,
+): Promise<ProjectDatabaseLinkSummary> {
+  return request<ProjectDatabaseLinkSummary>(
+    `/api/projects/${projectId}/databases/${linkId}/mcp-alias`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ mcp_alias: mcpAlias }),
+    },
+  );
 }
 
 export function createDatabaseProjectLink(

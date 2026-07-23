@@ -8,6 +8,7 @@ from context_router.schemas.context import (
     PreparedProject,
     PrepareTaskContextResult,
 )
+from context_router.services.database_access import DatabaseAccessError, DatabaseAccessService
 from context_router.services.document_tree import CachedTreeNode, DocumentCache
 from context_router.services.project_registry import (
     ProjectRegistry,
@@ -21,9 +22,15 @@ class ContextPreparationError(ValueError):
 
 
 class ContextPreparationService:
-    def __init__(self, registry: ProjectRegistry, task_repository: TaskWriter) -> None:
+    def __init__(
+        self,
+        registry: ProjectRegistry,
+        task_repository: TaskWriter,
+        database_access_service: DatabaseAccessService | None = None,
+    ) -> None:
         self._registry = registry
         self._task_repository = task_repository
+        self._database_access_service = database_access_service
 
     def prepare(
         self,
@@ -91,6 +98,14 @@ class ContextPreparationService:
         except TaskRepositoryError as exc:
             raise ContextPreparationError(str(exc)) from exc
 
+        databases = []
+        warnings: list[str] | None = None
+        if self._database_access_service is not None:
+            try:
+                databases = self._database_access_service.list_prepared_databases(project.id)
+            except DatabaseAccessError:
+                warnings = ["项目数据库摘要暂时不可用；文档上下文不受影响"]
+
         return PrepareTaskContextResult(
             task_id=task_id,
             project=PreparedProject(
@@ -99,6 +114,8 @@ class ContextPreparationService:
                 node_count=len(project.cache.documents),
             ),
             documents=self._context_node(project.cache.root, project.cache),
+            databases=databases,
+            warnings=warnings,
         )
 
     def _context_node(

@@ -1,5 +1,9 @@
 from fastapi import APIRouter, HTTPException, Query, Request, status
 
+from context_router.repositories.database_call_repository import (
+    DatabaseCallRepositoryError,
+    DatabaseCallStore,
+)
 from context_router.repositories.document_read_repository import (
     DocumentReadRepositoryError,
     DocumentReadStore,
@@ -9,6 +13,7 @@ from context_router.repositories.task_repository import (
     TaskRepositoryError,
 )
 from context_router.schemas.context import (
+    ContextDatabaseCallHistoryItem,
     ContextReadHistoryCall,
     ContextReadHistoryItem,
     ContextTaskReadHistory,
@@ -29,6 +34,10 @@ def _task_repository(request: Request) -> TaskReader:
 
 def _read_repository(request: Request) -> DocumentReadStore:
     return request.app.state.document_read_repository
+
+
+def _database_call_repository(request: Request) -> DatabaseCallStore:
+    return request.app.state.database_call_repository
 
 
 def _bad_request(message: str) -> HTTPException:
@@ -78,7 +87,12 @@ def get_task_document_reads(task_id: int, request: Request) -> ContextTaskReadHi
     try:
         task = _task_repository(request).get_task(task_id)
         calls = _read_repository(request).list_read_calls(task_id)
-    except (TaskRepositoryError, DocumentReadRepositoryError) as exc:
+        database_calls = _database_call_repository(request).list_calls(task_id)
+    except (
+        TaskRepositoryError,
+        DocumentReadRepositoryError,
+        DatabaseCallRepositoryError,
+    ) as exc:
         raise _bad_request(str(exc)) from exc
 
     return ContextTaskReadHistory(
@@ -104,5 +118,23 @@ def get_task_document_reads(task_id: int, request: Request) -> ContextTaskReadHi
                 ],
             )
             for call in calls
+        ],
+        database_calls=[
+            ContextDatabaseCallHistoryItem(
+                database_call_id=call.id,
+                operation=call.operation,
+                database=call.database_alias,
+                engine=call.engine,
+                status=call.status,
+                object_type=call.object_type,
+                statement_type=call.statement_type,
+                duration_ms=call.duration_ms,
+                returned_count=call.returned_count,
+                result_bytes=call.result_bytes,
+                truncated=call.truncated,
+                error_code=call.error_code,
+                created_at=call.created_at,
+            )
+            for call in database_calls
         ],
     )

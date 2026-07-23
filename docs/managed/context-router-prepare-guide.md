@@ -17,3 +17,5 @@
 | `agent_name` | 否 | `codex`、`antigravity` 等调用方名称 |
 
 每次调用由服务端生成独立 task_id，并返回 cwd 对应项目的完整文档树。节点只携带显式 Front Matter 中的 title 和 summary，不做候选检索、排名、截断或正文返回。
+
+prepare 还返回当前项目可用于 MCP 的数据库摘要：`database` 是项目内 `mcp_alias`，并带 Engine、展示名、用途、readonly 和 `search_objects`/`execute_query` 能力。它只读取控制面配置，不连接业务数据库；停用、不可用、系统库、非只读或未实现 Connector 的关联不会出现。数据库摘要暂时失败时返回 warning，文档树仍可使用。
