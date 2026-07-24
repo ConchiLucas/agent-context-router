@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from context_router.api.data_sources import router as data_sources_router
 from context_router.api.mcp_integration import router as mcp_integration_router
+from context_router.api.mcp_traces import router as mcp_traces_router
 from context_router.api.projects import router as projects_router
 from context_router.api.tasks import router as tasks_router
 from context_router.config import Settings
@@ -34,6 +35,11 @@ from context_router.repositories.document_read_repository import (
     DocumentReadStore,
     PostgresDocumentReadRepository,
 )
+from context_router.repositories.mcp_tool_call_repository import (
+    InMemoryMcpToolCallRepository,
+    McpToolCallStore,
+    PostgresMcpToolCallRepository,
+)
 from context_router.repositories.project_repository import (
     InMemoryProjectRepository,
     PostgresProjectRepository,
@@ -46,6 +52,7 @@ from context_router.services.database_access import DatabaseAccessService
 from context_router.services.database_catalog import DatabaseCatalogService
 from context_router.services.database_query import DatabaseQueryService
 from context_router.services.mcp_integration import McpIntegrationService
+from context_router.services.mcp_trace import McpTraceService
 from context_router.services.project_registry import ProjectRegistry, ProjectRegistryError
 
 logger = logging.getLogger(__name__)
@@ -58,6 +65,7 @@ def create_app(
     project_repository: ProjectStore | None = None,
     data_source_repository: DataSourceStore | None = None,
     database_call_repository: DatabaseCallStore | None = None,
+    mcp_tool_call_repository: McpToolCallStore | None = None,
     connector_registry: ConnectorRegistry | None = None,
     connector_manager: ConnectorManager | None = None,
 ) -> FastAPI:
@@ -83,6 +91,11 @@ def create_app(
         PostgresDatabaseCallRepository(resolved_settings.database_url)
         if resolved_settings.database_url
         else InMemoryDatabaseCallRepository()
+    )
+    resolved_mcp_tool_call_repository = mcp_tool_call_repository or (
+        PostgresMcpToolCallRepository(resolved_settings.database_url)
+        if resolved_settings.database_url
+        else InMemoryMcpToolCallRepository()
     )
     resolved_connector_registry = connector_registry or _create_connector_registry()
     resolved_connector_manager = connector_manager or ConnectorManager(
@@ -122,12 +135,20 @@ def create_app(
         resolved_task_repository,
         resolved_read_repository,
     )
+    mcp_trace_service = McpTraceService(
+        tool_call_repository=resolved_mcp_tool_call_repository,
+        task_repository=resolved_task_repository,
+        document_read_repository=resolved_read_repository,
+        database_call_repository=resolved_database_call_repository,
+        registry=registry,
+    )
     mcp_integration_service = McpIntegrationService(resolved_settings, registry)
     mcp_server = create_context_router_mcp(
         context_service,
         document_read_service,
         database_catalog_service,
         database_query_service,
+        mcp_trace_service,
     )
     mcp_app = mcp_server.streamable_http_app()
 
@@ -184,6 +205,8 @@ def create_app(
     app.state.database_access_service = database_access_service
     app.state.database_catalog_service = database_catalog_service
     app.state.database_query_service = database_query_service
+    app.state.mcp_tool_call_repository = resolved_mcp_tool_call_repository
+    app.state.mcp_trace_service = mcp_trace_service
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://127.0.0.1:49174", "http://localhost:49174"],
@@ -194,6 +217,7 @@ def create_app(
     app.include_router(tasks_router, prefix=resolved_settings.api_prefix)
     app.include_router(mcp_integration_router, prefix=resolved_settings.api_prefix)
     app.include_router(data_sources_router, prefix=resolved_settings.api_prefix)
+    app.include_router(mcp_traces_router, prefix=resolved_settings.api_prefix)
 
     @app.get("/health")
     def health() -> dict[str, str]:

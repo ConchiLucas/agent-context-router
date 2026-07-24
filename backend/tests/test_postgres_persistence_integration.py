@@ -22,12 +22,14 @@ from context_router.repositories.database_call_repository import (
     DatabaseCallWrite,
     PostgresDatabaseCallRepository,
 )
+from context_router.repositories.mcp_tool_call_repository import PostgresMcpToolCallRepository
 
 pytestmark = pytest.mark.postgresql
 
 _BACKEND_ROOT = Path(__file__).resolve().parents[1]
 _REVISION_0007 = "20260722_0007"
 _REVISION_0008 = "20260722_0008"
+_REVISION_0009 = "20260724_0009"
 
 _PROJECT_A = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 _PROJECT_B = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -105,6 +107,24 @@ def test_migration_and_postgres_repositories_preserve_legacy_data(
     aliases = _aliases(database_url)
     assert aliases == _EXPECTED_ALIASES
     _assert_case_insensitive_unique_index(database_url, aliases[_LINK_A])
+    legacy_read_id, legacy_database_call_id = _insert_legacy_call_rows(database_url, task_id)
+
+    command.upgrade(alembic_config, _REVISION_0009)
+    assert _current_revision(database_url) == _REVISION_0009
+    tool_calls = PostgresMcpToolCallRepository(database_url).list_calls(task_id)
+    assert [(call.tool_name, call.source) for call in tool_calls] == [
+        ("read_context_document", "legacy"),
+        ("execute_database_query", "legacy"),
+    ]
+    with psycopg.connect(database_url) as connection:
+        assert connection.execute(
+            "SELECT tool_call_id FROM mcp_document_read_calls WHERE id = %s",
+            (legacy_read_id,),
+        ).fetchone() == (tool_calls[0].id,)
+        assert connection.execute(
+            "SELECT tool_call_id FROM mcp_database_calls WHERE id = %s",
+            (legacy_database_call_id,),
+        ).fetchone() == (tool_calls[1].id,)
 
     data_sources = PostgresDataSourceRepository(database_url)
     resolved = data_sources.get_project_database_by_alias(
@@ -183,9 +203,9 @@ def test_migration_and_postgres_repositories_preserve_legacy_data(
         )
     )
     recorded = calls.list_calls(task_id)
-    assert [item.id for item in recorded] == [call_id]
-    assert recorded[0].sql_sha256 == sql_digest
-    assert recorded[0].returned_count == 2
+    assert [item.id for item in recorded] == [legacy_database_call_id, call_id]
+    assert recorded[-1].sql_sha256 == sql_digest
+    assert recorded[-1].returned_count == 2
     assert _database_call_columns(database_url).isdisjoint({"sql", "rows", "result"})
 
     with pytest.raises(DatabaseCallRepositoryError, match="任务不存在"):
@@ -213,7 +233,7 @@ def test_migration_and_postgres_repositories_preserve_legacy_data(
         )
 
     command.upgrade(alembic_config, "head")
-    assert _current_revision(database_url) == _REVISION_0008
+    assert _current_revision(database_url) == _REVISION_0009
     assert _aliases(database_url) == aliases
     _assert_legacy_rows_survive(database_url)
 
@@ -374,6 +394,69 @@ def _assert_case_insensitive_unique_index(database_url: str, alias: str) -> None
                 "UPDATE project_databases SET mcp_alias = %s WHERE id = %s",
                 (alias, _LINK_B),
             )
+
+
+def _insert_legacy_call_rows(database_url: str, task_id: int) -> tuple[int, int]:
+    created_read = datetime(2026, 1, 3, tzinfo=UTC)
+    created_database = datetime(2026, 1, 4, tzinfo=UTC)
+    with psycopg.connect(database_url) as connection:
+        read_row = connection.execute(
+            """
+            INSERT INTO mcp_document_read_calls (task_id, created_at)
+            VALUES (%s, %s)
+            RETURNING id
+            """,
+            (task_id, created_read),
+        ).fetchone()
+        assert read_row is not None
+        read_call_id = int(read_row[0])
+        connection.execute(
+            """
+            INSERT INTO mcp_document_read_items (
+                read_call_id,
+                position,
+                document_id,
+                document_path,
+                status
+            )
+            VALUES (%s, 1, 'legacy-doc', 'docs/legacy.md', 'ok')
+            """,
+            (read_call_id,),
+        )
+        database_row = connection.execute(
+            """
+            INSERT INTO mcp_database_calls (
+                task_id,
+                operation,
+                database_alias,
+                engine,
+                statement_type,
+                status,
+                duration_ms,
+                returned_count,
+                result_bytes,
+                truncated,
+                created_at
+            )
+            VALUES (
+                %s,
+                'execute_query',
+                'analytics_warehouse',
+                'postgresql',
+                'select',
+                'ok',
+                9,
+                1,
+                24,
+                false,
+                %s
+            )
+            RETURNING id
+            """,
+            (task_id, created_database),
+        ).fetchone()
+    assert database_row is not None
+    return read_call_id, int(database_row[0])
 
 
 def _aliases(database_url: str) -> dict[str, str]:

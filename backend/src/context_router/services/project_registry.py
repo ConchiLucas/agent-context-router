@@ -383,6 +383,20 @@ class ProjectRegistry:
                 raise ProjectRegistryError("项目不存在")
             return self._snapshot(project)
 
+    def get_project_key(self, project_id: str) -> str:
+        with self._lock:
+            project = self._projects.get(project_id)
+            if project is None:
+                raise ProjectRegistryError("项目不存在")
+            return self._project_key(project.agents_path)
+
+    def find_project_id_by_key(self, project_key: str) -> str | None:
+        with self._lock:
+            for project in self._projects.values():
+                if self._project_key(project.agents_path) == project_key:
+                    return project.id
+        return None
+
     def find_project_for_cwd(self, cwd: str) -> ProjectSnapshot:
         resolved_cwd = self._resolve_cwd(cwd)
         with self._lock:

@@ -11,6 +11,13 @@
 
 ## 记录
 
+### 2026-07-24
+
+- 新增 migration `20260724_0009` 和 `mcp_tool_calls` 通用链路表；文档读取、数据库调用增加可空唯一 `tool_call_id`，既有历史按时间恢复为 `legacy` 调用。
+- FastMCP 四个固定工具接入统一调用观测，记录 Server、工具名、状态、起止时间、耗时、稳定错误码及脱敏摘要；prepare 成功后关联新 task，后续调用在执行前生成运行中节点，观测失败不影响业务调用。
+- 新增统一 MCP Trace 列表和详情 API，服务端返回稳定 sequence 与文档/数据库 artifacts，保留旧任务历史接口兼容。
+- 前端增加“链路管理”一级导航，提供任务搜索和 Agent/MCP Server/状态筛选，以及链路图、调用列表、文档树和脱敏调用详情；复用文档树、Markdown 弹窗与批量文档横排交互。
+
 ### 2026-07-22
 
 - 新增 migration `20260722_0008`：为 `project_databases` 增加稳定、项目内大小写无关唯一的 `mcp_alias` 并回填旧关联；新增 `mcp_database_calls`，只记录数据库对象搜索/查询元数据与 SQL SHA-256，不保存 SQL 或结果。

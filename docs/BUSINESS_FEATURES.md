@@ -67,6 +67,8 @@ title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 sum
 - Markdown 渲染不执行原始 HTML 或脚本。
 - 项目卡片支持查看 MCP JSON，结果与 `prepare_task_context` 返回结构一致。
 - 项目卡片支持查看 MCP 调用记录，并在同一个全屏网格画布中切换“文档树”和“调用列表”：文档树保留全部节点，在被读取节点右上角标记文档读取批次；调用列表按时间合并文档读取和数据库调用，同一次批量读取的文档横向排在同一行。数据库调用只展示操作、项目内别名、Engine、对象或语句类型、耗时、返回数量、结果字节数、截断状态和稳定错误码。
+- 左侧主导航提供独立“链路管理”页面，统一按任务查看 Context Router MCP 工具调用。页面支持任务搜索、Agent/MCP Server/状态筛选，并在“链路图 / 调用列表 / 文档树”之间切换；项目卡片中的调用记录继续作为项目内快捷入口。
+- 链路图以任务为根节点，按服务端稳定顺序展示 MCP 工具调用。一次 `read_context_document` 仍是一个工具调用节点，其批量读取的多个文档作为同一节点的横向产物；普通连续调用只表达顺序，只有显式父调用时才表达因果关系。
 - 首页提供全局“MCP 接入”面板，集中展示服务地址、工具能力、Codex/Antigravity 配置模板和连接测试；客户端配置由后端按公开 MCP URL 生成，可直接复制。
 - 数据源管理以物理连接为单位维护 MySQL、MariaDB、PostgreSQL、SQL Server、SQLite、Oracle 和 ClickHouse；数据源分类与项目类型相互独立，可使用“自己服务器、公司内网服务器、本机电脑”等分类，未填写时默认归入“本机电脑”。
 - 数据源页面移除大标题说明区，顶部使用“全部数据源 / 动态数据源分类”Tab 筛选连接卡片；新增和编辑连接时可以维护分类。每个连接下只维护数据库清单，不在数据源页面反向选择项目。
@@ -85,13 +87,16 @@ title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 sum
 - 服务端按 cwd 最长前缀匹配项目，并返回完整文档树。
 - prepare 不搜索、不排名、不截断，也不返回正文；它同时返回当前项目可用于 MCP 的数据库别名、Engine、用途和能力摘要。prepare 只读取本地配置，不连接业务数据库；数据库摘要暂时失败时以 warning 降级，文档上下文仍可返回。
 - 每次成功调用 prepare 都由 PostgreSQL 生成独立 task_id。
+- Context Router 收到的每次 `tools/call` 都统一记录为任务下的 MCP 工具调用，包括 Server、工具名、服务端顺序、采集来源、状态、开始/结束时间、耗时、错误码和脱敏摘要。prepare 成功创建 task_id 后补记为该任务的第一个调用；后续工具在执行前创建运行中记录。
 - read 必须携带当前任务的 task_id，一次支持 1 到 10 个文档或精确章节，并保持请求数组顺序。
 - 每次 read 由 PostgreSQL 生成 read_call_id；客户端不传 sequence，服务端不使用任务锁。
+- `mcp_document_read_calls` 和 `mcp_database_calls` 继续保存工具专属客观明细，并通过 `tool_call_id` 关联统一调用；旧历史在 migration 中恢复为 `legacy` 调用，不伪造历史 prepare 节点或缺失耗时。
 - 所有数据库调用固定经过 `task_id -> task 绑定项目 -> 当前项目 mcp_alias -> 当前连接与查询策略 -> Connector`；不能跨项目复用 task_id 或直接提交连接参数。
 - `search_database_objects` 支持 schema、table、view、column、index，并以 `names -> summary -> full` 渐进增加细节。客户端可传 glob pattern、schema、table 和 limit；服务端还会按细节级别、结果字节数和项目策略截断。
 - `execute_database_query` 只接受一条可安全解析的只读 SQL。服务端拒绝写操作、多语句、跨库访问、外部表函数以及文件/网络访问函数，并同时施加行数、结果字节数、超时和数据库侧只读约束。返回值明确携带截断状态，不把截断结果伪装成完整结果。
 - Connector 按当前数据源配置和数据库版本延迟创建并有界缓存；prepare、文档 read 和 `/health` 不依赖业务数据库在线。
 - 数据库保存文档读取顺序和数据库调用客观元数据；不保存 Markdown 正文、完整 SQL、SQL 参数、Schema 搜索结果或查询结果集。查询审计仅保存 SQL SHA-256 摘要。
+- 工具调用摘要按工具白名单生成：文档只记录 ID、章节和数量，SQL 只记录数据库别名、语句类型与摘要，所有结果只保存规模信息；密码、Token、Markdown 正文、完整 SQL 和原始结果不会进入链路表。
 - 接入面板的端到端测试真实执行 PostgreSQL 检查、MCP initialize、tools/list、项目 cwd 匹配、prepare 和入口文档 read；页面只接收任务号、调用号、阶段耗时和正文字符数，不返回 Markdown 正文。
 - 接入面板测试不会执行项目业务数据库查询；真实 ClickHouse 查询由独立 Docker Compose integration profile 验证。
 - 接入测试使用 `agent_name=connection-test` 创建系统任务，普通调用记录默认隐藏，可通过任务列表接口的 `include_system=true` 显式查看。
@@ -104,4 +109,5 @@ title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 sum
 - 不使用大模型解析文档层级。
 - 不自动修改 Codex 或 Antigravity 的本地配置，也不负责重启客户端。
 - 当前接入面板不处理远程 HTTPS、鉴权、Skill 安装和全局模糊检索。
+- 当前链路管理只自动观测发送到 Context Router 的 MCP 工具调用；客户端直连 GitHub、浏览器等其他 MCP Server 的调用不在本阶段覆盖范围。跨 Server 完整链路需要后续统一 MCP Gateway 或客户端 Trace 上下文注入。
 - 不提供数据库写入、DDL、DBA 运维、跨数据库联邦查询或任意外部表函数。

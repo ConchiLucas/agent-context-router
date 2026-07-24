@@ -9,6 +9,14 @@
 
 ## 记录
 
+### 2026-07-24
+
+- MCP 调用记录采用“`mcp_tasks` 作为任务 Trace 根、`mcp_tool_calls` 作为工具 Span”的统一模型。四个固定工具在 FastMCP 分发入口统一观测，文档读取和数据库调用表继续保存专属明细，通过 `tool_call_id` 关联，避免把不同工具字段堆进通用表。
+- 工具调用顺序由 PostgreSQL Identity 生成，API 在同一 task 下按调用 ID 返回稳定 sequence；不让客户端传序号，不使用 `MAX(sequence)+1` 或任务锁。普通顺序不等于因果，只有显式 `parent_tool_call_id` 才形成父子关系。
+- 链路观测属于 best-effort 辅助能力：调用开始或完成记录失败时写日志，但不得改变 MCP 工具的业务返回。调用摘要使用工具白名单，不保存 Markdown 正文、完整 SQL、查询结果或连接凭据。
+- Context Router Server 只能自动观测发给自己的调用。客户端直连其他 MCP Server 的请求不能通过当前服务推断；未来跨 Server 链路应通过 MCP Gateway 或客户端注入 Trace ID 实现，显式客户端上报只能作为低可信兼容来源。
+- 历史 read/database 记录在 migration 中映射为 `legacy` 工具调用，保留旧页面数据但不伪造缺失的 prepare 节点、真实开始时间或因果关系。
+
 ### 2026-07-22
 
 - MCP 工具集合固定为 `prepare_task_context`、`read_context_document`、`search_database_objects`、`execute_database_query` 四个；数据源增删不生成动态工具，保证 Codex 和 Antigravity 的工具发现结果稳定。

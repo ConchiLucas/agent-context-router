@@ -109,7 +109,11 @@ function DocumentDetailDrawer({
   );
 }
 
-export function ProjectDashboard() {
+interface ProjectDashboardProps {
+  onOpenTraces?: (projectId: string) => void;
+}
+
+export function ProjectDashboard({ onOpenTraces }: ProjectDashboardProps) {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [selectedProjectType, setSelectedProjectType] =
     useState(ALL_PROJECT_TYPES);
@@ -900,7 +904,13 @@ export function ProjectDashboard() {
                 type="button"
                 className="secondary-button"
                 disabled={busyProjectId === project.id || !project.enabled}
-                onClick={() => void showTaskHistory(project)}
+                onClick={() => {
+                  if (onOpenTraces) {
+                    onOpenTraces(project.id);
+                    return;
+                  }
+                  void showTaskHistory(project);
+                }}
               >
                 查看调用记录
               </button>

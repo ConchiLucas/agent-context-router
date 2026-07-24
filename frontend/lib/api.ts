@@ -5,6 +5,8 @@ import type {
   DocumentTreeNode,
   McpIntegrationInfo,
   McpIntegrationTestResult,
+  McpTraceDetail,
+  McpTraceSummary,
   PrepareTaskContextResult,
   ProjectCreate,
   ProjectSummary,
@@ -21,6 +23,10 @@ import type {
   ProjectDatabaseLinkSummary,
   ProjectDataSourceOptions,
 } from "@/lib/types";
+import {
+  buildMcpTraceListPath,
+  type McpTraceListQuery,
+} from "@/lib/mcp-traces";
 
 const API_URL =
   process.env.NEXT_PUBLIC_CONTEXT_ROUTER_API_URL ?? "http://127.0.0.1:49173";
@@ -120,6 +126,20 @@ export function getTaskDocumentReads(
   return request<ContextTaskReadHistory>(
     `/api/tasks/${taskId}/document-reads`,
   );
+}
+
+export function listMcpTraces(
+  query: McpTraceListQuery = {},
+): Promise<McpTraceSummary[]> {
+  return request<McpTraceSummary[]>(buildMcpTraceListPath(query), {
+    cache: "no-store",
+  });
+}
+
+export function getMcpTrace(taskId: number): Promise<McpTraceDetail> {
+  return request<McpTraceDetail>(`/api/mcp-traces/${taskId}`, {
+    cache: "no-store",
+  });
 }
 
 export function getMcpIntegration(): Promise<McpIntegrationInfo> {

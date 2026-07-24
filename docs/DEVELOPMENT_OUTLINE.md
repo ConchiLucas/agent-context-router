@@ -29,4 +29,6 @@
 - SQL 安全策略必须 fail-closed：只允许单条、可解析、限定当前数据库/Schema 的只读语句；不能把客户端 LIMIT 当作唯一边界，仍需服务端行数、字节数、超时和数据库侧只读限制。
 - Connector 延迟创建且生命周期只归 `ConnectorManager`；数据源配置版本变化或删除时必须失效旧连接，应用退出时统一关闭。
 - 数据库调用历史只保存客观元数据和 SQL SHA-256，不保存完整 SQL、参数或结果集。
+- Context Router 四个 MCP 工具在统一分发入口记录到 `mcp_tool_calls`；任务内顺序由 PostgreSQL 调用 ID 生成，文档/数据库专属明细通过 `tool_call_id` 关联，观测失败不得改变工具业务结果。
+- 当前链路管理的自动观测范围仅限 Context Router MCP。其他 MCP Server 只有在未来经过 Gateway 或显式传播 Trace 上下文时才能进入同一任务链路。
 - 本地服务默认只绑定回环地址；真实 ClickHouse 测试使用根 Compose 的 `integration` profile 和固定镜像版本。

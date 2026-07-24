@@ -19,6 +19,7 @@ from context_router.services.markdown_section import (
     MarkdownSectionError,
     extract_markdown_section,
 )
+from context_router.services.mcp_trace import current_tool_call_id
 from context_router.services.project_registry import ProjectRegistry, ProjectRegistryError
 
 MAX_READ_REQUESTS = 10
@@ -81,10 +82,18 @@ class ContextDocumentReadService:
                 response_characters += len(result.content)
 
         try:
-            read_call_id = self._read_repository.create_read_call(
-                task_id=task_id,
-                items=writes,
-            )
+            trace_call_id = current_tool_call_id()
+            if trace_call_id is None:
+                read_call_id = self._read_repository.create_read_call(
+                    task_id=task_id,
+                    items=writes,
+                )
+            else:
+                read_call_id = self._read_repository.create_read_call(
+                    task_id=task_id,
+                    items=writes,
+                    tool_call_id=trace_call_id,
+                )
         except DocumentReadRepositoryError as exc:
             raise ContextDocumentReadError(str(exc)) from exc
 

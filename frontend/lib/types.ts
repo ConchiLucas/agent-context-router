@@ -247,6 +247,92 @@ export interface ContextTaskReadHistory {
   database_calls: ContextDatabaseCallHistoryItem[];
 }
 
+export type McpTraceCallStatus =
+  | "running"
+  | "ok"
+  | "error"
+  | "cancelled";
+
+export type McpTraceCallSource =
+  | "server"
+  | "gateway"
+  | "reported"
+  | "legacy";
+
+export interface McpTraceDocumentArtifactItem {
+  position: number;
+  document_id: string;
+  path?: string;
+  section?: string;
+  status: "ok" | "error";
+  error_code?: string;
+}
+
+export interface McpTraceDocumentReadArtifact {
+  kind: "document_read";
+  read_call_id: number;
+  documents: McpTraceDocumentArtifactItem[] | null;
+}
+
+export interface McpTraceDatabaseCallArtifact {
+  kind: "database_call";
+  database_call_id: number;
+  operation: "search_objects" | "execute_query";
+  database: string;
+  engine: string;
+  status: "ok" | "error";
+  object_type?: string;
+  statement_type?: string;
+  returned_count?: number;
+  result_bytes?: number;
+  truncated?: boolean;
+}
+
+export interface McpTraceGenericArtifact {
+  kind: string;
+  [key: string]: unknown;
+}
+
+export type McpTraceArtifact =
+  | McpTraceDocumentReadArtifact
+  | McpTraceDatabaseCallArtifact
+  | McpTraceGenericArtifact;
+
+export interface McpTraceSummary {
+  task_id: number;
+  task: string;
+  project_id?: string | null;
+  project_name: string;
+  cwd: string;
+  agent_name?: string;
+  created_at: string;
+  call_count: number;
+  error_count: number;
+  server_names: string[];
+  last_activity_at: string;
+}
+
+export interface McpTraceToolCall {
+  tool_call_id: number;
+  sequence: number;
+  parent_tool_call_id?: number | null;
+  server_name: string;
+  tool_name: string;
+  source: McpTraceCallSource;
+  status: McpTraceCallStatus;
+  started_at: string;
+  finished_at?: string | null;
+  duration_ms?: number | null;
+  request_summary?: Record<string, unknown> | null;
+  result_summary?: Record<string, unknown> | null;
+  error_code?: string | null;
+  artifacts: McpTraceArtifact[];
+}
+
+export interface McpTraceDetail extends McpTraceSummary {
+  calls: McpTraceToolCall[];
+}
+
 export interface McpServiceInfo {
   name: string;
   transport: string;

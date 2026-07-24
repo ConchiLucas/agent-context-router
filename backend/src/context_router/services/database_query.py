@@ -17,6 +17,7 @@ from context_router.repositories.database_call_repository import (
     DatabaseCallWrite,
 )
 from context_router.services.database_access import DatabaseAccessService
+from context_router.services.mcp_trace import current_tool_call_id
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +80,7 @@ class DatabaseQueryService:
                     returned_count=formatted.returned_rows,
                     result_bytes=formatted.result_bytes,
                     truncated=formatted.truncated,
+                    tool_call_id=current_tool_call_id(),
                 )
             )
             return result
@@ -141,6 +143,7 @@ class DatabaseQueryService:
                 sql_sha256=sql_hash,
                 status="error",
                 error_code=code[:64],
+                tool_call_id=current_tool_call_id(),
             )
         )
 

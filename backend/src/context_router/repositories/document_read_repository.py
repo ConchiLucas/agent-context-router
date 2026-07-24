@@ -32,6 +32,7 @@ class DocumentReadCallRecord:
     task_id: int
     created_at: datetime
     items: list[DocumentReadItemRecord]
+    tool_call_id: int | None = None
 
 
 class DocumentReadStore(Protocol):
@@ -40,6 +41,7 @@ class DocumentReadStore(Protocol):
         *,
         task_id: int,
         items: list[DocumentReadItemWrite],
+        tool_call_id: int | None = None,
     ) -> int: ...
 
     def list_read_calls(self, task_id: int) -> list[DocumentReadCallRecord]: ...
@@ -54,6 +56,7 @@ class PostgresDocumentReadRepository:
         *,
         task_id: int,
         items: list[DocumentReadItemWrite],
+        tool_call_id: int | None = None,
     ) -> int:
         if not self._database_url:
             raise DocumentReadRepositoryError("任务数据库尚未配置")
@@ -62,11 +65,11 @@ class PostgresDocumentReadRepository:
             with psycopg.connect(self._database_url) as connection:
                 row = connection.execute(
                     """
-                    INSERT INTO mcp_document_read_calls (task_id)
-                    VALUES (%s)
+                    INSERT INTO mcp_document_read_calls (task_id, tool_call_id)
+                    VALUES (%s, %s)
                     RETURNING id
                     """,
-                    (task_id,),
+                    (task_id, tool_call_id),
                 ).fetchone()
                 if row is None:
                     raise DocumentReadRepositoryError("读取调用写入后没有返回调用号")
@@ -116,6 +119,7 @@ class PostgresDocumentReadRepository:
                         read_call.id,
                         read_call.task_id,
                         read_call.created_at,
+                        read_call.tool_call_id,
                         item.id,
                         item.position,
                         item.document_id,
@@ -139,6 +143,7 @@ class PostgresDocumentReadRepository:
         current_items: list[DocumentReadItemRecord] = []
         current_task_id = task_id
         current_created_at: datetime | None = None
+        current_tool_call_id: int | None = None
 
         for row in rows:
             call_id = int(row[0])
@@ -149,6 +154,7 @@ class PostgresDocumentReadRepository:
                         task_id=current_task_id,
                         created_at=current_created_at,  # type: ignore[arg-type]
                         items=current_items,
+                        tool_call_id=current_tool_call_id,
                     )
                 )
                 current_items = []
@@ -156,16 +162,17 @@ class PostgresDocumentReadRepository:
             current_call_id = call_id
             current_task_id = int(row[1])
             current_created_at = row[2]
-            if row[3] is not None:
+            current_tool_call_id = int(row[3]) if row[3] is not None else None
+            if row[4] is not None:
                 current_items.append(
                     DocumentReadItemRecord(
-                        id=int(row[3]),
-                        position=int(row[4]),
-                        document_id=str(row[5]),
-                        document_path=str(row[6]) if row[6] is not None else None,
-                        requested_section=str(row[7]) if row[7] is not None else None,
-                        status=str(row[8]),
-                        error_code=str(row[9]) if row[9] is not None else None,
+                        id=int(row[4]),
+                        position=int(row[5]),
+                        document_id=str(row[6]),
+                        document_path=str(row[7]) if row[7] is not None else None,
+                        requested_section=str(row[8]) if row[8] is not None else None,
+                        status=str(row[9]),
+                        error_code=str(row[10]) if row[10] is not None else None,
                     )
                 )
 
@@ -176,6 +183,7 @@ class PostgresDocumentReadRepository:
                     task_id=current_task_id,
                     created_at=current_created_at,
                     items=current_items,
+                    tool_call_id=current_tool_call_id,
                 )
             )
         return calls

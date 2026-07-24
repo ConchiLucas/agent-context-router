@@ -30,6 +30,7 @@ class DatabaseCallWrite:
     result_bytes: int | None = None
     truncated: bool | None = None
     error_code: str | None = None
+    tool_call_id: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +50,7 @@ class DatabaseCallRecord:
     truncated: bool | None
     error_code: str | None
     created_at: datetime
+    tool_call_id: int | None = None
 
 
 class DatabaseCallStore(Protocol):
@@ -99,9 +101,10 @@ class PostgresDatabaseCallRepository:
                         returned_count,
                         result_bytes,
                         truncated,
-                        error_code
+                        error_code,
+                        tool_call_id
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -118,6 +121,7 @@ class PostgresDatabaseCallRepository:
                         call.result_bytes,
                         call.truncated,
                         call.error_code,
+                        call.tool_call_id,
                     ),
                 ).fetchone()
         except psycopg.errors.ForeignKeyViolation as exc:
@@ -152,7 +156,8 @@ class PostgresDatabaseCallRepository:
                         result_bytes,
                         truncated,
                         error_code,
-                        created_at
+                        created_at,
+                        tool_call_id
                     FROM mcp_database_calls
                     WHERE task_id = %s
                     ORDER BY id
@@ -177,6 +182,8 @@ def _validate_call(call: DatabaseCallWrite) -> None:
     _validate_text(call.object_type, "对象类型", 32)
     _validate_text(call.statement_type, "语句类型", 32)
     _validate_text(call.error_code, "错误码", 64)
+    if call.tool_call_id is not None and call.tool_call_id < 1:
+        raise DatabaseCallRepositoryError("MCP 工具调用号必须大于 0")
     if call.sql_sha256 is not None and not re.fullmatch(r"[0-9a-f]{64}", call.sql_sha256):
         raise DatabaseCallRepositoryError("SQL 摘要格式不正确")
     for value, label in (
@@ -222,6 +229,7 @@ def _record_from_write(
         truncated=call.truncated,
         error_code=call.error_code,
         created_at=created_at,
+        tool_call_id=call.tool_call_id,
     )
 
 
@@ -242,4 +250,5 @@ def _record_from_row(row: tuple[object, ...]) -> DatabaseCallRecord:
         truncated=bool(row[12]) if row[12] is not None else None,
         error_code=str(row[13]) if row[13] is not None else None,
         created_at=cast(datetime, row[14]),
+        tool_call_id=int(row[15]) if row[15] is not None else None,
     )

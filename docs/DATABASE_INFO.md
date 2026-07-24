@@ -21,7 +21,7 @@ docker compose exec backend uv run alembic upgrade head
 docker compose exec backend uv run alembic current
 ```
 
-当前 head 为 `20260722_0008`。若要验证 downgrade/upgrade，使用一次性测试数据库，不要在保存真实调用记录的控制面库上直接 downgrade，因为 `0008 -> 0007` 会删除数据库调用历史和 MCP alias 列。
+当前 head 为 `20260724_0009`。若要验证 downgrade/upgrade，使用一次性测试数据库，不要在保存真实调用记录的控制面库上直接 downgrade，因为 `0009 -> 0008` 会删除统一 MCP 工具链路，`0008 -> 0007` 会删除数据库调用历史和 MCP alias 列。
 
 ## 当前表
 
@@ -35,9 +35,12 @@ docker compose exec backend uv run alembic current
 | `mcp_document_read_calls` | 保存每次 read 的自增 read_call_id、task_id 和创建时间 |
 | `mcp_document_read_items` | 保存单次 read 内的 position、文档 ID、相对路径、章节、状态和错误码 |
 | `mcp_database_calls` | 保存对象搜索或只读查询的 task_id、数据库 alias、Engine、SQL SHA-256、状态、耗时、返回规模、截断和错误码；不保存 SQL 正文和结果集 |
+| `mcp_tool_calls` | 保存任务下每次 Context Router MCP 工具调用的 Server、工具名、服务端顺序依据、来源、状态、时间、耗时和脱敏摘要；文档/数据库明细通过 tool_call_id 关联 |
 | `agent_context_router_alembic_version` | 当前精简应用的 migration 版本；与 context_router 库内历史 `alembic_version` 隔离 |
 
-task_id 和 read_call_id 都由 PostgreSQL identity 自动生成；单次读取顺序来自请求数组 position。客户端不传序号，也不维护每任务计数器或锁。数据库不保存文档树或 Markdown 正文。
+task_id、tool_call_id 和 read_call_id 都由 PostgreSQL identity 自动生成；任务内调用顺序按 tool_call_id 计算，单次读取顺序来自请求数组 position。客户端不传序号，也不维护每任务计数器或锁。数据库不保存文档树或 Markdown 正文。
+
+`20260724_0009` 会把已有文档读取和数据库调用按历史时间恢复为 `legacy` 工具调用，并回写明细表的 `tool_call_id`；历史数据没有 prepare 事件或可靠开始时间，因此不会补造 prepare 节点，页面也会明确标记“历史记录”。
 
 项目创建、编辑、类型调整、启停和删除会同步写入 `document_projects`；未显式指定类型的项目默认归入“公司项目”。数据源以物理连接为单位保存在 `data_sources`，拥有与项目类型完全独立的分类字段，未显式指定时默认归入“本机电脑”；一个连接可包含多个库，项目通过“管理数据源”一次选择一个或多个连接下的多个库，并由 `project_databases` 持久化。批量保存会在一个事务中替换指定项目的关联，保留仍被选中的既有查询策略，新关联使用默认只读限制。当前版本不加密本地连接参数，列表 API 会过滤所有口令；编辑时口令留空会保留原值，只有用户点击眼睛时才通过 `POST /api/data-sources/{id}/reveal-password` 按需读取，并明确禁止缓存响应。MySQL/MariaDB/PostgreSQL/ClickHouse 的数据库清单可从远端自动同步，已不存在或当前账号不可见的旧库只标记 `available=false`，不直接删除项目关联。ClickHouse 使用官方 `clickhouse-connect` HTTP/HTTPS Client；后端容器访问宿主机服务时 Host 使用 `host.docker.internal`。
 
