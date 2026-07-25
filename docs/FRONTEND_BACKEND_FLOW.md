@@ -10,7 +10,8 @@ Browser
   -> ProjectRegistry 当前运行时缓存
   -> AGENTS.md 绝对路径映射到容器只读工作区
   -> 递归解析“下级文档”表格
-  -> 原子替换内存树和 Markdown 正文索引
+  -> 生成确定性文档版本并重建 PostgreSQL 词法搜索索引
+  -> 原子替换内存树和 Markdown 原文缓存
 ```
 
 ```text
@@ -26,6 +27,19 @@ Codex / Antigravity
   -> DocumentCache 按请求顺序返回完整 Markdown 或章节
   -> PostgreSQL 生成 read_call_id 并保存 position/status
 ```
+
+```text
+Codex / Antigravity
+  -> prepare_task_context 返回 task_id 和完整文档树
+  -> search_context_documents(task_id, query, limit)
+  -> ContextDocumentSearchService 按 task 的稳定 project_id 解析当前项目
+  -> 校验 document_search_index_states.index_version == DocumentCache.version
+  -> PostgreSQL simple 全文检索 + pg_trgm + 精确子串匹配
+  -> 按文档聚合并返回 title/summary/匹配章节/相关度/命中原因
+  -> read_context_document(task_id, 命中的 document_id/section)
+```
+
+搜索只在 task 绑定项目内执行，不返回完整正文。`document_search_chunks` 保存规范化派生分块，磁盘 Markdown 仍是唯一原文真源；索引缺失、构建失败或版本不一致时显式返回 index-not-ready，不回退到内存全文扫描。
 
 ```text
 Codex / Antigravity
@@ -57,9 +71,9 @@ Codex / Antigravity
 
 `mcp_tool_calls.id` 由 PostgreSQL Identity 生成，任务内展示顺序由后端按该 ID 计算，不依赖客户端 sequence、前端时间戳拼接或任务锁。旧文档/数据库调用由 migration 恢复为 `legacy` 节点，因此升级后仍可查看历史记录。后端启动时会把上次进程遗留的内部 `running` 调用收敛为 `error/server_restarted`，避免页面永久显示运行中。
 
-这条链路的边界固定在 Context Router 自身：只有进入 `/mcp` 并由 `ContextRouterMCP` 分发的四个内部工具会被记录。客户端对 GitHub、浏览器或其他 MCP Server 的直连请求不会经过本服务，也不会通过客户端上报补录；链路页面不尝试呈现跨 Server 调用。
+这条链路的边界固定在 Context Router 自身：只有进入 `/mcp` 并由 `ContextRouterMCP` 分发的五个内部工具会被记录。客户端对 GitHub、浏览器或其他 MCP Server 的直连请求不会经过本服务，也不会通过客户端上报补录；链路页面不尝试呈现跨 Server 调用。
 
-prepare 不建立业务数据库连接。业务数据库离线时，`/health`、文档 prepare 和文档 read 仍可工作；MCP 链路只有实际对象搜索或查询会尝试连接，管理页面的连接测试和数据库同步也会显式连接。
+prepare 和文档搜索不建立业务数据库连接。业务数据库离线时，`/health`、文档 prepare/search/read 仍可工作；MCP 链路只有实际对象搜索或查询会尝试连接，管理页面的连接测试和数据库同步也会显式连接。
 
 ## 页面到 API
 
@@ -108,6 +122,9 @@ api/projects.py
 - `build_document_cache` 负责递归读取、路径校验、循环检测和正文缓存。
 - 刷新完成后，`ProjectRegistry` 一次性替换该项目的 `DocumentCache`。
 - `document_metadata.py` 在刷新时安全解析显式 title 和 summary。
+- `markdown_search_parser.py` 剥离 Front Matter、按 fenced-code-aware ATX 章节解析并生成有界、带重叠的规范化分块。
+- `document_search_repository.py` 使用 PostgreSQL `simple` FTS、`pg_trgm` 和短词精确子串查询当前项目、当前索引版本。
+- `ContextDocumentSearchService` 校验 task/project/index_version，将分块命中聚合为文档结果；只返回定位信息，不返回 Markdown 正文。
 - `ContextPreparationService` 为 MCP 和卡片 JSON 预览生成同一个返回模型；除完整文档树外，还从本地持久化配置生成可用数据库摘要，不 ping 远端数据库。
 - `ContextDocumentReadService` 校验 task/project、批量读取文档或章节，并在返回正文前记录调用。
 - `document_read_repository.py` 保存 read_call_id、单次 position、相对路径、章节和状态，不保存正文。
@@ -118,8 +135,8 @@ api/projects.py
 - `ConnectorManager` 以数据源配置版本和数据库更新时间组成缓存键，提供延迟连接、同 key single-flight、并发限制、LRU 淘汰和失效关闭。
 - `database_call_repository.py` 记录 operation、数据库别名/Engine 快照、对象或语句类型、SQL SHA-256、状态、耗时、数量、字节数、截断和稳定错误码；不保存完整 SQL 或结果。
 - `database_tool_payload.py` 与独立 Repository 的采集默认关闭；显式启用后只对白名单数据库工具保存有界请求和最终 MCP 响应。请求/响应默认各 1 MB、硬上限 4 MB、默认保留 7 天；启动时恢复 pending 并清理过期内容，调用期间按节流周期继续清理。
-- `mcp_server.py` 固定注册 `prepare_task_context`、`read_context_document`、`search_database_objects`、`execute_database_query`，并挂载到 `/mcp`。数据源变化不会改变工具名。
-- `mcp_server.py` 使用统一工具分发埋点记录四个固定工具；观测持久化失败只降低链路可见性，不改变 MCP 工具原始成功或失败结果。
+- `mcp_server.py` 固定注册 `prepare_task_context`、`search_context_documents`、`read_context_document`、`search_database_objects`、`execute_database_query`，并挂载到 `/mcp`。项目或数据源变化不会改变工具名。
+- `mcp_server.py` 使用统一工具分发埋点记录五个固定工具；观测持久化失败只降低链路可见性，不改变 MCP 工具原始成功或失败结果。
 - `mcp_tool_call_repository.py` 保存通用工具调用和任务链路摘要；文档与数据库 Repository 继续保存各自明细，并通过可空唯一 `tool_call_id` 关联。
 - `api/mcp_traces.py` 返回全局任务链路列表和单任务统一调用详情；列表支持项目、Agent、固定内部工具、调用状态和关键词的服务端过滤。普通 task 即使没有成功落下内部调用节点也能显示，`web-preview` 与 `connection-test` 系统任务除外。API 已把文档、数据库明细转换为同一 `artifacts` 数组，并返回 `complete / running / partial` 完整性状态与稳定 warning code；主详情只包含 payload 的 available/status/reason，完整 JSON 由带 `Cache-Control: no-store` 的归属校验接口懒加载。
 - `mcp_integration.py` 生成客户端配置，并以 MCP Python Client 对后端自身执行 initialize、tools/list、prepare 和 read，不绕过协议直接调用 service。
@@ -155,8 +172,8 @@ Markdown 解析器只生成 React 元素，不使用 `dangerouslySetInnerHTML`�
 
 项目卡片调用记录通过 `task-history.ts` 保留文档读取批次和单批位置，通过 `database-access.ts` 把文档 read call 与数据库 call 按创建时间合并为上下文时间线。后端项目任务列表在 `LIMIT` 前过滤没有 read call 的任务；同一次批量读取的文档在一行横向展示，读取成功的卡片复用文档详情接口和 Markdown 抽屉。数据库卡片仍只展示客观摘要。
 
-全局链路管理由 `trace-explorer.tsx` 读取统一 Trace API，服务端直接返回 `sequence`、调用状态、完整性和关联 artifacts。页面提供任务、Agent、四个固定内部工具和状态筛选，只保留调用树与调用列表；“调用树”只对显式 `parent_tool_call_id` 绘制父子含义，普通调用按稳定顺序纵向排列。文档工具只展示紧凑读取摘要，不请求文档树或 Markdown；数据库工具通过 `database-call-payload-modal.tsx` 点击后懒加载全屏出入参详情。列表和详情会把链路标记为“完整 / 运行中 / 可能不完整”，并把 prepare 缺失、历史、重启中断或未关联明细转换为中文提示。
+全局链路管理由 `trace-explorer.tsx` 读取统一 Trace API，服务端直接返回 `sequence`、调用状态、完整性和关联 artifacts。页面提供任务、Agent、五个固定内部工具和状态筛选，只保留调用树与调用列表；“调用树”只对显式 `parent_tool_call_id` 绘制父子含义，普通调用按稳定顺序纵向排列。文档搜索节点只展示返回文档数量等脱敏摘要，文档工具不请求文档树或 Markdown；数据库工具通过 `database-call-payload-modal.tsx` 点击后懒加载全屏出入参详情。列表和详情会把链路标记为“完整 / 运行中 / 可能不完整”，并把 prepare 缺失、历史、重启中断或未关联明细转换为中文提示。
 
 ClickHouse 编辑表单保留 secure、verify、bootstrap database、connect timeout 和 send/receive timeout；项目数据库弹窗实时校验 `mcp_alias` 格式和项目内重复值，并将选择与别名放在一个后端事务中提交，因此支持两个别名直接互换且不会部分保存。历史非只读关联会明确提示不暴露给 MCP。
 
-MCP 接入信息和测试结果通过 `lib/api.ts` 获取；公开 MCP URL 由后端配置统一提供，前端不按浏览器地址猜测。面板展示四个固定工具，并说明任务真正可用的数据库以 prepare 的 `databases` 为准。端到端测试任务的 `agent_name` 固定为 `connection-test`，任务列表默认过滤这类记录。
+MCP 接入信息和测试结果通过 `lib/api.ts` 获取；公开 MCP URL 由后端配置统一提供，前端不按浏览器地址猜测。面板展示五个固定工具，并说明文档搜索绑定 prepare 创建的 task，任务真正可用的数据库以 prepare 的 `databases` 为准。端到端测试任务的 `agent_name` 固定为 `connection-test`，任务列表默认过滤这类记录。

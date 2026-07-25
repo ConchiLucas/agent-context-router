@@ -4,6 +4,7 @@ import pytest
 from mcp.server.fastmcp.exceptions import ToolError
 
 from context_router.mcp_server import create_context_router_mcp
+from context_router.schemas.context import SearchContextDocumentsResult
 
 
 class UnusedService:
@@ -23,6 +24,21 @@ class RecordingCatalogService:
         return {"objects": [], "returned_count": 0}
 
 
+class RecordingDocumentSearchService:
+    def __init__(self) -> None:
+        self.arguments: dict[str, object] = {}
+
+    def search(self, **arguments: object) -> SearchContextDocumentsResult:
+        self.arguments = arguments
+        return SearchContextDocumentsResult(
+            task_id=int(arguments["task_id"]),
+            query=str(arguments["query"]),
+            returned_count=0,
+            truncated=False,
+            results=[],
+        )
+
+
 class RecordingQueryService:
     def __init__(self) -> None:
         self.arguments: dict[str, object] = {}
@@ -32,7 +48,7 @@ class RecordingQueryService:
         return {"rows": [[1]], "returned_rows": 1}
 
 
-def test_mcp_exposes_four_stable_context_tools() -> None:
+def test_mcp_exposes_five_stable_context_tools() -> None:
     service = UnusedService()
     server = create_context_router_mcp(  # type: ignore[arg-type]
         service,
@@ -43,6 +59,7 @@ def test_mcp_exposes_four_stable_context_tools() -> None:
 
     assert [tool.name for tool in tools] == [
         "prepare_task_context",
+        "search_context_documents",
         "read_context_document",
         "search_database_objects",
         "execute_database_query",
@@ -58,10 +75,13 @@ def test_mcp_exposes_four_stable_context_tools() -> None:
         assert tool.annotations.destructiveHint is False
         assert tool.annotations.idempotentHint is True
         assert tool.annotations.openWorldHint is False
-    search_schema = tools[2].inputSchema
-    query_schema = tools[3].inputSchema
-    assert search_schema["required"] == ["task_id", "database", "object_type"]
-    assert set(search_schema["properties"]) == {
+    document_search_schema = tools[1].inputSchema
+    database_search_schema = tools[3].inputSchema
+    query_schema = tools[4].inputSchema
+    assert document_search_schema["required"] == ["task_id", "query"]
+    assert set(document_search_schema["properties"]) == {"task_id", "query", "limit"}
+    assert database_search_schema["required"] == ["task_id", "database", "object_type"]
+    assert set(database_search_schema["properties"]) == {
         "task_id",
         "database",
         "object_type",
@@ -73,6 +93,40 @@ def test_mcp_exposes_four_stable_context_tools() -> None:
     }
     assert query_schema["required"] == ["task_id", "database", "sql"]
     assert set(query_schema["properties"]) == {"task_id", "database", "sql"}
+
+
+def test_document_search_forwards_only_fixed_public_arguments() -> None:
+    document_service = UnusedService()
+    search = RecordingDocumentSearchService()
+    server = create_context_router_mcp(  # type: ignore[arg-type]
+        document_service,
+        document_service,
+        document_search_service=search,
+    )
+
+    _, result = asyncio.run(
+        server.call_tool(
+            "search_context_documents",
+            {
+                "task_id": 9,
+                "query": "数据库迁移",
+                "limit": 7,
+            },
+        )
+    )
+
+    assert result == {
+        "task_id": 9,
+        "query": "数据库迁移",
+        "returned_count": 0,
+        "truncated": False,
+        "results": [],
+    }
+    assert search.arguments == {
+        "task_id": 9,
+        "query": "数据库迁移",
+        "limit": 7,
+    }
 
 
 def test_database_tools_forward_only_fixed_public_arguments() -> None:
@@ -131,6 +185,10 @@ def test_database_tools_forward_only_fixed_public_arguments() -> None:
 @pytest.mark.parametrize(
     ("tool_name", "arguments"),
     [
+        (
+            "search_context_documents",
+            {"query": "数据库迁移"},
+        ),
         (
             "read_context_document",
             {"requests": [{"document_id": "root"}]},

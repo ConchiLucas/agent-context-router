@@ -85,9 +85,9 @@ CONTEXT_ROUTER_DATABASE_URL=postgresql://USER:PASSWORD@host.docker.internal:5432
 docker compose exec backend uv run alembic upgrade head
 ```
 
-PostgreSQL 保存项目、数据源、数据库清单、项目数据库关联及 `mcp_alias`、MCP task、read call、文档顺序和数据库调用审计元数据。文档树、Markdown 正文及文档工具完整出入参不持久化；显式启用 payload 采集后，`search_database_objects` 和 `execute_database_query` 才额外保存有界、可过期的详情快照，供本机链路页面按需查看。后端启动时恢复项目配置，并为启用项目从磁盘重建内存树；路径失效的项目仍保留在页面并显示错误。
+PostgreSQL 保存项目、数据源、数据库清单、项目数据库关联及 `mcp_alias`、MCP task、read call、文档顺序、数据库调用审计元数据，以及可重建的文档搜索分块与索引状态。文档树和 Markdown 原文仍从磁盘重建，文档工具完整出入参不持久化；显式启用 payload 采集后，`search_database_objects` 和 `execute_database_query` 才额外保存有界、可过期的详情快照，供本机链路页面按需查看。后端启动时恢复项目配置，并为启用项目从磁盘重建内存树与匹配版本的词法索引；路径失效的项目仍保留在页面并显示错误。
 
-数据库未配置时后端和 `/health` 仍可启动，项目配置退化为当前进程内存；但 task_id 持久化、prepare/read 的完整 MCP 工作流、卡片 JSON 预览和持久化调用记录不可用。业务数据源离线不会阻止后端启动，也不会阻止文档 prepare/read；连接只在测试、同步、对象搜索或查询时延迟建立。
+数据库未配置时后端和 `/health` 仍可启动，项目配置退化为当前进程内存；但 task_id 持久化、prepare/search/read 的完整 MCP 工作流、卡片 JSON 预览和持久化调用记录不可用。文档搜索不会降级为进程内扫描。业务数据源离线不会阻止后端启动，也不会阻止文档 prepare/search/read；连接只在测试、同步、对象搜索或查询时延迟建立。
 
 ## Docker Desktop 与公司 VPN 数据库
 

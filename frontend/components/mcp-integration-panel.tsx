@@ -65,7 +65,9 @@ function ClientConfigGuide({
         <strong>接入后怎么用</strong>
         <p>
           新任务先调用 <code>prepare_task_context</code> 获取文档树、task_id 和项目可用数据库别名；
-          再按需读取文档、搜索数据库对象或执行有界只读查询。没有匹配项目时，客户端继续使用普通源码检索。
+          文档目标不明确时先调用 <code>search_context_documents</code>，
+          再按需读取选中的文档或章节；数据库仍按对象搜索、有界只读查询的顺序使用。
+          没有匹配项目时，客户端继续使用普通源码检索。
         </p>
       </div>
     </section>

@@ -1,6 +1,6 @@
 # 上下文任务路由
 
-调用 `prepare_task_context` 时通常只传 task 和 cwd。后端按 cwd 最长前缀选择已启用项目并返回该项目完整文档树，不根据 task 内容搜索、排名或只返回候选；下表用于 Agent 在返回树中选择后续要读的稳定文档。
+调用 `prepare_task_context` 时通常只传 task 和 cwd。后端按 cwd 最长前缀选择已启用项目并返回该项目完整文档树，不根据 task 内容搜索、排名或只返回候选；下表用于 Agent 在返回树中选择后续要读的稳定文档。树较大或无法直接判断时，再用 prepare 返回的 task_id 调用 `search_context_documents`，定位命中文档/章节后调用 read。
 
 | area | document_id | 适用任务 |
 | --- | --- | --- |

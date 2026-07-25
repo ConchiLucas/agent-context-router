@@ -4,6 +4,9 @@ from fastapi.testclient import TestClient
 
 from context_router.config import Settings
 from context_router.main import create_app
+from context_router.repositories.document_search_repository import (
+    InMemoryDocumentSearchRepository,
+)
 from context_router.repositories.project_repository import InMemoryProjectRepository
 
 
@@ -27,6 +30,7 @@ def test_mcp_integration_returns_client_configs_and_readiness(tmp_path: Path) ->
         ),
         task_repository=FakeTaskRepository(),
         project_repository=InMemoryProjectRepository(),
+        document_search_repository=InMemoryDocumentSearchRepository(),
     )
 
     with TestClient(app) as client:
@@ -41,6 +45,7 @@ def test_mcp_integration_returns_client_configs_and_readiness(tmp_path: Path) ->
     }
     assert [tool["name"] for tool in payload["tools"]] == [
         "prepare_task_context",
+        "search_context_documents",
         "read_context_document",
         "search_database_objects",
         "execute_database_query",

@@ -73,6 +73,7 @@ class DocumentCache:
     root: CachedTreeNode
     documents: dict[str, CachedDocument]
     project_root: Path
+    version: str
 
 
 def _combine_errors(*errors: str | None) -> str | None:
@@ -347,8 +348,22 @@ def build_document_cache(root_path: Path) -> DocumentCache:
         relative_path=None,
         ancestors=frozenset(),
     )
+    version_hasher = hashlib.sha256()
+    version_hasher.update(b"document-cache-v1\0")
+    for document_id, document in sorted(documents.items()):
+        version_hasher.update(document_id.encode("utf-8"))
+        version_hasher.update(b"\0")
+        version_hasher.update(document.path.encode("utf-8"))
+        version_hasher.update(b"\0")
+        version_hasher.update((document.title or "").encode("utf-8"))
+        version_hasher.update(b"\0")
+        version_hasher.update((document.summary or "").encode("utf-8"))
+        version_hasher.update(b"\0")
+        version_hasher.update(document.content.encode("utf-8"))
+        version_hasher.update(b"\0")
     return DocumentCache(
         root=root,
         documents=documents,
         project_root=resolved_root.parent,
+        version=version_hasher.hexdigest(),
     )

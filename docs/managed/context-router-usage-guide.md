@@ -4,6 +4,7 @@
 
 - 新窗口遇到业务规则、启动、数据库或跨层链路任务时，调用 `prepare_task_context(task, cwd, agent_name)`。
 - prepare 返回 cwd 对应项目的完整文档树；先用 title、summary 和 path 建立全局认知。
+- 树较大、目标不明确或需要按术语定位时，调用 `search_context_documents(task_id, query, limit)`；它只搜索当前 task 绑定项目，返回文档与章节定位，不返回完整正文。
 - 选择文档后调用 `read_context_document(task_id, requests)`；task_id 必须来自当前 prepare，不跨任务复用。
 - requests 可同时包含多个 document_id 和可选 section，返回顺序严格保持输入顺序。
 - 完整树不等于完整正文，不要一次读取所有 Markdown 内容。
@@ -19,8 +20,9 @@
 | document_id | 适用任务 |
 | --- | --- |
 | `context-router-prepare-guide` | 需要了解 prepare 参数、项目识别和返回范围 |
+| `context-router-search-guide` | 需要按关键词定位文档、章节并理解相关度和索引错误 |
 | `context-router-read-guide` | 需要了解批量文档、精确章节、顺序和 read_call_id |
 | `context-router-trace-guide` | 需要理解 Tasks 页面记录了什么 |
 | `context-router-routing-guide` | 需要按 startup/database/frontend/backend/business/debugging 路由 |
 
-MCP 的 `tools/list` 固定为 `prepare_task_context`、`read_context_document`、`search_database_objects`、`execute_database_query`。某个项目当前没有数据库时，后两个工具仍会存在，但 prepare 的 databases 为空，不能据此访问其他项目的数据源。
+MCP 的 `tools/list` 固定为 `prepare_task_context`、`search_context_documents`、`read_context_document`、`search_database_objects`、`execute_database_query`。某个项目当前没有数据库时，后两个工具仍会存在，但 prepare 的 databases 为空，不能据此访问其他项目的数据源。

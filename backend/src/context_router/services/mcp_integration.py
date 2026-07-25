@@ -22,6 +22,8 @@ from context_router.mcp_server import (
     PREPARE_TOOL_NAME,
     READ_TOOL_DESCRIPTION,
     READ_TOOL_NAME,
+    SEARCH_CONTEXT_TOOL_DESCRIPTION,
+    SEARCH_CONTEXT_TOOL_NAME,
     SEARCH_DATABASE_TOOL_DESCRIPTION,
     SEARCH_DATABASE_TOOL_NAME,
 )
@@ -65,6 +67,10 @@ class McpIntegrationService:
             ),
             tools=[
                 McpToolInfo(name=PREPARE_TOOL_NAME, description=PREPARE_TOOL_DESCRIPTION),
+                McpToolInfo(
+                    name=SEARCH_CONTEXT_TOOL_NAME,
+                    description=SEARCH_CONTEXT_TOOL_DESCRIPTION,
+                ),
                 McpToolInfo(name=READ_TOOL_NAME, description=READ_TOOL_DESCRIPTION),
                 McpToolInfo(
                     name=SEARCH_DATABASE_TOOL_NAME,
@@ -120,6 +126,7 @@ class McpIntegrationService:
             ("tools", "工具发现"),
             ("project", "项目匹配"),
             ("prepare", "prepare_task_context"),
+            ("search", "search_context_documents"),
             ("read", "read_context_document"),
         ]
 
@@ -176,6 +183,7 @@ class McpIntegrationService:
                             names = [tool.name for tool in result.tools]
                             expected = {
                                 PREPARE_TOOL_NAME,
+                                SEARCH_CONTEXT_TOOL_NAME,
                                 READ_TOOL_NAME,
                                 SEARCH_DATABASE_TOOL_NAME,
                                 EXECUTE_DATABASE_TOOL_NAME,
@@ -235,6 +243,35 @@ class McpIntegrationService:
                             return f"已创建测试任务 #{task_id}，并返回完整文档树"
 
                         await add_stage("prepare", PREPARE_TOOL_NAME, prepare_context)
+
+                        async def search_documents() -> str:
+                            result = await session.call_tool(
+                                SEARCH_CONTEXT_TOOL_NAME,
+                                arguments={
+                                    "task_id": task_id,
+                                    "query": "AGENTS.md",
+                                    "limit": 1,
+                                },
+                            )
+                            payload = self._tool_payload(result)
+                            results = payload.get("results")
+                            if not isinstance(results, list) or not results:
+                                raise McpIntegrationError("search 未返回入口文档")
+                            first = results[0]
+                            if (
+                                not isinstance(first, dict)
+                                or first.get("document_id") != prepare_holder["root_document_id"]
+                            ):
+                                raise McpIntegrationError("search 返回了错误的入口文档")
+                            if "content" in first:
+                                raise McpIntegrationError("search 不应返回 Markdown 正文")
+                            return "按路径检索入口文档成功"
+
+                        await add_stage(
+                            "search",
+                            SEARCH_CONTEXT_TOOL_NAME,
+                            search_documents,
+                        )
 
                         async def read_document() -> str:
                             nonlocal read_call_id

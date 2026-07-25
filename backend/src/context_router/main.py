@@ -40,6 +40,10 @@ from context_router.repositories.document_read_repository import (
     DocumentReadStore,
     PostgresDocumentReadRepository,
 )
+from context_router.repositories.document_search_repository import (
+    DocumentSearchStore,
+    PostgresDocumentSearchRepository,
+)
 from context_router.repositories.mcp_tool_call_repository import (
     InMemoryMcpToolCallRepository,
     McpToolCallStore,
@@ -52,11 +56,13 @@ from context_router.repositories.project_repository import (
 )
 from context_router.repositories.task_repository import PostgresTaskRepository, TaskStore
 from context_router.services.context_document_read import ContextDocumentReadService
+from context_router.services.context_document_search import ContextDocumentSearchService
 from context_router.services.context_preparation import ContextPreparationService
 from context_router.services.database_access import DatabaseAccessService
 from context_router.services.database_catalog import DatabaseCatalogService
 from context_router.services.database_query import DatabaseQueryService
 from context_router.services.database_tool_payload import DatabaseToolPayloadService
+from context_router.services.document_search_index import DocumentSearchIndexer
 from context_router.services.mcp_integration import McpIntegrationService
 from context_router.services.mcp_trace import McpTraceService
 from context_router.services.project_registry import ProjectRegistry, ProjectRegistryError
@@ -75,6 +81,7 @@ def create_app(
     database_payload_repository: DatabaseToolPayloadStore | None = None,
     connector_registry: ConnectorRegistry | None = None,
     connector_manager: ConnectorManager | None = None,
+    document_search_repository: DocumentSearchStore | None = None,
 ) -> FastAPI:
     resolved_settings = settings or Settings()
     resolved_project_repository = project_repository or (
@@ -82,7 +89,18 @@ def create_app(
         if resolved_settings.database_url
         else InMemoryProjectRepository()
     )
-    registry = ProjectRegistry(resolved_settings, resolved_project_repository)
+    resolved_document_search_repository = (
+        document_search_repository
+        or PostgresDocumentSearchRepository(resolved_settings.database_url)
+    )
+    document_search_indexer = DocumentSearchIndexer(
+        resolved_document_search_repository,
+    )
+    registry = ProjectRegistry(
+        resolved_settings,
+        resolved_project_repository,
+        document_search_indexer,
+    )
     resolved_data_source_repository = data_source_repository or (
         PostgresDataSourceRepository(resolved_settings.database_url)
         if resolved_settings.database_url
@@ -147,6 +165,11 @@ def create_app(
         resolved_task_repository,
         resolved_read_repository,
     )
+    document_search_service = ContextDocumentSearchService(
+        registry,
+        resolved_task_repository,
+        resolved_document_search_repository,
+    )
     database_payload_service = DatabaseToolPayloadService(
         resolved_database_payload_repository,
         capture_enabled=resolved_settings.database_payload_capture_enabled,
@@ -172,6 +195,7 @@ def create_app(
         database_query_service,
         trace_service=mcp_trace_service,
         database_payload_service=database_payload_service,
+        document_search_service=document_search_service,
     )
     mcp_app = mcp_server.streamable_http_app()
 
@@ -219,6 +243,8 @@ def create_app(
     app.state.project_registry = registry
     app.state.context_preparation_service = context_service
     app.state.context_document_read_service = document_read_service
+    app.state.context_document_search_service = document_search_service
+    app.state.document_search_repository = resolved_document_search_repository
     app.state.task_repository = resolved_task_repository
     app.state.document_read_repository = resolved_read_repository
     app.state.project_repository = resolved_project_repository

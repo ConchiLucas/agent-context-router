@@ -78,6 +78,29 @@ class RecordingRead:
         )
 
 
+class RecordingSearch:
+    def search(self, **_: object) -> DumpResult:
+        return DumpResult(
+            {
+                "task_id": 77,
+                "query": "登录",
+                "returned_count": 1,
+                "truncated": False,
+                "results": [
+                    {
+                        "document_id": "root",
+                        "path": "AGENTS.md",
+                        "title": "登录说明",
+                        "summary": "结果正文不能进入调用摘要",
+                        "relevance": 0.75,
+                        "matched_sections": [],
+                        "match_reasons": ["title_exact"],
+                    }
+                ],
+            }
+        )
+
+
 class RecordingCatalog:
     def search(self, **_: object) -> dict[str, object]:
         return {
@@ -131,7 +154,7 @@ def _tracking_service(
     )
 
 
-def test_all_four_mcp_tools_are_traced_in_server_order_without_sensitive_payloads() -> None:
+def test_all_five_mcp_tools_are_traced_in_server_order_without_sensitive_payloads() -> None:
     repository = InMemoryMcpToolCallRepository()
     server = create_context_router_mcp(
         RecordingPreparation(),  # type: ignore[arg-type]
@@ -139,12 +162,17 @@ def test_all_four_mcp_tools_are_traced_in_server_order_without_sensitive_payload
         RecordingCatalog(),  # type: ignore[arg-type]
         RecordingQuery(),  # type: ignore[arg-type]
         _tracking_service(repository),
+        document_search_service=RecordingSearch(),
     )
 
     async def invoke_tools() -> None:
         await server.call_tool(
             "prepare_task_context",
             {"task": "排查问题", "cwd": "/workspace/project", "agent_name": "codex"},
+        )
+        await server.call_tool(
+            "search_context_documents",
+            {"task_id": 77, "query": "登录", "limit": 10},
         )
         await server.call_tool(
             "read_context_document",
@@ -168,17 +196,23 @@ def test_all_four_mcp_tools_are_traced_in_server_order_without_sensitive_payload
 
     assert [call.tool_name for call in calls] == [
         "prepare_task_context",
+        "search_context_documents",
         "read_context_document",
         "search_database_objects",
         "execute_database_query",
     ]
-    assert [call.status for call in calls] == ["ok", "ok", "ok", "ok"]
+    assert [call.status for call in calls] == ["ok", "ok", "ok", "ok", "ok"]
     assert calls[0].result_summary == {
         "document_count": 3,
         "database_count": 0,
         "warning_count": 0,
     }
     assert calls[1].result_summary == {
+        "returned_count": 1,
+        "truncated": False,
+        "max_relevance": 0.75,
+    }
+    assert calls[2].result_summary == {
         "document_count": 1,
         "ok_count": 1,
         "error_count": 0,
@@ -188,7 +222,9 @@ def test_all_four_mcp_tools_are_traced_in_server_order_without_sensitive_payload
     assert "SELECT password" not in serialized
     assert "secret-result" not in serialized
     assert "正文不能进入调用摘要" not in serialized
-    assert calls[3].request_summary == {
+    assert "结果正文不能进入调用摘要" not in serialized
+    assert "登录" not in serialized
+    assert calls[4].request_summary == {
         "database": "analytics",
         "sql_sha256": "70295e581aff4b4ae56d4cfae234338844965793adc6f178c5e5f44abf05c838",
     }

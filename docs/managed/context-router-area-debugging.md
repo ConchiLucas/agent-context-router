@@ -13,7 +13,8 @@
 | document_id | 用途 |
 | --- | --- |
 | `context-router-routing-guide` | 确认任务和项目路由 |
-| `context-router-trace-guide` | 确认 prepare/read/database call 记录语义 |
+| `context-router-search-guide` | 排查文档搜索命中、章节定位或 index-not-ready |
+| `context-router-trace-guide` | 确认 prepare/search/read/database call 记录语义 |
 | `context-router-area-backend` | 定位 MCP、API 和 service |
 | `context-router-area-database` | 检查 trace 和 retrieval 数据 |
 

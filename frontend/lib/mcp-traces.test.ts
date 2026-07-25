@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  INTERNAL_MCP_TOOL_NAMES,
   buildMcpTraceListPath,
   buildTraceDocumentCallNumbers,
   buildTraceGraphRows,
@@ -11,6 +12,7 @@ import {
   isInternalMcpToolName,
   sortTraceCalls,
   statusQueryForTraceFilter,
+  traceCallResultSummary,
   traceCompletenessLabel,
   traceWarningMessages,
 } from "./mcp-traces";
@@ -78,7 +80,15 @@ test("maps trace completeness and warning codes to concise Chinese messages", ()
   );
 });
 
-test("keeps only the four Context Router server and legacy tools", () => {
+test("keeps only the five Context Router server and legacy tools", () => {
+  assert.deepEqual(INTERNAL_MCP_TOOL_NAMES, [
+    "prepare_task_context",
+    "search_context_documents",
+    "read_context_document",
+    "search_database_objects",
+    "execute_database_query",
+  ]);
+
   const calls = [
     call({
       tool_call_id: 1,
@@ -88,27 +98,73 @@ test("keeps only the four Context Router server and legacy tools", () => {
     call({
       tool_call_id: 2,
       sequence: 2,
-      tool_name: "execute_database_query",
-      source: "legacy",
+      tool_name: "search_context_documents",
     }),
     call({
       tool_call_id: 3,
       sequence: 3,
-      tool_name: "read_context_document",
-      source: "gateway",
+      tool_name: "execute_database_query",
+      source: "legacy",
     }),
     call({
       tool_call_id: 4,
       sequence: 4,
+      tool_name: "read_context_document",
+      source: "gateway",
+    }),
+    call({
+      tool_call_id: 5,
+      sequence: 5,
       tool_name: "github__search_code",
     }),
   ];
 
+  assert.equal(isInternalMcpToolName("search_context_documents"), true);
   assert.equal(isInternalMcpToolName("search_database_objects"), true);
   assert.equal(isInternalMcpToolName("github__search_code"), false);
   assert.deepEqual(
     internalTraceCalls(calls).map((item) => item.tool_call_id),
-    [1, 2],
+    [1, 2, 3],
+  );
+});
+
+test("summarizes document search results without exposing result payloads", () => {
+  assert.equal(
+    traceCallResultSummary(
+      call({
+        tool_call_id: 1,
+        sequence: 1,
+        tool_name: "search_context_documents",
+        result_summary: {
+          returned_count: 3,
+          truncated: false,
+          max_relevance: 0.92,
+        },
+      }),
+    ),
+    "返回 3 个文档",
+  );
+  assert.equal(
+    traceCallResultSummary(
+      call({
+        tool_call_id: 2,
+        sequence: 2,
+        tool_name: "search_context_documents",
+        result_summary: { returned_count: -1 },
+      }),
+    ),
+    null,
+  );
+  assert.equal(
+    traceCallResultSummary(
+      call({
+        tool_call_id: 3,
+        sequence: 3,
+        tool_name: "execute_database_query",
+        result_summary: { returned_count: 3 },
+      }),
+    ),
+    null,
   );
 });
 

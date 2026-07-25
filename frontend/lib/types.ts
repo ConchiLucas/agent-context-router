@@ -265,6 +265,7 @@ export type InternalMcpTraceCallSource = "server" | "legacy";
 
 export type InternalMcpToolName =
   | "prepare_task_context"
+  | "search_context_documents"
   | "read_context_document"
   | "search_database_objects"
   | "execute_database_query";

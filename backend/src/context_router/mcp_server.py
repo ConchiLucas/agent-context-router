@@ -24,6 +24,10 @@ from context_router.services.context_document_read import (
     ContextDocumentReadError,
     ContextDocumentReadService,
 )
+from context_router.services.context_document_search import (
+    ContextDocumentSearchError,
+    ContextDocumentSearchService,
+)
 from context_router.services.context_preparation import (
     ContextPreparationError,
     ContextPreparationService,
@@ -37,12 +41,16 @@ MCP_SERVER_NAME = "Context Router"
 MCP_SERVER_INSTRUCTIONS = (
     "Call prepare_task_context once at the start of a new project task. Preserve the "
     "returned task_id and pass it to every document or database call for that task. "
+    "When the document tree is large or the target is uncertain, call "
+    "search_context_documents and then read the selected document or section with "
+    "read_context_document. "
     "Use only database aliases returned by prepare. Search database objects before querying "
     "when the schema is uncertain. Database queries are always bounded and read-only. Call "
     "prepare again for a new conversation when no task_id is available."
 )
 (
     PREPARE_TOOL_NAME,
+    SEARCH_CONTEXT_TOOL_NAME,
     READ_TOOL_NAME,
     SEARCH_DATABASE_TOOL_NAME,
     EXECUTE_DATABASE_TOOL_NAME,
@@ -56,6 +64,11 @@ READ_TOOL_DESCRIPTION = (
     "Read one or more Markdown documents or exact ATX-heading sections from the project "
     "selected by prepare_task_context. task_id must be the value returned for the current "
     "task. Results preserve request order and every call is recorded server-side."
+)
+SEARCH_CONTEXT_TOOL_DESCRIPTION = (
+    "Search every mapped Markdown document in the project selected by prepare_task_context. "
+    "Returns document metadata, matching sections, relevance, and deterministic match reasons "
+    "without returning Markdown content. Use read_context_document for selected results."
 )
 SEARCH_DATABASE_TOOL_DESCRIPTION = (
     "Search schemas, tables, views, columns, or indexes in a database authorized for the "
@@ -256,6 +269,7 @@ def create_context_router_mcp(
     database_query_service: DatabaseQueryService | None = None,
     trace_service: McpTraceService | None = None,
     database_payload_service: DatabaseToolPayloadService | None = None,
+    document_search_service: ContextDocumentSearchService | None = None,
 ) -> FastMCP:
     server = ContextRouterMCP(
         name=MCP_SERVER_NAME,
@@ -281,6 +295,28 @@ def create_context_router_mcp(
             result = preparation_service.prepare(task=task, cwd=cwd, agent_name=agent_name)
         except ContextPreparationError as exc:
             raise ToolError(str(exc)) from exc
+        return result.model_dump(exclude_none=True)
+
+    @server.tool(
+        name=SEARCH_CONTEXT_TOOL_NAME,
+        description=SEARCH_CONTEXT_TOOL_DESCRIPTION,
+        annotations=READ_TOOL_ANNOTATIONS,
+    )
+    def search_context_documents(
+        task_id: Annotated[int, Field(ge=1, strict=True)],
+        query: Annotated[str, Field(min_length=1, max_length=200)],
+        limit: Annotated[int, Field(ge=1, le=50, strict=True)] = 10,
+    ) -> dict[str, Any]:
+        if document_search_service is None:
+            raise ToolError("document_search_disabled: 文档搜索当前不可用")
+        try:
+            result = document_search_service.search(
+                task_id=task_id,
+                query=query,
+                limit=limit,
+            )
+        except ContextDocumentSearchError as exc:
+            raise ToolError(f"{exc.code}: {exc}") from exc
         return result.model_dump(exclude_none=True)
 
     @server.tool(
@@ -396,6 +432,17 @@ def _request_summary(name: str, arguments: dict[str, Any]) -> dict[str, object] 
                 isinstance(item, dict) and isinstance(item.get("section"), str) for item in requests
             ),
         }
+    if name == SEARCH_CONTEXT_TOOL_NAME:
+        query = arguments.get("query")
+        return {
+            "query_characters": len(query) if isinstance(query, str) else 0,
+            "query_sha256": (
+                hashlib.sha256(query.strip().encode("utf-8")).hexdigest()
+                if isinstance(query, str)
+                else None
+            ),
+            "limit": arguments.get("limit") if isinstance(arguments.get("limit"), int) else None,
+        }
     if name == SEARCH_DATABASE_TOOL_NAME:
         return {
             "database": _safe_string(arguments.get("database"), 64),
@@ -449,6 +496,28 @@ def _result_summary(name: str, payload: dict[str, Any]) -> dict[str, object] | N
                 for document in documents
                 if isinstance(document, dict) and isinstance(document.get("content"), str)
             ),
+        }
+    if name == SEARCH_CONTEXT_TOOL_NAME:
+        results = payload.get("results")
+        relevance = (
+            [
+                item.get("relevance")
+                for item in results
+                if isinstance(item, dict) and isinstance(item.get("relevance"), int | float)
+            ]
+            if isinstance(results, list)
+            else []
+        )
+        return {
+            "returned_count": (
+                payload.get("returned_count")
+                if isinstance(payload.get("returned_count"), int)
+                else 0
+            ),
+            "truncated": (
+                payload.get("truncated") if isinstance(payload.get("truncated"), bool) else False
+            ),
+            "max_relevance": max(relevance) if relevance else None,
         }
     if name == SEARCH_DATABASE_TOOL_NAME:
         return _bounded_result_metadata(payload, count_key="returned_count")

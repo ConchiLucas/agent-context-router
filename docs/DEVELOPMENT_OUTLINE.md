@@ -6,7 +6,7 @@
 
 | 任务 | 文档 | 主要代码 |
 | --- | --- | --- |
-| 产品目标和文档格式 | [业务功能说明](./BUSINESS_FEATURES.md) | `services/document_tree.py` |
+| 产品目标、文档格式和全文检索 | [业务功能说明](./BUSINESS_FEATURES.md) | `services/document_tree.py`、`services/document_search.py` |
 | 页面、API 和缓存链路 | [前后端链路速查](./FRONTEND_BACKEND_FLOW.md) | `project-dashboard.tsx`、`api/projects.py` |
 | 启动、测试、lint、build | [启动与开发规范](./STARTUP_GUIDE.md) | `docker-compose.yml` |
 | 数据库相关判断 | [数据库信息](./DATABASE_INFO.md) | `repositories/`、`migrations/` |
@@ -18,19 +18,20 @@
 - 根入口文件必须命名为 `AGENTS.md`。
 - 文档层级只来自 `## 下级文档` 下的“功能说明 / 相对路径”表格。
 - 映射由普通代码完成，不调用大模型。
-- 项目名称、项目类型、AGENTS.md 路径和启停状态，以及独立的数据源分类与连接配置保存在 PostgreSQL；文档树和正文只保存在单个后端进程内，并在启动时从磁盘重建。
+- 项目名称、项目类型、AGENTS.md 路径和启停状态，以及独立的数据源分类与连接配置保存在 PostgreSQL；文档树和 Markdown 原文只保存在单个后端进程内并在启动时从磁盘重建，PostgreSQL 仅保存可重建的规范化检索分块和版本状态。
 - 刷新是全量重建和原子替换。
 - 前端只从树接口获取概览，从详情接口按需获取内存正文。
 - 文档读取目录通过 Docker 只读挂载。
-- MCP `tools/list` 固定为 prepare、read、数据库对象搜索和数据库只读查询四个工具，不按数据源动态注册工具。
+- MCP `tools/list` 固定为 prepare、文档搜索、read、数据库对象搜索和数据库只读查询五个工具，不按项目或数据源动态注册工具。
+- 文档搜索固定绑定 task 的稳定项目，只查询与当前 DocumentCache 同版本的 PostgreSQL 索引；索引不可用时显式失败，不回退到进程内全文扫描。
 - prepare 只读取本地项目、文档缓存和数据库授权摘要，不连接业务数据库；数据库访问统一按 `task_id -> project -> mcp_alias -> 当前策略 -> Connector` 路由。
 - 项目数据库只有在项目、关联和数据源启用、数据库可用且非系统库、关联为只读、Engine 已实现 Connector 时才暴露给 MCP。
 - MySQL、MariaDB、PostgreSQL、ClickHouse 当前实现发现、对象搜索和有界只读查询；SQL Server、SQLite、Oracle 仅保留配置管理。
 - SQL 安全策略必须 fail-closed：只允许单条、可解析、限定当前数据库/Schema 的只读语句；不能把客户端 LIMIT 当作唯一边界，仍需服务端行数、字节数、超时和数据库侧只读限制。
 - Connector 延迟创建且生命周期只归 `ConnectorManager`；数据源配置版本变化或删除时必须失效旧连接，应用退出时统一关闭。
 - `mcp_database_calls` 审计历史只保存客观元数据和 SQL SHA-256；两个数据库 MCP 工具另以独立、可过期的有界 JSON 快照保存实际请求和最终 MCP 响应，主 Trace 接口不内联这些大字段。
-- Context Router 四个 MCP 工具在统一分发入口记录到 `mcp_tool_calls`；任务内顺序由 PostgreSQL 调用 ID 生成，文档/数据库专属明细通过 `tool_call_id` 关联，观测失败不得改变工具业务结果。
-- 链路管理只记录 Codex、Antigravity 等客户端实际发送到 Context Router `/mcp` 的四个内部工具调用；不连接、代理、聚合或接收其他 MCP Server 的调用上报，也不建设跨 Server Trace。
+- Context Router 五个 MCP 工具在统一分发入口记录到 `mcp_tool_calls`；任务内顺序由 PostgreSQL 调用 ID 生成，文档/数据库专属明细通过 `tool_call_id` 关联，观测失败不得改变工具业务结果。
+- 链路管理只记录 Codex、Antigravity 等客户端实际发送到 Context Router `/mcp` 的五个内部工具调用；不连接、代理、聚合或接收其他 MCP Server 的调用上报，也不建设跨 Server Trace。
 - 项目卡片“查看调用记录”只列出实际读取过文档的任务，并保留文档树、读取列表和 Markdown 查看；全局链路管理与之独立，只提供调用树和调用列表。
 - 完整出入参采集默认关闭；显式启用后只对白名单数据库工具 `search_database_objects`、`execute_database_query` 采集，并通过 no-store 详情 API 懒加载；prepare/read 不建立完整 payload 快照。
 - task 使用无项目外键的稳定 project_id 快照隔离历史链路；后端启动会收敛遗留 running 调用，Trace API 与页面明确区分完整、运行中和可能不完整。

@@ -9,6 +9,7 @@ import type {
 
 export const INTERNAL_MCP_TOOL_NAMES: readonly InternalMcpToolName[] = [
   "prepare_task_context",
+  "search_context_documents",
   "read_context_document",
   "search_database_objects",
   "execute_database_query",
@@ -148,6 +149,21 @@ export function documentsForTraceCall(
   return documentItems(call).sort(
     (left, right) => left.position - right.position,
   );
+}
+
+export function traceCallResultSummary(
+  call: McpTraceToolCall,
+): string | null {
+  if (call.tool_name !== "search_context_documents") return null;
+  const returnedCount = call.result_summary?.returned_count;
+  if (
+    typeof returnedCount !== "number" ||
+    !Number.isInteger(returnedCount) ||
+    returnedCount < 0
+  ) {
+    return null;
+  }
+  return `返回 ${returnedCount} 个文档`;
 }
 
 export function buildTraceDocumentCallNumbers(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -18,11 +19,17 @@ from context_router.schemas.projects import (
     DocumentTreeNode,
     ProjectSummary,
 )
+from context_router.services.document_search_index import (
+    DocumentSearchIndexer,
+    DocumentSearchIndexError,
+)
 from context_router.services.document_tree import (
     DocumentCache,
     DocumentTreeError,
     build_document_cache,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ProjectRegistryError(ValueError):
@@ -57,11 +64,42 @@ class ProjectRegistry:
         self,
         settings: Settings,
         project_repository: ProjectStore | None = None,
+        document_search_indexer: DocumentSearchIndexer | None = None,
     ) -> None:
         self._settings = settings
         self._project_repository = project_repository
+        self._document_search_indexer = document_search_indexer
         self._projects: dict[str, ProjectState] = {}
         self._lock = RLock()
+
+    def _ensure_search_index(
+        self,
+        project_id: str,
+        cache: DocumentCache,
+        *,
+        force: bool = False,
+    ) -> None:
+        if self._document_search_indexer is None:
+            return
+        try:
+            if force:
+                self._document_search_indexer.rebuild_project_index(
+                    project_id=project_id,
+                    cache=cache,
+                )
+            else:
+                self._document_search_indexer.ensure_project_index(
+                    project_id=project_id,
+                    cache=cache,
+                )
+        except DocumentSearchIndexError as exc:
+            # The document tree and direct reads remain available. The search
+            # service rejects a missing/stale index by comparing cache versions.
+            logger.warning(
+                "Unable to refresh document search index for project %s: %s",
+                project_id,
+                exc,
+            )
 
     def _map_agents_path(self, agents_path: str) -> Path:
         source = Path(agents_path).expanduser()
@@ -156,6 +194,7 @@ class ProjectRegistry:
                     if not resolved_path.is_file():
                         raise ProjectRegistryError(f"找不到入口文件：{record.agents_path}")
                     cache = build_document_cache(resolved_path)
+                    self._ensure_search_index(record.id, cache)
                     refreshed_at = datetime.now(UTC)
             except (ProjectRegistryError, DocumentTreeError) as exc:
                 resolved_path = Path(record.agents_path).expanduser()
@@ -226,6 +265,7 @@ class ProjectRegistry:
             except ProjectRepositoryError as exc:
                 raise ProjectRegistryError(str(exc)) from exc
 
+        self._ensure_search_index(project_id, new_cache, force=True)
         with self._lock:
             project = ProjectState(
                 id=project_id,
@@ -270,6 +310,7 @@ class ProjectRegistry:
                 for item in self._projects.values()
             ):
                 raise ProjectRegistryError("这个 AGENTS.md 已经添加")
+            was_enabled = project.enabled
 
         if self._project_repository is not None:
             try:
@@ -282,6 +323,8 @@ class ProjectRegistry:
             except ProjectRepositoryError as exc:
                 raise ProjectRegistryError(str(exc)) from exc
 
+        if was_enabled:
+            self._ensure_search_index(project_id, new_cache, force=True)
         with self._lock:
             project.name = normalized_name
             project.project_type = resolved_type
@@ -319,6 +362,8 @@ class ProjectRegistry:
             except ProjectRepositoryError as exc:
                 raise ProjectRegistryError(str(exc)) from exc
 
+        if new_cache is not None:
+            self._ensure_search_index(project_id, new_cache, force=True)
         with self._lock:
             project.enabled = enabled
             project.resolved_agents_path = resolved_path
@@ -356,6 +401,7 @@ class ProjectRegistry:
                 project.error = str(exc)
             raise ProjectRegistryError(str(exc)) from exc
 
+        self._ensure_search_index(project_id, new_cache, force=True)
         with self._lock:
             project.cache = new_cache
             project.resolved_agents_path = resolved_path

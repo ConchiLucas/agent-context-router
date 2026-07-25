@@ -63,6 +63,30 @@ class ReadContextDocumentResult(BaseModel):
     documents: list[ContextDocumentReadItem]
 
 
+class ContextDocumentSearchSection(BaseModel):
+    section: str | None = None
+    section_path: list[str] = Field(default_factory=list)
+    can_read_section: bool = False
+
+
+class ContextDocumentSearchResultItem(BaseModel):
+    document_id: str
+    path: str
+    title: str | None = None
+    summary: str | None = None
+    relevance: float = Field(ge=0, le=1)
+    matched_sections: list[ContextDocumentSearchSection] = Field(default_factory=list)
+    match_reasons: list[str] = Field(default_factory=list)
+
+
+class SearchContextDocumentsResult(BaseModel):
+    task_id: int
+    query: str
+    returned_count: int
+    truncated: bool
+    results: list[ContextDocumentSearchResultItem] = Field(default_factory=list)
+
+
 class ContextTaskSummary(BaseModel):
     task_id: int
     task: str

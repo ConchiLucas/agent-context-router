@@ -43,18 +43,19 @@ CONTEXT_ROUTER_DATABASE_URL=postgresql://USER:PASSWORD@host.docker.internal:5432
 CONTEXT_ROUTER_DATABASE_PAYLOAD_CAPTURE_ENABLED=false
 ```
 
-页面可以长期维护多个项目和物理数据源。项目配置、数据库关联、MCP task、文档读取与数据库调用元数据保存在 PostgreSQL；后端重启时恢复配置并重新构建内存文档树。Markdown 和文档工具完整出入参不写入数据库。数据库 MCP 工具的完整 SQL 与有界结果快照默认不采集；只有显式设置 `CONTEXT_ROUTER_DATABASE_PAYLOAD_CAPTURE_ENABLED=true` 后，才会写入独立、可过期的 payload 表供本机链路页面按需查看。
+页面可以长期维护多个项目和物理数据源。项目配置、数据库关联、MCP task、文档读取与数据库调用元数据保存在 PostgreSQL；后端重启时恢复配置并重新构建内存文档树。Markdown 原文仍以磁盘文件为唯一真源，数据库只额外保存用于词法检索的规范化派生分块，不保存文档工具完整出入参。数据库 MCP 工具的完整 SQL 与有界结果快照默认不采集；只有显式设置 `CONTEXT_ROUTER_DATABASE_PAYLOAD_CAPTURE_ENABLED=true` 后，才会写入独立、可过期的 payload 表供本机链路页面按需查看。
 
 ## MCP 工具
 
-MCP 始终暴露四个无状态工具：
+MCP 始终暴露五个无状态工具：
 
 - `prepare_task_context(task, cwd, agent_name?)`：按 cwd 定位项目、创建 task_id，并返回当前缓存的完整文档树。title 和 summary 只读取 Markdown 开头的 YAML Front Matter。
+- `search_context_documents(task_id, query, limit?)`：在 task 绑定项目的全部映射文档中，按路径、标题、概要、正文和章节做 PostgreSQL 全文与模糊检索；返回文档 ID、相关度、命中章节和命中原因，不返回完整正文。
 - `read_context_document(task_id, requests)`：一次读取 1 到 10 个文档或指定章节；task_id 必须来自当前任务的 prepare，返回顺序与 requests 一致。
 - `search_database_objects(task_id, database, object_type, ...)`：按 prepare 返回的项目数据库 alias 渐进搜索 schema、表、视图、列或索引。
 - `execute_database_query(task_id, database, sql)`：执行一条经过 AST、项目作用域和数据库只读机制共同约束的查询，并按行数和最终 JSON 字节数截断。
 
-每次 read 由 PostgreSQL 生成 read_call_id，单次调用内按数组 position 记录顺序。数据库调用的常规审计记录只保存 alias、Engine、SQL SHA-256、状态、耗时和返回规模；启用数据库 payload 采集后，完整 SQL 和最终有界结果会另存到默认保留 7 天的详情表。客户端不能通过 MCP 传入 Host、DSN、口令、数据库内部 ID 或放宽查询限制。
+完整树较大或目标不明确时，先调用 search，再用同一个 task_id 对命中文档或章节调用 read。检索仅在 task 绑定项目内执行，不跨项目，也不会把搜索结果当作正文。每次 read 由 PostgreSQL 生成 read_call_id，单次调用内按数组 position 记录顺序。数据库调用的常规审计记录只保存 alias、Engine、SQL SHA-256、状态、耗时和返回规模；启用数据库 payload 采集后，完整 SQL 和最终有界结果会另存到默认保留 7 天的详情表。客户端不能通过 MCP 传入 Host、DSN、口令、数据库内部 ID 或放宽查询限制。
 
 项目卡片上的“查看 MCP JSON”调用相同的 prepare service，返回与 MCP 工具一致的数据结构。
 “查看调用记录”按时间合并展示实际文档读取和数据库对象搜索/查询历史。
@@ -67,7 +68,7 @@ docker compose exec backend uv run alembic upgrade head
 
 ## 刷新行为
 
-点击“刷新映射”时，后端从根 `AGENTS.md` 重新递归读取所有下级文档，在全新的临时缓存中构建整棵树，完成后一次性替换旧缓存。因此成功刷新后不会残留已删除节点或旧文件内容；刷新失败则保留上一份完整缓存。
+点击“刷新映射”时，后端从根 `AGENTS.md` 重新递归读取所有下级文档，在全新的临时缓存中构建整棵树，并按同一文档版本重建 PostgreSQL 词法搜索索引，完成后一次性替换旧缓存。因此成功刷新后不会残留已删除节点或旧文件内容；刷新失败则保留上一份完整缓存。搜索前会校验索引版本，索引缺失、构建失败或版本落后时返回明确错误，不回退到进程内扫描，也不会返回旧结果。
 
 ## 核心 API
 

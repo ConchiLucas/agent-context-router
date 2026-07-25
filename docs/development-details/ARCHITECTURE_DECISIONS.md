@@ -11,6 +11,10 @@
 
 ### 2026-07-25
 
+- MCP 工具集合扩展为五个固定工具，在 prepare 与 read 之间增加 `search_context_documents(task_id, query, limit)`。搜索范围严格绑定 task 的稳定项目；返回文档与章节定位、相关度和命中原因，不返回正文，推荐工作流是 `prepare -> search -> read`。
+- 第一版文档搜索采用 PostgreSQL `simple` 全文检索、`pg_trgm` 和短词精确子串匹配，不引入向量数据库。路径、显式 title/summary、章节和规范化正文共同参与排序；分块命中在服务层按文档聚合。
+- Markdown 原文仍以磁盘文件为唯一真源，但允许把规范化派生分块持久化到 `document_search_chunks`。每次添加、编辑、启用、启动恢复或手动刷新项目时，以确定性 DocumentCache version 全量替换索引；查询只接受与当前缓存同版本的索引。
+- 搜索索引是显式依赖而不是静默优化：控制面数据库、索引状态或当前版本不可用时，`search_context_documents` 返回稳定的 index-not-ready 错误，不扫描进程内 Markdown 兜底，也不返回旧版本结果。
 - 项目卡片“查看调用记录”继续作为文档使用历史入口，只展示实际产生 read call 的任务，并保留完整文档树、读取列表和 Markdown 查看；全局链路管理是独立的内部 MCP 可观察性页面，只展示调用树与调用列表，不复用文档浏览功能。
 - 通用 `mcp_tool_calls` 和 `mcp_database_calls` 继续保持轻量。只有 `search_database_objects`、`execute_database_query` 把实际请求和最终、有界 MCP 响应写入独立的一对一 payload 表，prepare/read 不建立完整 payload。
 - payload 采集默认关闭，需要通过环境变量显式启用；启用后请求/响应各 1 MB、硬上限 4 MB、保留 7 天。主 Trace API 只返回可用状态，完整内容经 task/call 归属校验的 no-store API 按需读取。到期删除 JSON 但保留状态，采集/清理失败不得改变工具业务结果。

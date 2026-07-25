@@ -5,7 +5,7 @@
 - PostgreSQL 连接、端口和权限。
 - Alembic migration、表结构或数据检查。
 - `document_projects`、`data_sources`、`data_source_databases`、`project_databases` 数据问题。
-- `mcp_tasks`、文档 read call/item 和 `mcp_database_calls` 审计问题。
+- `mcp_tasks`、文档 read call/item、文档搜索索引和 `mcp_database_calls` 审计问题。
 - MySQL、MariaDB、PostgreSQL、ClickHouse Connector、能力矩阵或只读查询问题。
 
 ## 下一层文档
@@ -15,4 +15,4 @@
 | `context-router-database-info` | 数据库连接、表和 migration 信息 |
 | `context-router-area-startup` | Docker Compose 和 migration 执行方式 |
 
-控制面 PostgreSQL 与项目授权的业务数据库不同。业务数据库 MCP 路由固定为 `task_id -> project -> mcp_alias -> 当前 Link/Database/Source 状态与策略`；连接参数不会进入 MCP 参数或调用历史。
+控制面 PostgreSQL 与项目授权的业务数据库不同。文档搜索分块和 index_version 位于控制面 PostgreSQL，可从磁盘 Markdown 重建；业务数据库 MCP 路由固定为 `task_id -> project -> mcp_alias -> 当前 Link/Database/Source 状态与策略`，连接参数不会进入 MCP 参数或调用历史。

@@ -20,6 +20,7 @@ import {
   buildTraceGraphRows,
   internalTraceCalls,
   sortTraceCalls,
+  traceCallResultSummary,
   traceCompletenessLabel,
   traceWarningMessages,
 } from "@/lib/mcp-traces";
@@ -138,6 +139,8 @@ interface TraceCallCardProps {
 }
 
 function TraceCallCard({ call, active, onSelect }: TraceCallCardProps) {
+  const resultSummary = traceCallResultSummary(call);
+
   return (
     <button
       type="button"
@@ -158,6 +161,7 @@ function TraceCallCard({ call, active, onSelect }: TraceCallCardProps) {
         <span>{call.duration_ms == null ? "—" : `${call.duration_ms} ms`}</span>
         <span>{formattedTime(call.started_at)}</span>
       </span>
+      {resultSummary ? <small>{resultSummary}</small> : null}
       {call.artifacts.map((artifact, index) => {
         const summary = artifactSummary(artifact);
         return summary ? <small key={`${artifactKind(artifact)}-${index}`}>{summary}</small> : null;

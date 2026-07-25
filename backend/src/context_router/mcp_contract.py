@@ -3,6 +3,7 @@ from __future__ import annotations
 CONTEXT_ROUTER_TRACE_SERVER_NAME = "context-router"
 CONTEXT_ROUTER_TRACE_TOOL_NAMES = (
     "prepare_task_context",
+    "search_context_documents",
     "read_context_document",
     "search_database_objects",
     "execute_database_query",

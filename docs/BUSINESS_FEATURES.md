@@ -52,10 +52,12 @@ title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 sum
 
 - 首次添加项目时立即递归读取所有文档。
 - 缓存包含完整树和每个文件的 Markdown 原文。
+- PostgreSQL 只保存从当前缓存版本生成的规范化检索分块和索引状态；Markdown 原文仍以磁盘文件为唯一真源。
 - 树接口不返回正文，详情接口按节点 ID 从内存读取正文。
-- 手动刷新使用全量重建和原子替换，不在旧缓存上合并。
+- 手动刷新使用全量重建和原子替换，不在旧缓存上合并；新增、编辑、启用、启动恢复和刷新成功时同步重建该项目的词法索引。
 - 成功刷新后，已删除的节点和旧正文不会残留。
 - 刷新失败时保留上一份完整缓存。
+- 搜索必须命中与当前缓存相同的 index_version；索引缺失、构建失败或版本落后时返回明确的 index-not-ready 错误，不扫描内存正文兜底。
 
 ## 页面
 
@@ -67,7 +69,7 @@ title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 sum
 - Markdown 渲染不执行原始 HTML 或脚本。
 - 项目卡片支持查看 MCP JSON，结果与 `prepare_task_context` 返回结构一致。
 - 项目卡片支持查看 MCP 文档调用记录，并在同一个全屏网格画布中切换“文档树”和“调用列表”：任务选择器只列出至少成功落过一次 read call 的任务；文档树保留全部节点，在被读取节点右上角标记文档读取批次；调用列表按时间合并文档读取和数据库调用，同一次批量读取的文档横向排在同一行。读取成功的文档仍可打开 Markdown 详情。
-- 左侧主导航提供独立“链路管理”页面，统一按任务查看 Context Router MCP 工具调用。页面支持任务搜索、Agent、四个固定内部工具和状态筛选，只在“调用树 / 调用列表”之间切换；不加载完整项目文档树，也不在这里打开 Markdown。
+- 左侧主导航提供独立“链路管理”页面，统一按任务查看 Context Router MCP 工具调用。页面支持任务搜索、Agent、五个固定内部工具和状态筛选，只在“调用树 / 调用列表”之间切换；不加载完整项目文档树，也不在这里打开 Markdown。
 - 调用树以任务为根节点，按服务端稳定顺序展示 MCP 工具调用。一次 `read_context_document` 仍是一个工具调用节点，其批量读取的多个文档作为同一节点的横向产物；普通连续调用只表达顺序，只有显式父调用时才表达因果关系。任务列表和详情同时展示“完整 / 运行中 / 可能不完整”，prepare 记录缺失、历史恢复、服务重启中断或明细失联会显示明确提示。
 - 链路管理的文档工具节点只显示状态、耗时和读取规模，不提供完整出入参详情。数据库 payload 采集默认关闭；显式启用后，两个数据库工具节点可按需打开全屏详情页，在“请求参数 / 响应结果”之间切换并复制当前内容。SQL 单独显示，采集未启用、历史未采集、过期、采集失败和快照截断都有明确状态。
 - 首页提供全局“MCP 接入”面板，集中展示服务地址、工具能力、Codex/Antigravity 配置模板和连接测试；客户端配置由后端按公开 MCP URL 生成，可直接复制。
@@ -84,13 +86,15 @@ title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 sum
 
 ## MCP
 
-- MCP 固定提供四个工具：`prepare_task_context`、`read_context_document`、`search_database_objects` 和 `execute_database_query`。数据源增删或停用不会改变 `tools/list`。
+- MCP 固定提供五个工具：`prepare_task_context`、`search_context_documents`、`read_context_document`、`search_database_objects` 和 `execute_database_query`。数据源增删或停用不会改变 `tools/list`。
 - 服务端按 cwd 最长前缀匹配项目，并返回完整文档树。
 - prepare 不搜索、不排名、不截断，也不返回正文；它同时返回当前项目可用于 MCP 的数据库别名、Engine、用途和能力摘要。prepare 只读取本地配置，不连接业务数据库；数据库摘要暂时失败时以 warning 降级，文档上下文仍可返回。
 - 每次成功调用 prepare 都由 PostgreSQL 生成独立 task_id。
 - task 同时保存创建时的稳定 project_id 快照；新任务和已回填任务在项目删除后仍保留，同路径重建的新项目不会接管。migration 前已失去项目、无法回填的旧任务保持 project_id 为空，并兼容使用 project_key。
 - Context Router 收到的每次 `tools/call` 都统一记录为任务下的 MCP 工具调用，包括 Server、工具名、服务端顺序、采集来源、状态、开始/结束时间、耗时、错误码和脱敏摘要。prepare 成功创建 task_id 后补记为该任务的第一个调用；后续工具在执行前创建运行中记录。
 - read 必须携带当前任务的 task_id，一次支持 1 到 10 个文档或精确章节，并保持请求数组顺序。
+- `search_context_documents` 必须携带当前任务的 task_id，只搜索该 task 绑定项目的映射文档。输入为 query 和最多 50 的 limit；输出包含文档 ID、路径、标题、概要、相关度、命中章节和命中原因，不返回正文或摘录。树较大或目标不明确时先 search，再按结果调用 read。
+- 第一版文档搜索使用 PostgreSQL `to_tsvector('simple', ...)`/`websearch_to_tsquery('simple', ...)` 与 `pg_trgm` 组合评分，覆盖路径、标题、概要、章节和正文；中文短词保留精确子串匹配，不使用向量数据库。
 - 每次 read 由 PostgreSQL 生成 read_call_id；客户端不传 sequence，服务端不使用任务锁。
 - `mcp_document_read_calls` 和 `mcp_database_calls` 继续保存工具专属客观明细，并通过 `tool_call_id` 关联统一调用；旧历史在 migration 中恢复为 `legacy` 调用，不伪造历史 prepare 节点或缺失耗时。
 - 后端启动时把上次进程遗留的内部 `running` 调用标记为 `error/server_restarted`；链路 API 会按 prepare 是否存在、运行中、历史、重启中断和失联明细计算完整性。普通无内部调用 task 仍可作为“可能不完整”记录查看，管理端预览和接入测试任务不进入链路列表。
@@ -107,10 +111,11 @@ title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 sum
 ## 非目标
 
 - 不实时监听文件变动。
-- 不持久化文档树或 Markdown 正文；它们始终从本地磁盘重建。
+- 不把文档树或 Markdown 原文作为数据库真源；它们始终从本地磁盘重建。数据库仅持久化可随时重建的规范化检索分块。
 - 不扫描没有被“下级文档”表格引用的 Markdown。
 - 不使用大模型解析文档层级。
 - 不自动修改 Codex 或 Antigravity 的本地配置，也不负责重启客户端。
-- 当前接入面板不处理远程 HTTPS、鉴权、Skill 安装和全局模糊检索。
-- 链路管理只记录客户端实际发送到 Context Router `/mcp` 的四个内部工具调用。客户端直连 GitHub、浏览器等其他 MCP Server 的调用不记录；本产品不连接或代理外部 MCP，不提供外部调用上报，也不建设跨 Server Trace。
+- 当前接入面板不处理远程 HTTPS、鉴权和 Skill 安装。
+- 文档检索当前不跨 task 绑定项目、不返回完整正文，也不提供向量或混合召回。
+- 链路管理只记录客户端实际发送到 Context Router `/mcp` 的五个内部工具调用。客户端直连 GitHub、浏览器等其他 MCP Server 的调用不记录；本产品不连接或代理外部 MCP，不提供外部调用上报，也不建设跨 Server Trace。
 - 不提供数据库写入、DDL、DBA 运维、跨数据库联邦查询或任意外部表函数。

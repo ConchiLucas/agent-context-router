@@ -33,6 +33,7 @@ _REVISION_0008 = "20260722_0008"
 _REVISION_0009 = "20260724_0009"
 _REVISION_0010 = "20260724_0010"
 _REVISION_0011 = "20260725_0011"
+_REVISION_0012 = "20260725_0012"
 
 _PROJECT_A = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 _PROJECT_B = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -246,7 +247,7 @@ def test_migration_and_postgres_repositories_preserve_legacy_data(
         )
 
     command.upgrade(alembic_config, "head")
-    assert _current_revision(database_url) == _REVISION_0011
+    assert _current_revision(database_url) == _REVISION_0012
     assert _aliases(database_url) == aliases
     _assert_legacy_rows_survive(database_url)
     _assert_task_project_snapshot_survives_project_deletion(database_url)

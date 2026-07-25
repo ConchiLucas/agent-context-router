@@ -13,6 +13,10 @@
 
 ### 2026-07-25
 
+- 新增第五个固定 MCP 工具 `search_context_documents(task_id, query, limit)`：在 task 绑定项目内按路径、标题、概要、章节和正文检索，返回文档 ID、匹配章节、相关度和命中原因，完整正文继续由 `read_context_document` 按需读取。
+- 新增 migration `20260725_0012`、`pg_trgm`、`document_search_index_states` 和 `document_search_chunks`；Markdown 经 Front Matter 剥离、章节解析、NFKC 规范化和有界分块后建立 PostgreSQL `simple` FTS 与 trigram 索引，原始 Markdown 仍以磁盘为真源。
+- 项目新增、编辑、启用、启动恢复和刷新成功时按确定性文档版本全量替换搜索索引。搜索严格校验 task 项目和当前 index_version，索引缺失、失败或过期时明确报错，不回退内存扫描。
+- MCP 接入面板、工具发现和全局链路筛选同步扩展到五个内部工具；文档搜索调用只记录脱敏参数/结果规模，不保存查询原文、Markdown 正文或完整 payload。
 - 项目卡片“查看调用记录”恢复为独立的文档调用历史全屏弹窗，任务列表只返回实际产生文档 read call 的任务；链路管理解除项目入口耦合，只保留调用树和调用列表，不再加载完整文档树或 Markdown。
 - 新增 migration `20260725_0011` 与 `mcp_database_tool_payloads`：仅为 `search_database_objects`、`execute_database_query` 保存有界请求和最终 MCP 响应，默认请求/响应各 1 MB、硬上限 4 MB、保留 7 天，并在启动及运行期间 best-effort 清理。
 - Trace 主详情增加数据库 payload 可用状态，新增按 task_id/tool_call_id 校验归属的 no-store 详情接口；前端数据库节点增加懒加载全屏详情弹窗，支持请求/响应 Tab、SQL/JSON、复制、截断与历史未采集/过期/采集失败状态。
