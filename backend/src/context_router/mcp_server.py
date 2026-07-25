@@ -13,6 +13,12 @@ from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from context_router.database.errors import DatabaseAccessError
+from context_router.mcp_contract import (
+    CONTEXT_ROUTER_TRACE_SERVER_NAME as TRACE_SERVER_NAME,
+)
+from context_router.mcp_contract import (
+    CONTEXT_ROUTER_TRACE_TOOL_NAMES,
+)
 from context_router.schemas.context import ContextDocumentReadRequest
 from context_router.services.context_document_read import (
     ContextDocumentReadError,
@@ -24,6 +30,7 @@ from context_router.services.context_preparation import (
 )
 from context_router.services.database_catalog import DatabaseCatalogService
 from context_router.services.database_query import DatabaseQueryService
+from context_router.services.database_tool_payload import DatabaseToolPayloadService
 from context_router.services.mcp_trace import McpTraceService
 
 MCP_SERVER_NAME = "Context Router"
@@ -34,24 +41,26 @@ MCP_SERVER_INSTRUCTIONS = (
     "when the schema is uncertain. Database queries are always bounded and read-only. Call "
     "prepare again for a new conversation when no task_id is available."
 )
-PREPARE_TOOL_NAME = "prepare_task_context"
+(
+    PREPARE_TOOL_NAME,
+    READ_TOOL_NAME,
+    SEARCH_DATABASE_TOOL_NAME,
+    EXECUTE_DATABASE_TOOL_NAME,
+) = CONTEXT_ROUTER_TRACE_TOOL_NAMES
 PREPARE_TOOL_DESCRIPTION = (
     "Locate the registered project for cwd, create a server-side task number, and "
     "return its complete document tree. Summaries are only returned when explicitly "
     "declared in Markdown Front Matter."
 )
-READ_TOOL_NAME = "read_context_document"
 READ_TOOL_DESCRIPTION = (
     "Read one or more Markdown documents or exact ATX-heading sections from the project "
     "selected by prepare_task_context. task_id must be the value returned for the current "
     "task. Results preserve request order and every call is recorded server-side."
 )
-SEARCH_DATABASE_TOOL_NAME = "search_database_objects"
 SEARCH_DATABASE_TOOL_DESCRIPTION = (
     "Search schemas, tables, views, columns, or indexes in a database authorized for the "
     "current task. Use names first and request summary/full details only when needed."
 )
-EXECUTE_DATABASE_TOOL_NAME = "execute_database_query"
 EXECUTE_DATABASE_TOOL_DESCRIPTION = (
     "Execute exactly one bounded read-only SQL statement against a database alias returned "
     "by prepare_task_context. Connection details and query limits are enforced server-side."
@@ -74,14 +83,18 @@ DATABASE_TOOL_ANNOTATIONS = ToolAnnotations(
     idempotentHint=True,
     openWorldHint=False,
 )
-TRACE_SERVER_NAME = "context-router"
 
 
 class ContextRouterMCP(FastMCP):
     def __init__(
-        self, *args: object, trace_service: McpTraceService | None = None, **kwargs: object
+        self,
+        *args: object,
+        trace_service: McpTraceService | None = None,
+        database_payload_service: DatabaseToolPayloadService | None = None,
+        **kwargs: object,
     ):
         self._trace_service = trace_service
+        self._database_payload_service = database_payload_service
         super().__init__(*args, **kwargs)
 
     async def call_tool(
@@ -97,7 +110,22 @@ class ContextRouterMCP(FastMCP):
         started_ns = perf_counter_ns()
         request_summary = _request_summary(name, arguments)
         if name == PREPARE_TOOL_NAME:
-            result = await super().call_tool(name, arguments)
+            try:
+                result = await super().call_tool(name, arguments)
+            except Exception as exc:
+                task_id = _exception_task_id(exc)
+                if task_id is not None:
+                    trace_service.record_failed_call(
+                        task_id=task_id,
+                        server_name=TRACE_SERVER_NAME,
+                        tool_name=name,
+                        started_at=started_at,
+                        finished_at=datetime.now(UTC),
+                        duration_ms=_elapsed_ms(started_ns),
+                        request_summary=request_summary,
+                        error_code=_error_code(exc),
+                    )
+                raise
             payload = _structured_payload(result)
             task_id = _positive_int(payload.get("task_id"))
             if task_id is not None:
@@ -127,9 +155,28 @@ class ContextRouterMCP(FastMCP):
             else None
         )
         token = trace_service.bind_call(tool_call_id)
+        payload_service = self._database_payload_service
+        if payload_service is not None:
+            payload_service.capture_request(
+                tool_call_id,
+                tool_name=name,
+                arguments=arguments,
+            )
         try:
             result = await super().call_tool(name, arguments)
         except asyncio.CancelledError:
+            if payload_service is not None:
+                payload_service.capture_response(
+                    tool_call_id,
+                    tool_name=name,
+                    status="cancelled",
+                    payload={
+                        "error": {
+                            "code": "tool_call_cancelled",
+                            "message": "MCP 工具调用已取消",
+                        }
+                    },
+                )
             trace_service.finish_call(
                 tool_call_id,
                 status="cancelled",
@@ -138,17 +185,43 @@ class ContextRouterMCP(FastMCP):
             )
             raise
         except Exception as exc:
+            error_code = _error_code(exc)
+            if payload_service is not None:
+                payload_service.capture_response(
+                    tool_call_id,
+                    tool_name=name,
+                    status="error",
+                    payload={
+                        "error": {
+                            "code": error_code,
+                            "message": _database_payload_error_message(name, error_code),
+                        }
+                    },
+                )
             trace_service.finish_call(
                 tool_call_id,
                 status="error",
                 finished_at=datetime.now(UTC),
                 duration_ms=_elapsed_ms(started_ns),
-                error_code=_error_code(exc),
+                error_code=error_code,
             )
             raise
         else:
             payload = _structured_payload(result)
             if bool(getattr(result, "isError", False)):
+                if payload_service is not None:
+                    payload_service.capture_response(
+                        tool_call_id,
+                        tool_name=name,
+                        status="error",
+                        payload=payload
+                        or {
+                            "error": {
+                                "code": "tool_error_result",
+                                "message": "MCP 工具返回错误结果",
+                            }
+                        },
+                    )
                 trace_service.finish_call(
                     tool_call_id,
                     status="error",
@@ -157,6 +230,13 @@ class ContextRouterMCP(FastMCP):
                     error_code="tool_error_result",
                 )
             else:
+                if payload_service is not None:
+                    payload_service.capture_response(
+                        tool_call_id,
+                        tool_name=name,
+                        status="ok",
+                        payload=payload,
+                    )
                 trace_service.finish_call(
                     tool_call_id,
                     status="ok",
@@ -175,6 +255,7 @@ def create_context_router_mcp(
     database_catalog_service: DatabaseCatalogService | None = None,
     database_query_service: DatabaseQueryService | None = None,
     trace_service: McpTraceService | None = None,
+    database_payload_service: DatabaseToolPayloadService | None = None,
 ) -> FastMCP:
     server = ContextRouterMCP(
         name=MCP_SERVER_NAME,
@@ -183,6 +264,7 @@ def create_context_router_mcp(
         stateless_http=True,
         json_response=True,
         trace_service=trace_service,
+        database_payload_service=database_payload_service,
     )
 
     @server.tool(
@@ -207,7 +289,7 @@ def create_context_router_mcp(
         annotations=READ_TOOL_ANNOTATIONS,
     )
     def read_context_document(
-        task_id: Annotated[int, Field(ge=1)],
+        task_id: Annotated[int, Field(ge=1, strict=True)],
         requests: Annotated[
             list[ContextDocumentReadRequest],
             Field(min_length=1, max_length=10),
@@ -225,7 +307,7 @@ def create_context_router_mcp(
         annotations=DATABASE_TOOL_ANNOTATIONS,
     )
     def search_database_objects(
-        task_id: Annotated[int, Field(ge=1)],
+        task_id: Annotated[int, Field(ge=1, strict=True)],
         database: Annotated[
             str,
             Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_-]{0,63}$"),
@@ -259,7 +341,7 @@ def create_context_router_mcp(
         annotations=DATABASE_TOOL_ANNOTATIONS,
     )
     def execute_database_query(
-        task_id: Annotated[int, Field(ge=1)],
+        task_id: Annotated[int, Field(ge=1, strict=True)],
         database: Annotated[
             str,
             Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_-]{0,63}$"),
@@ -406,3 +488,34 @@ def _error_code(exc: Exception) -> str:
     if re.fullmatch(r"[a-z0-9_]{1,64}", prefix):
         return prefix
     return "tool_call_failed"
+
+
+def _database_payload_error_message(tool_name: str, error_code: str) -> str:
+    if tool_name == SEARCH_DATABASE_TOOL_NAME:
+        return {
+            "connection_failed": "数据库当前无法连接",
+            "catalog_query_failed": "数据库对象搜索失败",
+            "query_rejected": "数据库对象搜索超出项目授权范围",
+            "result_metadata_too_large": "数据库对象结果超过响应限制",
+            "result_cell_too_large": "数据库对象字段超过响应限制",
+            "engine_not_supported": "这个数据库类型不支持所请求的对象搜索",
+        }.get(error_code, "数据库对象搜索失败")
+    return {
+        "query_rejected": "SQL 不符合当前项目的只读或数据库范围策略",
+        "query_timeout": "数据库查询超时",
+        "query_cancelled": "数据库查询已取消",
+        "connection_failed": "数据库当前无法连接",
+        "result_cell_too_large": "单个查询结果字段超过响应限制",
+        "result_metadata_too_large": "查询列信息超过响应限制",
+        "engine_not_supported": "这个数据库类型暂不支持只读查询",
+    }.get(error_code, "数据库查询执行失败")
+
+
+def _exception_task_id(exc: Exception) -> int | None:
+    current: BaseException | None = exc
+    while current is not None:
+        task_id = _positive_int(getattr(current, "task_id", None))
+        if task_id is not None:
+            return task_id
+        current = current.__cause__ or current.__context__
+    return None

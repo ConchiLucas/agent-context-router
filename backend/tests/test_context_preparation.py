@@ -1,7 +1,12 @@
 from pathlib import Path
 
+import pytest
+
 from context_router.config import Settings
-from context_router.services.context_preparation import ContextPreparationService
+from context_router.services.context_preparation import (
+    ContextPreparationError,
+    ContextPreparationService,
+)
 from context_router.services.project_registry import ProjectRegistry
 
 
@@ -73,6 +78,10 @@ def test_prepare_returns_complete_tree_and_explicit_metadata(tmp_path: Path) -> 
     assert "summary" not in child
     assert "content" not in str(payload)
     assert repository.created[0]["agent_name"] == "codex"
+    assert repository.created[0]["project_id"] == payload["project"]["project_id"]
+    assert repository.created[0]["project_key"] == registry.get_project_key(
+        payload["project"]["project_id"]
+    )
 
 
 def test_preview_uses_same_result_shape(tmp_path: Path) -> None:
@@ -86,3 +95,27 @@ def test_preview_uses_same_result_shape(tmp_path: Path) -> None:
     assert payload["project"]["project_id"] == project_id
     assert payload["documents"]["children"][0]["title"] == "详情"
     assert repository.created[0]["agent_name"] == "web-preview"
+
+
+def test_prepare_failure_after_task_creation_preserves_task_id_for_tracing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry, _ = build_registry(tmp_path)
+    repository = FakeTaskRepository()
+    service = ContextPreparationService(registry, repository)
+
+    def fail_tree(*_: object) -> None:
+        raise RuntimeError("tree serialization failed")
+
+    monkeypatch.setattr(service, "_context_node", fail_tree)
+
+    with pytest.raises(ContextPreparationError) as caught:
+        service.prepare(
+            task="触发准备失败",
+            cwd=str(tmp_path / "project"),
+            agent_name="codex",
+        )
+
+    assert caught.value.task_id == 41
+    assert caught.value.code == "context_preparation_failed"

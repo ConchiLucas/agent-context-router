@@ -61,9 +61,15 @@ CONTEXT_ROUTER_DATABASE_MAX_QUERY_TIMEOUT_MS=30000
 CONTEXT_ROUTER_DATABASE_MAX_CACHED_CONNECTORS=16
 CONTEXT_ROUTER_DATABASE_MAX_CONCURRENCY_PER_SOURCE=4
 CONTEXT_ROUTER_DATABASE_SCHEMA_RESULT_BYTES=1000000
+CONTEXT_ROUTER_DATABASE_PAYLOAD_CAPTURE_ENABLED=false
+CONTEXT_ROUTER_DATABASE_PAYLOAD_REQUEST_BYTES=1000000
+CONTEXT_ROUTER_DATABASE_PAYLOAD_RESPONSE_BYTES=1000000
+CONTEXT_ROUTER_DATABASE_PAYLOAD_HARD_MAX_BYTES=4000000
+CONTEXT_ROUTER_DATABASE_PAYLOAD_TTL_DAYS=7
+CONTEXT_ROUTER_DATABASE_PAYLOAD_CLEANUP_INTERVAL_SECONDS=3600
 ```
 
-项目数据库关联自己的行数、字节数和超时限制会与这些全局值取更严格者。修改全局限制后重启 backend。
+项目数据库关联自己的行数、字节数和超时限制会与查询全局值取更严格者。数据库 MCP 出入参详情默认不采集；只有显式设置 `CONTEXT_ROUTER_DATABASE_PAYLOAD_CAPTURE_ENABLED=true` 后，`DATABASE_PAYLOAD_*` 才控制两个数据库 MCP 工具的本地详情快照：请求和最终 MCP 响应默认分别最多保存 1 MB，任何配置都不能超过 4 MB，默认保留 7 天，并在后端启动及调用期间按节流周期清理。修改这些值后重启 backend。
 
 ## PostgreSQL 与 migration
 
@@ -79,7 +85,7 @@ CONTEXT_ROUTER_DATABASE_URL=postgresql://USER:PASSWORD@host.docker.internal:5432
 docker compose exec backend uv run alembic upgrade head
 ```
 
-PostgreSQL 保存项目、数据源、数据库清单、项目数据库关联及 `mcp_alias`、MCP task、read call、文档顺序和数据库调用审计元数据，不保存文档树、Markdown 正文、完整 SQL、SQL 参数或查询结果。后端启动时恢复项目配置，并为启用项目从磁盘重建内存树；路径失效的项目仍保留在页面并显示错误。
+PostgreSQL 保存项目、数据源、数据库清单、项目数据库关联及 `mcp_alias`、MCP task、read call、文档顺序和数据库调用审计元数据。文档树、Markdown 正文及文档工具完整出入参不持久化；显式启用 payload 采集后，`search_database_objects` 和 `execute_database_query` 才额外保存有界、可过期的详情快照，供本机链路页面按需查看。后端启动时恢复项目配置，并为启用项目从磁盘重建内存树；路径失效的项目仍保留在页面并显示错误。
 
 数据库未配置时后端和 `/health` 仍可启动，项目配置退化为当前进程内存；但 task_id 持久化、prepare/read 的完整 MCP 工作流、卡片 JSON 预览和持久化调用记录不可用。业务数据源离线不会阻止后端启动，也不会阻止文档 prepare/read；连接只在测试、同步、对象搜索或查询时延迟建立。
 

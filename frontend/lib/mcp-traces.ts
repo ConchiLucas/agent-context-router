@@ -1,21 +1,42 @@
 import type {
+  InternalMcpTraceToolCall,
+  InternalMcpToolName,
+  McpTraceCompleteness,
   McpTraceDocumentArtifactItem,
   McpTraceSummary,
   McpTraceToolCall,
 } from "@/lib/types";
 
+export const INTERNAL_MCP_TOOL_NAMES: readonly InternalMcpToolName[] = [
+  "prepare_task_context",
+  "read_context_document",
+  "search_database_objects",
+  "execute_database_query",
+];
+
+export type McpTraceStatusFilter = "all" | "running" | "ok" | "error";
+
+const TRACE_WARNING_MESSAGES: Readonly<Record<string, string>> = {
+  running_calls: "仍有内部工具调用正在运行，链路内容会继续更新。",
+  legacy_calls: "包含升级前的历史记录，部分调用细节可能缺失。",
+  unlinked_document_reads: "部分文档读取记录无法关联到对应工具调用。",
+  unlinked_database_calls: "部分数据库访问记录无法关联到对应工具调用。",
+  interrupted_calls: "部分调用在服务重启前未正常结束。",
+  no_trace_calls: "这个任务没有可展示的内部工具调用记录。",
+  missing_prepare_call:
+    "缺少 prepare_task_context 调用记录，任务起点可能未完整落库。",
+};
+
+const UNKNOWN_TRACE_WARNING = "链路包含无法完整还原的记录。";
+
 export interface McpTraceFilters {
-  query: string;
-  agentName: string;
-  serverName: string;
-  status: "all" | "ok" | "error";
+  status: McpTraceStatusFilter;
 }
 
 export interface McpTraceListQuery {
   projectId?: string;
   agentName?: string;
-  serverName?: string;
-  toolName?: string;
+  toolName?: InternalMcpToolName;
   status?: "running" | "ok" | "error" | "cancelled";
   keyword?: string;
   limit?: number;
@@ -27,15 +48,10 @@ export interface McpTraceGraphRow {
   parentSequence: number | null;
 }
 
-function normalized(value: string): string {
-  return value.trim().toLocaleLowerCase();
-}
-
 export function buildMcpTraceListPath(query: McpTraceListQuery = {}): string {
   const search = new URLSearchParams();
   if (query.projectId) search.set("project_id", query.projectId);
   if (query.agentName) search.set("agent_name", query.agentName);
-  if (query.serverName) search.set("server_name", query.serverName);
   if (query.toolName) search.set("tool_name", query.toolName);
   if (query.status) search.set("status", query.status);
   if (query.keyword) search.set("keyword", query.keyword);
@@ -60,21 +76,7 @@ export function filterMcpTraces(
   traces: McpTraceSummary[],
   filters: McpTraceFilters,
 ): McpTraceSummary[] {
-  const query = normalized(filters.query);
-
   return traces.filter((trace) => {
-    if (
-      filters.agentName &&
-      (trace.agent_name ?? "") !== filters.agentName
-    ) {
-      return false;
-    }
-    if (
-      filters.serverName &&
-      !trace.server_names.includes(filters.serverName)
-    ) {
-      return false;
-    }
     if (filters.status === "error" && trace.error_count === 0) return false;
     if (
       filters.status === "ok" &&
@@ -82,17 +84,47 @@ export function filterMcpTraces(
     ) {
       return false;
     }
-    if (!query) return true;
-
-    return [
-      String(trace.task_id),
-      trace.task,
-      trace.project_name,
-      trace.cwd,
-      trace.agent_name ?? "",
-      trace.server_names.join(" "),
-    ].some((value) => normalized(value).includes(query));
+    return true;
   });
+}
+
+export function statusQueryForTraceFilter(
+  status: McpTraceStatusFilter,
+): "running" | "error" | undefined {
+  if (status === "running" || status === "error") return status;
+  return undefined;
+}
+
+export function isInternalMcpToolName(
+  value: string,
+): value is InternalMcpToolName {
+  return (INTERNAL_MCP_TOOL_NAMES as readonly string[]).includes(value);
+}
+
+export function internalTraceCalls(
+  calls: McpTraceToolCall[],
+): InternalMcpTraceToolCall[] {
+  return calls.filter((call): call is InternalMcpTraceToolCall => {
+    return (
+      isInternalMcpToolName(call.tool_name) &&
+      (call.source === "server" || call.source === "legacy")
+    );
+  });
+}
+
+export function traceCompletenessLabel(
+  status: McpTraceCompleteness,
+): "完整" | "运行中" | "可能不完整" {
+  if (status === "running") return "运行中";
+  if (status === "partial") return "可能不完整";
+  return "完整";
+}
+
+export function traceWarningMessages(warnings: string[]): string[] {
+  const messages = warnings.map(
+    (warning) => TRACE_WARNING_MESSAGES[warning] ?? UNKNOWN_TRACE_WARNING,
+  );
+  return Array.from(new Set(messages));
 }
 
 function documentItems(

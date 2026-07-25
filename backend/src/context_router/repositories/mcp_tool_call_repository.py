@@ -8,6 +8,12 @@ from typing import Literal, Protocol, cast
 import psycopg
 from psycopg.types.json import Jsonb
 
+from context_router.mcp_contract import (
+    CONTEXT_ROUTER_TRACE_SERVER_NAME,
+    CONTEXT_ROUTER_TRACE_SOURCES,
+    CONTEXT_ROUTER_TRACE_TOOL_NAMES,
+)
+
 McpToolCallSource = Literal["server", "gateway", "reported", "legacy"]
 McpToolCallStatus = Literal["running", "ok", "error", "cancelled"]
 
@@ -52,6 +58,7 @@ class McpToolCallRecord:
 @dataclass(frozen=True, slots=True)
 class McpTraceTaskRecord:
     task_id: int
+    project_id: str | None
     project_key: str
     project_name: str
     task: str
@@ -62,6 +69,12 @@ class McpTraceTaskRecord:
     error_count: int
     server_names: list[str]
     last_activity_at: datetime
+    prepare_call_count: int = 0
+    running_call_count: int = 0
+    legacy_call_count: int = 0
+    interrupted_call_count: int = 0
+    unlinked_document_read_count: int = 0
+    unlinked_database_call_count: int = 0
 
 
 class McpToolCallStore(Protocol):
@@ -80,9 +93,12 @@ class McpToolCallStore(Protocol):
 
     def list_calls(self, task_id: int) -> list[McpToolCallRecord]: ...
 
+    def fail_running_calls(self, *, finished_at: datetime) -> int: ...
+
     def list_traces(
         self,
         *,
+        project_id: str | None = None,
         project_key: str | None = None,
         agent_name: str | None = None,
         server_name: str | None = None,
@@ -166,9 +182,30 @@ class InMemoryMcpToolCallRepository:
         with self._lock:
             return [call for call in self._calls if call.task_id == task_id]
 
+    def fail_running_calls(self, *, finished_at: datetime) -> int:
+        updated = 0
+        with self._lock:
+            for index, call in enumerate(self._calls):
+                if call.status != "running":
+                    continue
+                duration_ms = max(
+                    0,
+                    round((finished_at - call.started_at).total_seconds() * 1000),
+                )
+                self._calls[index] = replace(
+                    call,
+                    status="error",
+                    finished_at=finished_at,
+                    duration_ms=duration_ms,
+                    error_code="server_restarted",
+                )
+                updated += 1
+        return updated
+
     def list_traces(
         self,
         *,
+        project_id: str | None = None,
         project_key: str | None = None,
         agent_name: str | None = None,
         server_name: str | None = None,
@@ -304,6 +341,14 @@ class PostgresMcpToolCallRepository:
                         error_code
                     FROM mcp_tool_calls
                     WHERE task_id = %s
+                      AND server_name = 'context-router'
+                      AND tool_name IN (
+                            'prepare_task_context',
+                            'read_context_document',
+                            'search_database_objects',
+                            'execute_database_query'
+                      )
+                      AND source IN ('server', 'legacy')
                     ORDER BY id
                     """,
                     (task_id,),
@@ -312,9 +357,44 @@ class PostgresMcpToolCallRepository:
             raise McpToolCallRepositoryError("MCP 工具调用读取失败") from exc
         return [_call_from_row(row) for row in rows]
 
+    def fail_running_calls(self, *, finished_at: datetime) -> int:
+        database_url = self._require_database_url()
+        try:
+            with psycopg.connect(database_url) as connection:
+                cursor = connection.execute(
+                    """
+                    UPDATE mcp_tool_calls
+                    SET
+                        status = 'error',
+                        finished_at = %s,
+                        duration_ms = LEAST(
+                            2147483647,
+                            GREATEST(
+                                0,
+                                FLOOR(EXTRACT(EPOCH FROM (%s - started_at)) * 1000)
+                            )
+                        )::integer,
+                        error_code = 'server_restarted'
+                    WHERE status = 'running'
+                      AND server_name = 'context-router'
+                      AND tool_name IN (
+                            'prepare_task_context',
+                            'read_context_document',
+                            'search_database_objects',
+                            'execute_database_query'
+                      )
+                      AND source = 'server'
+                    """,
+                    (finished_at, finished_at),
+                )
+                return max(cursor.rowcount, 0)
+        except psycopg.Error as exc:
+            raise McpToolCallRepositoryError("遗留 MCP 工具调用恢复失败") from exc
+
     def list_traces(
         self,
         *,
+        project_id: str | None = None,
         project_key: str | None = None,
         agent_name: str | None = None,
         server_name: str | None = None,
@@ -325,6 +405,10 @@ class PostgresMcpToolCallRepository:
     ) -> list[McpTraceTaskRecord]:
         if status is not None and status not in {"running", "ok", "error", "cancelled"}:
             raise McpToolCallRepositoryError("MCP 工具调用状态不受支持")
+        if server_name is not None and (server_name.casefold() != CONTEXT_ROUTER_TRACE_SERVER_NAME):
+            return []
+        if tool_name is not None and tool_name not in CONTEXT_ROUTER_TRACE_TOOL_NAMES:
+            return []
         safe_limit = min(max(limit, 1), 100)
         normalized_keyword = keyword.strip() if keyword else None
         keyword_pattern = f"%{normalized_keyword}%" if normalized_keyword else None
@@ -335,6 +419,7 @@ class PostgresMcpToolCallRepository:
                     """
                     SELECT
                         task.id,
+                        task.project_id,
                         task.project_key,
                         task.project_name,
                         task.task,
@@ -343,8 +428,20 @@ class PostgresMcpToolCallRepository:
                         task.created_at,
                         COUNT(tool_call.id) AS call_count,
                         COUNT(tool_call.id) FILTER (
+                            WHERE tool_call.tool_name = 'prepare_task_context'
+                        ) AS prepare_call_count,
+                        COUNT(tool_call.id) FILTER (
                             WHERE tool_call.status = 'error'
                         ) AS error_count,
+                        COUNT(tool_call.id) FILTER (
+                            WHERE tool_call.status = 'running'
+                        ) AS running_call_count,
+                        COUNT(tool_call.id) FILTER (
+                            WHERE tool_call.source = 'legacy'
+                        ) AS legacy_call_count,
+                        COUNT(tool_call.id) FILTER (
+                            WHERE tool_call.error_code = 'server_restarted'
+                        ) AS interrupted_call_count,
                         COALESCE(
                             ARRAY_AGG(DISTINCT tool_call.server_name)
                                 FILTER (WHERE tool_call.server_name IS NOT NULL),
@@ -356,18 +453,89 @@ class PostgresMcpToolCallRepository:
                                 tool_call.started_at,
                                 task.created_at
                             )
-                        ) AS last_activity_at
+                        ) AS last_activity_at,
+                        (
+                            SELECT COUNT(*)
+                            FROM mcp_document_read_calls AS unlinked_read
+                            WHERE unlinked_read.task_id = task.id
+                              AND (
+                                    unlinked_read.tool_call_id IS NULL
+                                    OR NOT EXISTS (
+                                        SELECT 1
+                                        FROM mcp_tool_calls AS linked_read_call
+                                        WHERE linked_read_call.id = unlinked_read.tool_call_id
+                                          AND linked_read_call.task_id = unlinked_read.task_id
+                                          AND linked_read_call.server_name = 'context-router'
+                                          AND linked_read_call.source IN ('server', 'legacy')
+                                          AND linked_read_call.tool_name =
+                                                'read_context_document'
+                                    )
+                              )
+                        ) AS unlinked_document_read_count,
+                        (
+                            SELECT COUNT(*)
+                            FROM mcp_database_calls AS unlinked_database
+                            WHERE unlinked_database.task_id = task.id
+                              AND (
+                                    unlinked_database.tool_call_id IS NULL
+                                    OR NOT EXISTS (
+                                        SELECT 1
+                                        FROM mcp_tool_calls AS linked_database_call
+                                        WHERE linked_database_call.id =
+                                              unlinked_database.tool_call_id
+                                          AND linked_database_call.task_id =
+                                                unlinked_database.task_id
+                                          AND linked_database_call.server_name = 'context-router'
+                                          AND linked_database_call.source IN ('server', 'legacy')
+                                          AND (
+                                                (
+                                                    unlinked_database.operation =
+                                                        'search_objects'
+                                                    AND linked_database_call.tool_name =
+                                                        'search_database_objects'
+                                                )
+                                                OR (
+                                                    unlinked_database.operation =
+                                                        'execute_query'
+                                                    AND linked_database_call.tool_name =
+                                                        'execute_database_query'
+                                                )
+                                          )
+                                    )
+                              )
+                        ) AS unlinked_database_call_count
                     FROM mcp_tasks AS task
-                    JOIN mcp_tool_calls AS tool_call ON tool_call.task_id = task.id
-                    WHERE (%s::text IS NULL OR task.project_key = %s)
+                    LEFT JOIN mcp_tool_calls AS tool_call
+                      ON tool_call.task_id = task.id
+                     AND tool_call.server_name = 'context-router'
+                     AND tool_call.tool_name IN (
+                            'prepare_task_context',
+                            'read_context_document',
+                            'search_database_objects',
+                            'execute_database_query'
+                     )
+                     AND tool_call.source IN ('server', 'legacy')
+                    WHERE (
+                            %s::text IS NULL
+                            OR task.project_id = %s
+                            OR (task.project_id IS NULL AND task.project_key = %s)
+                      )
                       AND (%s::text IS NULL OR lower(task.agent_name) = lower(%s))
                       AND task.agent_name IS DISTINCT FROM 'connection-test'
+                      AND task.agent_name IS DISTINCT FROM 'web-preview'
                       AND (
                             %s::text IS NULL
                             OR EXISTS (
                                 SELECT 1
                                 FROM mcp_tool_calls AS filtered_server
                                 WHERE filtered_server.task_id = task.id
+                                  AND filtered_server.source IN ('server', 'legacy')
+                                  AND filtered_server.tool_name IN (
+                                        'prepare_task_context',
+                                        'read_context_document',
+                                        'search_database_objects',
+                                        'execute_database_query'
+                                  )
                                   AND lower(filtered_server.server_name) = lower(%s)
                             )
                       )
@@ -377,6 +545,8 @@ class PostgresMcpToolCallRepository:
                                 SELECT 1
                                 FROM mcp_tool_calls AS filtered_tool
                                 WHERE filtered_tool.task_id = task.id
+                                  AND filtered_tool.server_name = 'context-router'
+                                  AND filtered_tool.source IN ('server', 'legacy')
                                   AND filtered_tool.tool_name = %s
                             )
                       )
@@ -386,6 +556,14 @@ class PostgresMcpToolCallRepository:
                                 SELECT 1
                                 FROM mcp_tool_calls AS filtered_status
                                 WHERE filtered_status.task_id = task.id
+                                  AND filtered_status.server_name = 'context-router'
+                                  AND filtered_status.source IN ('server', 'legacy')
+                                  AND filtered_status.tool_name IN (
+                                        'prepare_task_context',
+                                        'read_context_document',
+                                        'search_database_objects',
+                                        'execute_database_query'
+                                  )
                                   AND filtered_status.status = %s
                             )
                       )
@@ -400,7 +578,8 @@ class PostgresMcpToolCallRepository:
                     LIMIT %s
                     """,
                     (
-                        project_key,
+                        project_id,
+                        project_id,
                         project_key,
                         agent_name,
                         agent_name,
@@ -432,8 +611,12 @@ def _validate_call(call: McpToolCallWrite) -> None:
         raise McpToolCallRepositoryError("任务号必须大于 0")
     _validate_text(call.server_name, "MCP Server 名称", 64, required=True)
     _validate_text(call.tool_name, "MCP 工具名称", 128, required=True)
-    if call.source not in {"server", "gateway", "reported", "legacy"}:
-        raise McpToolCallRepositoryError("MCP 工具调用来源不受支持")
+    if call.server_name != CONTEXT_ROUTER_TRACE_SERVER_NAME:
+        raise McpToolCallRepositoryError("只允许记录 Context Router MCP 调用")
+    if call.tool_name not in CONTEXT_ROUTER_TRACE_TOOL_NAMES:
+        raise McpToolCallRepositoryError("MCP 工具不在内部追踪白名单")
+    if call.source not in CONTEXT_ROUTER_TRACE_SOURCES:
+        raise McpToolCallRepositoryError("只允许记录内部或历史 MCP 调用")
     if call.status not in {"running", "ok", "error", "cancelled"}:
         raise McpToolCallRepositoryError("MCP 工具调用状态不受支持")
     if call.parent_tool_call_id is not None and call.parent_tool_call_id < 1:
@@ -493,14 +676,21 @@ def _call_from_row(row: tuple[object, ...]) -> McpToolCallRecord:
 def _trace_from_row(row: tuple[object, ...]) -> McpTraceTaskRecord:
     return McpTraceTaskRecord(
         task_id=int(row[0]),
-        project_key=str(row[1]),
-        project_name=str(row[2]),
-        task=str(row[3]),
-        cwd=str(row[4]),
-        agent_name=str(row[5]) if row[5] is not None else None,
-        created_at=cast(datetime, row[6]),
-        call_count=int(row[7]),
-        error_count=int(row[8]),
-        server_names=[str(name) for name in cast(list[object], row[9])],
-        last_activity_at=cast(datetime, row[10]),
+        project_id=str(row[1]) if row[1] is not None else None,
+        project_key=str(row[2]),
+        project_name=str(row[3]),
+        task=str(row[4]),
+        cwd=str(row[5]),
+        agent_name=str(row[6]) if row[6] is not None else None,
+        created_at=cast(datetime, row[7]),
+        call_count=int(row[8]),
+        prepare_call_count=int(row[9]),
+        error_count=int(row[10]),
+        running_call_count=int(row[11]),
+        legacy_call_count=int(row[12]),
+        interrupted_call_count=int(row[13]),
+        server_names=[str(name) for name in cast(list[object], row[14])],
+        last_activity_at=cast(datetime, row[15]),
+        unlinked_document_read_count=int(row[16]),
+        unlinked_database_call_count=int(row[17]),
     )

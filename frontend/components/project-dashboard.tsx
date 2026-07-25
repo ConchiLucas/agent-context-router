@@ -109,11 +109,7 @@ function DocumentDetailDrawer({
   );
 }
 
-interface ProjectDashboardProps {
-  onOpenTraces?: (projectId: string) => void;
-}
-
-export function ProjectDashboard({ onOpenTraces }: ProjectDashboardProps) {
+export function ProjectDashboard() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [selectedProjectType, setSelectedProjectType] =
     useState(ALL_PROJECT_TYPES);
@@ -904,13 +900,7 @@ export function ProjectDashboard({ onOpenTraces }: ProjectDashboardProps) {
                 type="button"
                 className="secondary-button"
                 disabled={busyProjectId === project.id || !project.enabled}
-                onClick={() => {
-                  if (onOpenTraces) {
-                    onOpenTraces(project.id);
-                    return;
-                  }
-                  void showTaskHistory(project);
-                }}
+                onClick={() => void showTaskHistory(project)}
               >
                 查看调用记录
               </button>
@@ -1465,7 +1455,7 @@ export function ProjectDashboard({ onOpenTraces }: ProjectDashboardProps) {
                   <strong>{selectedHistoryTask.task}</strong>
                 </>
               ) : (
-                <p>当前项目还没有 MCP 任务</p>
+                <p>当前项目还没有文档读取任务</p>
               )}
             </div>
             <div className="tree-toolbar-actions">
@@ -1545,7 +1535,7 @@ export function ProjectDashboard({ onOpenTraces }: ProjectDashboardProps) {
               ) : null}
               {!historyLoading && historyTasks.length === 0 ? (
                 <div className="empty-state task-history-empty">
-                  <h3>当前项目还没有 MCP 任务</h3>
+                  <h3>当前项目还没有文档读取任务</h3>
                 </div>
               ) : null}
               {!historyLoading &&

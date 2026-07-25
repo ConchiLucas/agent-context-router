@@ -253,11 +253,21 @@ export type McpTraceCallStatus =
   | "error"
   | "cancelled";
 
+export type McpTraceCompleteness = "complete" | "running" | "partial";
+
 export type McpTraceCallSource =
   | "server"
   | "gateway"
   | "reported"
   | "legacy";
+
+export type InternalMcpTraceCallSource = "server" | "legacy";
+
+export type InternalMcpToolName =
+  | "prepare_task_context"
+  | "read_context_document"
+  | "search_database_objects"
+  | "execute_database_query";
 
 export interface McpTraceDocumentArtifactItem {
   position: number;
@@ -310,6 +320,8 @@ export interface McpTraceSummary {
   error_count: number;
   server_names: string[];
   last_activity_at: string;
+  trace_status: McpTraceCompleteness;
+  warnings: string[];
 }
 
 export interface McpTraceToolCall {
@@ -325,12 +337,57 @@ export interface McpTraceToolCall {
   duration_ms?: number | null;
   request_summary?: Record<string, unknown> | null;
   result_summary?: Record<string, unknown> | null;
+  database_payload_available?: boolean;
+  database_payload_status?: McpDatabasePayloadStatus | null;
+  database_payload_reason?: McpDatabasePayloadUnavailableReason | null;
   error_code?: string | null;
   artifacts: McpTraceArtifact[];
 }
 
+export type InternalMcpTraceToolCall = Omit<
+  McpTraceToolCall,
+  "source" | "tool_name"
+> & {
+  source: InternalMcpTraceCallSource;
+  tool_name: InternalMcpToolName;
+};
+
 export interface McpTraceDetail extends McpTraceSummary {
   calls: McpTraceToolCall[];
+}
+
+export type McpDatabasePayloadStatus =
+  | "pending"
+  | "ok"
+  | "error"
+  | "cancelled"
+  | "interrupted"
+  | "capture_failed"
+  | "expired";
+
+export type McpDatabasePayloadUnavailableReason =
+  | "capture_disabled"
+  | "not_captured"
+  | "expired"
+  | "capture_failed";
+
+export interface McpDatabaseToolPayload {
+  task_id: number;
+  tool_call_id: number;
+  tool_name: "search_database_objects" | "execute_database_query";
+  available: boolean;
+  reason?: McpDatabasePayloadUnavailableReason | null;
+  status?: McpDatabasePayloadStatus | null;
+  request_payload?: Record<string, unknown> | null;
+  response_payload?: Record<string, unknown> | null;
+  request_bytes?: number | null;
+  response_bytes?: number | null;
+  request_truncated: boolean;
+  response_truncated: boolean;
+  capture_error_code?: string | null;
+  expires_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
 }
 
 export interface McpServiceInfo {

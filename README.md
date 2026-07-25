@@ -40,9 +40,10 @@ CONTEXT_ROUTER_WORKSPACE_HOST_ROOT=/absolute/workspace/root
 CONTEXT_ROUTER_DEFAULT_PROJECT_NAME=示例项目
 CONTEXT_ROUTER_DEFAULT_AGENTS_PATH=/absolute/workspace/root/project/AGENTS.md
 CONTEXT_ROUTER_DATABASE_URL=postgresql://USER:PASSWORD@host.docker.internal:5432/context_router
+CONTEXT_ROUTER_DATABASE_PAYLOAD_CAPTURE_ENABLED=false
 ```
 
-页面可以长期维护多个项目和物理数据源。项目配置、数据库关联、MCP task、文档读取与数据库调用元数据保存在 PostgreSQL；后端重启时恢复配置并重新构建内存文档树。Markdown、完整 SQL 和查询结果不写入数据库。
+页面可以长期维护多个项目和物理数据源。项目配置、数据库关联、MCP task、文档读取与数据库调用元数据保存在 PostgreSQL；后端重启时恢复配置并重新构建内存文档树。Markdown 和文档工具完整出入参不写入数据库。数据库 MCP 工具的完整 SQL 与有界结果快照默认不采集；只有显式设置 `CONTEXT_ROUTER_DATABASE_PAYLOAD_CAPTURE_ENABLED=true` 后，才会写入独立、可过期的 payload 表供本机链路页面按需查看。
 
 ## MCP 工具
 
@@ -53,7 +54,7 @@ MCP 始终暴露四个无状态工具：
 - `search_database_objects(task_id, database, object_type, ...)`：按 prepare 返回的项目数据库 alias 渐进搜索 schema、表、视图、列或索引。
 - `execute_database_query(task_id, database, sql)`：执行一条经过 AST、项目作用域和数据库只读机制共同约束的查询，并按行数和最终 JSON 字节数截断。
 
-每次 read 由 PostgreSQL 生成 read_call_id，单次调用内按数组 position 记录顺序。数据库调用只保存 alias、Engine、SQL SHA-256、状态、耗时和返回规模，不保存 SQL 正文或结果。客户端不能通过 MCP 传入 Host、DSN、口令、数据库内部 ID 或放宽查询限制。
+每次 read 由 PostgreSQL 生成 read_call_id，单次调用内按数组 position 记录顺序。数据库调用的常规审计记录只保存 alias、Engine、SQL SHA-256、状态、耗时和返回规模；启用数据库 payload 采集后，完整 SQL 和最终有界结果会另存到默认保留 7 天的详情表。客户端不能通过 MCP 传入 Host、DSN、口令、数据库内部 ID 或放宽查询限制。
 
 项目卡片上的“查看 MCP JSON”调用相同的 prepare service，返回与 MCP 工具一致的数据结构。
 “查看调用记录”按时间合并展示实际文档读取和数据库对象搜索/查询历史。

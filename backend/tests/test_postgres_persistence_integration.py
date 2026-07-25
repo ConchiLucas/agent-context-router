@@ -23,6 +23,7 @@ from context_router.repositories.database_call_repository import (
     PostgresDatabaseCallRepository,
 )
 from context_router.repositories.mcp_tool_call_repository import PostgresMcpToolCallRepository
+from context_router.repositories.task_repository import PostgresTaskRepository
 
 pytestmark = pytest.mark.postgresql
 
@@ -30,6 +31,8 @@ _BACKEND_ROOT = Path(__file__).resolve().parents[1]
 _REVISION_0007 = "20260722_0007"
 _REVISION_0008 = "20260722_0008"
 _REVISION_0009 = "20260724_0009"
+_REVISION_0010 = "20260724_0010"
+_REVISION_0011 = "20260725_0011"
 
 _PROJECT_A = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 _PROJECT_B = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -39,6 +42,8 @@ _DATABASE_B = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
 _LINK_A = "11111111111111111111111111111111"
 _LINK_B = "22222222222222222222222222222222"
 _LINK_OTHER_PROJECT = "33333333333333333333333333333333"
+_PROJECT_A_PATH = "/legacy/project-a/AGENTS.md"
+_PROJECT_A_KEY = hashlib.sha256(_PROJECT_A_PATH.encode()).hexdigest()
 
 _EXPECTED_ALIASES = {
     _LINK_A: "analytics_warehouse",
@@ -125,6 +130,14 @@ def test_migration_and_postgres_repositories_preserve_legacy_data(
             "SELECT tool_call_id FROM mcp_database_calls WHERE id = %s",
             (legacy_database_call_id,),
         ).fetchone() == (tool_calls[1].id,)
+
+    command.upgrade(alembic_config, _REVISION_0010)
+    assert _current_revision(database_url) == _REVISION_0010
+    with psycopg.connect(database_url) as connection:
+        assert connection.execute(
+            "SELECT project_id FROM mcp_tasks WHERE id = %s",
+            (task_id,),
+        ).fetchone() == (_PROJECT_A,)
 
     data_sources = PostgresDataSourceRepository(database_url)
     resolved = data_sources.get_project_database_by_alias(
@@ -233,15 +246,186 @@ def test_migration_and_postgres_repositories_preserve_legacy_data(
         )
 
     command.upgrade(alembic_config, "head")
-    assert _current_revision(database_url) == _REVISION_0009
+    assert _current_revision(database_url) == _REVISION_0011
     assert _aliases(database_url) == aliases
     _assert_legacy_rows_survive(database_url)
+    _assert_task_project_snapshot_survives_project_deletion(database_url)
+
+
+def test_trace_list_keeps_ordinary_tasks_without_internal_calls_and_excludes_system_tasks(
+    isolated_postgres_database: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_url = isolated_postgres_database
+    monkeypatch.setenv("CONTEXT_ROUTER_DATABASE_URL", database_url)
+    command.upgrade(_alembic_config(), "head")
+
+    task_ids: dict[str, int] = {}
+    with psycopg.connect(database_url) as connection:
+        for label, agent_name in (
+            ("ordinary-no-call", "codex"),
+            ("ordinary-external-only", "codex"),
+            ("ordinary-read-without-prepare", "codex"),
+            ("preview", "web-preview"),
+            ("connection", "connection-test"),
+        ):
+            row = connection.execute(
+                """
+                INSERT INTO mcp_tasks (
+                    project_key,
+                    project_name,
+                    task,
+                    cwd,
+                    agent_name
+                )
+                VALUES (%s, 'Trace Test', %s, '/trace-test', %s)
+                RETURNING id
+                """,
+                ("trace-project-key", label, agent_name),
+            ).fetchone()
+            assert row is not None
+            task_ids[label] = int(row[0])
+
+        connection.execute(
+            """
+            INSERT INTO mcp_tool_calls (
+                task_id,
+                server_name,
+                tool_name,
+                source,
+                status,
+                finished_at
+            )
+            VALUES (%s, 'external-gateway', 'external_search', 'gateway', 'ok', CURRENT_TIMESTAMP)
+            """,
+            (task_ids["ordinary-external-only"],),
+        )
+        connection.execute(
+            """
+            INSERT INTO mcp_tool_calls (
+                task_id,
+                server_name,
+                tool_name,
+                source,
+                status,
+                finished_at
+            )
+            VALUES (
+                %s,
+                'context-router',
+                'read_context_document',
+                'server',
+                'ok',
+                CURRENT_TIMESTAMP
+            )
+            """,
+            (task_ids["ordinary-read-without-prepare"],),
+        )
+
+    records = PostgresMcpToolCallRepository(database_url).list_traces(limit=100)
+    records_by_task = {record.task: record for record in records}
+
+    assert set(records_by_task) == {
+        "ordinary-no-call",
+        "ordinary-external-only",
+        "ordinary-read-without-prepare",
+    }
+    assert records_by_task["ordinary-no-call"].call_count == 0
+    assert records_by_task["ordinary-no-call"].prepare_call_count == 0
+    assert records_by_task["ordinary-external-only"].call_count == 0
+    assert records_by_task["ordinary-external-only"].server_names == []
+    assert records_by_task["ordinary-read-without-prepare"].call_count == 1
+    assert records_by_task["ordinary-read-without-prepare"].prepare_call_count == 0
+
+
+def test_project_task_history_only_lists_tasks_with_document_reads(
+    isolated_postgres_database: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_url = isolated_postgres_database
+    monkeypatch.setenv("CONTEXT_ROUTER_DATABASE_URL", database_url)
+    command.upgrade(_alembic_config(), "head")
+
+    with psycopg.connect(database_url) as connection:
+        task_ids: dict[str, int] = {}
+        for task_name in ("prepare-only", "database-only", "document-read"):
+            row = connection.execute(
+                """
+                INSERT INTO mcp_tasks (
+                    project_id,
+                    project_key,
+                    project_name,
+                    task,
+                    cwd,
+                    agent_name
+                )
+                VALUES (%s, %s, 'History Test', %s, '/history-test', 'codex')
+                RETURNING id
+                """,
+                (_PROJECT_A, _PROJECT_A_KEY, task_name),
+            ).fetchone()
+            assert row is not None
+            task_ids[task_name] = int(row[0])
+
+        connection.execute(
+            """
+            INSERT INTO mcp_database_calls (
+                task_id,
+                operation,
+                database_alias,
+                engine,
+                status
+            )
+            VALUES (%s, 'search_objects', 'analytics', 'postgresql', 'ok')
+            """,
+            (task_ids["database-only"],),
+        )
+        connection.execute(
+            """
+            INSERT INTO mcp_document_read_calls (task_id)
+            VALUES (%s)
+            """,
+            (task_ids["document-read"],),
+        )
+
+    tasks = PostgresTaskRepository(database_url).list_tasks(
+        _PROJECT_A_KEY,
+        project_id=_PROJECT_A,
+        limit=30,
+    )
+
+    assert [(task.task, task.read_call_count) for task in tasks] == [("document-read", 1)]
 
 
 def _alembic_config() -> Config:
     config = Config(str(_BACKEND_ROOT / "alembic.ini"))
     config.set_main_option("script_location", str(_BACKEND_ROOT / "migrations"))
     return config
+
+
+def _assert_task_project_snapshot_survives_project_deletion(database_url: str) -> None:
+    project_id = "ffffffffffffffffffffffffffffffff"
+    with psycopg.connect(database_url) as connection:
+        connection.execute(
+            """INSERT INTO document_projects
+            (id, name, agents_path, enabled, project_type)
+            VALUES (%s, 'Disposable Project', '/disposable/AGENTS.md', true, '公司项目')""",
+            (project_id,),
+        )
+        task_row = connection.execute(
+            """INSERT INTO mcp_tasks
+            (project_id, project_key, project_name, task, cwd, agent_name)
+            VALUES (%s, %s, 'Disposable Project', 'retain snapshot', '/disposable', 'pytest')
+            RETURNING id""",
+            (project_id, hashlib.sha256(b"/disposable/AGENTS.md").hexdigest()),
+        ).fetchone()
+        assert task_row is not None
+        connection.execute("DELETE FROM document_projects WHERE id = %s", (project_id,))
+        retained = connection.execute(
+            "SELECT project_id FROM mcp_tasks WHERE id = %s",
+            (int(task_row[0]),),
+        ).fetchone()
+    assert retained == (project_id,)
 
 
 def _insert_legacy_rows(database_url: str) -> int:
@@ -256,7 +440,7 @@ def _insert_legacy_rows(database_url: str) -> int:
             (
                 _PROJECT_A,
                 "Legacy Project A",
-                "/legacy/project-a/AGENTS.md",
+                _PROJECT_A_PATH,
                 "公司项目",
                 created_first,
                 created_first,
@@ -364,7 +548,7 @@ def _insert_legacy_rows(database_url: str) -> int:
             VALUES (%s, %s, %s, %s, %s)
             RETURNING id""",
             (
-                _PROJECT_A,
+                _PROJECT_A_KEY,
                 "Legacy Project A",
                 "verify PostgreSQL persistence",
                 "/legacy/project-a",

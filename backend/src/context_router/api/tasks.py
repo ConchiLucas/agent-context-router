@@ -59,6 +59,7 @@ def list_project_tasks(
         project = _registry(request).get_snapshot(project_id)
         records = _task_repository(request).list_tasks(
             project.project_key,
+            project_id=project.id,
             limit=limit,
             include_system=include_system,
         )

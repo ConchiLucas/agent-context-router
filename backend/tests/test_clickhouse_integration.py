@@ -64,12 +64,14 @@ _VIEW_REF = f"`{_DATABASE}`.`{_VIEW}`"
 
 
 class IntegrationTaskRepository:
-    def __init__(self, project_key: str) -> None:
+    def __init__(self, project_id: str, project_key: str) -> None:
+        self._project_id = project_id
         self._project_key = project_key
         self._next_task_id = 42
         self._tasks = {
             41: TaskRecord(
                 id=41,
+                project_id=project_id,
                 project_key=project_key,
                 project_name="ClickHouse Integration",
                 task="inspect the integration database",
@@ -82,6 +84,7 @@ class IntegrationTaskRepository:
     def create_task(
         self,
         *,
+        project_id: str,
         project_key: str,
         project_name: str,
         task: str,
@@ -92,6 +95,7 @@ class IntegrationTaskRepository:
         self._next_task_id += 1
         self._tasks[task_id] = TaskRecord(
             id=task_id,
+            project_id=project_id,
             project_key=project_key,
             project_name=project_name,
             task=task,
@@ -268,7 +272,7 @@ def _build_service_harness(
         agents_path=str(root),
     )
     snapshot = project_registry.get_snapshot(project.id)
-    task_repository = IntegrationTaskRepository(snapshot.project_key)
+    task_repository = IntegrationTaskRepository(project.id, snapshot.project_key)
     data_sources = InMemoryDataSourceRepository()
     now = datetime.now(UTC)
     data_sources.create_data_source(

@@ -1,5 +1,8 @@
 import asyncio
 
+import pytest
+from mcp.server.fastmcp.exceptions import ToolError
+
 from context_router.mcp_server import create_context_router_mcp
 
 
@@ -122,3 +125,48 @@ def test_database_tools_forward_only_fixed_public_arguments() -> None:
         "database": "analytics",
         "sql": "SELECT 1",
     }
+
+
+@pytest.mark.parametrize("invalid_task_id", ["9", True])
+@pytest.mark.parametrize(
+    ("tool_name", "arguments"),
+    [
+        (
+            "read_context_document",
+            {"requests": [{"document_id": "root"}]},
+        ),
+        (
+            "search_database_objects",
+            {"database": "analytics", "object_type": "table"},
+        ),
+        (
+            "execute_database_query",
+            {"database": "analytics", "sql": "SELECT 1"},
+        ),
+    ],
+)
+def test_followup_tools_reject_coercible_task_ids_before_business_execution(
+    invalid_task_id: object,
+    tool_name: str,
+    arguments: dict[str, object],
+) -> None:
+    document_service = UnusedService()
+    catalog = RecordingCatalogService()
+    query = RecordingQueryService()
+    server = create_context_router_mcp(  # type: ignore[arg-type]
+        document_service,
+        document_service,
+        catalog,  # type: ignore[arg-type]
+        query,  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(ToolError):
+        asyncio.run(
+            server.call_tool(
+                tool_name,
+                {"task_id": invalid_task_id, **arguments},
+            )
+        )
+
+    assert catalog.arguments == {}
+    assert query.arguments == {}

@@ -61,7 +61,10 @@ class ContextDocumentReadService:
             raise ContextDocumentReadError(str(exc)) from exc
 
         try:
-            project = self._registry.get_snapshot_by_project_key(task.project_key)
+            project = self._registry.get_snapshot_for_task(
+                project_id=task.project_id,
+                project_key=task.project_key,
+            )
         except ProjectRegistryError as exc:
             raise ContextDocumentReadError("任务绑定的项目当前不可用，请重新 prepare") from exc
 

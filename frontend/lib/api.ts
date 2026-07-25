@@ -6,6 +6,7 @@ import type {
   McpIntegrationInfo,
   McpIntegrationTestResult,
   McpTraceDetail,
+  McpDatabaseToolPayload,
   McpTraceSummary,
   PrepareTaskContextResult,
   ProjectCreate,
@@ -27,6 +28,7 @@ import {
   buildMcpTraceListPath,
   type McpTraceListQuery,
 } from "@/lib/mcp-traces";
+import { buildDatabasePayloadPath } from "@/lib/database-call-payload";
 
 const API_URL =
   process.env.NEXT_PUBLIC_CONTEXT_ROUTER_API_URL ?? "http://127.0.0.1:49173";
@@ -140,6 +142,16 @@ export function getMcpTrace(taskId: number): Promise<McpTraceDetail> {
   return request<McpTraceDetail>(`/api/mcp-traces/${taskId}`, {
     cache: "no-store",
   });
+}
+
+export function getMcpDatabaseToolPayload(
+  taskId: number,
+  toolCallId: number,
+): Promise<McpDatabaseToolPayload> {
+  return request<McpDatabaseToolPayload>(
+    buildDatabasePayloadPath(taskId, toolCallId),
+    { cache: "no-store" },
+  );
 }
 
 export function getMcpIntegration(): Promise<McpIntegrationInfo> {

@@ -22,12 +22,18 @@ from context_router.repositories.mcp_tool_call_repository import (
 from context_router.repositories.task_repository import TaskReader, TaskRepositoryError
 from context_router.schemas.context import ContextReadHistoryItem
 from context_router.schemas.mcp_traces import (
+    McpDatabaseToolPayloadDetail,
     McpTraceArtifact,
     McpTraceCall,
     McpTraceDatabaseCallArtifact,
     McpTraceDetail,
     McpTraceDocumentReadArtifact,
     McpTraceSummary,
+)
+from context_router.services.database_tool_payload import (
+    DATABASE_PAYLOAD_TOOL_NAMES,
+    DatabaseToolPayloadService,
+    DatabaseToolPayloadServiceError,
 )
 from context_router.services.project_registry import ProjectRegistry, ProjectRegistryError
 
@@ -55,12 +61,14 @@ class McpTraceService:
         document_read_repository: DocumentReadStore,
         database_call_repository: DatabaseCallStore,
         registry: ProjectRegistry,
+        database_payload_service: DatabaseToolPayloadService | None = None,
     ) -> None:
         self._tool_calls = tool_call_repository
         self._tasks = task_repository
         self._document_reads = document_read_repository
         self._database_calls = database_call_repository
         self._registry = registry
+        self._database_payloads = database_payload_service
 
     def start_call(
         self,
@@ -86,7 +94,7 @@ class McpTraceService:
                     request_summary=request_summary,
                 )
             )
-        except McpToolCallRepositoryError:
+        except Exception:
             logger.warning("Unable to persist MCP tool-call start metadata", exc_info=True)
             return None
 
@@ -118,8 +126,39 @@ class McpTraceService:
                     result_summary=result_summary,
                 )
             )
-        except McpToolCallRepositoryError:
+        except Exception:
             logger.warning("Unable to persist completed MCP tool-call metadata", exc_info=True)
+            return None
+
+    def record_failed_call(
+        self,
+        *,
+        task_id: int,
+        server_name: str,
+        tool_name: str,
+        started_at: datetime,
+        finished_at: datetime,
+        duration_ms: int,
+        request_summary: dict[str, object] | None = None,
+        error_code: str,
+    ) -> int | None:
+        try:
+            return self._tool_calls.create_call(
+                McpToolCallWrite(
+                    task_id=task_id,
+                    server_name=server_name,
+                    tool_name=tool_name,
+                    source="server",
+                    status="error",
+                    started_at=started_at,
+                    finished_at=finished_at,
+                    duration_ms=duration_ms,
+                    request_summary=request_summary,
+                    error_code=error_code,
+                )
+            )
+        except Exception:
+            logger.warning("Unable to persist failed MCP tool-call metadata", exc_info=True)
             return None
 
     def finish_call(
@@ -143,7 +182,7 @@ class McpTraceService:
                 result_summary=result_summary,
                 error_code=error_code,
             )
-        except McpToolCallRepositoryError:
+        except Exception:
             logger.warning("Unable to persist MCP tool-call completion metadata", exc_info=True)
 
     @staticmethod
@@ -153,6 +192,19 @@ class McpTraceService:
     @staticmethod
     def reset_call(token: Token[int | None]) -> None:
         _CURRENT_TOOL_CALL_ID.reset(token)
+
+    def reconcile_interrupted_calls(self) -> int:
+        try:
+            recovered = self._tool_calls.fail_running_calls(finished_at=datetime.now(UTC))
+        except Exception:
+            logger.warning("Unable to reconcile interrupted MCP tool calls", exc_info=True)
+            return 0
+        if recovered:
+            logger.warning(
+                "Marked %s interrupted MCP tool call(s) as server_restarted",
+                recovered,
+            )
+        return recovered
 
     def list_traces(
         self,
@@ -173,6 +225,7 @@ class McpTraceService:
                 raise McpTraceServiceError(str(exc)) from exc
         try:
             records = self._tool_calls.list_traces(
+                project_id=project_id,
                 project_key=project_key,
                 agent_name=agent_name,
                 server_name=server_name,
@@ -183,22 +236,36 @@ class McpTraceService:
             )
         except McpToolCallRepositoryError as exc:
             raise McpTraceServiceError(str(exc)) from exc
-        return [
-            McpTraceSummary(
-                task_id=record.task_id,
-                task=record.task,
-                project_id=self._registry.find_project_id_by_key(record.project_key),
-                project_name=record.project_name,
-                cwd=record.cwd,
-                agent_name=record.agent_name,
-                created_at=record.created_at,
+        summaries: list[McpTraceSummary] = []
+        for record in records:
+            trace_status, warnings = _trace_completeness(
                 call_count=record.call_count,
-                error_count=record.error_count,
-                server_names=sorted(record.server_names),
-                last_activity_at=record.last_activity_at,
+                prepare_call_count=record.prepare_call_count,
+                running_call_count=record.running_call_count,
+                legacy_call_count=record.legacy_call_count,
+                interrupted_call_count=record.interrupted_call_count,
+                unlinked_document_read_count=record.unlinked_document_read_count,
+                unlinked_database_call_count=record.unlinked_database_call_count,
             )
-            for record in records
-        ]
+            summaries.append(
+                McpTraceSummary(
+                    task_id=record.task_id,
+                    task=record.task,
+                    project_id=record.project_id
+                    or self._registry.find_project_id_by_key(record.project_key),
+                    project_name=record.project_name,
+                    cwd=record.cwd,
+                    agent_name=record.agent_name,
+                    created_at=record.created_at,
+                    call_count=record.call_count,
+                    error_count=record.error_count,
+                    server_names=sorted(record.server_names),
+                    last_activity_at=record.last_activity_at,
+                    trace_status=trace_status,
+                    warnings=warnings,
+                )
+            )
+        return summaries
 
     def get_trace(self, task_id: int) -> McpTraceDetail:
         try:
@@ -214,9 +281,20 @@ class McpTraceService:
         ) as exc:
             raise McpTraceServiceError(str(exc)) from exc
 
+        database_payload_metadata = (
+            self._database_payloads.metadata_for_calls(
+                [call.id for call in calls if call.tool_name in DATABASE_PAYLOAD_TOOL_NAMES]
+            )
+            if self._database_payloads is not None
+            else {}
+        )
+
         artifacts_by_call: dict[int, list[McpTraceArtifact]] = {}
+        document_call_ids = {call.id for call in calls if call.tool_name == "read_context_document"}
+        unlinked_document_read_count = 0
         for read_call in document_reads:
-            if read_call.tool_call_id is None:
+            if read_call.tool_call_id not in document_call_ids:
+                unlinked_document_read_count += 1
                 continue
             artifacts_by_call.setdefault(read_call.tool_call_id, []).append(
                 McpTraceDocumentReadArtifact(
@@ -234,8 +312,16 @@ class McpTraceService:
                     ],
                 )
             )
+        database_call_tools = {call.id: call.tool_name for call in calls}
+        unlinked_database_call_count = 0
         for database_call in database_calls:
-            if database_call.tool_call_id is None:
+            expected_tool = (
+                "search_database_objects"
+                if database_call.operation == "search_objects"
+                else "execute_database_query"
+            )
+            if database_call_tools.get(database_call.tool_call_id) != expected_tool:
+                unlinked_database_call_count += 1
                 continue
             artifacts_by_call.setdefault(database_call.tool_call_id, []).append(
                 McpTraceDatabaseCallArtifact(
@@ -254,26 +340,54 @@ class McpTraceService:
                 )
             )
 
-        trace_calls = [
-            McpTraceCall(
-                tool_call_id=call.id,
-                sequence=sequence,
-                parent_tool_call_id=call.parent_tool_call_id,
-                server_name=call.server_name,
-                tool_name=call.tool_name,
-                source=call.source,
-                status=call.status,
-                started_at=call.started_at,
-                finished_at=call.finished_at,
-                duration_ms=call.duration_ms,
-                request_summary=call.request_summary,
-                result_summary=call.result_summary,
-                error_code=call.error_code,
-                artifacts=artifacts_by_call.get(call.id, []),
+        trace_calls: list[McpTraceCall] = []
+        for sequence, call in enumerate(calls, start=1):
+            payload_metadata = database_payload_metadata.get(call.id)
+            trace_calls.append(
+                McpTraceCall(
+                    tool_call_id=call.id,
+                    sequence=sequence,
+                    parent_tool_call_id=call.parent_tool_call_id,
+                    server_name=call.server_name,
+                    tool_name=call.tool_name,
+                    source=call.source,
+                    status=call.status,
+                    started_at=call.started_at,
+                    finished_at=call.finished_at,
+                    duration_ms=call.duration_ms,
+                    request_summary=call.request_summary,
+                    result_summary=call.result_summary,
+                    error_code=call.error_code,
+                    artifacts=artifacts_by_call.get(call.id, []),
+                    database_payload_available=(
+                        payload_metadata is not None
+                        and payload_metadata.response_status != "expired"
+                    ),
+                    database_payload_status=(
+                        payload_metadata.response_status if payload_metadata is not None else None
+                    ),
+                    database_payload_reason=(
+                        "capture_disabled"
+                        if call.tool_name in DATABASE_PAYLOAD_TOOL_NAMES
+                        and payload_metadata is None
+                        and self._database_payloads is not None
+                        and not self._database_payloads.capture_enabled
+                        else None
+                    ),
+                )
             )
-            for sequence, call in enumerate(calls, start=1)
-        ]
         error_count = sum(1 for call in calls if call.status == "error")
+        trace_status, warnings = _trace_completeness(
+            call_count=len(calls),
+            prepare_call_count=sum(1 for call in calls if call.tool_name == "prepare_task_context"),
+            running_call_count=sum(1 for call in calls if call.status == "running"),
+            legacy_call_count=sum(1 for call in calls if call.source == "legacy"),
+            interrupted_call_count=sum(
+                1 for call in calls if call.error_code == "server_restarted"
+            ),
+            unlinked_document_read_count=unlinked_document_read_count,
+            unlinked_database_call_count=unlinked_database_call_count,
+        )
         last_activity_at = max(
             (call.finished_at or call.started_at for call in calls),
             default=task.created_at,
@@ -281,7 +395,7 @@ class McpTraceService:
         return McpTraceDetail(
             task_id=task.id,
             task=task.task,
-            project_id=self._registry.find_project_id_by_key(task.project_key),
+            project_id=task.project_id or self._registry.find_project_id_by_key(task.project_key),
             project_name=task.project_name,
             cwd=task.cwd,
             agent_name=task.agent_name,
@@ -290,5 +404,106 @@ class McpTraceService:
             error_count=error_count,
             server_names=sorted({call.server_name for call in calls}),
             last_activity_at=last_activity_at,
+            trace_status=trace_status,
+            warnings=warnings,
             calls=trace_calls,
         )
+
+    def get_database_payload(
+        self,
+        *,
+        task_id: int,
+        tool_call_id: int,
+    ) -> McpDatabaseToolPayloadDetail:
+        try:
+            self._tasks.get_task(task_id)
+            calls = self._tool_calls.list_calls(task_id)
+        except (TaskRepositoryError, McpToolCallRepositoryError) as exc:
+            raise McpTraceServiceError(str(exc)) from exc
+        call = next((item for item in calls if item.id == tool_call_id), None)
+        if call is None:
+            raise McpTraceServiceError("这个 MCP 工具调用不属于指定任务")
+        if call.tool_name not in DATABASE_PAYLOAD_TOOL_NAMES:
+            raise McpTraceServiceError("只有数据库 MCP 工具调用支持出入参详情")
+
+        record = None
+        if self._database_payloads is not None:
+            try:
+                record = self._database_payloads.get_payload(tool_call_id)
+            except DatabaseToolPayloadServiceError as exc:
+                raise McpTraceServiceError(str(exc)) from exc
+        if record is None:
+            return McpDatabaseToolPayloadDetail(
+                task_id=task_id,
+                tool_call_id=tool_call_id,
+                tool_name=call.tool_name,
+                available=False,
+                reason=(
+                    "capture_disabled"
+                    if self._database_payloads is not None
+                    and not self._database_payloads.capture_enabled
+                    else "not_captured"
+                ),
+            )
+
+        available = record.response_status != "expired" and (
+            record.request_payload is not None or record.response_payload is not None
+        )
+        reason = None
+        if record.response_status == "expired":
+            reason = "expired"
+        elif record.response_status == "capture_failed":
+            reason = "capture_failed"
+        elif not available:
+            reason = "not_captured"
+        return McpDatabaseToolPayloadDetail(
+            task_id=task_id,
+            tool_call_id=tool_call_id,
+            tool_name=call.tool_name,
+            available=available,
+            reason=reason,
+            status=record.response_status,
+            request_payload=record.request_payload,
+            response_payload=record.response_payload,
+            request_bytes=record.request_bytes,
+            response_bytes=record.response_bytes,
+            request_truncated=record.request_truncated,
+            response_truncated=record.response_truncated,
+            capture_error_code=record.capture_error_code,
+            expires_at=record.expires_at,
+            created_at=record.created_at,
+            updated_at=record.updated_at,
+        )
+
+
+def _trace_completeness(
+    *,
+    call_count: int,
+    prepare_call_count: int,
+    running_call_count: int,
+    legacy_call_count: int,
+    interrupted_call_count: int,
+    unlinked_document_read_count: int,
+    unlinked_database_call_count: int,
+) -> tuple[str, list[str]]:
+    warnings: list[str] = []
+    if call_count == 0:
+        warnings.append("no_trace_calls")
+    if prepare_call_count == 0:
+        warnings.append("missing_prepare_call")
+    if running_call_count:
+        warnings.append("running_calls")
+    if legacy_call_count:
+        warnings.append("legacy_calls")
+    if interrupted_call_count:
+        warnings.append("interrupted_calls")
+    if unlinked_document_read_count:
+        warnings.append("unlinked_document_reads")
+    if unlinked_database_call_count:
+        warnings.append("unlinked_database_calls")
+
+    if running_call_count:
+        return "running", warnings
+    if warnings:
+        return "partial", warnings
+    return "complete", warnings

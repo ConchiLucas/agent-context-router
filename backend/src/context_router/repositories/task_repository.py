@@ -14,6 +14,7 @@ class TaskRepositoryError(RuntimeError):
 @dataclass(frozen=True, slots=True)
 class TaskRecord:
     id: int
+    project_id: str | None
     project_key: str
     project_name: str
     task: str
@@ -31,6 +32,7 @@ class TaskWriter(Protocol):
     def create_task(
         self,
         *,
+        project_id: str,
         project_key: str,
         project_name: str,
         task: str,
@@ -46,6 +48,7 @@ class TaskReader(Protocol):
         self,
         project_key: str,
         *,
+        project_id: str | None = None,
         limit: int = 30,
         include_system: bool = False,
     ) -> list[TaskListRecord]: ...
@@ -62,6 +65,7 @@ class PostgresTaskRepository:
     def create_task(
         self,
         *,
+        project_id: str,
         project_key: str,
         project_name: str,
         task: str,
@@ -76,16 +80,17 @@ class PostgresTaskRepository:
                 row = connection.execute(
                     """
                     INSERT INTO mcp_tasks (
+                        project_id,
                         project_key,
                         project_name,
                         task,
                         cwd,
                         agent_name
                     )
-                    VALUES (%s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
-                    (project_key, project_name, task, cwd, agent_name),
+                    (project_id, project_key, project_name, task, cwd, agent_name),
                 ).fetchone()
         except psycopg.Error as exc:
             raise TaskRepositoryError("任务记录写入失败") from exc
@@ -102,7 +107,15 @@ class PostgresTaskRepository:
             with psycopg.connect(self._database_url) as connection:
                 row = connection.execute(
                     """
-                    SELECT id, project_key, project_name, task, cwd, agent_name, created_at
+                    SELECT
+                        id,
+                        project_id,
+                        project_key,
+                        project_name,
+                        task,
+                        cwd,
+                        agent_name,
+                        created_at
                     FROM mcp_tasks
                     WHERE id = %s
                     """,
@@ -115,18 +128,20 @@ class PostgresTaskRepository:
             raise TaskRepositoryError("任务不存在")
         return TaskRecord(
             id=int(row[0]),
-            project_key=str(row[1]),
-            project_name=str(row[2]),
-            task=str(row[3]),
-            cwd=str(row[4]),
-            agent_name=str(row[5]) if row[5] is not None else None,
-            created_at=row[6],
+            project_id=str(row[1]) if row[1] is not None else None,
+            project_key=str(row[2]),
+            project_name=str(row[3]),
+            task=str(row[4]),
+            cwd=str(row[5]),
+            agent_name=str(row[6]) if row[6] is not None else None,
+            created_at=row[7],
         )
 
     def list_tasks(
         self,
         project_key: str,
         *,
+        project_id: str | None = None,
         limit: int = 30,
         include_system: bool = False,
     ) -> list[TaskListRecord]:
@@ -140,6 +155,7 @@ class PostgresTaskRepository:
                     """
                     SELECT
                         task.id,
+                        task.project_id,
                         task.project_key,
                         task.project_name,
                         task.task,
@@ -150,13 +166,17 @@ class PostgresTaskRepository:
                     FROM mcp_tasks AS task
                     LEFT JOIN mcp_document_read_calls AS read_call
                         ON read_call.task_id = task.id
-                    WHERE task.project_key = %s
+                    WHERE (
+                            task.project_id = %s
+                            OR (task.project_id IS NULL AND task.project_key = %s)
+                      )
                       AND (%s OR task.agent_name IS DISTINCT FROM 'connection-test')
                     GROUP BY task.id
+                    HAVING COUNT(read_call.id) > 0
                     ORDER BY task.id DESC
                     LIMIT %s
                     """,
-                    (project_key, include_system, safe_limit),
+                    (project_id, project_key, include_system, safe_limit),
                 ).fetchall()
         except psycopg.Error as exc:
             raise TaskRepositoryError("任务列表读取失败") from exc
@@ -164,13 +184,14 @@ class PostgresTaskRepository:
         return [
             TaskListRecord(
                 id=int(row[0]),
-                project_key=str(row[1]),
-                project_name=str(row[2]),
-                task=str(row[3]),
-                cwd=str(row[4]),
-                agent_name=str(row[5]) if row[5] is not None else None,
-                created_at=row[6],
-                read_call_count=int(row[7]),
+                project_id=str(row[1]) if row[1] is not None else None,
+                project_key=str(row[2]),
+                project_name=str(row[3]),
+                task=str(row[4]),
+                cwd=str(row[5]),
+                agent_name=str(row[6]) if row[6] is not None else None,
+                created_at=row[7],
+                read_call_count=int(row[8]),
             )
             for row in rows
         ]

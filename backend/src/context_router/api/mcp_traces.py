@@ -1,9 +1,13 @@
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 
 from context_router.repositories.mcp_tool_call_repository import McpToolCallStatus
-from context_router.schemas.mcp_traces import McpTraceDetail, McpTraceSummary
+from context_router.schemas.mcp_traces import (
+    McpDatabaseToolPayloadDetail,
+    McpTraceDetail,
+    McpTraceSummary,
+)
 from context_router.services.mcp_trace import McpTraceService, McpTraceServiceError
 
 router = APIRouter(prefix="/mcp-traces", tags=["mcp-traces"])
@@ -41,6 +45,28 @@ def list_mcp_traces(
             status=call_status,
             keyword=keyword,
             limit=limit,
+        )
+    except McpTraceServiceError as exc:
+        raise _bad_request(str(exc)) from exc
+
+
+@router.get(
+    "/{task_id}/calls/{tool_call_id}/database-payload",
+    response_model=McpDatabaseToolPayloadDetail,
+    response_model_exclude_none=True,
+)
+def get_database_tool_payload(
+    task_id: int,
+    tool_call_id: int,
+    request: Request,
+    response: Response,
+) -> McpDatabaseToolPayloadDetail:
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    try:
+        return _service(request).get_database_payload(
+            task_id=task_id,
+            tool_call_id=tool_call_id,
         )
     except McpTraceServiceError as exc:
         raise _bad_request(str(exc)) from exc

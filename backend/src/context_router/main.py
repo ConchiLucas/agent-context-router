@@ -31,6 +31,11 @@ from context_router.repositories.database_call_repository import (
     InMemoryDatabaseCallRepository,
     PostgresDatabaseCallRepository,
 )
+from context_router.repositories.database_tool_payload_repository import (
+    DatabaseToolPayloadStore,
+    InMemoryDatabaseToolPayloadRepository,
+    PostgresDatabaseToolPayloadRepository,
+)
 from context_router.repositories.document_read_repository import (
     DocumentReadStore,
     PostgresDocumentReadRepository,
@@ -51,6 +56,7 @@ from context_router.services.context_preparation import ContextPreparationServic
 from context_router.services.database_access import DatabaseAccessService
 from context_router.services.database_catalog import DatabaseCatalogService
 from context_router.services.database_query import DatabaseQueryService
+from context_router.services.database_tool_payload import DatabaseToolPayloadService
 from context_router.services.mcp_integration import McpIntegrationService
 from context_router.services.mcp_trace import McpTraceService
 from context_router.services.project_registry import ProjectRegistry, ProjectRegistryError
@@ -66,6 +72,7 @@ def create_app(
     data_source_repository: DataSourceStore | None = None,
     database_call_repository: DatabaseCallStore | None = None,
     mcp_tool_call_repository: McpToolCallStore | None = None,
+    database_payload_repository: DatabaseToolPayloadStore | None = None,
     connector_registry: ConnectorRegistry | None = None,
     connector_manager: ConnectorManager | None = None,
 ) -> FastAPI:
@@ -96,6 +103,11 @@ def create_app(
         PostgresMcpToolCallRepository(resolved_settings.database_url)
         if resolved_settings.database_url
         else InMemoryMcpToolCallRepository()
+    )
+    resolved_database_payload_repository = database_payload_repository or (
+        PostgresDatabaseToolPayloadRepository(resolved_settings.database_url)
+        if resolved_settings.database_url
+        else InMemoryDatabaseToolPayloadRepository()
     )
     resolved_connector_registry = connector_registry or _create_connector_registry()
     resolved_connector_manager = connector_manager or ConnectorManager(
@@ -135,12 +147,22 @@ def create_app(
         resolved_task_repository,
         resolved_read_repository,
     )
+    database_payload_service = DatabaseToolPayloadService(
+        resolved_database_payload_repository,
+        capture_enabled=resolved_settings.database_payload_capture_enabled,
+        request_max_bytes=resolved_settings.database_payload_request_bytes,
+        response_max_bytes=resolved_settings.database_payload_response_bytes,
+        hard_max_bytes=resolved_settings.database_payload_hard_max_bytes,
+        ttl_days=resolved_settings.database_payload_ttl_days,
+        cleanup_interval_seconds=resolved_settings.database_payload_cleanup_interval_seconds,
+    )
     mcp_trace_service = McpTraceService(
         tool_call_repository=resolved_mcp_tool_call_repository,
         task_repository=resolved_task_repository,
         document_read_repository=resolved_read_repository,
         database_call_repository=resolved_database_call_repository,
         registry=registry,
+        database_payload_service=database_payload_service,
     )
     mcp_integration_service = McpIntegrationService(resolved_settings, registry)
     mcp_server = create_context_router_mcp(
@@ -148,7 +170,8 @@ def create_app(
         document_read_service,
         database_catalog_service,
         database_query_service,
-        mcp_trace_service,
+        trace_service=mcp_trace_service,
+        database_payload_service=database_payload_service,
     )
     mcp_app = mcp_server.streamable_http_app()
 
@@ -181,6 +204,8 @@ def create_app(
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         try:
+            mcp_trace_service.reconcile_interrupted_calls()
+            database_payload_service.reconcile_startup()
             async with mcp_server.session_manager.run():
                 yield
         finally:
@@ -206,6 +231,8 @@ def create_app(
     app.state.database_catalog_service = database_catalog_service
     app.state.database_query_service = database_query_service
     app.state.mcp_tool_call_repository = resolved_mcp_tool_call_repository
+    app.state.database_payload_repository = resolved_database_payload_repository
+    app.state.database_payload_service = database_payload_service
     app.state.mcp_trace_service = mcp_trace_service
     app.add_middleware(
         CORSMiddleware,

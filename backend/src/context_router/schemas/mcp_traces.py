@@ -7,8 +7,24 @@ from pydantic import BaseModel, Field
 
 from context_router.schemas.context import ContextReadHistoryItem
 
-McpTraceSource = Literal["server", "gateway", "reported", "legacy"]
+McpTraceSource = Literal["server", "legacy"]
 McpTraceStatus = Literal["running", "ok", "error", "cancelled"]
+McpTraceCompleteness = Literal["complete", "running", "partial"]
+McpDatabasePayloadStatus = Literal[
+    "pending",
+    "ok",
+    "error",
+    "cancelled",
+    "interrupted",
+    "capture_failed",
+    "expired",
+]
+McpDatabasePayloadUnavailableReason = Literal[
+    "capture_disabled",
+    "not_captured",
+    "expired",
+    "capture_failed",
+]
 
 
 class McpTraceSummary(BaseModel):
@@ -23,6 +39,8 @@ class McpTraceSummary(BaseModel):
     error_count: int
     server_names: list[str] = Field(default_factory=list)
     last_activity_at: datetime
+    trace_status: McpTraceCompleteness = "complete"
+    warnings: list[str] = Field(default_factory=list)
 
 
 class McpTraceDocumentReadArtifact(BaseModel):
@@ -65,7 +83,29 @@ class McpTraceCall(BaseModel):
     result_summary: dict[str, object] | None = None
     error_code: str | None = None
     artifacts: list[McpTraceArtifact] = Field(default_factory=list)
+    database_payload_available: bool = False
+    database_payload_status: McpDatabasePayloadStatus | None = None
+    database_payload_reason: McpDatabasePayloadUnavailableReason | None = None
 
 
 class McpTraceDetail(McpTraceSummary):
     calls: list[McpTraceCall] = Field(default_factory=list)
+
+
+class McpDatabaseToolPayloadDetail(BaseModel):
+    task_id: int
+    tool_call_id: int
+    tool_name: Literal["search_database_objects", "execute_database_query"]
+    available: bool
+    reason: McpDatabasePayloadUnavailableReason | None = None
+    status: McpDatabasePayloadStatus | None = None
+    request_payload: dict[str, object] | None = None
+    response_payload: dict[str, object] | None = None
+    request_bytes: int | None = None
+    response_bytes: int | None = None
+    request_truncated: bool = False
+    response_truncated: bool = False
+    capture_error_code: str | None = None
+    expires_at: datetime | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None

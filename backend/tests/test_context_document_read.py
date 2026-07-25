@@ -1,12 +1,14 @@
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from context_router.config import Settings
 from context_router.repositories.document_read_repository import DocumentReadItemWrite
 from context_router.repositories.task_repository import TaskRecord
 from context_router.schemas.context import ContextDocumentReadRequest
 from context_router.services.context_document_read import ContextDocumentReadService
-from context_router.services.project_registry import ProjectRegistry
+from context_router.services.project_registry import ProjectRegistry, ProjectRegistryError
 
 
 class FakeTaskRepository:
@@ -66,6 +68,7 @@ title: 入口
     snapshot = registry.get_snapshot(project.id)
     task = TaskRecord(
         id=44,
+        project_id=project.id,
         project_key=snapshot.project_key,
         project_name=project.name,
         task="排查启动问题",
@@ -123,3 +126,39 @@ def test_invalid_document_is_recorded_without_blocking_valid_item(tmp_path: Path
     repository = service._read_repository  # noqa: SLF001
     _, writes = repository.created[0]  # type: ignore[attr-defined]
     assert [(item.position, item.status) for item in writes] == [(1, "error"), (2, "ok")]
+
+
+def test_read_resolves_stable_project_id_after_agents_path_changes(tmp_path: Path) -> None:
+    service, registry, project_id = build_service(tmp_path)
+    old_project_key = service._task_repository.task.project_key  # type: ignore[attr-defined]  # noqa: SLF001
+    moved_root = tmp_path / "moved" / "AGENTS.md"
+    moved_child = tmp_path / "moved" / "docs" / "first.md"
+    moved_child.parent.mkdir(parents=True)
+    moved_root.write_text(
+        """
+## 下级文档
+
+| 功能说明 | 相对路径 |
+| --- | --- |
+| 第一份 | `./docs/first.md` |
+""".strip(),
+        encoding="utf-8",
+    )
+    moved_child.write_text("# 移动后的文档", encoding="utf-8")
+    registry.update_project(
+        project_id,
+        name="测试项目",
+        project_type="公司项目",
+        agents_path=str(moved_root),
+    )
+
+    with pytest.raises(ProjectRegistryError, match="任务绑定的项目不存在"):
+        registry.get_snapshot_by_project_key(old_project_key)
+
+    moved_document_id = registry.get_tree(project_id).children[0].id
+    result = service.read(
+        task_id=44,
+        requests=[ContextDocumentReadRequest(document_id=moved_document_id)],
+    )
+
+    assert result.documents[0].content == "# 移动后的文档"

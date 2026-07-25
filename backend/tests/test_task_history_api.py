@@ -17,10 +17,12 @@ from context_router.repositories.task_repository import TaskListRecord, TaskReco
 
 class FakeTaskStore:
     def __init__(self) -> None:
+        self.project_id = ""
         self.project_key = ""
         self.created_at = datetime.now(UTC)
 
-    def create_task(self, *, project_key: str, **_: object) -> int:
+    def create_task(self, *, project_id: str, project_key: str, **_: object) -> int:
+        self.project_id = project_id
         self.project_key = project_key
         return 12
 
@@ -28,6 +30,7 @@ class FakeTaskStore:
         assert task_id == 12
         return TaskRecord(
             id=12,
+            project_id=self.project_id,
             project_key=self.project_key,
             project_name="测试项目",
             task="排查登录问题",
@@ -40,16 +43,19 @@ class FakeTaskStore:
         self,
         project_key: str,
         *,
+        project_id: str | None = None,
         limit: int = 30,
         include_system: bool = False,
     ) -> list[TaskListRecord]:
         assert project_key == self.project_key
+        assert project_id == self.project_id
         assert limit == 30
         assert include_system is False
         task = self.get_task(12)
         return [
             TaskListRecord(
                 id=task.id,
+                project_id=task.project_id,
                 project_key=task.project_key,
                 project_name=task.project_name,
                 task=task.task,

@@ -18,7 +18,16 @@ from context_router.services.project_registry import (
 
 
 class ContextPreparationError(ValueError):
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        task_id: int | None = None,
+        code: str = "context_preparation_failed",
+    ) -> None:
+        super().__init__(message)
+        self.task_id = task_id
+        self.code = code
 
 
 class ContextPreparationService:
@@ -89,6 +98,7 @@ class ContextPreparationService:
     ) -> PrepareTaskContextResult:
         try:
             task_id = self._task_repository.create_task(
+                project_id=project.id,
                 project_key=project.project_key,
                 project_name=project.name,
                 task=task,
@@ -98,25 +108,33 @@ class ContextPreparationService:
         except TaskRepositoryError as exc:
             raise ContextPreparationError(str(exc)) from exc
 
-        databases = []
-        warnings: list[str] | None = None
-        if self._database_access_service is not None:
-            try:
-                databases = self._database_access_service.list_prepared_databases(project.id)
-            except DatabaseAccessError:
-                warnings = ["项目数据库摘要暂时不可用；文档上下文不受影响"]
+        try:
+            databases = []
+            warnings: list[str] | None = None
+            if self._database_access_service is not None:
+                try:
+                    databases = self._database_access_service.list_prepared_databases(project.id)
+                except DatabaseAccessError:
+                    warnings = ["项目数据库摘要暂时不可用；文档上下文不受影响"]
 
-        return PrepareTaskContextResult(
-            task_id=task_id,
-            project=PreparedProject(
-                project_id=project.id,
-                name=project.name,
-                node_count=len(project.cache.documents),
-            ),
-            documents=self._context_node(project.cache.root, project.cache),
-            databases=databases,
-            warnings=warnings,
-        )
+            return PrepareTaskContextResult(
+                task_id=task_id,
+                project=PreparedProject(
+                    project_id=project.id,
+                    name=project.name,
+                    node_count=len(project.cache.documents),
+                ),
+                documents=self._context_node(project.cache.root, project.cache),
+                databases=databases,
+                warnings=warnings,
+            )
+        except Exception as exc:
+            if isinstance(exc, ContextPreparationError) and exc.task_id is not None:
+                raise
+            raise ContextPreparationError(
+                "任务上下文准备失败",
+                task_id=task_id,
+            ) from exc
 
     def _context_node(
         self,

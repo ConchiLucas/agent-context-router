@@ -11,12 +11,23 @@
 
 ## 记录
 
+### 2026-07-25
+
+- 项目卡片“查看调用记录”恢复为独立的文档调用历史全屏弹窗，任务列表只返回实际产生文档 read call 的任务；链路管理解除项目入口耦合，只保留调用树和调用列表，不再加载完整文档树或 Markdown。
+- 新增 migration `20260725_0011` 与 `mcp_database_tool_payloads`：仅为 `search_database_objects`、`execute_database_query` 保存有界请求和最终 MCP 响应，默认请求/响应各 1 MB、硬上限 4 MB、保留 7 天，并在启动及运行期间 best-effort 清理。
+- Trace 主详情增加数据库 payload 可用状态，新增按 task_id/tool_call_id 校验归属的 no-store 详情接口；前端数据库节点增加懒加载全屏详情弹窗，支持请求/响应 Tab、SQL/JSON、复制、截断与历史未采集/过期/采集失败状态。
+- 文档工具继续只保存脱敏摘要和读取 artifact，不保存 Markdown 正文或完整出入参；数据库 payload 采集失败不会影响原 MCP 调用。
+
 ### 2026-07-24
 
 - 新增 migration `20260724_0009` 和 `mcp_tool_calls` 通用链路表；文档读取、数据库调用增加可空唯一 `tool_call_id`，既有历史按时间恢复为 `legacy` 调用。
 - FastMCP 四个固定工具接入统一调用观测，记录 Server、工具名、状态、起止时间、耗时、稳定错误码及脱敏摘要；prepare 成功后关联新 task，后续调用在执行前生成运行中节点，观测失败不影响业务调用。
 - 新增统一 MCP Trace 列表和详情 API，服务端返回稳定 sequence 与文档/数据库 artifacts，保留旧任务历史接口兼容。
-- 前端增加“链路管理”一级导航，提供任务搜索和 Agent/MCP Server/状态筛选，以及链路图、调用列表、文档树和脱敏调用详情；复用文档树、Markdown 弹窗与批量文档横排交互。
+- 前端增加“链路管理”一级导航，提供任务搜索、Agent、四个内部工具和状态筛选，以及调用树、调用列表、文档树和脱敏调用详情；复用文档树、Markdown 弹窗与批量文档横排交互。
+- 明确链路产品边界：只记录进入 Context Router `/mcp` 的四个内部工具调用，不连接、代理或聚合外部 MCP，不接收外部调用上报，也不规划跨 Server Trace。
+- 新增 migration `20260724_0010`，为 task 保存稳定、无外键的 project_id 快照并按旧 project_key 回填历史；read 和数据库授权优先按稳定 ID 解析，项目删除或同路径重建不会串链。
+- 后端启动时恢复遗留 running 调用为 `error/server_restarted`；Trace API 增加 `complete / running / partial` 及 warning code，缺 prepare 或没有内部调用的普通 task 也作为 partial 可见，前端以“完整 / 运行中 / 可能不完整”呈现链路可见性。
+- 后续三个 MCP 工具的 task_id 改为严格整数，拒绝字符串与布尔值；链路 best-effort 写入、完成和恢复统一隔离非预期 Exception，确保观测异常不改变工具业务结果。
 
 ### 2026-07-22
 

@@ -38,12 +38,6 @@ function NavIcon({ kind }: { kind: Section }) {
 
 export function AppShell() {
   const [section, setSection] = useState<Section>("projects");
-  const [traceProjectId, setTraceProjectId] = useState<string | null>(null);
-
-  function openProjectTraces(projectId: string) {
-    setTraceProjectId(projectId);
-    setSection("traces");
-  }
 
   return (
     <div className="app-shell">
@@ -75,10 +69,7 @@ export function AppShell() {
           <button
             type="button"
             data-active={section === "traces"}
-            onClick={() => {
-              setTraceProjectId(null);
-              setSection("traces");
-            }}
+            onClick={() => setSection("traces")}
           >
             <NavIcon kind="traces" />
             <span>链路管理</span>
@@ -87,13 +78,9 @@ export function AppShell() {
         <p className="app-sidebar-note">连接信息仅保存在本机服务中</p>
       </aside>
       <main className="app-content">
-        {section === "projects" ? (
-          <ProjectDashboard onOpenTraces={openProjectTraces} />
-        ) : null}
+        {section === "projects" ? <ProjectDashboard /> : null}
         {section === "data-sources" ? <DataSourceDashboard /> : null}
-        {section === "traces" ? (
-          <TraceExplorer projectId={traceProjectId ?? undefined} />
-        ) : null}
+        {section === "traces" ? <TraceExplorer /> : null}
       </main>
     </div>
   );

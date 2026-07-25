@@ -425,6 +425,16 @@ class ProjectRegistry:
                     return self._snapshot(project)
         raise ProjectRegistryError("任务绑定的项目不存在")
 
+    def get_snapshot_for_task(
+        self,
+        *,
+        project_id: str | None,
+        project_key: str,
+    ) -> ProjectSnapshot:
+        if project_id is not None:
+            return self.get_snapshot(project_id)
+        return self.get_snapshot_by_project_key(project_key)
+
     def get_document(self, project_id: str, document_id: str) -> DocumentDetail:
         with self._lock:
             project = self._projects.get(project_id)

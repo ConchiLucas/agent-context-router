@@ -28,7 +28,10 @@
 - MySQL、MariaDB、PostgreSQL、ClickHouse 当前实现发现、对象搜索和有界只读查询；SQL Server、SQLite、Oracle 仅保留配置管理。
 - SQL 安全策略必须 fail-closed：只允许单条、可解析、限定当前数据库/Schema 的只读语句；不能把客户端 LIMIT 当作唯一边界，仍需服务端行数、字节数、超时和数据库侧只读限制。
 - Connector 延迟创建且生命周期只归 `ConnectorManager`；数据源配置版本变化或删除时必须失效旧连接，应用退出时统一关闭。
-- 数据库调用历史只保存客观元数据和 SQL SHA-256，不保存完整 SQL、参数或结果集。
+- `mcp_database_calls` 审计历史只保存客观元数据和 SQL SHA-256；两个数据库 MCP 工具另以独立、可过期的有界 JSON 快照保存实际请求和最终 MCP 响应，主 Trace 接口不内联这些大字段。
 - Context Router 四个 MCP 工具在统一分发入口记录到 `mcp_tool_calls`；任务内顺序由 PostgreSQL 调用 ID 生成，文档/数据库专属明细通过 `tool_call_id` 关联，观测失败不得改变工具业务结果。
-- 当前链路管理的自动观测范围仅限 Context Router MCP。其他 MCP Server 只有在未来经过 Gateway 或显式传播 Trace 上下文时才能进入同一任务链路。
+- 链路管理只记录 Codex、Antigravity 等客户端实际发送到 Context Router `/mcp` 的四个内部工具调用；不连接、代理、聚合或接收其他 MCP Server 的调用上报，也不建设跨 Server Trace。
+- 项目卡片“查看调用记录”只列出实际读取过文档的任务，并保留文档树、读取列表和 Markdown 查看；全局链路管理与之独立，只提供调用树和调用列表。
+- 完整出入参采集默认关闭；显式启用后只对白名单数据库工具 `search_database_objects`、`execute_database_query` 采集，并通过 no-store 详情 API 懒加载；prepare/read 不建立完整 payload 快照。
+- task 使用无项目外键的稳定 project_id 快照隔离历史链路；后端启动会收敛遗留 running 调用，Trace API 与页面明确区分完整、运行中和可能不完整。
 - 本地服务默认只绑定回环地址；真实 ClickHouse 测试使用根 Compose 的 `integration` profile 和固定镜像版本。

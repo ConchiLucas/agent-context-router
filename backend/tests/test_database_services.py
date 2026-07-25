@@ -32,7 +32,8 @@ from context_router.services.project_registry import ProjectRegistry
 
 
 class FakeTaskRepository:
-    def __init__(self, project_key: str) -> None:
+    def __init__(self, project_id: str, project_key: str) -> None:
+        self.project_id = project_id
         self.project_key = project_key
 
     def create_task(self, **values: object) -> int:
@@ -43,6 +44,7 @@ class FakeTaskRepository:
             raise AssertionError("unexpected task")
         return TaskRecord(
             id=task_id,
+            project_id=self.project_id,
             project_key=self.project_key,
             project_name="Analytics",
             task="inspect analytics",
@@ -124,7 +126,7 @@ def build_services(tmp_path: Path):
     project_registry = ProjectRegistry(settings)
     project = project_registry.add_project(name="Analytics", agents_path=str(root))
     snapshot = project_registry.get_snapshot(project.id)
-    task_repository = FakeTaskRepository(snapshot.project_key)
+    task_repository = FakeTaskRepository(project.id, snapshot.project_key)
     repository = InMemoryDataSourceRepository()
     now = datetime.now(UTC)
     repository.create_data_source(
@@ -249,6 +251,33 @@ def test_prepare_lists_database_without_opening_remote_connection(tmp_path: Path
     assert result.databases[0].capabilities == ["search_objects", "execute_query"]
     assert created == []
     assert manager.cached_connector_count == 0
+
+
+def test_database_access_resolves_stable_project_id_after_agents_path_changes(
+    tmp_path: Path,
+) -> None:
+    (
+        _,
+        project_registry,
+        project,
+        _,
+        access,
+        *_,
+    ) = build_services(tmp_path)
+    moved_root = tmp_path / "moved-analytics" / "AGENTS.md"
+    moved_root.parent.mkdir(parents=True)
+    moved_root.write_text("# Moved Analytics", encoding="utf-8")
+    project_registry.update_project(
+        project.id,
+        name=project.name,
+        project_type=project.project_type,
+        agents_path=str(moved_root),
+    )
+
+    resolved = access.resolve(task_id=41, mcp_alias="analytics")
+
+    assert resolved.database.project_id == project.id
+    assert resolved.database.mcp_alias == "analytics"
 
 
 def test_search_and_query_are_project_scoped_bounded_and_recorded(tmp_path: Path) -> None:

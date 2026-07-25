@@ -7,7 +7,12 @@ import {
   buildTraceGraphRows,
   documentsForTraceCall,
   filterMcpTraces,
+  internalTraceCalls,
+  isInternalMcpToolName,
   sortTraceCalls,
+  statusQueryForTraceFilter,
+  traceCompletenessLabel,
+  traceWarningMessages,
 } from "./mcp-traces";
 import type { McpTraceSummary, McpTraceToolCall } from "./types";
 
@@ -30,12 +35,81 @@ test("builds the trace list query for project-scoped navigation", () => {
     buildMcpTraceListPath({
       projectId: "project/with space",
       agentName: "codex",
+      toolName: "read_context_document",
       status: "error",
+      keyword: "订单 路由",
       limit: 500,
     }),
-    "/api/mcp-traces?project_id=project%2Fwith+space&agent_name=codex&status=error&limit=100",
+    "/api/mcp-traces?project_id=project%2Fwith+space&agent_name=codex&tool_name=read_context_document&status=error&keyword=%E8%AE%A2%E5%8D%95+%E8%B7%AF%E7%94%B1&limit=100",
   );
   assert.equal(buildMcpTraceListPath(), "/api/mcp-traces");
+});
+
+test("maps task health filters to supported server-side call status queries", () => {
+  assert.equal(statusQueryForTraceFilter("running"), "running");
+  assert.equal(statusQueryForTraceFilter("error"), "error");
+  assert.equal(statusQueryForTraceFilter("ok"), undefined);
+  assert.equal(statusQueryForTraceFilter("all"), undefined);
+});
+
+test("maps trace completeness and warning codes to concise Chinese messages", () => {
+  assert.equal(traceCompletenessLabel("complete"), "完整");
+  assert.equal(traceCompletenessLabel("running"), "运行中");
+  assert.equal(traceCompletenessLabel("partial"), "可能不完整");
+  assert.deepEqual(
+    traceWarningMessages([
+      "running_calls",
+      "legacy_calls",
+      "unlinked_document_reads",
+      "unlinked_database_calls",
+      "missing_prepare_call",
+    ]),
+    [
+      "仍有内部工具调用正在运行，链路内容会继续更新。",
+      "包含升级前的历史记录，部分调用细节可能缺失。",
+      "部分文档读取记录无法关联到对应工具调用。",
+      "部分数据库访问记录无法关联到对应工具调用。",
+      "缺少 prepare_task_context 调用记录，任务起点可能未完整落库。",
+    ],
+  );
+  assert.deepEqual(
+    traceWarningMessages(["future_warning", "future_warning"]),
+    ["链路包含无法完整还原的记录。"],
+  );
+});
+
+test("keeps only the four Context Router server and legacy tools", () => {
+  const calls = [
+    call({
+      tool_call_id: 1,
+      sequence: 1,
+      tool_name: "prepare_task_context",
+    }),
+    call({
+      tool_call_id: 2,
+      sequence: 2,
+      tool_name: "execute_database_query",
+      source: "legacy",
+    }),
+    call({
+      tool_call_id: 3,
+      sequence: 3,
+      tool_name: "read_context_document",
+      source: "gateway",
+    }),
+    call({
+      tool_call_id: 4,
+      sequence: 4,
+      tool_name: "github__search_code",
+    }),
+  ];
+
+  assert.equal(isInternalMcpToolName("search_database_objects"), true);
+  assert.equal(isInternalMcpToolName("github__search_code"), false);
+  assert.deepEqual(
+    internalTraceCalls(calls).map((item) => item.tool_call_id),
+    [1, 2],
+  );
 });
 
 test("orders calls by server sequence and uses id as a deterministic tie breaker", () => {
@@ -115,7 +189,7 @@ test("keeps documents from one read call together and marks tree by tool sequenc
   ]);
 });
 
-test("filters task summaries across task metadata and health", () => {
+test("filters task summaries by aggregate task health", () => {
   const traces: McpTraceSummary[] = [
     {
       task_id: 11,
@@ -129,6 +203,8 @@ test("filters task summaries across task metadata and health", () => {
       error_count: 0,
       server_names: ["context-router"],
       last_activity_at: "2026-07-24T01:02:00Z",
+      trace_status: "complete",
+      warnings: [],
     },
     {
       task_id: 12,
@@ -142,25 +218,27 @@ test("filters task summaries across task metadata and health", () => {
       error_count: 1,
       server_names: ["context-router", "github"],
       last_activity_at: "2026-07-24T02:03:00Z",
+      trace_status: "partial",
+      warnings: ["legacy_calls"],
     },
   ];
 
   assert.deepEqual(
     filterMcpTraces(traces, {
-      query: "库存",
-      agentName: "",
-      serverName: "github",
       status: "error",
     }).map((trace) => trace.task_id),
     [12],
   );
   assert.deepEqual(
     filterMcpTraces(traces, {
-      query: "项目 A",
-      agentName: "codex",
-      serverName: "",
       status: "ok",
     }).map((trace) => trace.task_id),
     [11],
+  );
+  assert.deepEqual(
+    filterMcpTraces(traces, {
+      status: "running",
+    }).map((trace) => trace.task_id),
+    [11, 12],
   );
 });

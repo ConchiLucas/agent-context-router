@@ -9,13 +9,22 @@
 
 ## 记录
 
+### 2026-07-25
+
+- 项目卡片“查看调用记录”继续作为文档使用历史入口，只展示实际产生 read call 的任务，并保留完整文档树、读取列表和 Markdown 查看；全局链路管理是独立的内部 MCP 可观察性页面，只展示调用树与调用列表，不复用文档浏览功能。
+- 通用 `mcp_tool_calls` 和 `mcp_database_calls` 继续保持轻量。只有 `search_database_objects`、`execute_database_query` 把实际请求和最终、有界 MCP 响应写入独立的一对一 payload 表，prepare/read 不建立完整 payload。
+- payload 采集默认关闭，需要通过环境变量显式启用；启用后请求/响应各 1 MB、硬上限 4 MB、保留 7 天。主 Trace API 只返回可用状态，完整内容经 task/call 归属校验的 no-store API 按需读取。到期删除 JSON 但保留状态，采集/清理失败不得改变工具业务结果。
+- 当前产品仍是回环地址上的本机单用户服务。数据库 payload 可能包含 SQL 条件值和业务数据，因此详情页明确提示敏感性；如果未来扩大网络边界，必须先增加鉴权、授权、审计访问和更严格的字段脱敏。
+
 ### 2026-07-24
 
 - MCP 调用记录采用“`mcp_tasks` 作为任务 Trace 根、`mcp_tool_calls` 作为工具 Span”的统一模型。四个固定工具在 FastMCP 分发入口统一观测，文档读取和数据库调用表继续保存专属明细，通过 `tool_call_id` 关联，避免把不同工具字段堆进通用表。
 - 工具调用顺序由 PostgreSQL Identity 生成，API 在同一 task 下按调用 ID 返回稳定 sequence；不让客户端传序号，不使用 `MAX(sequence)+1` 或任务锁。普通顺序不等于因果，只有显式 `parent_tool_call_id` 才形成父子关系。
 - 链路观测属于 best-effort 辅助能力：调用开始或完成记录失败时写日志，但不得改变 MCP 工具的业务返回。调用摘要使用工具白名单，不保存 Markdown 正文、完整 SQL、查询结果或连接凭据。
-- Context Router Server 只能自动观测发给自己的调用。客户端直连其他 MCP Server 的请求不能通过当前服务推断；未来跨 Server 链路应通过 MCP Gateway 或客户端注入 Trace ID 实现，显式客户端上报只能作为低可信兼容来源。
+- Context Router Server 只观测发给自身 `/mcp` 的四个内部工具调用。客户端直连其他 MCP Server 的请求不属于本产品链路范围；不实现外部 MCP 连接或代理、客户端调用上报、工具聚合以及跨 Server Trace。
 - 历史 read/database 记录在 migration 中映射为 `legacy` 工具调用，保留旧页面数据但不伪造缺失的 prepare 节点、真实开始时间或因果关系。
+- task 使用创建时的稳定 `project_id` 作为不可变项目快照，仅 migration 前已失去项目、无法回填 ID 的旧记录兼容 `project_key`。该字段刻意不设置 `document_projects` 外键，确保新任务和已回填任务在项目删除后不丢历史身份、同路径新项目不会继承，也允许默认项目在持久化降级时创建任务。
+- 单进程启动时将遗留的内部 `running` 调用收敛为 `error/server_restarted`。Trace API 以 prepare 是否存在、运行中、legacy、重启中断和无法关联的文档/数据库明细计算 `complete / running / partial`；普通无内部调用 task 仍可显示为 partial，系统预览/接入测试任务排除。这是可见性提示，不改变工具结果。
 
 ### 2026-07-22
 

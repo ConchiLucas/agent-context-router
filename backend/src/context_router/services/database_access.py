@@ -76,7 +76,10 @@ class DatabaseAccessService:
         except TaskRepositoryError as exc:
             raise DatabaseAccessError("task_not_found", "任务不存在，请重新 prepare") from exc
         try:
-            project = self._registry.get_snapshot_by_project_key(task.project_key)
+            project = self._registry.get_snapshot_for_task(
+                project_id=task.project_id,
+                project_key=task.project_key,
+            )
         except ProjectRegistryError as exc:
             raise DatabaseAccessError(
                 "project_unavailable",

@@ -9,32 +9,30 @@ import {
 } from "react";
 import type { CSSProperties } from "react";
 
-import { DocumentTree } from "@/components/document-tree";
-import { MarkdownViewer } from "@/components/markdown-viewer";
+import { DatabaseCallPayloadModal } from "@/components/database-call-payload-modal";
 import {
-  getDocumentDetail,
   getMcpTrace,
-  getProjectTree,
   listMcpTraces,
 } from "@/lib/api";
+import { isDatabaseMcpCall } from "@/lib/database-call-payload";
 import {
-  buildTraceDocumentCallNumbers,
+  INTERNAL_MCP_TOOL_NAMES,
   buildTraceGraphRows,
-  documentsForTraceCall,
-  filterMcpTraces,
+  internalTraceCalls,
   sortTraceCalls,
+  traceCompletenessLabel,
+  traceWarningMessages,
 } from "@/lib/mcp-traces";
 import type {
-  DocumentDetail,
-  DocumentTreeNode,
+  InternalMcpToolName,
   McpTraceArtifact,
+  McpTraceCompleteness,
   McpTraceDetail,
   McpTraceSummary,
   McpTraceToolCall,
 } from "@/lib/types";
 
-type TraceView = "graph" | "list" | "tree";
-type TraceStatusFilter = "all" | "ok" | "error";
+type TraceView = "graph" | "list";
 
 function formattedTime(value: string | null | undefined): string {
   if (!value) return "—";
@@ -45,8 +43,6 @@ function formattedTime(value: string | null | undefined): string {
 }
 
 function sourceLabel(source: McpTraceToolCall["source"]): string {
-  if (source === "gateway") return "Gateway 观测";
-  if (source === "reported") return "客户端上报";
   if (source === "legacy") return "历史记录";
   return "服务端观测";
 }
@@ -102,6 +98,39 @@ function TraceStatus({
   );
 }
 
+function TraceCompletenessBadge({
+  status,
+}: {
+  status: McpTraceCompleteness;
+}) {
+  return (
+    <span className="trace-completeness-badge" data-status={status}>
+      {traceCompletenessLabel(status)}
+    </span>
+  );
+}
+
+function TraceCompletenessNotice({
+  status,
+  warnings,
+}: {
+  status: McpTraceCompleteness;
+  warnings: string[];
+}) {
+  if (status === "complete") return null;
+  const messages = traceWarningMessages(warnings);
+  const fallback =
+    status === "running"
+      ? "仍有内部工具调用正在运行，链路内容会继续更新。"
+      : "这条链路的部分历史信息可能无法完整还原。";
+
+  return (
+    <p className="trace-completeness-notice" data-status={status}>
+      {messages.length > 0 ? messages.join(" ") : fallback}
+    </p>
+  );
+}
+
 interface TraceCallCardProps {
   call: McpTraceToolCall;
   active: boolean;
@@ -120,9 +149,9 @@ function TraceCallCard({ call, active, onSelect }: TraceCallCardProps) {
       <span className="trace-sequence" aria-label={`第 ${call.sequence} 次调用`}>
         {call.sequence}
       </span>
-      <span className="trace-call-kicker">
-        {call.server_name} · {sourceLabel(call.source)}
-      </span>
+      {call.source === "legacy" ? (
+        <span className="trace-call-kicker">历史记录</span>
+      ) : null}
       <strong>{call.tool_name}</strong>
       <span className="trace-call-meta">
         <TraceStatus status={call.status} />
@@ -140,58 +169,23 @@ function TraceCallCard({ call, active, onSelect }: TraceCallCardProps) {
   );
 }
 
-interface TraceDocumentCardsProps {
-  call: McpTraceToolCall;
-  canOpenDocuments: boolean;
-  onOpenDocument: (documentId: string) => void;
-}
-
-function TraceDocumentCards({
-  call,
-  canOpenDocuments,
-  onOpenDocument,
-}: TraceDocumentCardsProps) {
-  const documents = documentsForTraceCall(call);
-  if (documents.length === 0) return null;
-
-  return (
-    <div className="trace-document-row">
-      {documents.map((document) => (
-        <button
-          type="button"
-          className="trace-document-card"
-          data-status={document.status}
-          disabled={document.status === "error" || !canOpenDocuments}
-          onClick={(event) => {
-            event.stopPropagation();
-            onOpenDocument(document.document_id);
-          }}
-          key={`${call.tool_call_id}-${document.position}-${document.document_id}`}
-        >
-          <span>文档 {document.position}</span>
-          <strong>{document.path ?? document.document_id}</strong>
-          {document.section ? <small>章节：{document.section}</small> : null}
-          {document.status === "error" ? (
-            <code>{document.error_code ?? "读取失败"}</code>
-          ) : null}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 interface TraceCallDetailProps {
   call: McpTraceToolCall | null;
   onClose: () => void;
+  onOpenDatabasePayload: (call: McpTraceToolCall) => void;
 }
 
-function TraceCallDetail({ call, onClose }: TraceCallDetailProps) {
+function TraceCallDetail({
+  call,
+  onClose,
+  onOpenDatabasePayload,
+}: TraceCallDetailProps) {
   if (!call) {
     return (
       <aside className="trace-call-detail trace-call-detail-empty">
         <span className="section-eyebrow">CALL DETAIL</span>
         <h3>选择一个调用节点</h3>
-        <p>这里会展示服务端保存的脱敏参数摘要、结果摘要和关联产物。</p>
+        <p>这里会展示调用状态、耗时和关联产物；数据库工具可按需查看出入参详情。</p>
       </aside>
     );
   }
@@ -214,8 +208,8 @@ function TraceCallDetail({ call, onClose }: TraceCallDetailProps) {
       </header>
       <dl className="trace-detail-facts">
         <div>
-          <dt>服务</dt>
-          <dd>{call.server_name}</dd>
+          <dt>调用范围</dt>
+          <dd>Context Router /mcp</dd>
         </div>
         <div>
           <dt>采集方式</dt>
@@ -238,13 +232,13 @@ function TraceCallDetail({ call, onClose }: TraceCallDetailProps) {
           <dd>{call.parent_tool_call_id ?? "任务根节点"}</dd>
         </div>
       </dl>
-      {call.request_summary ? (
+      {isDatabaseMcpCall(call) && call.request_summary ? (
         <section className="trace-json-summary">
           <h4>参数摘要</h4>
           <pre>{JSON.stringify(call.request_summary, null, 2)}</pre>
         </section>
       ) : null}
-      {call.result_summary ? (
+      {isDatabaseMcpCall(call) && call.result_summary ? (
         <section className="trace-json-summary">
           <h4>结果摘要</h4>
           <pre>{JSON.stringify(call.result_summary, null, 2)}</pre>
@@ -265,86 +259,59 @@ function TraceCallDetail({ call, onClose }: TraceCallDetailProps) {
       {call.error_code ? (
         <p className="trace-detail-error">错误码：{call.error_code}</p>
       ) : null}
+      {isDatabaseMcpCall(call) ? (
+        <section className="trace-database-payload-action">
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => onOpenDatabasePayload(call)}
+          >
+            查看出入参详情
+          </button>
+          {call.database_payload_available === false ? (
+            <small>
+              {call.database_payload_reason === "capture_disabled"
+                ? "详情采集未启用"
+                : call.database_payload_status === "expired"
+                ? "详情已过期"
+                : call.database_payload_status === "capture_failed"
+                  ? "详情采集失败"
+              : "历史调用可能没有详情"}
+            </small>
+          ) : null}
+        </section>
+      ) : null}
     </aside>
   );
 }
 
-interface TraceDocumentDrawerProps {
-  detail: DocumentDetail | null;
-  loading: boolean;
-  onClose: () => void;
-}
-
-function TraceDocumentDrawer({
-  detail,
-  loading,
-  onClose,
-}: TraceDocumentDrawerProps) {
-  return (
-    <aside
-      className="document-detail-drawer trace-document-drawer"
-      role="dialog"
-      aria-label="Markdown 文档详情"
-    >
-      <button
-        type="button"
-        className="close-button detail-close-button"
-        aria-label="关闭文档详情"
-        onClick={onClose}
-      >
-        ×
-      </button>
-      {loading ? (
-        <p className="empty-message">正在读取内存中的文档内容…</p>
-      ) : detail ? (
-        <>
-          <header className="document-detail-header">
-            <div>
-              <span className="file-chip">Markdown</span>
-              <h2>{detail.description}</h2>
-            </div>
-            <code>{detail.relative_path ?? detail.path}</code>
-          </header>
-          {detail.error ? <div className="error-banner">{detail.error}</div> : null}
-          <MarkdownViewer content={detail.content} />
-        </>
-      ) : (
-        <p className="empty-message">文档内容读取失败。</p>
-      )}
-    </aside>
-  );
-}
-
-interface TraceExplorerProps {
-  projectId?: string;
-}
-
-export function TraceExplorer({ projectId }: TraceExplorerProps) {
+export function TraceExplorer() {
   const [traces, setTraces] = useState<McpTraceSummary[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
   const [trace, setTrace] = useState<McpTraceDetail | null>(null);
   const [view, setView] = useState<TraceView>("graph");
   const [selectedCallId, setSelectedCallId] = useState<number | null>(null);
   const [query, setQuery] = useState("");
-  const [agentName, setAgentName] = useState("");
-  const [serverName, setServerName] = useState("");
-  const [status, setStatus] = useState<TraceStatusFilter>("all");
-  const [tree, setTree] = useState<DocumentTreeNode | null>(null);
-  const [treeError, setTreeError] = useState<string | null>(null);
-  const [documentDetail, setDocumentDetail] = useState<DocumentDetail | null>(
-    null,
-  );
-  const [documentLoading, setDocumentLoading] = useState(false);
+  const [searchKeyword, setSearchKeyword] = useState("");
+  const [toolName, setToolName] = useState<InternalMcpToolName | "">("");
+  const [databasePayloadCall, setDatabasePayloadCall] =
+    useState<McpTraceToolCall | null>(null);
   const [loadingList, setLoadingList] = useState(true);
   const [loadingTrace, setLoadingTrace] = useState(false);
-  const [traceRefreshToken, setTraceRefreshToken] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const documentRequestIdRef = useRef(0);
+  const traceListRequestIdRef = useRef(0);
 
   const loadTraces = useCallback(async () => {
+    const requestId = traceListRequestIdRef.current + 1;
+    traceListRequestIdRef.current = requestId;
     setLoadingList(true);
     try {
-      const nextTraces = await listMcpTraces({ projectId, limit: 100 });
+      const nextTraces = await listMcpTraces({
+        toolName: toolName || undefined,
+        keyword: searchKeyword || undefined,
+        limit: 100,
+      });
+      if (traceListRequestIdRef.current !== requestId) return;
       setTraces(nextTraces);
       setSelectedTaskId((current) => {
         if (current && nextTraces.some((item) => item.task_id === current)) {
@@ -354,15 +321,25 @@ export function TraceExplorer({ projectId }: TraceExplorerProps) {
       });
       setError(null);
     } catch (requestError) {
+      if (traceListRequestIdRef.current !== requestId) return;
       setError((requestError as Error).message);
     } finally {
-      setLoadingList(false);
+      if (traceListRequestIdRef.current === requestId) {
+        setLoadingList(false);
+      }
     }
-  }, [projectId]);
+  }, [searchKeyword, toolName]);
 
   useEffect(() => {
     void loadTraces();
   }, [loadTraces]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setSearchKeyword(query.trim());
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [query]);
 
   useEffect(() => {
     if (selectedTaskId === null) {
@@ -373,13 +350,15 @@ export function TraceExplorer({ projectId }: TraceExplorerProps) {
     let active = true;
     setLoadingTrace(true);
     setSelectedCallId(null);
-    setDocumentDetail(null);
-    documentRequestIdRef.current += 1;
+    setDatabasePayloadCall(null);
     void getMcpTrace(selectedTaskId)
       .then((nextTrace) => {
         if (!active) return;
         setTrace(nextTrace);
-        setSelectedCallId(nextTrace.calls[0]?.tool_call_id ?? null);
+        const firstInternalCall = sortTraceCalls(
+          internalTraceCalls(nextTrace.calls),
+        )[0];
+        setSelectedCallId(firstInternalCall?.tool_call_id ?? null);
         setError(null);
       })
       .catch((requestError: Error) => {
@@ -394,208 +373,77 @@ export function TraceExplorer({ projectId }: TraceExplorerProps) {
     return () => {
       active = false;
     };
-  }, [selectedTaskId, traceRefreshToken]);
-
-  useEffect(() => {
-    if (!trace?.project_id) {
-      setTree(null);
-      setTreeError(null);
-      return;
-    }
-
-    let active = true;
-    setTree(null);
-    setTreeError(null);
-    void getProjectTree(trace.project_id)
-      .then((nextTree) => {
-        if (active) setTree(nextTree);
-      })
-      .catch((requestError: Error) => {
-        if (active) setTreeError(requestError.message);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [trace?.project_id]);
-
-  const agentNames = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          traces
-            .map((item) => item.agent_name)
-            .filter((item): item is string => Boolean(item)),
-        ),
-      ).sort((left, right) => left.localeCompare(right)),
-    [traces],
-  );
-  const serverNames = useMemo(
-    () =>
-      Array.from(new Set(traces.flatMap((item) => item.server_names))).sort(
-        (left, right) => left.localeCompare(right),
-      ),
-    [traces],
-  );
-  const filteredTraces = useMemo(
-    () =>
-      filterMcpTraces(traces, {
-        query,
-        agentName,
-        serverName,
-        status,
-      }),
-    [agentName, query, serverName, status, traces],
-  );
+  }, [selectedTaskId]);
 
   useEffect(() => {
     if (loadingList) return;
     if (
       selectedTaskId !== null &&
-      filteredTraces.some((item) => item.task_id === selectedTaskId)
+      traces.some((item) => item.task_id === selectedTaskId)
     ) {
       return;
     }
-    setSelectedTaskId(filteredTraces[0]?.task_id ?? null);
-  }, [filteredTraces, loadingList, selectedTaskId]);
+    setSelectedTaskId(traces[0]?.task_id ?? null);
+  }, [loadingList, selectedTaskId, traces]);
 
   const sortedCalls = useMemo(
-    () => sortTraceCalls(trace?.calls ?? []),
+    () => sortTraceCalls(internalTraceCalls(trace?.calls ?? [])),
     [trace],
   );
   const graphRows = useMemo(
-    () => buildTraceGraphRows(trace?.calls ?? []),
-    [trace],
-  );
-  const documentCallNumbers = useMemo(
-    () => buildTraceDocumentCallNumbers(trace?.calls ?? []),
-    [trace],
+    () => buildTraceGraphRows(sortedCalls),
+    [sortedCalls],
   );
   const selectedCall =
     sortedCalls.find((call) => call.tool_call_id === selectedCallId) ?? null;
-
-  async function openDocument(documentId: string) {
-    if (!trace?.project_id) return;
-    const requestId = documentRequestIdRef.current + 1;
-    documentRequestIdRef.current = requestId;
-    setDocumentLoading(true);
-    setDocumentDetail(null);
-    try {
-      const nextDetail = await getDocumentDetail(trace.project_id, documentId);
-      if (documentRequestIdRef.current !== requestId) return;
-      setDocumentDetail(nextDetail);
-      setError(null);
-    } catch (requestError) {
-      if (documentRequestIdRef.current !== requestId) return;
-      setError((requestError as Error).message);
-    } finally {
-      if (documentRequestIdRef.current === requestId) {
-        setDocumentLoading(false);
-      }
-    }
-  }
-
-  function closeDocument() {
-    documentRequestIdRef.current += 1;
-    setDocumentDetail(null);
-    setDocumentLoading(false);
-  }
-
-  async function refreshTraces() {
-    await loadTraces();
-    setTraceRefreshToken((current) => current + 1);
-  }
+  const displayedErrorCount = sortedCalls.filter(
+    (call) => call.status === "error",
+  ).length;
 
   return (
     <section className="trace-explorer">
-      <header className="trace-page-toolbar">
-        <div>
-          <span className="section-eyebrow">MCP TRACES</span>
-          <h1>链路管理</h1>
-          <p>
-            查看 Codex、Antigravity 等客户端经过 Context Router 的 MCP 调用。
-            {projectId ? " 当前仅显示所选项目。" : ""}
-          </p>
-        </div>
-        <button
-          type="button"
-          className="secondary-button"
-          disabled={loadingList}
-          onClick={() => void refreshTraces()}
-        >
-          {loadingList ? "正在刷新…" : "刷新链路"}
-        </button>
-      </header>
-
       {error ? <div className="error-banner">{error}</div> : null}
 
       <div className="trace-workspace">
         <aside className="trace-task-panel" aria-label="MCP 任务列表">
           <div className="trace-filter-panel">
-            <label className="trace-search">
-              <span>搜索任务</span>
-              <input
-                type="search"
-                value={query}
-                placeholder="任务、项目、目录或任务号"
-                onChange={(event) => setQuery(event.target.value)}
-              />
-            </label>
             <div className="trace-filter-row">
-              <label>
-                <span>Agent</span>
-                <select
-                  value={agentName}
-                  onChange={(event) => setAgentName(event.target.value)}
-                >
-                  <option value="">全部</option>
-                  {agentNames.map((name) => (
-                    <option value={name} key={name}>{name}</option>
-                  ))}
-                </select>
+              <label className="trace-search">
+                <span>搜索任务</span>
+                <input
+                  type="search"
+                  value={query}
+                  placeholder="任务、项目或目录"
+                  onChange={(event) => setQuery(event.target.value)}
+                />
               </label>
               <label>
-                <span>MCP 服务</span>
+                <span>内部工具</span>
                 <select
-                  value={serverName}
-                  onChange={(event) => setServerName(event.target.value)}
+                  value={toolName}
+                  onChange={(event) =>
+                    setToolName(event.target.value as InternalMcpToolName | "")
+                  }
                 >
                   <option value="">全部</option>
-                  {serverNames.map((name) => (
-                    <option value={name} key={name}>{name}</option>
+                  {INTERNAL_MCP_TOOL_NAMES.map((name) => (
+                    <option value={name} key={name}>
+                      {name}
+                    </option>
                   ))}
                 </select>
               </label>
             </div>
-            <div className="trace-status-filters" aria-label="任务状态筛选">
-              {([
-                ["all", "全部"],
-                ["ok", "无错误"],
-                ["error", "有错误"],
-              ] as const).map(([value, label]) => (
-                <button
-                  type="button"
-                  data-active={status === value}
-                  onClick={() => setStatus(value)}
-                  key={value}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <p className="trace-filter-scope">
-              当前筛选仅作用于已加载的最近 100 条任务链路。
-            </p>
           </div>
 
           <div className="trace-task-list">
             {loadingList ? (
               <p className="trace-panel-message">正在读取任务链路…</p>
             ) : null}
-            {!loadingList && filteredTraces.length === 0 ? (
+            {!loadingList && traces.length === 0 ? (
               <p className="trace-panel-message">没有符合当前条件的任务。</p>
             ) : null}
-            {filteredTraces.map((item) => (
+            {traces.map((item) => (
               <button
                 type="button"
                 className="trace-task-item"
@@ -605,12 +453,15 @@ export function TraceExplorer({ projectId }: TraceExplorerProps) {
               >
                 <span className="trace-task-heading">
                   <strong>#{item.task_id} · {item.agent_name ?? "未标记 Agent"}</strong>
-                  {item.error_count > 0 ? (
-                    <span className="trace-error-count">{item.error_count}</span>
-                  ) : null}
+                  <span className="trace-task-indicators">
+                    <TraceCompletenessBadge status={item.trace_status} />
+                    {item.error_count > 0 ? (
+                      <span className="trace-error-count">{item.error_count}</span>
+                    ) : null}
+                  </span>
                 </span>
                 <span className="trace-task-title">{item.task}</span>
-                <small>{item.project_name} · {item.call_count} 次调用</small>
+                <small>{item.project_name} · {item.call_count} 次内部调用</small>
                 <small>{formattedTime(item.last_activity_at)}</small>
               </button>
             ))}
@@ -633,28 +484,36 @@ export function TraceExplorer({ projectId }: TraceExplorerProps) {
             <>
               <header className="trace-summary">
                 <div>
-                  <span className="file-chip">任务 #{trace.task_id}</span>
+                  <div className="trace-summary-chips">
+                    <span className="file-chip">任务 #{trace.task_id}</span>
+                    <TraceCompletenessBadge status={trace.trace_status} />
+                  </div>
                   <h2>{trace.task}</h2>
                   <p>
-                    {trace.project_name} · {trace.agent_name ?? "未标记 Agent"} · {trace.call_count} 次调用
-                    {trace.error_count > 0 ? ` · ${trace.error_count} 个错误` : ""}
+                    {trace.project_name} · {trace.agent_name ?? "未标记 Agent"} · {sortedCalls.length} 次内部调用
+                    {displayedErrorCount > 0
+                      ? ` · ${displayedErrorCount} 个错误`
+                      : ""}
                   </p>
+                  <small className="trace-order-note">
+                    普通节点只表示服务端执行顺序；仅带“来自调用”标记的分支表示显式父子关系。
+                  </small>
+                  <TraceCompletenessNotice
+                    status={trace.trace_status}
+                    warnings={trace.warnings}
+                  />
                 </div>
-                <div className="trace-view-tabs" role="tablist" aria-label="链路视图">
+                <div className="trace-view-tabs" role="tablist" aria-label="内部调用视图">
                   {([
-                    ["graph", "链路图"],
+                    ["graph", "调用树"],
                     ["list", "调用列表"],
-                    ["tree", "文档树"],
                   ] as const).map(([value, label]) => (
                     <button
                       type="button"
                       role="tab"
                       aria-selected={view === value}
                       data-active={view === value}
-                      onClick={() => {
-                        setView(value);
-                        closeDocument();
-                      }}
+                      onClick={() => setView(value)}
                       key={value}
                     >
                       {label}
@@ -695,13 +554,6 @@ export function TraceExplorer({ projectId }: TraceExplorerProps) {
                             active={selectedCallId === row.call.tool_call_id}
                             onSelect={() => setSelectedCallId(row.call.tool_call_id)}
                           />
-                          <TraceDocumentCards
-                            call={row.call}
-                            canOpenDocuments={Boolean(trace.project_id)}
-                            onOpenDocument={(documentId) =>
-                              void openDocument(documentId)
-                            }
-                          />
                         </div>
                       ))}
                     </div>
@@ -711,7 +563,7 @@ export function TraceExplorer({ projectId }: TraceExplorerProps) {
                     <div className="trace-call-list">
                       <div className="trace-call-list-header" aria-hidden="true">
                         <span>顺序</span>
-                        <span>服务 / 工具</span>
+                        <span>内部工具</span>
                         <span>状态</span>
                         <span>耗时</span>
                         <span>开始时间</span>
@@ -726,7 +578,9 @@ export function TraceExplorer({ projectId }: TraceExplorerProps) {
                         >
                           <strong>#{call.sequence}</strong>
                           <span>
-                            <small>{call.server_name}</small>
+                            {call.source === "legacy" ? (
+                              <small>历史记录</small>
+                            ) : null}
                             <code>{call.tool_name}</code>
                           </span>
                           <TraceStatus status={call.status} />
@@ -737,42 +591,12 @@ export function TraceExplorer({ projectId }: TraceExplorerProps) {
                     </div>
                   ) : null}
 
-                  {view === "tree" ? (
-                    <div className="trace-tree-canvas">
-                      {!trace.project_id ? (
-                        <div className="trace-main-empty">
-                          <h3>这个历史任务没有可用的项目标识</h3>
-                          <p>仍可在链路图中查看文档读取产物。</p>
-                        </div>
-                      ) : null}
-                      {trace.project_id && treeError ? (
-                        <div className="trace-main-empty">
-                          <h3>当前项目文档树不可用</h3>
-                          <p>{treeError}</p>
-                        </div>
-                      ) : null}
-                      {trace.project_id && !tree && !treeError ? (
-                        <p className="trace-panel-message">正在读取项目文档树…</p>
-                      ) : null}
-                      {tree ? (
-                        <div className="tree-content">
-                          <ul className="document-tree">
-                            <DocumentTree
-                              node={tree}
-                              selectedId={documentDetail?.id ?? null}
-                              callNumbersByDocumentId={documentCallNumbers}
-                              onSelect={(node) => void openDocument(node.id)}
-                            />
-                          </ul>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
                 </section>
 
                 <TraceCallDetail
                   call={selectedCall}
                   onClose={() => setSelectedCallId(null)}
+                  onOpenDatabasePayload={setDatabasePayloadCall}
                 />
               </div>
             </>
@@ -780,11 +604,11 @@ export function TraceExplorer({ projectId }: TraceExplorerProps) {
         </main>
       </div>
 
-      {documentLoading || documentDetail ? (
-        <TraceDocumentDrawer
-          detail={documentDetail}
-          loading={documentLoading}
-          onClose={closeDocument}
+      {trace && databasePayloadCall ? (
+        <DatabaseCallPayloadModal
+          taskId={trace.task_id}
+          call={databasePayloadCall}
+          onClose={() => setDatabasePayloadCall(null)}
         />
       ) : null}
     </section>
