@@ -9,9 +9,7 @@ import type {
   McpDatabaseToolPayload,
   McpTraceSummary,
   PrepareTaskContextResult,
-  ProjectCreate,
   ProjectSummary,
-  ProjectUpdate,
   DataSourceDatabasePayload,
   DataSourceConnectionTestResult,
   DataSourceEngineCapability,
@@ -23,6 +21,12 @@ import type {
   ProjectDatabaseLinkPayload,
   ProjectDatabaseLinkSummary,
   ProjectDataSourceOptions,
+  WorkspaceCreate,
+  WorkspaceDataSourceSummary,
+  WorkspaceProjectCreate,
+  WorkspaceProjectUpdate,
+  WorkspaceSummary,
+  WorkspaceUpdate,
 } from "@/lib/types";
 import {
   buildMcpTraceListPath,
@@ -53,73 +57,140 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-export function listProjects(): Promise<ProjectSummary[]> {
-  return request<ProjectSummary[]>("/api/projects");
+export function listWorkspaces(): Promise<WorkspaceSummary[]> {
+  return request<WorkspaceSummary[]>("/api/workspaces");
 }
 
-export function createProject(payload: ProjectCreate): Promise<ProjectSummary> {
-  return request<ProjectSummary>("/api/projects", {
+export function getWorkspace(workspaceId: string): Promise<WorkspaceSummary> {
+  return request<WorkspaceSummary>(`/api/workspaces/${workspaceId}`);
+}
+
+export function createWorkspace(
+  payload: WorkspaceCreate,
+): Promise<WorkspaceSummary> {
+  return request<WorkspaceSummary>("/api/workspaces", {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
-export function refreshProject(projectId: string): Promise<ProjectSummary> {
-  return request<ProjectSummary>(`/api/projects/${projectId}/refresh`, {
-    method: "POST",
-  });
-}
-
-export function updateProject(
-  projectId: string,
-  payload: ProjectUpdate,
-): Promise<ProjectSummary> {
-  return request<ProjectSummary>(`/api/projects/${projectId}`, {
+export function updateWorkspace(
+  workspaceId: string,
+  payload: WorkspaceUpdate,
+): Promise<WorkspaceSummary> {
+  return request<WorkspaceSummary>(`/api/workspaces/${workspaceId}`, {
     method: "PUT",
     body: JSON.stringify(payload),
   });
 }
 
-export function setProjectEnabled(
-  projectId: string,
+export function setWorkspaceEnabled(
+  workspaceId: string,
   enabled: boolean,
-): Promise<ProjectSummary> {
-  return request<ProjectSummary>(`/api/projects/${projectId}/enabled`, {
+): Promise<WorkspaceSummary> {
+  return request<WorkspaceSummary>(`/api/workspaces/${workspaceId}/enabled`, {
     method: "PATCH",
     body: JSON.stringify({ enabled }),
   });
 }
 
-export async function deleteProject(projectId: string): Promise<void> {
-  await request<unknown>(`/api/projects/${projectId}`, { method: "DELETE" });
+export async function deleteWorkspace(workspaceId: string): Promise<void> {
+  await request<unknown>(`/api/workspaces/${workspaceId}`, {
+    method: "DELETE",
+  });
 }
 
-export function getProjectTree(projectId: string): Promise<DocumentTreeNode> {
-  return request<DocumentTreeNode>(`/api/projects/${projectId}/tree`);
-}
-
-export function getDocumentDetail(
-  projectId: string,
-  documentId: string,
-): Promise<DocumentDetail> {
-  return request<DocumentDetail>(
-    `/api/projects/${projectId}/documents/${documentId}`,
+export function listWorkspaceProjects(
+  workspaceId: string,
+): Promise<ProjectSummary[]> {
+  return request<ProjectSummary[]>(
+    `/api/workspaces/${workspaceId}/projects`,
   );
 }
 
-export function prepareProjectPreview(
+export function createWorkspaceProject(
+  workspaceId: string,
+  payload: WorkspaceProjectCreate,
+): Promise<ProjectSummary> {
+  return request<ProjectSummary>(
+    `/api/workspaces/${workspaceId}/projects`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function updateWorkspaceProject(
+  workspaceId: string,
   projectId: string,
+  payload: WorkspaceProjectUpdate,
+): Promise<ProjectSummary> {
+  return request<ProjectSummary>(
+    `/api/workspaces/${workspaceId}/projects/${projectId}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function deleteWorkspaceProject(
+  workspaceId: string,
+  projectId: string,
+): Promise<void> {
+  await request<unknown>(
+    `/api/workspaces/${workspaceId}/projects/${projectId}`,
+    { method: "DELETE" },
+  );
+}
+
+export function getWorkspaceDataSourceSummary(
+  workspaceId: string,
+): Promise<WorkspaceDataSourceSummary> {
+  return request<WorkspaceDataSourceSummary>(
+    `/api/workspaces/${workspaceId}/data-source-summary`,
+  );
+}
+
+export function refreshWorkspaceMapping(
+  workspaceId: string,
+): Promise<WorkspaceSummary> {
+  return request<WorkspaceSummary>(`/api/workspaces/${workspaceId}/refresh`, {
+    method: "POST",
+  });
+}
+
+export function getWorkspaceTree(
+  workspaceId: string,
+): Promise<DocumentTreeNode> {
+  return request<DocumentTreeNode>(`/api/workspaces/${workspaceId}/tree`);
+}
+
+export function getWorkspaceDocumentDetail(
+  workspaceId: string,
+  documentId: string,
+): Promise<DocumentDetail> {
+  return request<DocumentDetail>(
+    `/api/workspaces/${workspaceId}/documents/${encodeURIComponent(documentId)}`,
+  );
+}
+
+export function prepareWorkspacePreview(
+  workspaceId: string,
 ): Promise<PrepareTaskContextResult> {
   return request<PrepareTaskContextResult>(
-    `/api/projects/${projectId}/prepare-preview`,
+    `/api/workspaces/${workspaceId}/prepare-preview`,
     { method: "POST" },
   );
 }
 
-export function listProjectTasks(
-  projectId: string,
+export function listWorkspaceTasks(
+  workspaceId: string,
 ): Promise<ContextTaskSummary[]> {
-  return request<ContextTaskSummary[]>(`/api/projects/${projectId}/tasks`);
+  return request<ContextTaskSummary[]>(
+    `/api/workspaces/${workspaceId}/tasks`,
+  );
 }
 
 export function getTaskDocumentReads(
@@ -159,11 +230,11 @@ export function getMcpIntegration(): Promise<McpIntegrationInfo> {
 }
 
 export function runMcpIntegrationTest(
-  projectId: string,
+  workspaceId: string,
 ): Promise<McpIntegrationTestResult> {
   return request<McpIntegrationTestResult>("/api/mcp/integration/tests", {
     method: "POST",
-    body: JSON.stringify({ project_id: projectId }),
+    body: JSON.stringify({ workspace_id: workspaceId }),
   });
 }
 

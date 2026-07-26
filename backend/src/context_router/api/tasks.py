@@ -45,21 +45,21 @@ def _bad_request(message: str) -> HTTPException:
 
 
 @router.get(
-    "/projects/{project_id}/tasks",
+    "/workspaces/{workspace_id}/tasks",
     response_model=list[ContextTaskSummary],
     response_model_exclude_none=True,
 )
-def list_project_tasks(
-    project_id: str,
+def list_workspace_tasks(
+    workspace_id: str,
     request: Request,
     limit: int = Query(default=30, ge=1, le=100),
     include_system: bool = Query(default=False),
 ) -> list[ContextTaskSummary]:
     try:
-        project = _registry(request).get_snapshot(project_id)
-        records = _task_repository(request).list_tasks(
-            project.project_key,
-            project_id=project.id,
+        workspace_key = _registry(request).get_workspace_key(workspace_id)
+        records = _task_repository(request).list_workspace_tasks(
+            workspace_id,
+            workspace_key=workspace_key,
             limit=limit,
             include_system=include_system,
         )
@@ -74,6 +74,12 @@ def list_project_tasks(
             agent_name=record.agent_name,
             created_at=record.created_at,
             read_call_count=record.read_call_count,
+            scope=record.scope,
+            workspace_id=record.workspace_id,
+            workspace_name=record.workspace_name,
+            active_project_id=record.active_project_id,
+            active_project_name=record.active_project_name,
+            active_project_kind=record.active_project_kind,
         )
         for record in records
     ]
@@ -100,6 +106,12 @@ def get_task_document_reads(task_id: int, request: Request) -> ContextTaskReadHi
         task_id=task.id,
         task=task.task,
         project_name=task.project_name,
+        workspace_id=task.workspace_id,
+        workspace_name=task.workspace_name,
+        active_project_id=task.active_project_id,
+        active_project_name=task.active_project_name,
+        active_project_kind=task.active_project_kind,
+        scope=task.scope,
         agent_name=task.agent_name,
         created_at=task.created_at,
         calls=[

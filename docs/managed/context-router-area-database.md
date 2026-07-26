@@ -15,4 +15,4 @@
 | `context-router-database-info` | 数据库连接、表和 migration 信息 |
 | `context-router-area-startup` | Docker Compose 和 migration 执行方式 |
 
-控制面 PostgreSQL 与项目授权的业务数据库不同。文档搜索分块和 index_version 位于控制面 PostgreSQL，可从磁盘 Markdown 重建；业务数据库 MCP 路由固定为 `task_id -> project -> mcp_alias -> 当前 Link/Database/Source 状态与策略`，连接参数不会进入 MCP 参数或调用历史。
+控制面 PostgreSQL 与 Project 授权的业务数据库不同。文档搜索分块和 index_version 位于控制面 PostgreSQL，可从磁盘 Markdown 重建；业务数据库 MCP 路由固定为 `task_id -> Workspace -> Workspace 唯一 mcp_alias -> 当前 Project Link/Database/Source 状态与策略`，连接参数不会进入 MCP 参数或调用历史。

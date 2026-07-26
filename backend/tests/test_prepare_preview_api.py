@@ -8,11 +8,13 @@ from context_router.repositories.project_repository import InMemoryProjectReposi
 
 
 class FakeTaskRepository:
-    def create_task(self, **_: object) -> int:
+    def create_workspace_task(self, **_: object) -> int:
         return 77
 
 
-def test_project_preview_returns_prepare_result(tmp_path: Path) -> None:
+def test_workspace_preview_returns_prepare_result_and_project_preview_is_removed(
+    tmp_path: Path,
+) -> None:
     root = tmp_path / "project" / "AGENTS.md"
     child = tmp_path / "project" / "docs" / "child.md"
     child.parent.mkdir(parents=True)
@@ -44,17 +46,28 @@ summary: 项目导航。
     )
 
     with TestClient(app) as client:
-        created = client.post(
-            "/api/projects",
-            json={"name": "测试项目", "agents_path": str(root)},
+        workspace = client.post(
+            "/api/workspaces",
+            json={"name": "测试工作空间", "root_path": str(root.parent)},
         )
-        assert created.status_code == 201
+        assert workspace.status_code == 201
+        project = client.post(
+            f"/api/workspaces/{workspace.json()['id']}/projects",
+            json={"name": "测试项目", "relative_path": "."},
+        )
+        assert project.status_code == 201
 
-        response = client.post(f"/api/projects/{created.json()['id']}/prepare-preview")
+        response = client.post(f"/api/workspaces/{workspace.json()['id']}/prepare-preview")
+        removed_project_preview = client.post(
+            f"/api/projects/{project.json()['id']}/prepare-preview"
+        )
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["task_id"] == 77
-    assert payload["documents"]["summary"] == "项目导航。"
-    assert "summary" not in payload["documents"]["children"][0]
+    assert payload["workspace"]["workspace_id"] == workspace.json()["id"]
+    project_root = payload["documents"]
+    assert project_root["summary"] == "项目导航。"
+    assert "summary" not in project_root["children"][0]
     assert "content" not in response.text
+    assert removed_project_preview.status_code == 404

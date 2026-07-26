@@ -24,6 +24,7 @@ _BACKEND_ROOT = Path(__file__).resolve().parents[1]
 _REVISION_0011 = "20260725_0011"
 _REVISION_0012 = "20260725_0012"
 _PROJECT_ID = "a" * 32
+_WORKSPACE_ID = "b" * 32
 _VERSION_A = "1" * 64
 _VERSION_B = "2" * 64
 
@@ -136,6 +137,36 @@ def test_in_memory_repository_supports_fuzzy_search_and_strict_version_isolation
         )
         == []
     )
+
+
+def test_in_memory_repository_indexes_workspace_documents_independently() -> None:
+    repository = InMemoryDocumentSearchRepository()
+    state = repository.replace_workspace_index(
+        workspace_id=_WORKSPACE_ID,
+        index_version=_VERSION_A,
+        index_format_version=1,
+        chunks=[
+            _chunk(
+                document_id="workspace-entry",
+                path="AGENTS.md",
+                title="工作空间索引",
+                body_text="workspace-only-index-needle",
+            )
+        ],
+    )
+
+    assert repository.get_workspace_index_state(_WORKSPACE_ID) == state
+    assert repository.get_index_state(_WORKSPACE_ID) is None
+    hits = repository.search_workspace(
+        workspace_id=_WORKSPACE_ID,
+        index_version=_VERSION_A,
+        query="workspace-only-index-needle",
+        limit=10,
+    )
+    assert [hit.document_id for hit in hits] == ["workspace-entry"]
+
+    repository.delete_workspace_index(_WORKSPACE_ID)
+    assert repository.get_workspace_index_state(_WORKSPACE_ID) is None
 
 
 @pytest.mark.parametrize(
@@ -264,12 +295,37 @@ def test_migration_and_postgres_repository_support_search_and_atomic_replacement
                 """
             ).fetchall()
         }
+        workspace_index_names = {
+            str(row[0])
+            for row in connection.execute(
+                """
+                SELECT indexname
+                FROM pg_indexes
+                WHERE schemaname = current_schema()
+                  AND tablename = 'workspace_document_search_chunks'
+                """
+            ).fetchall()
+        }
         connection.execute(
             """
-            INSERT INTO document_projects (id, name, project_type, agents_path, enabled)
-            VALUES (%s, 'Search Project', '公司项目', '/search/AGENTS.md', true)
+            INSERT INTO workspaces
+                (id, name, workspace_type, root_path, enabled)
+            VALUES (%s, 'Search Workspace', '公司项目', '/search', true)
             """,
             (_PROJECT_ID,),
+        )
+        connection.execute(
+            """
+            INSERT INTO document_projects (
+                id, name, project_type, project_kind,
+                workspace_id, relative_path, agents_path
+            )
+            VALUES (
+                %s, 'Search Project', '公司项目', 'backend',
+                %s, '.', '/search/AGENTS.md'
+            )
+            """,
+            (_PROJECT_ID, _PROJECT_ID),
         )
     assert extension == ("pg_trgm",)
     assert {
@@ -277,8 +333,48 @@ def test_migration_and_postgres_repository_support_search_and_atomic_replacement
         "ix_document_search_chunks_search_text_trgm",
         "ix_document_search_chunks_project_version_document",
     }.issubset(index_names)
+    assert {
+        "ix_workspace_document_search_chunks_vector",
+        "ix_workspace_document_search_chunks_trgm",
+        "ix_workspace_document_search_chunks_scope",
+    }.issubset(workspace_index_names)
 
     repository = PostgresDocumentSearchRepository(database_url)
+    workspace_state = repository.replace_workspace_index(
+        workspace_id=_PROJECT_ID,
+        index_version=_VERSION_A,
+        index_format_version=1,
+        chunks=[
+            _chunk(
+                document_id="workspace-entry",
+                path="AGENTS.md",
+                title="工作空间索引",
+                body_text="postgres-workspace-index-needle",
+            )
+        ],
+    )
+    assert repository.get_workspace_index_state(_PROJECT_ID) == workspace_state
+    assert [
+        hit.document_id
+        for hit in repository.search_workspace(
+            workspace_id=_PROJECT_ID,
+            index_version=_VERSION_A,
+            query="postgres-workspace-index-needle",
+            limit=10,
+        )
+    ] == ["workspace-entry"]
+    repository.delete_workspace_index(_PROJECT_ID)
+    assert repository.get_workspace_index_state(_PROJECT_ID) is None
+    with psycopg.connect(database_url) as connection:
+        assert connection.execute(
+            """
+            SELECT COUNT(*)
+            FROM workspace_document_search_chunks
+            WHERE workspace_id = %s
+            """,
+            (_PROJECT_ID,),
+        ).fetchone() == (0,)
+
     state = repository.replace_project_index(
         project_id=_PROJECT_ID,
         index_version=_VERSION_A,

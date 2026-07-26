@@ -52,7 +52,7 @@ def test_mcp_integration_returns_client_configs_and_readiness(tmp_path: Path) ->
     ]
     assert payload["readiness"] == {
         "database_configured": True,
-        "project_count": 1,
+        "workspace_count": 1,
         "ready_for_full_test": True,
     }
     configs = {item["client"]: item["config"] for item in payload["clients"]}

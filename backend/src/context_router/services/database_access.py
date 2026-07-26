@@ -70,31 +70,60 @@ class DatabaseAccessService:
             )
         normalized_alias = mcp_alias.strip().casefold()
         if not normalized_alias:
-            raise DatabaseAccessError("database_not_found", "当前项目没有这个数据库别名")
+            raise DatabaseAccessError("database_not_found", "当前工作空间没有这个数据库别名")
         try:
             task = self._task_repository.get_task(task_id)
         except TaskRepositoryError as exc:
             raise DatabaseAccessError("task_not_found", "任务不存在，请重新 prepare") from exc
-        try:
-            project = self._registry.get_snapshot_for_task(
-                project_id=task.project_id,
-                project_key=task.project_key,
-            )
-        except ProjectRegistryError as exc:
-            raise DatabaseAccessError(
-                "project_unavailable",
-                "任务绑定的项目当前不可用，请重新 prepare",
-            ) from exc
-        try:
-            database = self._data_source_repository.get_project_database_by_alias(
-                project_id=project.id,
-                mcp_alias=normalized_alias,
-            )
-        except DataSourceRepositoryError as exc:
-            raise DatabaseAccessError(
-                "database_not_found",
-                "当前项目没有这个数据库别名",
-            ) from exc
+        if getattr(task, "scope", "project") == "workspace":
+            workspace_id = getattr(task, "workspace_id", None)
+            workspace_key = getattr(task, "workspace_key", None)
+            if not workspace_id:
+                raise DatabaseAccessError(
+                    "workspace_unavailable",
+                    "任务缺少工作空间快照，请重新 prepare",
+                )
+            try:
+                self._registry.get_workspace_snapshot_for_task(
+                    workspace_id=workspace_id,
+                    workspace_key=workspace_key,
+                )
+            except ProjectRegistryError as exc:
+                raise DatabaseAccessError(
+                    "workspace_unavailable",
+                    "任务绑定的工作空间当前不可用，请重新 prepare",
+                ) from exc
+            try:
+                database = self._data_source_repository.get_workspace_database_by_alias(
+                    workspace_id=workspace_id,
+                    mcp_alias=normalized_alias,
+                )
+            except DataSourceRepositoryError as exc:
+                raise DatabaseAccessError(
+                    "database_not_found",
+                    "当前工作空间没有这个数据库别名",
+                ) from exc
+        else:
+            try:
+                project = self._registry.get_snapshot_for_task(
+                    project_id=task.project_id,
+                    project_key=task.project_key,
+                )
+            except ProjectRegistryError as exc:
+                raise DatabaseAccessError(
+                    "project_unavailable",
+                    "任务绑定的项目当前不可用，请重新 prepare",
+                ) from exc
+            try:
+                database = self._data_source_repository.get_project_database_by_alias(
+                    project_id=project.id,
+                    mcp_alias=normalized_alias,
+                )
+            except DataSourceRepositoryError as exc:
+                raise DatabaseAccessError(
+                    "database_not_found",
+                    "当前项目没有这个数据库别名",
+                ) from exc
 
         self._ensure_available(database)
         try:
@@ -149,6 +178,23 @@ class DatabaseAccessService:
                 "项目数据库摘要暂时不可用",
             ) from exc
 
+        return self._prepare_database_records(records)
+
+    def list_prepared_workspace_databases(self, workspace_id: str) -> list[PreparedDatabase]:
+        if not self._settings.database_tools_enabled:
+            return []
+        try:
+            records = self._data_source_repository.list_workspace_databases_for_mcp(workspace_id)
+        except DataSourceRepositoryError as exc:
+            raise DatabaseAccessError(
+                "database_summary_unavailable",
+                "工作空间数据库摘要暂时不可用",
+            ) from exc
+        return self._prepare_database_records(records)
+
+    def _prepare_database_records(
+        self, records: list[ResolvedProjectDatabase]
+    ) -> list[PreparedDatabase]:
         prepared: list[PreparedDatabase] = []
         for record in records:
             if not self._is_available(record):
@@ -180,6 +226,9 @@ class DatabaseAccessService:
                     purpose=record.purpose,
                     readonly=True,
                     capabilities=names,
+                    project_id=record.project_id,
+                    project_name=record.project_name,
+                    project_kind=record.project_kind,
                 )
             )
         return prepared
@@ -189,13 +238,13 @@ class DatabaseAccessService:
         if not cls._is_available(database):
             raise DatabaseAccessError(
                 "database_not_available",
-                "这个项目数据库当前不可用于 MCP 只读查询",
+                "这个数据库当前不可用于 MCP 只读查询",
             )
 
     @staticmethod
     def _is_available(database: ResolvedProjectDatabase) -> bool:
         return bool(
-            database.project_enabled
+            database.workspace_enabled
             and database.link_enabled
             and database.readonly
             and database.source_enabled

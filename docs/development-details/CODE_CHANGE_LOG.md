@@ -11,6 +11,21 @@
 
 ## 记录
 
+### 2026-07-26
+
+- 新增 migration `20260726_0015` 和 Workspace 文档独立搜索状态/分块表。工作空间固定自动探测根 `AGENTS.md`：存在时作为真实聚合树根并参与 prepare/search/read，不存在时保持合成根；不新增 Workspace 路径配置字段，也不把根文档伪装成 frontend/backend Project。
+- Workspace 刷新同时临时构建根入口和全部 Project，成功后统一替换；根入口与 Project 重复映射时 Workspace 所有权优先，Project 之间继续按最深项目去重。旧 `scope='project'` task 仍只访问原 Project 文档。
+- 新增 migration `20260726_0013` 和 `workspaces` 表；`document_projects` 增加非空 `workspace_id`、`relative_path`、工作空间外键、工作空间内相对路径唯一约束和查询索引。旧项目按同 ID Workspace + 根项目 `.` 回填，保留项目 ID、数据库授权和全部调用历史。
+- 新增 migration `20260726_0014`。`document_projects` 增加 `frontend/backend` 的 `project_kind` 并删除 Project enabled；`project_databases` 增加 `workspace_id`，`mcp_alias` 唯一索引从 Project 提升到 Workspace；`mcp_tasks` 增加 `scope`、Workspace 快照和可选活动项目快照。
+- 0014 升级前的 task 保持 `scope='project'`，并按原项目回填 Workspace/活动项目字段；新 prepare 写入 `scope='workspace'`。read/search/database 根据 scope 选择 Workspace 新链路或 Project 兼容链路，旧历史不会扩大权限，也不会被同路径新项目接管。
+- `prepare_task_context` 工具名和参数保持不变，cwd 改为最长前缀匹配 Workspace；最深 Project 仅作为 `active_project`。返回值包含 Workspace、全部 Project 的类型/相对路径、聚合文档树，以及全部子项目当前有效且在 Workspace 内 alias 唯一的数据库摘要。
+- ProjectRegistry 新增 Workspace 聚合缓存：根 `AGENTS.md` 存在时使用真实入口，不存在时使用合成入口。文档树、文档详情、MCP JSON、调用记录和刷新均新增或切换到 `/api/workspaces/{id}` 路径；Workspace 刷新先构建根入口和全部子项目，任一文档构建失败时保留上一版完整映射。Project 只保留新增、编辑和删除，不再有启停、逐项目刷新或逐项目上下文 API。
+- 文档搜索对 Workspace task 查询根文档独立索引和各 Project 当前版本索引，再按 Workspace 优先、最深 Project 所有权去重；read 从 Workspace 聚合缓存读取；数据库访问按 `task_id -> workspace snapshot -> Workspace mcp_alias -> 所属项目关联` 解析。授权记录仍属于 Project，Workspace 数据源汇总不复制授权或策略。
+- 前端一级导航由项目管理改为工作空间管理；详情页改为“前端项目 / 后端项目 / 数据源汇总”三页签。刷新映射、调用记录、文档树、MCP JSON 和 MCP 接入移到 Workspace 工具栏，项目卡片只保留“编辑项目 / 管理数据源 / 删除项目”。
+- MCP 接入测试请求由 `project_id` 改为 `workspace_id`，真实执行 Workspace 匹配、prepare、search 和 read；接入信息的可匹配数量改为 Workspace 数量。
+
+以下更早日期保留当时已落地行为作为历史；其中 Project task、Project enabled、项目内 alias 和项目卡片上下文入口均已被本日 0014 与 Workspace UI 改造取代。
+
 ### 2026-07-25
 
 - 新增第五个固定 MCP 工具 `search_context_documents(task_id, query, limit)`：在 task 绑定项目内按路径、标题、概要、章节和正文检索，返回文档 ID、匹配章节、相关度和命中原因，完整正文继续由 `read_context_document` 按需读取。

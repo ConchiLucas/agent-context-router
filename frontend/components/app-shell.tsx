@@ -3,13 +3,13 @@
 import { useState } from "react";
 
 import { DataSourceDashboard } from "@/components/data-source-dashboard";
-import { ProjectDashboard } from "@/components/project-dashboard";
 import { TraceExplorer } from "@/components/trace-explorer";
+import { WorkspaceDashboard } from "@/components/workspace-dashboard";
 
-type Section = "projects" | "data-sources" | "traces";
+type Section = "workspaces" | "data-sources" | "traces";
 
 function NavIcon({ kind }: { kind: Section }) {
-  if (kind === "projects") {
+  if (kind === "workspaces") {
     return (
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M4 6.5h6l1.7 2H20v9.5H4z" />
@@ -37,7 +37,7 @@ function NavIcon({ kind }: { kind: Section }) {
 }
 
 export function AppShell() {
-  const [section, setSection] = useState<Section>("projects");
+  const [section, setSection] = useState<Section>("workspaces");
 
   return (
     <div className="app-shell">
@@ -52,11 +52,11 @@ export function AppShell() {
         <nav aria-label="主菜单">
           <button
             type="button"
-            data-active={section === "projects"}
-            onClick={() => setSection("projects")}
+            data-active={section === "workspaces"}
+            onClick={() => setSection("workspaces")}
           >
-            <NavIcon kind="projects" />
-            <span>项目管理</span>
+            <NavIcon kind="workspaces" />
+            <span>工作空间管理</span>
           </button>
           <button
             type="button"
@@ -78,7 +78,7 @@ export function AppShell() {
         <p className="app-sidebar-note">连接信息仅保存在本机服务中</p>
       </aside>
       <main className="app-content">
-        {section === "projects" ? <ProjectDashboard /> : null}
+        {section === "workspaces" ? <WorkspaceDashboard /> : null}
         {section === "data-sources" ? <DataSourceDashboard /> : null}
         {section === "traces" ? <TraceExplorer /> : null}
       </main>

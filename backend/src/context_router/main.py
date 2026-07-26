@@ -10,6 +10,7 @@ from context_router.api.mcp_integration import router as mcp_integration_router
 from context_router.api.mcp_traces import router as mcp_traces_router
 from context_router.api.projects import router as projects_router
 from context_router.api.tasks import router as tasks_router
+from context_router.api.workspaces import router as workspaces_router
 from context_router.config import Settings
 from context_router.database.connectors import (
     ClickHouseConnector,
@@ -55,6 +56,12 @@ from context_router.repositories.project_repository import (
     ProjectStore,
 )
 from context_router.repositories.task_repository import PostgresTaskRepository, TaskStore
+from context_router.repositories.workspace_repository import (
+    InMemoryWorkspaceRepository,
+    PostgresWorkspaceRepository,
+    WorkspaceRepositoryError,
+    WorkspaceStore,
+)
 from context_router.services.context_document_read import ContextDocumentReadService
 from context_router.services.context_document_search import ContextDocumentSearchService
 from context_router.services.context_preparation import ContextPreparationService
@@ -66,6 +73,7 @@ from context_router.services.document_search_index import DocumentSearchIndexer
 from context_router.services.mcp_integration import McpIntegrationService
 from context_router.services.mcp_trace import McpTraceService
 from context_router.services.project_registry import ProjectRegistry, ProjectRegistryError
+from context_router.services.workspace_management import WorkspaceManagementService
 
 logger = logging.getLogger(__name__)
 
@@ -82,13 +90,27 @@ def create_app(
     connector_registry: ConnectorRegistry | None = None,
     connector_manager: ConnectorManager | None = None,
     document_search_repository: DocumentSearchStore | None = None,
+    workspace_repository: WorkspaceStore | None = None,
 ) -> FastAPI:
     resolved_settings = settings or Settings()
-    resolved_project_repository = project_repository or (
-        PostgresProjectRepository(resolved_settings.database_url)
-        if resolved_settings.database_url
-        else InMemoryProjectRepository()
-    )
+    if workspace_repository is not None:
+        resolved_workspace_repository = workspace_repository
+    elif project_repository is not None and hasattr(
+        project_repository,
+        "workspace_repository",
+    ):
+        resolved_workspace_repository = project_repository.workspace_repository
+    elif resolved_settings.database_url:
+        resolved_workspace_repository = PostgresWorkspaceRepository(resolved_settings.database_url)
+    else:
+        resolved_workspace_repository = InMemoryWorkspaceRepository()
+
+    if project_repository is not None:
+        resolved_project_repository = project_repository
+    elif resolved_settings.database_url:
+        resolved_project_repository = PostgresProjectRepository(resolved_settings.database_url)
+    else:
+        resolved_project_repository = InMemoryProjectRepository(resolved_workspace_repository)
     resolved_document_search_repository = (
         document_search_repository
         or PostgresDocumentSearchRepository(resolved_settings.database_url)
@@ -104,7 +126,7 @@ def create_app(
     resolved_data_source_repository = data_source_repository or (
         PostgresDataSourceRepository(resolved_settings.database_url)
         if resolved_settings.database_url
-        else InMemoryDataSourceRepository()
+        else InMemoryDataSourceRepository(resolved_project_repository)
     )
     resolved_task_repository = task_repository or PostgresTaskRepository(
         resolved_settings.database_url
@@ -132,6 +154,13 @@ def create_app(
         resolved_connector_registry,
         max_cached_connectors=resolved_settings.database_max_cached_connectors,
         max_concurrency_per_source=resolved_settings.database_max_concurrency_per_source,
+    )
+    workspace_management_service = WorkspaceManagementService(
+        settings=resolved_settings,
+        workspace_repository=resolved_workspace_repository,
+        project_repository=resolved_project_repository,
+        project_registry=registry,
+        data_source_repository=resolved_data_source_repository,
     )
     database_access_service = DatabaseAccessService(
         settings=resolved_settings,
@@ -202,6 +231,11 @@ def create_app(
         registry.load_persisted_projects()
     except ProjectRegistryError as exc:
         logger.warning("Unable to restore persisted document projects: %s", exc)
+    try:
+        for workspace in resolved_workspace_repository.list_workspaces():
+            registry.register_workspace(workspace)
+    except (WorkspaceRepositoryError, ProjectRegistryError) as exc:
+        logger.warning("Unable to restore persisted workspaces: %s", exc)
 
     if (
         resolved_settings.default_project_name
@@ -247,6 +281,8 @@ def create_app(
     app.state.task_repository = resolved_task_repository
     app.state.document_read_repository = resolved_read_repository
     app.state.project_repository = resolved_project_repository
+    app.state.workspace_repository = resolved_workspace_repository
+    app.state.workspace_management_service = workspace_management_service
     app.state.mcp_integration_service = mcp_integration_service
     app.state.data_source_repository = resolved_data_source_repository
     app.state.database_call_repository = resolved_database_call_repository
@@ -266,6 +302,7 @@ def create_app(
         allow_headers=["*"],
     )
     app.include_router(projects_router, prefix=resolved_settings.api_prefix)
+    app.include_router(workspaces_router, prefix=resolved_settings.api_prefix)
     app.include_router(tasks_router, prefix=resolved_settings.api_prefix)
     app.include_router(mcp_integration_router, prefix=resolved_settings.api_prefix)
     app.include_router(data_sources_router, prefix=resolved_settings.api_prefix)

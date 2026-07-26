@@ -2,15 +2,15 @@
 
 ## 记录内容
 
-- task_id、task、cwd、project、agent_name 和创建时间。
+- task_id、task、cwd、Workspace、可选 active project、agent_name 和创建时间。
 - 每次 read 的 read_call_id 和创建时间。
 - 单次批量读取中每个文档的 position、document_id、相对路径、section、状态和错误码。
-- 已成功持久化的数据库对象搜索或只读查询记录，包括 operation、项目内数据库别名、Engine、对象/语句类型、状态、耗时、返回数量、结果字节数、截断和稳定错误码；授权解析前失败的请求可能没有数据库调用记录。
+- 已成功持久化的数据库对象搜索或只读查询记录，包括 operation、Workspace 内数据库别名、Project 归属、Engine、对象/语句类型、状态、耗时、返回数量、结果字节数、截断和稳定错误码；授权解析前失败的请求可能没有数据库调用记录。
 - 查询只记录 SQL SHA-256，用于区分客观调用，不保存完整 SQL、参数、Schema 搜索结果或查询结果集。
 
 ## 页面含义
 
-- 项目卡片“查看调用记录”可切换文档树和调用列表；调用列表按创建时间合并文档 read call 与数据库 call。
+- Workspace 顶部“查看调用记录”和“查看文档树”切换工作空间级视图；调用列表按创建时间合并文档 read call 与数据库 call。
 - 同一次调用中的文档只表示请求顺序，不表示文档之间存在依赖关系。
 - 页面展示成功、失败和截断事实，但数据库不保存 Markdown 正文、完整 SQL 或结果内容。
 

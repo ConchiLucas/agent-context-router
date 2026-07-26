@@ -9,15 +9,25 @@
 
 ## 记录
 
+### 2026-07-26
+
+- 顶层管理实体和 Codex 运行时上下文边界统一为 Workspace。Workspace 保存唯一绝对根目录和总启停状态；Project 必须归属一个 Workspace，只保存名称、`frontend/backend` 类型和工作空间内唯一的 `relative_path`，没有独立 enabled。根项目用 `.`，`AGENTS.md` 入口由两者确定性推导；当前不自动扫描目录注册项目。
+- cwd 路由在全部 Workspace 根目录中选择最长前缀，工作空间内最深 Project 只记录为 `active_project` 元数据。prepare、search、read、调用记录、文档树、刷新和 MCP JSON 都以 Workspace 为边界；活动项目不收窄文档或数据库范围。
+- Workspace 根目录固定自动探测可选 `AGENTS.md`，不新增路径配置字段；缺失时继续使用合成入口。ProjectRegistry 分别保留工作空间级及各 Project 的 DocumentCache 和搜索索引，再构建 Workspace 聚合缓存。Workspace 刷新先构建根入口和全部子项目，任一文档构建失败时保留整份旧映射；重复文档由 Workspace 入口优先，Project 之间按最深所有者去重。
+- 物理数据源和数据库清单继续全局维护，授权记录仍由 `project_databases` 绑定具体 Project；Workspace task 汇总使用所有子项目当前有效的授权。`mcp_alias` 唯一约束提升到 Workspace，prepare 的数据库摘要携带所属项目 ID、名称和类型，数据源汇总视图不复制授权或策略。
+- 新 prepare 写入 `scope='workspace'`、稳定 Workspace 快照和可选活动项目快照；read/search/database 每次按 Workspace 当前状态重新校验。migration 前的 task 保持 `scope='project'` 和原 project_id/project_key 权限范围，同时回填 Workspace/活动项目字段供工作空间调用记录查询。
+- migration `20260726_0013` 先采用兼容式一对一回填：每个旧 Project 生成同 ID Workspace，旧入口父目录成为 `root_path`，Project 设为 `relative_path='.'`；`20260726_0014` 再新增 `project_kind`、删除 Project enabled、把数据库 alias 提升到 Workspace 唯一，并增加 Workspace task 快照；`20260726_0015` 为 Workspace 根文档新增独立派生搜索索引。旧 `agents_path/project_type` 暂时双写兼容，当前 migration head 为 `20260726_0015`。
+
 ### 2026-07-25
 
+- 本节记录的是 0014 前的 Project task 阶段；其中“task 绑定项目”“项目卡片调用记录”和项目级刷新已经由 2026-07-26 的 Workspace scope 决策取代，搜索算法、索引版本与 payload 预算决策仍有效。
 - MCP 工具集合扩展为五个固定工具，在 prepare 与 read 之间增加 `search_context_documents(task_id, query, limit)`。搜索范围严格绑定 task 的稳定项目；返回文档与章节定位、相关度和命中原因，不返回正文，推荐工作流是 `prepare -> search -> read`。
 - 第一版文档搜索采用 PostgreSQL `simple` 全文检索、`pg_trgm` 和短词精确子串匹配，不引入向量数据库。路径、显式 title/summary、章节和规范化正文共同参与排序；分块命中在服务层按文档聚合。
-- Markdown 原文仍以磁盘文件为唯一真源，但允许把规范化派生分块持久化到 `document_search_chunks`。每次添加、编辑、启用、启动恢复或手动刷新项目时，以确定性 DocumentCache version 全量替换索引；查询只接受与当前缓存同版本的索引。
+- Markdown 原文仍以磁盘文件为唯一真源，但允许把规范化派生分块持久化到 `document_search_chunks`。每次添加、编辑、启动恢复或手动刷新 Workspace 时，以确定性 DocumentCache version 全量替换涉及项目的索引；查询只接受与当前缓存同版本的索引。
 - 搜索索引是显式依赖而不是静默优化：控制面数据库、索引状态或当前版本不可用时，`search_context_documents` 返回稳定的 index-not-ready 错误，不扫描进程内 Markdown 兜底，也不返回旧版本结果。
 - 项目卡片“查看调用记录”继续作为文档使用历史入口，只展示实际产生 read call 的任务，并保留完整文档树、读取列表和 Markdown 查看；全局链路管理是独立的内部 MCP 可观察性页面，只展示调用树与调用列表，不复用文档浏览功能。
 - 通用 `mcp_tool_calls` 和 `mcp_database_calls` 继续保持轻量。只有 `search_database_objects`、`execute_database_query` 把实际请求和最终、有界 MCP 响应写入独立的一对一 payload 表，prepare/read 不建立完整 payload。
-- payload 采集默认关闭，需要通过环境变量显式启用；启用后请求/响应各 1 MB、硬上限 4 MB、保留 7 天。主 Trace API 只返回可用状态，完整内容经 task/call 归属校验的 no-store API 按需读取。到期删除 JSON 但保留状态，采集/清理失败不得改变工具业务结果。
+- payload 当前对白名单数据库工具自动采集，请求/响应各 1 MB、硬上限 4 MB、保留 7 天。主 Trace API 只返回可用状态，完整内容经 task/call 归属校验的 no-store API 按需读取。到期删除 JSON 但保留状态，采集/清理失败不得改变工具业务结果。
 - 当前产品仍是回环地址上的本机单用户服务。数据库 payload 可能包含 SQL 条件值和业务数据，因此详情页明确提示敏感性；如果未来扩大网络边界，必须先增加鉴权、授权、审计访问和更严格的字段脱敏。
 
 ### 2026-07-24
@@ -32,6 +42,7 @@
 
 ### 2026-07-22
 
+- 本节保留当时的 Project alias 与 task 路由决策作为历史；`20260726_0014` 已把新 task 和 alias 唯一范围提升到 Workspace，旧 `scope='project'` task 才继续使用这里的兼容链路。
 - MCP 工具集合固定为 `prepare_task_context`、`read_context_document`、`search_database_objects`、`execute_database_query` 四个；数据源增删不生成动态工具，保证 Codex 和 Antigravity 的工具发现结果稳定。
 - 数据库访问统一经过 `task_id -> project_key -> 当前 project -> 项目内 mcp_alias -> live policy`。MCP 参数不接受 project/source/database ID、Host、DSN、口令或客户端自定义查询限制。
 - `mcp_alias` 与人类展示 alias 分离，在项目内大小写无关唯一。prepare 只返回可用只读数据库的最小摘要，不连接远端业务数据库。

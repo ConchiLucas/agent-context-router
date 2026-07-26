@@ -1,12 +1,104 @@
+export type ProjectKind = "frontend" | "backend";
+
 export interface ProjectSummary {
   id: string;
   name: string;
-  project_type: string;
+  project_kind: ProjectKind;
+  project_type?: string;
   agents_path: string;
-  enabled: boolean;
+  workspace_id?: string | null;
+  workspace_name?: string | null;
+  workspace_enabled?: boolean | null;
+  relative_path?: string | null;
   node_count: number;
+  data_source_count?: number;
+  database_count?: number;
   refreshed_at: string | null;
   error: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface WorkspaceSummary {
+  id: string;
+  name: string;
+  workspace_type: string;
+  root_path: string;
+  enabled: boolean;
+  project_count: number;
+  error_project_count: number;
+  data_source_count: number;
+  database_count: number;
+  database_authorization_count: number;
+  created_at?: string;
+  updated_at: string;
+}
+
+export interface WorkspaceCreate {
+  name: string;
+  workspace_type: string;
+  root_path: string;
+  enabled?: boolean;
+}
+
+export interface WorkspaceUpdate {
+  name: string;
+  workspace_type: string;
+  root_path: string;
+}
+
+export interface WorkspaceProjectCreate {
+  name: string;
+  relative_path: string;
+  project_kind: ProjectKind;
+}
+
+export interface WorkspaceProjectUpdate {
+  name: string;
+  relative_path: string;
+  project_kind: ProjectKind;
+}
+
+export interface WorkspaceDataSourceAssignment {
+  link_id: string;
+  project_id: string;
+  project_name: string;
+  project_kind: ProjectKind;
+  database_id: string;
+  database_name: string;
+  database_display_name: string;
+  mcp_alias: string | null;
+  alias: string;
+  purpose: string;
+  workspace_enabled: boolean;
+  link_enabled: boolean;
+  readonly: boolean;
+  database_available: boolean;
+  database_system: boolean;
+  source_enabled: boolean;
+  status: string;
+}
+
+export interface WorkspaceDataSourceUsage {
+  id: string;
+  name: string;
+  category: string;
+  engine: DatabaseEngine;
+  enabled: boolean;
+  database_count: number;
+  assignment_count: number;
+  project_count: number;
+  assignments: WorkspaceDataSourceAssignment[];
+}
+
+export interface WorkspaceDataSourceSummary {
+  workspace_id: string;
+  workspace_enabled: boolean;
+  source_count: number;
+  database_count: number;
+  assignment_count: number;
+  project_count: number;
+  sources: WorkspaceDataSourceUsage[];
 }
 
 export interface DocumentTreeNode {
@@ -15,6 +107,9 @@ export interface DocumentTreeNode {
   path: string;
   relative_path: string | null;
   error: string | null;
+  project_id?: string | null;
+  project_kind?: ProjectKind | null;
+  selectable?: boolean;
   children: DocumentTreeNode[];
 }
 
@@ -25,18 +120,6 @@ export interface DocumentDetail {
   relative_path: string | null;
   content: string;
   error: string | null;
-}
-
-export interface ProjectCreate {
-  name: string;
-  project_type: string;
-  agents_path: string;
-}
-
-export interface ProjectUpdate {
-  name: string;
-  project_type: string;
-  agents_path: string;
 }
 
 export type DatabaseEngine =
@@ -178,6 +261,13 @@ export interface PreparedProject {
   project_id: string;
   name: string;
   node_count: number;
+  relative_path: string;
+  project_kind: ProjectKind;
+}
+
+export interface PreparedWorkspace {
+  workspace_id: string;
+  name: string;
 }
 
 export interface PreparedDatabase {
@@ -187,11 +277,17 @@ export interface PreparedDatabase {
   purpose: string;
   readonly: boolean;
   capabilities: string[];
+  project_id?: string | null;
+  project_name?: string | null;
+  project_kind?: ProjectKind | null;
 }
 
 export interface PrepareTaskContextResult {
   task_id: number;
-  project: PreparedProject;
+  workspace: PreparedWorkspace;
+  projects: PreparedProject[];
+  active_project?: PreparedProject | null;
+  project?: PreparedProject | null;
   documents: ContextDocumentNode;
   databases: PreparedDatabase[];
   warnings?: string[];
@@ -201,6 +297,12 @@ export interface ContextTaskSummary {
   task_id: number;
   task: string;
   cwd: string;
+  scope: "project" | "workspace";
+  workspace_id?: string | null;
+  workspace_name?: string | null;
+  active_project_id?: string | null;
+  active_project_name?: string | null;
+  active_project_kind?: ProjectKind | null;
   agent_name?: string;
   created_at: string;
   read_call_count: number;
@@ -240,7 +342,13 @@ export interface ContextDatabaseCallHistoryItem {
 export interface ContextTaskReadHistory {
   task_id: number;
   task: string;
-  project_name: string;
+  project_name?: string;
+  workspace_id?: string | null;
+  workspace_name?: string | null;
+  active_project_id?: string | null;
+  active_project_name?: string | null;
+  active_project_kind?: ProjectKind | null;
+  scope: "project" | "workspace";
   agent_name?: string;
   created_at: string;
   calls: ContextReadHistoryCall[];
@@ -411,7 +519,7 @@ export interface McpClientConfig {
 
 export interface McpIntegrationReadiness {
   database_configured: boolean;
-  project_count: number;
+  workspace_count: number;
   ready_for_full_test: boolean;
 }
 
@@ -432,8 +540,8 @@ export interface McpIntegrationTestStage {
 
 export interface McpIntegrationTestResult {
   status: "passed" | "failed";
-  project_id: string;
-  project_name?: string;
+  workspace_id: string;
+  workspace_name?: string;
   task_id?: number;
   read_call_id?: number;
   started_at: string;

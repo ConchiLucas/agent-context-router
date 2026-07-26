@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 DatabaseEngine = Literal[
     "mysql",
@@ -174,7 +174,7 @@ class ProjectDatabaseSelectionUpdate(BaseModel):
             alias = ProjectDatabaseAliasUpdate(mcp_alias=value).mcp_alias
             key = alias.casefold()
             if key in used:
-                raise ValueError("同一项目内的 MCP 数据库别名不能重复")
+                raise ValueError("同一工作空间内的 MCP 数据库别名不能重复")
             normalized[database_id] = alias
             used.add(key)
         return normalized
@@ -206,3 +206,63 @@ class ProjectDataSourceOptions(BaseModel):
     selected_source_count: int
     selected_database_count: int
     sources: list[ProjectDataSourceOption]
+
+
+WorkspaceDataSourceAssignmentStatus = Literal[
+    "active",
+    "workspace_disabled",
+    "source_disabled",
+    "database_unavailable",
+    "system_database",
+    "link_disabled",
+    "not_readonly",
+    "missing_mcp_alias",
+]
+
+
+class WorkspaceDataSourceAssignmentSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    link_id: str
+    project_id: str
+    project_name: str
+    project_kind: Literal["frontend", "backend"]
+    database_id: str
+    database_name: str
+    database_display_name: str
+    mcp_alias: str | None
+    alias: str
+    purpose: str
+    status: WorkspaceDataSourceAssignmentStatus
+    workspace_enabled: bool
+    link_enabled: bool
+    readonly: bool
+    database_available: bool
+    database_system: bool
+    source_enabled: bool
+
+
+class WorkspaceDataSourceUsageSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    category: str
+    engine: DatabaseEngine
+    enabled: bool
+    database_count: int
+    assignment_count: int
+    project_count: int
+    assignments: list[WorkspaceDataSourceAssignmentSummary]
+
+
+class WorkspaceDataSourceSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    workspace_id: str
+    workspace_enabled: bool
+    source_count: int
+    database_count: int
+    assignment_count: int
+    project_count: int
+    sources: list[WorkspaceDataSourceUsageSummary]

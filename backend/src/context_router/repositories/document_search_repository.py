@@ -47,6 +47,16 @@ class DocumentSearchIndexState:
 
 
 @dataclass(frozen=True, slots=True)
+class WorkspaceDocumentSearchIndexState:
+    workspace_id: str
+    index_version: str
+    index_format_version: int
+    document_count: int
+    chunk_count: int
+    indexed_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class DocumentSearchHit:
     document_id: str
     path: str
@@ -80,11 +90,41 @@ class DocumentSearchStore(Protocol):
         limit: int,
     ) -> list[DocumentSearchHit]: ...
 
+    def replace_workspace_index(
+        self,
+        *,
+        workspace_id: str,
+        index_version: str,
+        index_format_version: int,
+        chunks: Sequence[DocumentSearchChunkWrite],
+    ) -> WorkspaceDocumentSearchIndexState: ...
+
+    def get_workspace_index_state(
+        self,
+        workspace_id: str,
+    ) -> WorkspaceDocumentSearchIndexState | None: ...
+
+    def search_workspace(
+        self,
+        *,
+        workspace_id: str,
+        index_version: str,
+        query: str,
+        limit: int,
+    ) -> list[DocumentSearchHit]: ...
+
+    def delete_workspace_index(self, workspace_id: str) -> None: ...
+
 
 class InMemoryDocumentSearchRepository:
     def __init__(self) -> None:
         self._states: dict[str, DocumentSearchIndexState] = {}
         self._chunks: dict[str, tuple[str, tuple[DocumentSearchChunkWrite, ...]]] = {}
+        self._workspace_states: dict[str, WorkspaceDocumentSearchIndexState] = {}
+        self._workspace_chunks: dict[
+            str,
+            tuple[str, tuple[DocumentSearchChunkWrite, ...]],
+        ] = {}
         self._lock = RLock()
 
     def replace_project_index(
@@ -152,6 +192,81 @@ class InMemoryDocumentSearchRepository:
             )
         )
         return [item[0] for item in scored[:safe_limit]]
+
+    def replace_workspace_index(
+        self,
+        *,
+        workspace_id: str,
+        index_version: str,
+        index_format_version: int,
+        chunks: Sequence[DocumentSearchChunkWrite],
+    ) -> WorkspaceDocumentSearchIndexState:
+        safe_chunks = _validate_workspace_replacement(
+            workspace_id=workspace_id,
+            index_version=index_version,
+            index_format_version=index_format_version,
+            chunks=chunks,
+        )
+        state = WorkspaceDocumentSearchIndexState(
+            workspace_id=workspace_id,
+            index_version=index_version,
+            index_format_version=index_format_version,
+            document_count=len({chunk.document_id for chunk in safe_chunks}),
+            chunk_count=len(safe_chunks),
+            indexed_at=datetime.now(UTC),
+        )
+        with self._lock:
+            self._workspace_chunks[workspace_id] = (index_version, safe_chunks)
+            self._workspace_states[workspace_id] = state
+        return state
+
+    def get_workspace_index_state(
+        self,
+        workspace_id: str,
+    ) -> WorkspaceDocumentSearchIndexState | None:
+        _validate_workspace_id(workspace_id)
+        with self._lock:
+            return self._workspace_states.get(workspace_id)
+
+    def search_workspace(
+        self,
+        *,
+        workspace_id: str,
+        index_version: str,
+        query: str,
+        limit: int,
+    ) -> list[DocumentSearchHit]:
+        _validate_workspace_id(workspace_id)
+        _validate_sha256(index_version, "索引版本")
+        normalized_query = _normalize_query(query)
+        safe_limit = _validate_search_limit(limit)
+        with self._lock:
+            current = self._workspace_chunks.get(workspace_id)
+            if current is None or current[0] != index_version:
+                return []
+            chunks = current[1]
+
+        scored = [
+            result
+            for chunk in chunks
+            if (result := _score_in_memory_chunk(chunk, normalized_query)) is not None
+        ]
+        scored.sort(
+            key=lambda item: (
+                -item[0].relevance,
+                item[0].path,
+                item[0].document_id,
+                item[1],
+                item[2],
+            )
+        )
+        return [item[0] for item in scored[:safe_limit]]
+
+    def delete_workspace_index(self, workspace_id: str) -> None:
+        _validate_workspace_id(workspace_id)
+        with self._lock:
+            self._workspace_chunks.pop(workspace_id, None)
+            self._workspace_states.pop(workspace_id, None)
 
 
 class PostgresDocumentSearchRepository:
@@ -295,6 +410,159 @@ class PostgresDocumentSearchRepository:
             raise DocumentSearchRepositoryError("文档搜索失败") from exc
         return [_hit_from_row(row) for row in rows]
 
+    def replace_workspace_index(
+        self,
+        *,
+        workspace_id: str,
+        index_version: str,
+        index_format_version: int,
+        chunks: Sequence[DocumentSearchChunkWrite],
+    ) -> WorkspaceDocumentSearchIndexState:
+        safe_chunks = _validate_workspace_replacement(
+            workspace_id=workspace_id,
+            index_version=index_version,
+            index_format_version=index_format_version,
+            chunks=chunks,
+        )
+        database_url = self._require_database_url()
+        try:
+            with psycopg.connect(database_url) as connection:
+                connection.execute(
+                    "DELETE FROM workspace_document_search_chunks WHERE workspace_id = %s",
+                    (workspace_id,),
+                )
+                if safe_chunks:
+                    with connection.cursor() as cursor:
+                        cursor.executemany(
+                            _INSERT_WORKSPACE_CHUNK,
+                            [
+                                _chunk_insert_parameters(
+                                    project_id=workspace_id,
+                                    index_version=index_version,
+                                    chunk=chunk,
+                                )
+                                for chunk in safe_chunks
+                            ],
+                        )
+                row = connection.execute(
+                    """
+                    INSERT INTO workspace_document_search_index_states (
+                        workspace_id,
+                        index_version,
+                        index_format_version,
+                        document_count,
+                        chunk_count,
+                        indexed_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                    ON CONFLICT (workspace_id) DO UPDATE
+                    SET
+                        index_version = EXCLUDED.index_version,
+                        index_format_version = EXCLUDED.index_format_version,
+                        document_count = EXCLUDED.document_count,
+                        chunk_count = EXCLUDED.chunk_count,
+                        indexed_at = CURRENT_TIMESTAMP
+                    RETURNING
+                        workspace_id,
+                        index_version,
+                        index_format_version,
+                        document_count,
+                        chunk_count,
+                        indexed_at
+                    """,
+                    (
+                        workspace_id,
+                        index_version,
+                        index_format_version,
+                        len({chunk.document_id for chunk in safe_chunks}),
+                        len(safe_chunks),
+                    ),
+                ).fetchone()
+        except psycopg.errors.ForeignKeyViolation as exc:
+            raise DocumentSearchRepositoryError("文档搜索索引对应的工作空间不存在") from exc
+        except psycopg.Error as exc:
+            raise DocumentSearchRepositoryError("工作空间文档搜索索引替换失败") from exc
+
+        if row is None:
+            raise DocumentSearchRepositoryError("工作空间文档搜索索引替换后没有返回索引状态")
+        return _workspace_state_from_row(row)
+
+    def get_workspace_index_state(
+        self,
+        workspace_id: str,
+    ) -> WorkspaceDocumentSearchIndexState | None:
+        _validate_workspace_id(workspace_id)
+        database_url = self._require_database_url()
+        try:
+            with psycopg.connect(database_url) as connection:
+                row = connection.execute(
+                    """
+                    SELECT
+                        workspace_id,
+                        index_version,
+                        index_format_version,
+                        document_count,
+                        chunk_count,
+                        indexed_at
+                    FROM workspace_document_search_index_states
+                    WHERE workspace_id = %s
+                    """,
+                    (workspace_id,),
+                ).fetchone()
+        except psycopg.Error as exc:
+            raise DocumentSearchRepositoryError("工作空间文档搜索索引状态读取失败") from exc
+        return _workspace_state_from_row(row) if row is not None else None
+
+    def search_workspace(
+        self,
+        *,
+        workspace_id: str,
+        index_version: str,
+        query: str,
+        limit: int,
+    ) -> list[DocumentSearchHit]:
+        _validate_workspace_id(workspace_id)
+        _validate_sha256(index_version, "索引版本")
+        normalized_query = _normalize_query(query)
+        safe_limit = _validate_search_limit(limit)
+        trigram_enabled = len(normalized_query) >= 3
+        database_url = self._require_database_url()
+        try:
+            with psycopg.connect(database_url) as connection:
+                connection.execute(
+                    "SELECT set_config('pg_trgm.word_similarity_threshold', %s, true)",
+                    (str(_TRIGRAM_THRESHOLD),),
+                )
+                rows = connection.execute(
+                    _SEARCH_WORKSPACE_CHUNKS,
+                    _search_parameters(
+                        normalized_query=normalized_query,
+                        trigram_enabled=trigram_enabled,
+                        project_id=workspace_id,
+                        index_version=index_version,
+                        limit=safe_limit,
+                    ),
+                ).fetchall()
+        except psycopg.Error as exc:
+            raise DocumentSearchRepositoryError("工作空间文档搜索失败") from exc
+        return [_hit_from_row(row) for row in rows]
+
+    def delete_workspace_index(self, workspace_id: str) -> None:
+        _validate_workspace_id(workspace_id)
+        database_url = self._require_database_url()
+        try:
+            with psycopg.connect(database_url) as connection:
+                connection.execute(
+                    "DELETE FROM workspace_document_search_chunks WHERE workspace_id = %s",
+                    (workspace_id,),
+                )
+                connection.execute(
+                    "DELETE FROM workspace_document_search_index_states WHERE workspace_id = %s",
+                    (workspace_id,),
+                )
+        except psycopg.Error as exc:
+            raise DocumentSearchRepositoryError("工作空间文档搜索索引删除失败") from exc
+
     def _require_database_url(self) -> str:
         if not self._database_url:
             raise DocumentSearchRepositoryError("任务数据库尚未配置")
@@ -309,6 +577,29 @@ def _validate_replacement(
     chunks: Sequence[DocumentSearchChunkWrite],
 ) -> tuple[DocumentSearchChunkWrite, ...]:
     _validate_project_id(project_id)
+    _validate_sha256(index_version, "索引版本")
+    if isinstance(index_format_version, bool) or index_format_version < 1:
+        raise DocumentSearchRepositoryError("索引格式版本必须大于 0")
+
+    safe_chunks = tuple(chunks)
+    positions: set[tuple[str, int, int]] = set()
+    for chunk in safe_chunks:
+        _validate_chunk(chunk)
+        position = (chunk.document_id, chunk.section_ordinal, chunk.chunk_index)
+        if position in positions:
+            raise DocumentSearchRepositoryError("文档搜索分块位置不能重复")
+        positions.add(position)
+    return safe_chunks
+
+
+def _validate_workspace_replacement(
+    *,
+    workspace_id: str,
+    index_version: str,
+    index_format_version: int,
+    chunks: Sequence[DocumentSearchChunkWrite],
+) -> tuple[DocumentSearchChunkWrite, ...]:
+    _validate_workspace_id(workspace_id)
     _validate_sha256(index_version, "索引版本")
     if isinstance(index_format_version, bool) or index_format_version < 1:
         raise DocumentSearchRepositoryError("索引格式版本必须大于 0")
@@ -345,6 +636,10 @@ def _validate_chunk(chunk: DocumentSearchChunkWrite) -> None:
 
 def _validate_project_id(project_id: str) -> None:
     _validate_text(project_id, "项目 ID", 32, required=True)
+
+
+def _validate_workspace_id(workspace_id: str) -> None:
+    _validate_text(workspace_id, "工作空间 ID", 32, required=True)
 
 
 def _validate_sha256(value: str, label: str) -> None:
@@ -569,6 +864,19 @@ def _trigram_similarity(left: set[str], right: set[str]) -> float:
 def _state_from_row(row: tuple[object, ...]) -> DocumentSearchIndexState:
     return DocumentSearchIndexState(
         project_id=str(row[0]),
+        index_version=str(row[1]),
+        index_format_version=int(row[2]),
+        document_count=int(row[3]),
+        chunk_count=int(row[4]),
+        indexed_at=cast(datetime, row[5]),
+    )
+
+
+def _workspace_state_from_row(
+    row: tuple[object, ...],
+) -> WorkspaceDocumentSearchIndexState:
+    return WorkspaceDocumentSearchIndexState(
+        workspace_id=str(row[0]),
         index_version=str(row[1]),
         index_format_version=int(row[2]),
         document_count=int(row[3]),
@@ -813,3 +1121,20 @@ _SEARCH_CHUNKS = """
         chunk_index
     LIMIT %s
 """
+
+_INSERT_WORKSPACE_CHUNK = _INSERT_CHUNK.replace(
+    "document_search_chunks",
+    "workspace_document_search_chunks",
+).replace(
+    "        project_id,\n",
+    "        workspace_id,\n",
+    1,
+)
+
+_SEARCH_WORKSPACE_CHUNKS = _SEARCH_CHUNKS.replace(
+    "document_search_chunks",
+    "workspace_document_search_chunks",
+).replace(
+    "WHERE chunk.project_id = %s",
+    "WHERE chunk.workspace_id = %s",
+)

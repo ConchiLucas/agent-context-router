@@ -33,25 +33,39 @@ def test_project_configuration_crud_api(tmp_path: Path) -> None:
             json={
                 "name": "更新后的项目",
                 "project_type": "交通物流",
+                "project_kind": "frontend",
                 "agents_path": str(root),
             },
         )
-        disabled = client.patch(
+        removed_enabled = client.patch(
             f"/api/projects/{project_id}/enabled",
             json={"enabled": False},
         )
+        removed_refresh = client.post(f"/api/projects/{project_id}/refresh")
+        removed_tree = client.get(f"/api/projects/{project_id}/tree")
+        removed_preview = client.post(f"/api/projects/{project_id}/prepare-preview")
+        removed_document = client.get(f"/api/projects/{project_id}/documents/unknown-document")
+        removed_tasks = client.get(f"/api/projects/{project_id}/tasks")
+        workspace_tree = client.get(f"/api/workspaces/{project_id}/tree")
         listed = client.get("/api/projects")
         deleted = client.delete(f"/api/projects/{project_id}")
         empty = client.get("/api/projects")
 
     assert created.status_code == 201
-    assert created.json()["enabled"] is True
+    assert "enabled" not in created.json()
     assert created.json()["project_type"] == "公司项目"
+    assert created.json()["project_kind"] == "backend"
     assert updated.status_code == 200
     assert updated.json()["name"] == "更新后的项目"
     assert updated.json()["project_type"] == "交通物流"
-    assert disabled.status_code == 200
-    assert disabled.json()["enabled"] is False
+    assert updated.json()["project_kind"] == "frontend"
+    assert removed_enabled.status_code == 404
+    assert removed_refresh.status_code == 404
+    assert removed_tree.status_code == 404
+    assert removed_preview.status_code == 404
+    assert removed_document.status_code == 404
+    assert removed_tasks.status_code == 404
+    assert workspace_tree.status_code == 200
     assert listed.json()[0]["id"] == project_id
     assert deleted.status_code == 204
     assert deleted.content == b""

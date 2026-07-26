@@ -1,8 +1,10 @@
 "use client";
 
 import {
+  forwardRef,
   useCallback,
   useEffect,
+  useImperativeHandle,
   useRef,
   useState,
 } from "react";
@@ -15,19 +17,18 @@ import { DocumentTree } from "@/components/document-tree";
 import { MarkdownViewer } from "@/components/markdown-viewer";
 import { McpIntegrationPanel } from "@/components/mcp-integration-panel";
 import {
-  createProject,
-  deleteProject,
-  getDocumentDetail,
+  createWorkspaceProject,
+  deleteWorkspaceProject,
   getProjectDataSourceOptions,
-  getProjectTree,
   getTaskDocumentReads,
-  listProjects,
-  listProjectTasks,
-  prepareProjectPreview,
-  refreshProject,
+  getWorkspaceDocumentDetail,
+  getWorkspaceTree,
+  listWorkspaceTasks,
+  listWorkspaceProjects,
+  prepareWorkspacePreview,
+  refreshWorkspaceMapping,
   replaceProjectDatabases,
-  setProjectEnabled,
-  updateProject,
+  updateWorkspaceProject,
 } from "@/lib/api";
 import {
   buildSelectedDatabaseAliases,
@@ -50,12 +51,12 @@ import type {
   DocumentTreeNode,
   PrepareTaskContextResult,
   ProjectDataSourceOptions,
+  ProjectKind,
   ProjectSummary,
+  WorkspaceSummary,
 } from "@/lib/types";
 
-const ALL_PROJECT_TYPES = "__all__";
 const ALL_DATA_SOURCE_CATEGORIES = "__all__";
-const DEFAULT_PROJECT_TYPE = "公司项目";
 const TREE_OVERVIEW_KEY = "__tree_overview__";
 
 interface TreeScrollPosition {
@@ -170,10 +171,42 @@ function DocumentTreeBreadcrumbs({
   );
 }
 
-export function ProjectDashboard() {
+interface ProjectDashboardProps {
+  workspace: WorkspaceSummary;
+  projectKind: ProjectKind;
+  visible?: boolean;
+  onProjectCountsChanged?: (counts: Record<ProjectKind, number>) => void;
+  onWorkspaceChanged?: () => Promise<void>;
+}
+
+export interface ProjectDashboardHandle {
+  openCreateProject: () => void;
+  refreshWorkspaceMapping: () => void;
+  showWorkspaceTaskHistory: () => void;
+  showWorkspaceTree: () => void;
+  showWorkspaceMcpPreview: () => void;
+  showMcpIntegration: () => void;
+}
+
+function projectKindLabel(kind: ProjectKind): string {
+  return kind === "frontend" ? "前端项目" : "后端项目";
+}
+
+export const ProjectDashboard = forwardRef<
+  ProjectDashboardHandle,
+  ProjectDashboardProps
+>(function ProjectDashboard(
+  {
+    workspace,
+    projectKind,
+    visible = true,
+    onProjectCountsChanged,
+    onWorkspaceChanged,
+  }: ProjectDashboardProps,
+  ref,
+) {
+  const workspaceId = workspace.id;
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
-  const [selectedProjectType, setSelectedProjectType] =
-    useState(ALL_PROJECT_TYPES);
   const [activeProject, setActiveProject] = useState<ProjectSummary | null>(null);
   const [tree, setTree] = useState<DocumentTreeNode | null>(null);
   const [treeFocusPath, setTreeFocusPath] = useState<number[] | null>(null);
@@ -185,13 +218,11 @@ export function ProjectDashboard() {
     null,
   );
   const [editName, setEditName] = useState("");
-  const [editProjectType, setEditProjectType] = useState("");
+  const [editProjectKind, setEditProjectKind] =
+    useState<ProjectKind>("backend");
   const [editAgentsPath, setEditAgentsPath] = useState("");
   const [deletingProject, setDeletingProject] =
     useState<ProjectSummary | null>(null);
-  const [actionsProject, setActionsProject] = useState<ProjectSummary | null>(
-    null,
-  );
   const [dataSourceProject, setDataSourceProject] =
     useState<ProjectSummary | null>(null);
   const [dataSourceOptions, setDataSourceOptions] =
@@ -211,7 +242,8 @@ export function ProjectDashboard() {
   const [dataSourceAccessLoading, setDataSourceAccessLoading] = useState(false);
   const [dataSourceAccessSaving, setDataSourceAccessSaving] = useState(false);
   const [name, setName] = useState("");
-  const [projectType, setProjectType] = useState(DEFAULT_PROJECT_TYPE);
+  const [newProjectKind, setNewProjectKind] =
+    useState<ProjectKind>(projectKind);
   const [agentsPath, setAgentsPath] = useState("");
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -263,31 +295,57 @@ export function ProjectDashboard() {
     scrollLeft: number;
     scrollTop: number;
   } | null>(null);
+  const workspaceContextProject: ProjectSummary = {
+    id: workspace.id,
+    name: workspace.name,
+    project_kind: projectKind,
+    project_type: workspace.workspace_type,
+    agents_path: `${workspace.root_path}/AGENTS.md`,
+    workspace_id: workspace.id,
+    workspace_name: workspace.name,
+    workspace_enabled: workspace.enabled,
+    relative_path: ".",
+    node_count: projects.reduce(
+      (total, project) => total + project.node_count,
+      0,
+    ),
+    data_source_count: workspace.data_source_count,
+    database_count: workspace.database_count,
+    refreshed_at: null,
+    error: null,
+  };
 
   const loadProjects = useCallback(async () => {
     setLoading(true);
     try {
-      setProjects(await listProjects());
+      const nextProjects = await listWorkspaceProjects(workspaceId);
+      setProjects(nextProjects);
       setError(null);
     } catch (requestError) {
       setError((requestError as Error).message);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [workspaceId]);
 
   useEffect(() => {
     void loadProjects();
   }, [loadProjects]);
 
   useEffect(() => {
-    if (
-      selectedProjectType !== ALL_PROJECT_TYPES &&
-      !projects.some((project) => project.project_type === selectedProjectType)
-    ) {
-      setSelectedProjectType(ALL_PROJECT_TYPES);
-    }
-  }, [projects, selectedProjectType]);
+    onProjectCountsChanged?.({
+      frontend: projects.filter(
+        (project) => project.project_kind === "frontend",
+      ).length,
+      backend: projects.filter(
+        (project) => project.project_kind === "backend",
+      ).length,
+    });
+  }, [onProjectCountsChanged, projects]);
+
+  useEffect(() => {
+    setNewProjectKind(projectKind);
+  }, [projectKind]);
 
   useEffect(() => {
     if (!activeProject || !tree) return;
@@ -371,9 +429,9 @@ export function ProjectDashboard() {
   ]);
 
   async function loadTree(project: ProjectSummary) {
-    setBusyProjectId(project.id);
+    setBusyProjectId("workspace");
     try {
-      const nextTree = await getProjectTree(project.id);
+      const nextTree = await getWorkspaceTree(workspace.id);
       setActiveProject(project);
       setTree(nextTree);
       setTreeFocusPath(null);
@@ -389,15 +447,12 @@ export function ProjectDashboard() {
     }
   }
 
-  async function selectDocument(
-    project: ProjectSummary,
-    documentId: string,
-  ) {
+  async function selectDocument(documentId: string) {
     setSelectedId(documentId);
     setDetail(null);
     setDetailLoading(true);
     try {
-      setDetail(await getDocumentDetail(project.id, documentId));
+      setDetail(await getWorkspaceDocumentDetail(workspace.id, documentId));
       setError(null);
     } catch (requestError) {
       setError((requestError as Error).message);
@@ -407,15 +462,14 @@ export function ProjectDashboard() {
   }
 
   async function refresh(project: ProjectSummary, reopenTree = false) {
-    setBusyProjectId(project.id);
+    setBusyProjectId("workspace");
     try {
-      const updated = await refreshProject(project.id);
-      setProjects((current) =>
-        current.map((item) => (item.id === updated.id ? updated : item)),
-      );
+      await refreshWorkspaceMapping(workspace.id);
+      await loadProjects();
+      await onWorkspaceChanged?.();
       if (reopenTree) {
-        const nextTree = await getProjectTree(project.id);
-        setActiveProject(updated);
+        const nextTree = await getWorkspaceTree(workspace.id);
+        setActiveProject(project);
         setTree(nextTree);
         setTreeFocusPath(null);
         treeScrollPositionsRef.current.clear();
@@ -432,11 +486,11 @@ export function ProjectDashboard() {
   }
 
   async function showMcpPreview(project: ProjectSummary) {
-    setBusyProjectId(project.id);
+    setBusyProjectId("workspace");
     setMcpPreviewProject(project);
     setMcpPreview(null);
     try {
-      setMcpPreview(await prepareProjectPreview(project.id));
+      setMcpPreview(await prepareWorkspacePreview(workspace.id));
       setError(null);
     } catch (requestError) {
       setMcpPreviewProject(null);
@@ -561,6 +615,8 @@ export function ProjectDashboard() {
         Array.from(selectedDatabaseIds),
         mcpAliases,
       );
+      await loadProjects();
+      await onWorkspaceChanged?.();
       setError(null);
       setDataSourceProject(null);
       setDataSourceOptions(null);
@@ -592,7 +648,7 @@ export function ProjectDashboard() {
   }
 
   async function showTaskHistory(project: ProjectSummary) {
-    setBusyProjectId(project.id);
+    setBusyProjectId("workspace");
     setHistoryProject(project);
     setHistoryTasks([]);
     setSelectedHistoryTaskId(null);
@@ -606,8 +662,8 @@ export function ProjectDashboard() {
     setHistoryLoading(true);
     try {
       const [tasks, projectTree] = await Promise.all([
-        listProjectTasks(project.id),
-        getProjectTree(project.id),
+        listWorkspaceTasks(workspace.id),
+        getWorkspaceTree(workspace.id),
       ]);
       setHistoryTasks(tasks);
       setHistoryTree(projectTree);
@@ -630,16 +686,16 @@ export function ProjectDashboard() {
     event.preventDefault();
     setBusyProjectId("new");
     try {
-      const project = await createProject({
+      const project = await createWorkspaceProject(workspace.id, {
         name: name.trim(),
-        project_type: projectType.trim(),
-        agents_path: agentsPath.trim(),
+        relative_path: agentsPath.trim(),
+        project_kind: newProjectKind,
       });
       setProjects((current) => [...current, project]);
+      await onWorkspaceChanged?.();
       setName("");
-      setProjectType(DEFAULT_PROJECT_TYPE);
+      setNewProjectKind(projectKind);
       setAgentsPath("");
-      setSelectedProjectType(project.project_type);
       setShowCreate(false);
       setError(null);
     } catch (requestError) {
@@ -652,8 +708,8 @@ export function ProjectDashboard() {
   function startEditingProject(project: ProjectSummary) {
     setEditingProject(project);
     setEditName(project.name);
-    setEditProjectType(project.project_type);
-    setEditAgentsPath(project.agents_path);
+    setEditProjectKind(project.project_kind);
+    setEditAgentsPath(project.relative_path ?? ".");
   }
 
   async function submitProjectUpdate(event: FormEvent<HTMLFormElement>) {
@@ -661,39 +717,24 @@ export function ProjectDashboard() {
     if (!editingProject) return;
     setBusyProjectId(editingProject.id);
     try {
-      const updated = await updateProject(editingProject.id, {
-        name: editName.trim(),
-        project_type: editProjectType.trim(),
-        agents_path: editAgentsPath.trim(),
-      });
+      const updated = await updateWorkspaceProject(
+        workspace.id,
+        editingProject.id,
+        {
+          name: editName.trim(),
+          relative_path: editAgentsPath.trim(),
+          project_kind: editProjectKind,
+        },
+      );
       setProjects((current) =>
         current.map((project) =>
           project.id === updated.id ? updated : project,
         ),
       );
+      await onWorkspaceChanged?.();
       if (activeProject?.id === updated.id) closeTree();
       if (historyProject?.id === updated.id) closeTaskHistory();
-      setSelectedProjectType(updated.project_type);
       setEditingProject(null);
-      setError(null);
-    } catch (requestError) {
-      setError((requestError as Error).message);
-    } finally {
-      setBusyProjectId(null);
-    }
-  }
-
-  async function toggleProject(project: ProjectSummary) {
-    setBusyProjectId(project.id);
-    try {
-      const updated = await setProjectEnabled(project.id, !project.enabled);
-      setProjects((current) =>
-        current.map((item) => (item.id === updated.id ? updated : item)),
-      );
-      if (!updated.enabled && activeProject?.id === updated.id) closeTree();
-      if (!updated.enabled && historyProject?.id === updated.id) {
-        closeTaskHistory();
-      }
       setError(null);
     } catch (requestError) {
       setError((requestError as Error).message);
@@ -706,10 +747,11 @@ export function ProjectDashboard() {
     if (!deletingProject) return;
     setBusyProjectId(deletingProject.id);
     try {
-      await deleteProject(deletingProject.id);
+      await deleteWorkspaceProject(workspace.id, deletingProject.id);
       setProjects((current) =>
         current.filter((project) => project.id !== deletingProject.id),
       );
+      await onWorkspaceChanged?.();
       if (activeProject?.id === deletingProject.id) closeTree();
       if (historyProject?.id === deletingProject.id) closeTaskHistory();
       setDeletingProject(null);
@@ -898,15 +940,9 @@ export function ProjectDashboard() {
   const historyCallNumbers = history
     ? buildDocumentCallNumbers(history.calls)
     : new Map<string, number[]>();
-  const projectTypes = Array.from(
-    new Set(projects.map((project) => project.project_type)),
-  ).sort((left, right) => left.localeCompare(right, "zh-CN"));
-  const visibleProjects =
-    selectedProjectType === ALL_PROJECT_TYPES
-      ? projects
-      : projects.filter(
-          (project) => project.project_type === selectedProjectType,
-        );
+  const visibleProjects = projects.filter(
+    (project) => project.project_kind === projectKind,
+  );
   const dataSourceCategories = dataSourceOptions
     ? Array.from(
         new Set(dataSourceOptions.sources.map((source) => source.category)),
@@ -945,283 +981,184 @@ export function ProjectDashboard() {
       : [],
   );
 
+  useImperativeHandle(ref, () => ({
+    openCreateProject() {
+      setNewProjectKind(projectKind);
+      setShowCreate(true);
+    },
+    refreshWorkspaceMapping() {
+      void refresh(workspaceContextProject);
+    },
+    showWorkspaceTaskHistory() {
+      void showTaskHistory(workspaceContextProject);
+    },
+    showWorkspaceTree() {
+      void loadTree(workspaceContextProject);
+    },
+    showWorkspaceMcpPreview() {
+      void showMcpPreview(workspaceContextProject);
+    },
+    showMcpIntegration() {
+      setShowMcpIntegration(true);
+    },
+  }));
+
   return (
     <>
-      <nav
-        className="project-type-tabs"
-        role="tablist"
-        aria-label="项目类型"
-      >
-        <button
-          type="button"
-          role="tab"
-          aria-selected={selectedProjectType === ALL_PROJECT_TYPES}
-          data-active={selectedProjectType === ALL_PROJECT_TYPES}
-          onClick={() => setSelectedProjectType(ALL_PROJECT_TYPES)}
-        >
-          <span>全部项目</span>
-          <small>{projects.length}</small>
-        </button>
-        {projectTypes.map((type) => (
-          <button
-            type="button"
-            role="tab"
-            aria-selected={selectedProjectType === type}
-            data-active={selectedProjectType === type}
-            key={type}
-            onClick={() => setSelectedProjectType(type)}
-          >
-            <span>{type}</span>
-            <small>
-              {projects.filter((project) => project.project_type === type).length}
-            </small>
-          </button>
-        ))}
-      </nav>
-
-      <div className="page-actions">
-        <button
-          type="button"
-          className="secondary-button"
-          onClick={() => setShowMcpIntegration(true)}
-        >
-          MCP 接入
-        </button>
-        <button
-          type="button"
-          className="primary-button"
-          onClick={() => setShowCreate((visible) => !visible)}
-        >
-          {showCreate ? "取消添加" : "添加项目"}
-        </button>
-      </div>
-
-      {showCreate ? (
-        <form className="create-project-form" onSubmit={submitProject}>
-          <label>
-            项目名称
-            <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="例如：攀枝花多式联运"
-              required
-            />
-          </label>
-          <label>
-            项目类型
-            <input
-              value={projectType}
-              onChange={(event) => setProjectType(event.target.value)}
-              placeholder="例如：业务系统"
-              maxLength={60}
-              required
-            />
-          </label>
-          <label>
-            AGENTS.md 绝对路径
-            <input
-              value={agentsPath}
-              onChange={(event) => setAgentsPath(event.target.value)}
-              placeholder="/Users/name/workforce/project/AGENTS.md"
-              required
-            />
-          </label>
-          <button
-            type="submit"
-            className="primary-button"
-            disabled={busyProjectId === "new"}
-          >
-            {busyProjectId === "new" ? "正在建立映射…" : "创建并映射"}
-          </button>
-        </form>
-      ) : null}
-
       {error ? (
         <div className="error-banner" role="alert">
           {error}
         </div>
       ) : null}
 
-      {loading ? <p className="empty-message">正在读取项目…</p> : null}
-
-      {!loading && projects.length === 0 ? (
-        <div className="empty-state">
-          <h2>还没有文档项目</h2>
-          <p>添加一个 AGENTS.md 绝对路径，系统会立即递归建立内存映射。</p>
-        </div>
-      ) : null}
-
-      {!loading && projects.length > 0 && visibleProjects.length === 0 ? (
-        <div className="empty-state">
-          <h2>这个类型还没有项目</h2>
-          <p>可以添加项目，或编辑已有项目的项目类型。</p>
-        </div>
-      ) : null}
-
-      <section className="project-grid" aria-label="文档项目列表">
-        {visibleProjects.map((project) => (
-          <article
-            className="project-card"
-            data-enabled={project.enabled}
-            key={project.id}
-          >
-            <div className="project-card-heading">
-              <div>
-                <div className="project-card-chips">
-                  <span className="file-chip">AGENTS.md</span>
-                  <span className="project-type-chip">{project.project_type}</span>
-                </div>
-                <h2>{project.name}</h2>
-              </div>
-              <div className="project-card-statuses">
-                <span
-                  className="project-status-chip"
-                  data-enabled={project.enabled}
+      {visible ? (
+        <>
+          {showCreate ? (
+            <form
+              className="create-project-form workspace-project-form"
+              onSubmit={submitProject}
+            >
+              <label>
+                项目名称
+                <input
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="例如：攀枝花多式联运"
+                  required
+                />
+              </label>
+              <label>
+                项目类型
+                <select
+                  value={newProjectKind}
+                  onChange={(event) =>
+                    setNewProjectKind(event.target.value as ProjectKind)
+                  }
                 >
-                  {project.enabled ? "已启用" : "已停用"}
-                </span>
-                <span className="node-count">{project.node_count} 个节点</span>
+                  <option value="frontend">前端项目</option>
+                  <option value="backend">后端项目</option>
+                </select>
+              </label>
+              <label>
+                项目相对路径
+                <input
+                  value={agentsPath}
+                  onChange={(event) => setAgentsPath(event.target.value)}
+                  placeholder="例如：services/order；根项目填写 ."
+                  required
+                />
+              </label>
+              <div className="create-project-actions">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={busyProjectId === "new"}
+                  onClick={() => setShowCreate(false)}
+                >
+                  取消
+                </button>
+                <button
+                  type="submit"
+                  className="primary-button"
+                  disabled={busyProjectId === "new"}
+                >
+                  {busyProjectId === "new" ? "正在建立映射…" : "创建并映射"}
+                </button>
               </div>
+            </form>
+          ) : null}
+
+          {loading ? <p className="empty-message">正在读取项目…</p> : null}
+
+          {!loading && projects.length === 0 ? (
+            <div className="empty-state">
+              <h2>这个工作空间还没有项目</h2>
+              <p>
+                添加工作空间目录下的相对路径，系统会从该项目的 AGENTS.md 建立映射。
+              </p>
             </div>
-            <code className="project-path">{project.agents_path}</code>
-            <p className="refresh-time">
-              最近映射：{formattedTime(project.refreshed_at)}
-            </p>
-            {project.error ? <p className="card-error">{project.error}</p> : null}
-            <div className="project-card-actions">
-              <button
-                type="button"
-                className="secondary-button"
-                disabled={busyProjectId === project.id}
-                onClick={() => setActionsProject(project)}
-              >
-                更多操作
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
-                disabled={busyProjectId === project.id || !project.enabled}
-                onClick={() => void showTaskHistory(project)}
-              >
-                查看调用记录
-              </button>
-              <button
-                type="button"
-                className="primary-button"
-                disabled={busyProjectId === project.id || !project.enabled}
-                onClick={() => void loadTree(project)}
-              >
-                {busyProjectId === project.id ? "正在读取…" : "查看文档树"}
-              </button>
+          ) : null}
+
+          {!loading && projects.length > 0 && visibleProjects.length === 0 ? (
+            <div className="empty-state">
+              <h2>{`还没有${projectKindLabel(projectKind)}`}</h2>
+              <p>添加项目时可以选择前端项目或后端项目。</p>
             </div>
-          </article>
-        ))}
-      </section>
+          ) : null}
+
+          <section className="project-grid" aria-label="文档项目列表">
+            {visibleProjects.map((project) => (
+              <article className="project-card" key={project.id}>
+                <div className="project-card-heading">
+                  <div>
+                    <div className="project-card-chips">
+                      <span className="file-chip">AGENTS.md</span>
+                      <span className="project-type-chip">
+                        {projectKindLabel(project.project_kind)}
+                      </span>
+                      <span className="project-type-chip">
+                        {project.relative_path === "."
+                          ? "根项目"
+                          : (project.relative_path ?? "相对路径未返回")}
+                      </span>
+                    </div>
+                    <h2>{project.name}</h2>
+                  </div>
+                  <div className="project-card-statuses">
+                    <span className="node-count">
+                      {project.node_count} 个节点
+                    </span>
+                    <span className="node-count">
+                      {project.database_count ?? 0} 个数据库
+                    </span>
+                  </div>
+                </div>
+                <code className="project-path">
+                  {`${project.relative_path ?? "."}/AGENTS.md`}
+                </code>
+                <p className="refresh-time">
+                  最近映射：{formattedTime(project.refreshed_at)}
+                </p>
+                {project.error ? (
+                  <p className="card-error">{project.error}</p>
+                ) : null}
+                <div className="project-card-actions">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={busyProjectId === project.id}
+                    onClick={() => startEditingProject(project)}
+                  >
+                    编辑项目
+                  </button>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    disabled={busyProjectId === project.id}
+                    onClick={() => void openProjectDataSources(project)}
+                  >
+                    管理数据源
+                  </button>
+                  <button
+                    type="button"
+                    className="danger-button"
+                    disabled={busyProjectId === project.id}
+                    onClick={() => setDeletingProject(project)}
+                  >
+                    删除项目
+                  </button>
+                </div>
+              </article>
+            ))}
+          </section>
+        </>
+      ) : null}
 
       {showMcpIntegration ? (
         <McpIntegrationPanel
-          projects={projects}
+          workspace={workspace}
           onClose={() => setShowMcpIntegration(false)}
         />
-      ) : null}
-
-      {actionsProject ? (
-        <div className="project-settings-modal" role="presentation">
-          <section
-            className="project-actions-panel"
-            role="dialog"
-            aria-modal="true"
-            aria-label={`更多操作 ${actionsProject.name}`}
-          >
-            <header>
-              <div>
-                <span className="file-chip">项目操作</span>
-                <h2>{actionsProject.name}</h2>
-                <code>{actionsProject.agents_path}</code>
-              </div>
-              <button
-                type="button"
-                className="close-button"
-                aria-label="关闭更多操作"
-                onClick={() => setActionsProject(null)}
-              >
-                ×
-              </button>
-            </header>
-            <div className="project-actions-grid">
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => {
-                  setActionsProject(null);
-                  startEditingProject(actionsProject);
-                }}
-              >
-                编辑项目
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
-                disabled={busyProjectId === actionsProject.id}
-                onClick={() => {
-                  setActionsProject(null);
-                  void toggleProject(actionsProject);
-                }}
-              >
-                {actionsProject.enabled ? "停用项目" : "启用项目"}
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
-                disabled={
-                  busyProjectId === actionsProject.id || !actionsProject.enabled
-                }
-                onClick={() => {
-                  setActionsProject(null);
-                  void refresh(actionsProject);
-                }}
-              >
-                刷新映射
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
-                disabled={
-                  busyProjectId === actionsProject.id || !actionsProject.enabled
-                }
-                onClick={() => {
-                  setActionsProject(null);
-                  void showMcpPreview(actionsProject);
-                }}
-              >
-                查看 MCP JSON
-              </button>
-              <button
-                type="button"
-                className="secondary-button project-actions-data-source"
-                disabled={busyProjectId === actionsProject.id}
-                onClick={() => {
-                  const project = actionsProject;
-                  setActionsProject(null);
-                  void openProjectDataSources(project);
-                }}
-              >
-                管理数据源
-              </button>
-              <button
-                type="button"
-                className="danger-button project-actions-delete"
-                disabled={busyProjectId === actionsProject.id}
-                onClick={() => {
-                  setActionsProject(null);
-                  setDeletingProject(actionsProject);
-                }}
-              >
-                删除项目
-              </button>
-            </div>
-          </section>
-        </div>
       ) : null}
 
       {dataSourceProject ? (
@@ -1534,15 +1471,18 @@ export function ProjectDashboard() {
             </label>
             <label>
               项目类型
-              <input
-                value={editProjectType}
-                required
-                maxLength={60}
-                onChange={(event) => setEditProjectType(event.target.value)}
-              />
+              <select
+                value={editProjectKind}
+                onChange={(event) =>
+                  setEditProjectKind(event.target.value as ProjectKind)
+                }
+              >
+                <option value="frontend">前端项目</option>
+                <option value="backend">后端项目</option>
+              </select>
             </label>
             <label>
-              AGENTS.md 绝对路径
+              项目相对路径
               <input
                 value={editAgentsPath}
                 required
@@ -1580,8 +1520,8 @@ export function ProjectDashboard() {
             <span className="file-chip">删除项目配置</span>
             <h2>确定删除“{deletingProject.name}”吗？</h2>
             <p>
-              只删除 Context Router 中保存的项目配置，不会删除磁盘上的 AGENTS.md、文档或历史 MCP 调用记录。
-              如果这个路径仍由默认项目环境变量声明，后端下次启动时会重新创建它。
+              只删除 Context Router 中保存的项目配置，不会删除磁盘上的
+              AGENTS.md、文档或历史 MCP 调用记录。
             </p>
             <footer>
               <button
@@ -1632,7 +1572,7 @@ export function ProjectDashboard() {
                 <code>{JSON.stringify(mcpPreview, null, 2)}</code>
               </pre>
             ) : (
-              <p className="empty-message">正在生成完整文档树 JSON…</p>
+              <p className="empty-message">正在生成工作空间文档树 JSON…</p>
             )}
           </section>
         </div>
@@ -1656,7 +1596,11 @@ export function ProjectDashboard() {
                   <strong>{selectedHistoryTask.task}</strong>
                 </>
               ) : (
-                <p>当前项目还没有文档读取任务</p>
+                <p>
+                  {workspace
+                    ? "当前工作空间还没有上下文调用任务"
+                    : "当前项目还没有文档读取任务"}
+                </p>
               )}
               {historyView === "tree" &&
               historyTreeFocusPath !== null &&
@@ -1746,7 +1690,11 @@ export function ProjectDashboard() {
               ) : null}
               {!historyLoading && historyTasks.length === 0 ? (
                 <div className="empty-state task-history-empty">
-                  <h3>当前项目还没有文档读取任务</h3>
+                  <h3>
+                    {workspace
+                      ? "当前工作空间还没有上下文调用任务"
+                      : "当前项目还没有文档读取任务"}
+                  </h3>
                 </div>
               ) : null}
               {!historyLoading &&
@@ -1780,10 +1728,7 @@ export function ProjectDashboard() {
                               disabled={step.document.status === "error"}
                               key={`${step.readCallId}-${step.document.position}`}
                               onClick={() =>
-                                void selectDocument(
-                                  historyProject,
-                                  step.document.document_id,
-                                )
+                                void selectDocument(step.document.document_id)
                               }
                             >
                               <span
@@ -1873,9 +1818,7 @@ export function ProjectDashboard() {
                       node={focusedHistoryTreeNode}
                       nodePath={historyTreeFocusPath ?? []}
                       selectedId={selectedId}
-                      onSelect={(node) =>
-                        void selectDocument(historyProject, node.id)
-                      }
+                      onSelect={(node) => void selectDocument(node.id)}
                       onOpenSubtree={openHistorySubtree}
                       callNumbersByDocumentId={historyCallNumbers}
                     />
@@ -1915,12 +1858,12 @@ export function ProjectDashboard() {
               <button
                 type="button"
                 className="secondary-button"
-                disabled={busyProjectId === activeProject.id}
+                disabled={busyProjectId === "workspace"}
                 onClick={() => void refresh(activeProject, true)}
               >
-                {busyProjectId === activeProject.id
+                {busyProjectId === "workspace"
                   ? "正在刷新…"
-                  : "刷新整棵树"}
+                  : "刷新工作空间映射"}
               </button>
               <button
                 type="button"
@@ -1950,9 +1893,7 @@ export function ProjectDashboard() {
                     node={focusedTreeNode ?? tree}
                     nodePath={treeFocusPath ?? []}
                     selectedId={selectedId}
-                    onSelect={(node) =>
-                      void selectDocument(activeProject, node.id)
-                    }
+                    onSelect={(node) => void selectDocument(node.id)}
                     onOpenSubtree={openTreeSubtree}
                   />
                 </ul>
@@ -1971,4 +1912,4 @@ export function ProjectDashboard() {
       ) : null}
     </>
   );
-}
+});

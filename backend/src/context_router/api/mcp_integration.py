@@ -24,4 +24,4 @@ async def test_mcp_integration(
     payload: McpIntegrationTestRequest,
     request: Request,
 ) -> McpIntegrationTestResult:
-    return await _service(request).run_test(payload.project_id)
+    return await _service(request).run_test(payload.workspace_id)

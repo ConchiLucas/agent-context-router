@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Protocol
+from typing import Literal, Protocol
 
 import psycopg
 
@@ -21,11 +21,18 @@ class TaskRecord:
     cwd: str
     agent_name: str | None
     created_at: datetime
+    scope: Literal["project", "workspace"] = "project"
+    workspace_id: str | None = None
+    workspace_key: str | None = None
+    workspace_name: str | None = None
+    active_project_id: str | None = None
+    active_project_name: str | None = None
+    active_project_kind: Literal["frontend", "backend"] | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class TaskListRecord(TaskRecord):
-    read_call_count: int
+    read_call_count: int = 0
 
 
 class TaskWriter(Protocol):
@@ -40,6 +47,20 @@ class TaskWriter(Protocol):
         agent_name: str | None,
     ) -> int: ...
 
+    def create_workspace_task(
+        self,
+        *,
+        workspace_id: str,
+        workspace_key: str,
+        workspace_name: str,
+        task: str,
+        cwd: str,
+        agent_name: str | None,
+        active_project_id: str | None = None,
+        active_project_name: str | None = None,
+        active_project_kind: Literal["frontend", "backend"] | None = None,
+    ) -> int: ...
+
 
 class TaskReader(Protocol):
     def get_task(self, task_id: int) -> TaskRecord: ...
@@ -49,6 +70,15 @@ class TaskReader(Protocol):
         project_key: str,
         *,
         project_id: str | None = None,
+        limit: int = 30,
+        include_system: bool = False,
+    ) -> list[TaskListRecord]: ...
+
+    def list_workspace_tasks(
+        self,
+        workspace_id: str,
+        *,
+        workspace_key: str | None = None,
         limit: int = 30,
         include_system: bool = False,
     ) -> list[TaskListRecord]: ...
@@ -80,6 +110,7 @@ class PostgresTaskRepository:
                 row = connection.execute(
                     """
                     INSERT INTO mcp_tasks (
+                        scope,
                         project_id,
                         project_key,
                         project_name,
@@ -87,10 +118,76 @@ class PostgresTaskRepository:
                         cwd,
                         agent_name
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    VALUES ('project', %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (project_id, project_key, project_name, task, cwd, agent_name),
+                ).fetchone()
+        except psycopg.Error as exc:
+            raise TaskRepositoryError("任务记录写入失败") from exc
+
+        if row is None:
+            raise TaskRepositoryError("任务记录写入后没有返回任务号")
+        return int(row[0])
+
+    def create_workspace_task(
+        self,
+        *,
+        workspace_id: str,
+        workspace_key: str,
+        workspace_name: str,
+        task: str,
+        cwd: str,
+        agent_name: str | None,
+        active_project_id: str | None = None,
+        active_project_name: str | None = None,
+        active_project_kind: Literal["frontend", "backend"] | None = None,
+    ) -> int:
+        if not self._database_url:
+            raise TaskRepositoryError("任务数据库尚未配置")
+        if active_project_kind not in {None, "frontend", "backend"}:
+            raise TaskRepositoryError("活动项目类型必须是 frontend 或 backend")
+
+        legacy_project_name = active_project_name or workspace_name
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                row = connection.execute(
+                    """
+                    INSERT INTO mcp_tasks (
+                        scope,
+                        workspace_id,
+                        workspace_key,
+                        workspace_name,
+                        active_project_id,
+                        active_project_name,
+                        active_project_kind,
+                        project_id,
+                        project_key,
+                        project_name,
+                        task,
+                        cwd,
+                        agent_name
+                    )
+                    VALUES (
+                        'workspace', %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s
+                    )
+                    RETURNING id
+                    """,
+                    (
+                        workspace_id,
+                        workspace_key,
+                        workspace_name,
+                        active_project_id,
+                        active_project_name,
+                        active_project_kind,
+                        active_project_id,
+                        workspace_key,
+                        legacy_project_name,
+                        task,
+                        cwd,
+                        agent_name,
+                    ),
                 ).fetchone()
         except psycopg.Error as exc:
             raise TaskRepositoryError("任务记录写入失败") from exc
@@ -115,7 +212,14 @@ class PostgresTaskRepository:
                         task,
                         cwd,
                         agent_name,
-                        created_at
+                        created_at,
+                        scope,
+                        workspace_id,
+                        workspace_key,
+                        workspace_name,
+                        active_project_id,
+                        active_project_name,
+                        active_project_kind
                     FROM mcp_tasks
                     WHERE id = %s
                     """,
@@ -126,16 +230,7 @@ class PostgresTaskRepository:
 
         if row is None:
             raise TaskRepositoryError("任务不存在")
-        return TaskRecord(
-            id=int(row[0]),
-            project_id=str(row[1]) if row[1] is not None else None,
-            project_key=str(row[2]),
-            project_name=str(row[3]),
-            task=str(row[4]),
-            cwd=str(row[5]),
-            agent_name=str(row[6]) if row[6] is not None else None,
-            created_at=row[7],
-        )
+        return self._task_record(row)
 
     def list_tasks(
         self,
@@ -162,17 +257,30 @@ class PostgresTaskRepository:
                         task.cwd,
                         task.agent_name,
                         task.created_at,
+                        task.scope,
+                        task.workspace_id,
+                        task.workspace_key,
+                        task.workspace_name,
+                        task.active_project_id,
+                        task.active_project_name,
+                        task.active_project_kind,
                         COUNT(read_call.id) AS read_call_count
                     FROM mcp_tasks AS task
                     LEFT JOIN mcp_document_read_calls AS read_call
                         ON read_call.task_id = task.id
-                    WHERE (
+                    WHERE task.scope = 'project'
+                      AND (
                             task.project_id = %s
                             OR (task.project_id IS NULL AND task.project_key = %s)
                       )
                       AND (%s OR task.agent_name IS DISTINCT FROM 'connection-test')
                     GROUP BY task.id
                     HAVING COUNT(read_call.id) > 0
+                        OR EXISTS (
+                            SELECT 1
+                            FROM mcp_database_calls AS database_call
+                            WHERE database_call.task_id = task.id
+                        )
                     ORDER BY task.id DESC
                     LIMIT %s
                     """,
@@ -181,17 +289,114 @@ class PostgresTaskRepository:
         except psycopg.Error as exc:
             raise TaskRepositoryError("任务列表读取失败") from exc
 
-        return [
-            TaskListRecord(
-                id=int(row[0]),
-                project_id=str(row[1]) if row[1] is not None else None,
-                project_key=str(row[2]),
-                project_name=str(row[3]),
-                task=str(row[4]),
-                cwd=str(row[5]),
-                agent_name=str(row[6]) if row[6] is not None else None,
-                created_at=row[7],
-                read_call_count=int(row[8]),
-            )
-            for row in rows
-        ]
+        return [self._task_list_record(row) for row in rows]
+
+    def list_workspace_tasks(
+        self,
+        workspace_id: str,
+        *,
+        workspace_key: str | None = None,
+        limit: int = 30,
+        include_system: bool = False,
+    ) -> list[TaskListRecord]:
+        if not self._database_url:
+            raise TaskRepositoryError("任务数据库尚未配置")
+
+        safe_limit = min(max(limit, 1), 100)
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                rows = connection.execute(
+                    """
+                    SELECT
+                        task.id,
+                        task.project_id,
+                        task.project_key,
+                        task.project_name,
+                        task.task,
+                        task.cwd,
+                        task.agent_name,
+                        task.created_at,
+                        task.scope,
+                        task.workspace_id,
+                        task.workspace_key,
+                        task.workspace_name,
+                        task.active_project_id,
+                        task.active_project_name,
+                        task.active_project_kind,
+                        COUNT(read_call.id) AS read_call_count
+                    FROM mcp_tasks AS task
+                    LEFT JOIN mcp_document_read_calls AS read_call
+                        ON read_call.task_id = task.id
+                    WHERE (
+                            task.workspace_id = %s
+                            OR (
+                                task.workspace_id IS NULL
+                                AND %s::text IS NOT NULL
+                                AND task.workspace_key = %s
+                            )
+                      )
+                      AND (%s OR task.agent_name IS DISTINCT FROM 'connection-test')
+                    GROUP BY task.id
+                    HAVING COUNT(read_call.id) > 0
+                        OR EXISTS (
+                            SELECT 1
+                            FROM mcp_database_calls AS database_call
+                            WHERE database_call.task_id = task.id
+                        )
+                    ORDER BY task.id DESC
+                    LIMIT %s
+                    """,
+                    (
+                        workspace_id,
+                        workspace_key,
+                        workspace_key,
+                        include_system,
+                        safe_limit,
+                    ),
+                ).fetchall()
+        except psycopg.Error as exc:
+            raise TaskRepositoryError("工作空间任务列表读取失败") from exc
+
+        return [self._task_list_record(row) for row in rows]
+
+    @staticmethod
+    def _task_record(row: tuple[object, ...]) -> TaskRecord:
+        return TaskRecord(
+            id=int(row[0]),
+            project_id=str(row[1]) if row[1] is not None else None,
+            project_key=str(row[2]),
+            project_name=str(row[3]),
+            task=str(row[4]),
+            cwd=str(row[5]),
+            agent_name=str(row[6]) if row[6] is not None else None,
+            created_at=row[7],  # type: ignore[arg-type]
+            scope=str(row[8]),  # type: ignore[arg-type]
+            workspace_id=str(row[9]) if row[9] is not None else None,
+            workspace_key=str(row[10]) if row[10] is not None else None,
+            workspace_name=str(row[11]) if row[11] is not None else None,
+            active_project_id=str(row[12]) if row[12] is not None else None,
+            active_project_name=str(row[13]) if row[13] is not None else None,
+            active_project_kind=str(row[14]) if row[14] is not None else None,  # type: ignore[arg-type]
+        )
+
+    @classmethod
+    def _task_list_record(cls, row: tuple[object, ...]) -> TaskListRecord:
+        task = cls._task_record(row)
+        return TaskListRecord(
+            id=task.id,
+            project_id=task.project_id,
+            project_key=task.project_key,
+            project_name=task.project_name,
+            task=task.task,
+            cwd=task.cwd,
+            agent_name=task.agent_name,
+            created_at=task.created_at,
+            scope=task.scope,
+            workspace_id=task.workspace_id,
+            workspace_key=task.workspace_key,
+            workspace_name=task.workspace_name,
+            active_project_id=task.active_project_id,
+            active_project_name=task.active_project_name,
+            active_project_kind=task.active_project_kind,
+            read_call_count=int(row[15]),
+        )

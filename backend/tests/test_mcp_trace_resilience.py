@@ -536,7 +536,7 @@ def test_concurrent_tasks_keep_calls_and_artifacts_isolated(
 
 
 class PreviewTaskStore:
-    def create_task(self, **_: object) -> int:
+    def create_workspace_task(self, **_: object) -> int:
         return 501
 
     def get_task(self, task_id: int) -> TaskRecord:
@@ -570,11 +570,15 @@ def test_prepare_preview_does_not_create_mcp_tool_calls(tmp_path: Path) -> None:
         )
         assert project.status_code == 201
         preview = client.post(
+            f"/api/workspaces/{project.json()['workspace_id']}/prepare-preview",
+        )
+        removed_project_preview = client.post(
             f"/api/projects/{project.json()['id']}/prepare-preview",
         )
 
     assert preview.status_code == 200
     assert preview.json()["task_id"] == 501
+    assert removed_project_preview.status_code == 404
     assert tool_calls.list_calls(501) == []
 
 

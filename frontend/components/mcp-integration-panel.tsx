@@ -7,13 +7,13 @@ import type {
   McpClientConfig,
   McpIntegrationInfo,
   McpIntegrationTestResult,
-  ProjectSummary,
+  WorkspaceSummary,
 } from "@/lib/types";
 
 type IntegrationTab = "connection" | "codex" | "antigravity" | "test";
 
 interface McpIntegrationPanelProps {
-  projects: ProjectSummary[];
+  workspace: WorkspaceSummary;
   onClose: () => void;
 }
 
@@ -45,7 +45,7 @@ function ClientConfigGuide({
         </p>
         {client.project_config_path ? (
           <p>
-            也可以仅对当前项目配置：<code>{client.project_config_path}</code>
+            也可以仅对当前工作空间配置：<code>{client.project_config_path}</code>
           </p>
         ) : null}
       </div>
@@ -64,10 +64,10 @@ function ClientConfigGuide({
       <div className="integration-note">
         <strong>接入后怎么用</strong>
         <p>
-          新任务先调用 <code>prepare_task_context</code> 获取文档树、task_id 和项目可用数据库别名；
+          新任务先调用 <code>prepare_task_context</code> 获取文档树、task_id 和工作空间可用数据库别名；
           文档目标不明确时先调用 <code>search_context_documents</code>，
           再按需读取选中的文档或章节；数据库仍按对象搜索、有界只读查询的顺序使用。
-          没有匹配项目时，客户端继续使用普通源码检索。
+          没有匹配工作空间时，客户端继续使用普通源码检索。
         </p>
       </div>
     </section>
@@ -75,16 +75,14 @@ function ClientConfigGuide({
 }
 
 export function McpIntegrationPanel({
-  projects,
+  workspace,
   onClose,
 }: McpIntegrationPanelProps) {
-  const availableProjects = projects.filter((project) => project.enabled);
   const [tab, setTab] = useState<IntegrationTab>("connection");
   const [info, setInfo] = useState<McpIntegrationInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  const [projectId, setProjectId] = useState(availableProjects[0]?.id ?? "");
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] =
     useState<McpIntegrationTestResult | null>(null);
@@ -119,11 +117,10 @@ export function McpIntegrationPanel({
   }
 
   async function runTest() {
-    if (!projectId) return;
     setTesting(true);
     setTestResult(null);
     try {
-      setTestResult(await runMcpIntegrationTest(projectId));
+      setTestResult(await runMcpIntegrationTest(workspace.id));
       setError(null);
     } catch (requestError) {
       setError((requestError as Error).message);
@@ -218,9 +215,9 @@ export function McpIntegrationPanel({
                     {info.readiness.database_configured ? "已配置" : "未配置"}
                   </strong>
                 </article>
-                <article data-ready={info.readiness.project_count > 0}>
-                  <span>可匹配项目</span>
-                  <strong>{info.readiness.project_count} 个</strong>
+                <article data-ready={info.readiness.workspace_count > 0}>
+                  <span>可匹配工作空间</span>
+                  <strong>{info.readiness.workspace_count} 个</strong>
                 </article>
                 <article data-ready={databaseToolsAvailable}>
                   <span>数据库工具</span>
@@ -275,33 +272,20 @@ export function McpIntegrationPanel({
               <section className="integration-test-controls">
                 <div>
                   <span className="file-chip">端到端验证</span>
-                  <h3>选择一个项目执行真实 MCP 调用</h3>
+                  <h3>对当前工作空间执行真实 MCP 调用</h3>
                   <p>
                     测试会创建一条隐藏的 connection-test 任务并读取入口文档，不返回正文，也不会执行任何业务数据库查询。
                   </p>
                 </div>
-                <label>
-                  测试项目
-                  <select
-                    value={projectId}
-                    disabled={testing || availableProjects.length === 0}
-                    onChange={(event) => setProjectId(event.target.value)}
-                  >
-                    {availableProjects.map((project) => (
-                      <option value={project.id} key={project.id}>
-                        {project.name} · {project.node_count} 个节点
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <div className="integration-test-workspace">
+                  <span>测试工作空间</span>
+                  <strong>{workspace.name}</strong>
+                  <code>{workspace.root_path}</code>
+                </div>
                 <button
                   type="button"
                   className="primary-button"
-                  disabled={
-                    testing ||
-                    !projectId ||
-                    !info.readiness.ready_for_full_test
-                  }
+                  disabled={testing || !info.readiness.ready_for_full_test}
                   onClick={() => void runTest()}
                 >
                   {testing ? "正在执行完整链路…" : "开始连接测试"}
@@ -314,7 +298,7 @@ export function McpIntegrationPanel({
                   <p>
                     {!info.readiness.database_configured
                       ? "请先配置 PostgreSQL 任务数据库。"
-                      : "请先添加至少一个文档项目。"}
+                      : "请先添加至少一个工作空间。"}
                   </p>
                 </div>
               ) : null}
@@ -326,7 +310,7 @@ export function McpIntegrationPanel({
                       <span>
                         {testResult.status === "passed" ? "测试通过" : "测试未通过"}
                       </span>
-                      <h3>{testResult.project_name ?? "MCP 接入测试"}</h3>
+                      <h3>{testResult.workspace_name ?? "MCP 接入测试"}</h3>
                     </div>
                     {testResult.task_id ? (
                       <code>

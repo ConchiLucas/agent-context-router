@@ -28,7 +28,7 @@ Compose 的前端和后端宿主机端口都显式绑定 `127.0.0.1`，不会默
 
 ## 工作区挂载
 
-后端需要读取用户填写的 `AGENTS.md` 绝对路径。Compose 将宿主机工作区根目录只读挂载到容器 `/workspace`：
+后端需要读取用户填写的 Workspace 绝对根目录、可选的 Workspace 根 `AGENTS.md`，以及其中按相对路径推导出的各项目 `AGENTS.md`。Compose 将宿主机工作区根目录只读挂载到容器 `/workspace`：
 
 ```text
 CONTEXT_ROUTER_WORKSPACE_HOST_ROOT=/Users/conchi/workforce
@@ -36,7 +36,7 @@ CONTEXT_ROUTER_WORKSPACE_HOST_ROOT=/Users/conchi/workforce
 
 后端收到宿主机绝对路径后，会将该前缀替换为 `/workspace` 再读取文件。目标文件必须位于挂载的工作区中。
 
-默认项目通过以下环境变量配置：
+以下默认项目环境变量仅用于兼容启动时声明一个根项目；新页面以 Workspace 根目录和 Project 相对路径为真值：
 
 ```text
 CONTEXT_ROUTER_DEFAULT_PROJECT_NAME=攀枝花多式联运
@@ -47,7 +47,7 @@ CONTEXT_ROUTER_MCP_TEST_TIMEOUT_SECONDS=15
 
 修改挂载路径或默认项目后需要重建容器。
 
-环境变量默认项目属于声明式启动配置：如果在页面删除了同一路径项目，但 `CONTEXT_ROUTER_DEFAULT_AGENTS_PATH` 仍然存在，后端下次启动时会重新写入该项目；需要永久移除时同时清除默认项目环境变量。
+环境变量默认项目属于声明式兼容配置：如果在页面删除了同一路径项目，但 `CONTEXT_ROUTER_DEFAULT_AGENTS_PATH` 仍然存在，后端下次启动时会重新写入对应 Workspace 根项目；需要永久移除时同时清除默认项目环境变量。
 
 `CONTEXT_ROUTER_PUBLIC_MCP_URL` 只用于接入面板生成 Codex 和 Antigravity 配置；后端容器通过固定的 `http://127.0.0.1:8000/mcp` 对自身执行真实协议测试。修改该变量不会改变 Compose 的回环绑定，也不会增加 HTTPS 或鉴权；当前版本不支持远程暴露。若未来设计远程部署，需要先完成安全评审和相应实现，再把公开地址设置为客户端实际可访问的 URL。
 
@@ -68,7 +68,7 @@ CONTEXT_ROUTER_DATABASE_PAYLOAD_TTL_DAYS=7
 CONTEXT_ROUTER_DATABASE_PAYLOAD_CLEANUP_INTERVAL_SECONDS=3600
 ```
 
-项目数据库关联自己的行数、字节数和超时限制会与查询全局值取更严格者。数据库 MCP 出入参详情默认自动采集，`DATABASE_PAYLOAD_*` 控制两个数据库 MCP 工具的本地详情快照：请求和最终 MCP 响应默认分别最多保存 1 MB，任何配置都不能超过 4 MB，默认保留 7 天，并在后端启动及调用期间按节流周期清理。修改这些值后重启 backend。
+项目数据库关联自己的行数、字节数和超时限制会与查询全局值取更严格者。数据库 MCP 出入参详情默认自动采集，`DATABASE_PAYLOAD_*` 控制两个数据库 MCP 工具的本地详情快照：请求和最终 MCP 响应默认分别最多保存 1 MB，任何配置都不能超过 4 MB，默认保留 7 天，并在后端启动及调用期间按节流周期清理。授权记录归属 Project，但 `mcp_alias` 在 Workspace 内唯一，新 Workspace task 可以使用所有子项目在 prepare 中返回的 alias。修改这些值后重启 backend。
 
 ## PostgreSQL 与 migration
 
@@ -84,9 +84,11 @@ CONTEXT_ROUTER_DATABASE_URL=postgresql://USER:PASSWORD@host.docker.internal:5432
 docker compose exec backend uv run alembic upgrade head
 ```
 
-PostgreSQL 保存项目、数据源、数据库清单、项目数据库关联及 `mcp_alias`、MCP task、read call、文档顺序、数据库调用审计元数据，以及可重建的文档搜索分块与索引状态。文档树和 Markdown 原文仍从磁盘重建，文档工具完整出入参不持久化；显式启用 payload 采集后，`search_database_objects` 和 `execute_database_query` 才额外保存有界、可过期的详情快照，供本机链路页面按需查看。后端启动时恢复项目配置，并为启用项目从磁盘重建内存树与匹配版本的词法索引；路径失效的项目仍保留在页面并显示错误。
+当前 migration head 为 `20260726_0015`。`0013` 引入 Workspace 与项目相对路径；`0014` 增加 `frontend/backend` 项目类型、移除 Project enabled、把 `mcp_alias` 唯一范围提升到 Workspace，并为新 task 增加 Workspace scope；`0015` 增加工作空间级 Markdown 的独立词法搜索索引。旧 task 保持 `scope='project'` 兼容，迁移同时回填 Workspace/活动项目快照。
 
-数据库未配置时后端和 `/health` 仍可启动，项目配置退化为当前进程内存；但 task_id 持久化、prepare/search/read 的完整 MCP 工作流、卡片 JSON 预览和持久化调用记录不可用。文档搜索不会降级为进程内扫描。业务数据源离线不会阻止后端启动，也不会阻止文档 prepare/search/read；连接只在测试、同步、对象搜索或查询时延迟建立。
+PostgreSQL 保存 Workspace、Project 类型与相对路径、数据源、数据库清单、项目数据库关联及 Workspace 唯一 `mcp_alias`、带 scope 的 MCP task、read call、文档顺序、数据库调用审计元数据，以及可重建的文档搜索分块与索引状态。文档树和 Markdown 原文仍从磁盘重建，文档工具完整出入参不持久化；`search_database_objects` 和 `execute_database_query` 自动保存有界、可过期的详情快照，供本机链路页面按需查看。后端启动时恢复工作空间和全部项目配置，并从磁盘重建每个项目的内存树与匹配版本词法索引；路径失效的项目仍保留在页面并显示错误。
+
+数据库未配置时后端和 `/health` 仍可启动，默认配置退化为当前进程内存；但 task_id 持久化、prepare/search/read 的完整 MCP 工作流、Workspace MCP JSON 预览和持久化调用记录不可用。文档搜索不会降级为进程内扫描。业务数据源离线不会阻止后端启动，也不会阻止 Workspace 文档 prepare/search/read；连接只在测试、同步、对象搜索或查询时延迟建立。
 
 ## Docker Desktop 与公司 VPN 数据库
 

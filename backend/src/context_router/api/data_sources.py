@@ -37,6 +37,7 @@ from context_router.schemas.data_sources import (
     ProjectDataSourceOption,
     ProjectDataSourceOptions,
 )
+from context_router.schemas.projects import ProjectSummary
 from context_router.services.database_discovery import discover_databases
 from context_router.services.project_registry import ProjectRegistry
 
@@ -95,14 +96,18 @@ def _link_summary(record: ProjectDatabaseLinkRecord) -> ProjectDatabaseLinkSumma
     )
 
 
-def _project_name(request: Request, project_id: str) -> str:
+def _project(request: Request, project_id: str) -> ProjectSummary:
     project = next(
         (item for item in _registry(request).list_projects() if item.id == project_id),
         None,
     )
     if project is None:
         raise DataSourceRepositoryError("项目不存在")
-    return project.name
+    return project
+
+
+def _project_name(request: Request, project_id: str) -> str:
+    return _project(request, project_id).name
 
 
 def _project_data_source_options(request: Request, project_id: str) -> ProjectDataSourceOptions:
@@ -500,12 +505,12 @@ def create_database_project_link(
     try:
         database = _store(request).get_database(database_id)
         source = _store(request).get_data_source(database.data_source_id)
-        project_name = _project_name(request, payload.project_id)
+        project = _project(request, payload.project_id)
         now = datetime.now(UTC)
         record = ProjectDatabaseLinkRecord(
             id=uuid4().hex,
             project_id=payload.project_id,
-            project_name=project_name,
+            project_name=project.name,
             database_id=database_id,
             database_name=database.remote_name,
             data_source_id=source.id,
@@ -522,6 +527,9 @@ def create_database_project_link(
             query_timeout_ms=payload.query_timeout_ms,
             created_at=now,
             updated_at=now,
+            workspace_id=project.workspace_id,
+            workspace_enabled=project.workspace_enabled,
+            project_kind=project.project_kind,
         )
         saved_record = _store(request).create_link(record)
         return _link_summary(saved_record)
@@ -550,11 +558,11 @@ def update_database_project_link(
         )
         if previous is None:
             raise DataSourceRepositoryError("项目数据库关联不存在")
-        project_name = _project_name(request, payload.project_id)
+        project = _project(request, payload.project_id)
         record = replace(
             previous,
             project_id=payload.project_id,
-            project_name=project_name,
+            project_name=project.name,
             alias=payload.alias.strip(),
             mcp_alias=payload.mcp_alias or previous.mcp_alias,
             purpose=payload.purpose.strip(),
@@ -565,6 +573,9 @@ def update_database_project_link(
             max_result_bytes=payload.max_result_bytes,
             query_timeout_ms=payload.query_timeout_ms,
             updated_at=datetime.now(UTC),
+            workspace_id=project.workspace_id,
+            workspace_enabled=project.workspace_enabled,
+            project_kind=project.project_kind,
         )
         saved_record = _store(request).update_link(record)
         return _link_summary(saved_record)
@@ -655,7 +666,7 @@ def replace_project_databases(
     request: Request,
 ) -> ProjectDataSourceOptions:
     try:
-        project_name = _project_name(request, project_id)
+        project = _project(request, project_id)
         if len(payload.database_ids) != len(set(payload.database_ids)):
             raise DataSourceRepositoryError("数据库选择中存在重复项")
         unexpected_aliases = set(payload.mcp_aliases).difference(payload.database_ids)
@@ -687,6 +698,9 @@ def replace_project_databases(
                     replace(
                         existing,
                         mcp_alias=requested_alias or existing.mcp_alias,
+                        workspace_id=project.workspace_id,
+                        workspace_enabled=project.workspace_enabled,
+                        project_kind=project.project_kind,
                         updated_at=(
                             now
                             if requested_alias and requested_alias != existing.mcp_alias
@@ -705,7 +719,7 @@ def replace_project_databases(
                 ProjectDatabaseLinkRecord(
                     id=uuid4().hex,
                     project_id=project_id,
-                    project_name=project_name,
+                    project_name=project.name,
                     database_id=database.id,
                     database_name=database.remote_name,
                     data_source_id=source.id,
@@ -722,6 +736,9 @@ def replace_project_databases(
                     query_timeout_ms=15_000,
                     created_at=now,
                     updated_at=now,
+                    workspace_id=project.workspace_id,
+                    workspace_enabled=project.workspace_enabled,
+                    project_kind=project.project_kind,
                 )
             )
         store.replace_project_links(project_id, records)

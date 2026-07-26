@@ -64,6 +64,52 @@ class DocumentSearchIndexer:
         except DocumentSearchRepositoryError as exc:
             raise DocumentSearchIndexError(str(exc)) from exc
 
+    def ensure_workspace_index(
+        self,
+        *,
+        workspace_id: str,
+        cache: DocumentCache,
+    ) -> None:
+        try:
+            state = self._repository.get_workspace_index_state(workspace_id)
+        except DocumentSearchRepositoryError as exc:
+            raise DocumentSearchIndexError(str(exc)) from exc
+
+        if (
+            state is not None
+            and state.index_version == cache.version
+            and state.index_format_version == DOCUMENT_SEARCH_INDEX_FORMAT_VERSION
+        ):
+            return
+        self.rebuild_workspace_index(workspace_id=workspace_id, cache=cache)
+
+    def rebuild_workspace_index(
+        self,
+        *,
+        workspace_id: str,
+        cache: DocumentCache,
+    ) -> None:
+        chunks = [
+            chunk
+            for document in sorted(cache.documents.values(), key=lambda item: item.id)
+            for chunk in self._document_chunks(document, cache)
+        ]
+        try:
+            self._repository.replace_workspace_index(
+                workspace_id=workspace_id,
+                index_version=cache.version,
+                index_format_version=DOCUMENT_SEARCH_INDEX_FORMAT_VERSION,
+                chunks=chunks,
+            )
+        except DocumentSearchRepositoryError as exc:
+            raise DocumentSearchIndexError(str(exc)) from exc
+
+    def delete_workspace_index(self, workspace_id: str) -> None:
+        try:
+            self._repository.delete_workspace_index(workspace_id)
+        except DocumentSearchRepositoryError as exc:
+            raise DocumentSearchIndexError(str(exc)) from exc
+
     @staticmethod
     def _document_chunks(
         document: CachedDocument,

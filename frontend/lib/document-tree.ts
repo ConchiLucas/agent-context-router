@@ -12,6 +12,12 @@ export function documentFilename(path: string): string {
 }
 
 export function documentNodeLabel(node: DocumentTreeNode): string {
+  if (
+    node.relative_path === null &&
+    node.description === "工作空间文档入口"
+  ) {
+    return "工作空间文档入口";
+  }
   if (node.relative_path === null) return "项目文档入口";
   if (documentFilename(node.path).includes("subprojects-overview")) {
     return "子项目总览";

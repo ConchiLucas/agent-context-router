@@ -27,7 +27,7 @@ class McpClientConfig(BaseModel):
 
 class McpIntegrationReadiness(BaseModel):
     database_configured: bool
-    project_count: int
+    workspace_count: int
     ready_for_full_test: bool
 
 
@@ -39,7 +39,7 @@ class McpIntegrationInfo(BaseModel):
 
 
 class McpIntegrationTestRequest(BaseModel):
-    project_id: str = Field(min_length=1)
+    workspace_id: str = Field(min_length=1)
 
 
 class McpIntegrationTestStage(BaseModel):
@@ -52,8 +52,8 @@ class McpIntegrationTestStage(BaseModel):
 
 class McpIntegrationTestResult(BaseModel):
     status: Literal["passed", "failed"]
-    project_id: str
-    project_name: str | None = None
+    workspace_id: str
+    workspace_name: str | None = None
     task_id: int | None = None
     read_call_id: int | None = None
     started_at: datetime

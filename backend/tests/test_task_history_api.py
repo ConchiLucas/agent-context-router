@@ -17,38 +17,57 @@ from context_router.repositories.task_repository import TaskListRecord, TaskReco
 
 class FakeTaskStore:
     def __init__(self) -> None:
-        self.project_id = ""
-        self.project_key = ""
+        self.workspace_id = ""
+        self.workspace_key = ""
+        self.workspace_name = ""
+        self.active_project_id = "frontend-project"
+        self.active_project_name = "前端项目"
+        self.active_project_kind = "frontend"
         self.created_at = datetime.now(UTC)
 
-    def create_task(self, *, project_id: str, project_key: str, **_: object) -> int:
-        self.project_id = project_id
-        self.project_key = project_key
+    def create_workspace_task(
+        self,
+        *,
+        workspace_id: str,
+        workspace_key: str,
+        workspace_name: str,
+        **_: object,
+    ) -> int:
+        self.workspace_id = workspace_id
+        self.workspace_key = workspace_key
+        self.workspace_name = workspace_name
         return 12
 
     def get_task(self, task_id: int) -> TaskRecord:
         assert task_id == 12
         return TaskRecord(
             id=12,
-            project_id=self.project_id,
-            project_key=self.project_key,
-            project_name="测试项目",
+            project_id=None,
+            project_key=self.workspace_key,
+            project_name=self.workspace_name,
             task="排查登录问题",
             cwd="/workspace/test",
             agent_name="codex",
             created_at=self.created_at,
+            scope="workspace",
+            workspace_id=self.workspace_id,
+            workspace_key=self.workspace_key,
+            workspace_name=self.workspace_name,
+            active_project_id=self.active_project_id,
+            active_project_name=self.active_project_name,
+            active_project_kind="frontend",
         )
 
-    def list_tasks(
+    def list_workspace_tasks(
         self,
-        project_key: str,
+        workspace_id: str,
         *,
-        project_id: str | None = None,
+        workspace_key: str | None = None,
         limit: int = 30,
         include_system: bool = False,
     ) -> list[TaskListRecord]:
-        assert project_key == self.project_key
-        assert project_id == self.project_id
+        assert workspace_id == self.workspace_id
+        assert workspace_key == self.workspace_key
         assert limit == 30
         assert include_system is False
         task = self.get_task(12)
@@ -62,6 +81,13 @@ class FakeTaskStore:
                 cwd=task.cwd,
                 agent_name=task.agent_name,
                 created_at=task.created_at,
+                scope=task.scope,
+                workspace_id=task.workspace_id,
+                workspace_key=task.workspace_key,
+                workspace_name=task.workspace_name,
+                active_project_id=task.active_project_id,
+                active_project_name=task.active_project_name,
+                active_project_kind=task.active_project_kind,
                 read_call_count=1,
             )
         ]
@@ -130,7 +156,7 @@ class FakeDatabaseCallStore:
         ]
 
 
-def test_lists_project_tasks_and_ordered_read_history(tmp_path: Path) -> None:
+def test_lists_workspace_tasks_and_ordered_read_history(tmp_path: Path) -> None:
     root = tmp_path / "project" / "AGENTS.md"
     root.parent.mkdir(parents=True)
     root.write_text("# 项目入口", encoding="utf-8")
@@ -151,18 +177,39 @@ def test_lists_project_tasks_and_ordered_read_history(tmp_path: Path) -> None:
     )
 
     with TestClient(app) as client:
-        project = client.post(
-            "/api/projects",
-            json={"name": "测试项目", "agents_path": str(root)},
+        workspace = client.post(
+            "/api/workspaces",
+            json={"name": "测试工作空间", "root_path": str(root.parent)},
         ).json()
-        client.post(f"/api/projects/{project['id']}/prepare-preview")
-        tasks = client.get(f"/api/projects/{project['id']}/tasks")
+        project = client.post(
+            f"/api/workspaces/{workspace['id']}/projects",
+            json={"name": "测试项目", "relative_path": "."},
+        ).json()
+        client.post(f"/api/workspaces/{workspace['id']}/prepare-preview")
+        disabled_workspace = client.patch(
+            f"/api/workspaces/{workspace['id']}/enabled",
+            json={"enabled": False},
+        )
+        tasks = client.get(f"/api/workspaces/{workspace['id']}/tasks")
+        removed_project_tasks = client.get(f"/api/projects/{project['id']}/tasks")
         history = client.get("/api/tasks/12/document-reads")
 
     assert tasks.status_code == 200
+    assert disabled_workspace.status_code == 200
     assert tasks.json()[0]["task_id"] == 12
     assert tasks.json()[0]["read_call_count"] == 1
+    assert tasks.json()[0]["scope"] == "workspace"
+    assert tasks.json()[0]["workspace_id"] == workspace["id"]
+    assert tasks.json()[0]["active_project_id"] == "frontend-project"
+    assert tasks.json()[0]["active_project_kind"] == "frontend"
+    assert removed_project_tasks.status_code == 404
     assert history.status_code == 200
+    assert history.json()["scope"] == "workspace"
+    assert history.json()["workspace_id"] == workspace["id"]
+    assert history.json()["workspace_name"] == "测试工作空间"
+    assert history.json()["active_project_id"] == "frontend-project"
+    assert history.json()["active_project_name"] == "前端项目"
+    assert history.json()["active_project_kind"] == "frontend"
     assert history.json()["calls"][0]["read_call_id"] == 31
     assert history.json()["calls"][0]["documents"] == [
         {

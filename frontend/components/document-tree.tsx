@@ -81,6 +81,7 @@ function DocumentTreeBranch({
           type="button"
           className="document-node-main"
           aria-label={documentAriaLabel}
+          disabled={node.selectable === false}
           onClick={() => onSelect(node)}
           title={node.description}
         >

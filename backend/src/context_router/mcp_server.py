@@ -39,7 +39,7 @@ from context_router.services.mcp_trace import McpTraceService
 
 MCP_SERVER_NAME = "Context Router"
 MCP_SERVER_INSTRUCTIONS = (
-    "Call prepare_task_context once at the start of a new project task. Preserve the "
+    "Call prepare_task_context once at the start of a new workspace task. Preserve the "
     "returned task_id and pass it to every document or database call for that task. "
     "When the document tree is large or the target is uncertain, call "
     "search_context_documents and then read the selected document or section with "
@@ -56,17 +56,18 @@ MCP_SERVER_INSTRUCTIONS = (
     EXECUTE_DATABASE_TOOL_NAME,
 ) = CONTEXT_ROUTER_TRACE_TOOL_NAMES
 PREPARE_TOOL_DESCRIPTION = (
-    "Locate the registered project for cwd, create a server-side task number, and "
-    "return its complete document tree. Summaries are only returned when explicitly "
-    "declared in Markdown Front Matter."
+    "Locate the registered workspace for cwd, create a server-side task number, and "
+    "return its explicit workspace document tree or synthetic project-root tree. Project "
+    "documents outside an explicit root remain available through search_context_documents. "
+    "Summaries are only returned when explicitly declared in Markdown Front Matter."
 )
 READ_TOOL_DESCRIPTION = (
-    "Read one or more Markdown documents or exact ATX-heading sections from the project "
+    "Read one or more Markdown documents or exact ATX-heading sections from the workspace "
     "selected by prepare_task_context. task_id must be the value returned for the current "
     "task. Results preserve request order and every call is recorded server-side."
 )
 SEARCH_CONTEXT_TOOL_DESCRIPTION = (
-    "Search every mapped Markdown document in the project selected by prepare_task_context. "
+    "Search every mapped Markdown document in the workspace selected by prepare_task_context. "
     "Returns document metadata, matching sections, relevance, and deterministic match reasons "
     "without returning Markdown content. Use read_context_document for selected results."
 )

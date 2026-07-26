@@ -23,7 +23,9 @@ from context_router.repositories.database_call_repository import (
     PostgresDatabaseCallRepository,
 )
 from context_router.repositories.mcp_tool_call_repository import PostgresMcpToolCallRepository
+from context_router.repositories.project_repository import PostgresProjectRepository
 from context_router.repositories.task_repository import PostgresTaskRepository
+from context_router.repositories.workspace_repository import PostgresWorkspaceRepository
 
 pytestmark = pytest.mark.postgresql
 
@@ -34,6 +36,9 @@ _REVISION_0009 = "20260724_0009"
 _REVISION_0010 = "20260724_0010"
 _REVISION_0011 = "20260725_0011"
 _REVISION_0012 = "20260725_0012"
+_REVISION_0013 = "20260726_0013"
+_REVISION_0014 = "20260726_0014"
+_REVISION_0015 = "20260726_0015"
 
 _PROJECT_A = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 _PROJECT_B = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -140,72 +145,13 @@ def test_migration_and_postgres_repositories_preserve_legacy_data(
             (task_id,),
         ).fetchone() == (_PROJECT_A,)
 
-    data_sources = PostgresDataSourceRepository(database_url)
-    resolved = data_sources.get_project_database_by_alias(
-        project_id=_PROJECT_A,
-        mcp_alias="ANALYTICS_WAREHOUSE",
-    )
-    assert resolved.link_id == _LINK_A
-    assert resolved.project_name == "Legacy Project A"
-    assert resolved.database_id == _DATABASE_A
-    assert resolved.database_remote_name == "warehouse_a"
-    assert resolved.data_source_id == _SOURCE_ID
-    assert resolved.data_source_category == "本机电脑"
-    assert resolved.connection_config == {
-        "host": "legacy-db.internal",
-        "password": "legacy-secret",
-        "username": "legacy-reader",
-    }
-    assert resolved.allowed_schemas == ["public"]
-    assert resolved.max_rows == 321
-    assert resolved.max_result_bytes == 654_321
-    assert resolved.query_timeout_ms == 7_654
-
-    same_alias_other_project = data_sources.get_project_database_by_alias(
-        project_id=_PROJECT_B,
-        mcp_alias="analytics_warehouse",
-    )
-    assert same_alias_other_project.link_id == _LINK_OTHER_PROJECT
-
-    original_links = data_sources.list_links(project_id=_PROJECT_A)
-    original_by_id = {link.id: link for link in original_links}
-    swapped = data_sources.replace_project_links(
-        _PROJECT_A,
-        [
-            replace(
-                original_by_id[_LINK_A],
-                mcp_alias=original_by_id[_LINK_B].mcp_alias,
-            ),
-            replace(
-                original_by_id[_LINK_B],
-                mcp_alias=original_by_id[_LINK_A].mcp_alias,
-            ),
-        ],
-    )
-    assert {link.id: link.mcp_alias for link in swapped} == {
-        _LINK_A: aliases[_LINK_B],
-        _LINK_B: aliases[_LINK_A],
-    }
-    assert (
-        data_sources.get_project_database_by_alias(
-            project_id=_PROJECT_A,
-            mcp_alias="analytics_warehouse",
-        ).link_id
-        == _LINK_B
-    )
-    restored = data_sources.replace_project_links(_PROJECT_A, original_links)
-    assert {link.id: link.mcp_alias for link in restored} == {
-        _LINK_A: aliases[_LINK_A],
-        _LINK_B: aliases[_LINK_B],
-    }
-
     calls = PostgresDatabaseCallRepository(database_url)
     sql_digest = hashlib.sha256(b"SELECT id FROM public.events").hexdigest()
     call_id = calls.create_call(
         DatabaseCallWrite(
             task_id=task_id,
             operation="execute_query",
-            database_alias=resolved.mcp_alias,
+            database_alias=aliases[_LINK_A],
             engine="postgresql",
             status="ok",
             statement_type="select",
@@ -247,9 +193,72 @@ def test_migration_and_postgres_repositories_preserve_legacy_data(
         )
 
     command.upgrade(alembic_config, "head")
-    assert _current_revision(database_url) == _REVISION_0012
+    assert _current_revision(database_url) == _REVISION_0015
     assert _aliases(database_url) == aliases
     _assert_legacy_rows_survive(database_url)
+    _assert_legacy_projects_migrated_to_workspaces(database_url)
+    _assert_workspace_alias_unique_index(database_url, aliases[_LINK_A])
+
+    data_sources = PostgresDataSourceRepository(database_url)
+    resolved = data_sources.get_workspace_database_by_alias(
+        workspace_id=_PROJECT_A,
+        mcp_alias="ANALYTICS_WAREHOUSE",
+    )
+    assert resolved.link_id == _LINK_A
+    assert resolved.workspace_id == _PROJECT_A
+    assert resolved.project_name == "Legacy Project A"
+    assert resolved.project_kind == "backend"
+    assert resolved.database_id == _DATABASE_A
+    assert resolved.database_remote_name == "warehouse_a"
+    assert resolved.data_source_id == _SOURCE_ID
+    assert resolved.data_source_category == "本机电脑"
+    assert resolved.connection_config == {
+        "host": "legacy-db.internal",
+        "password": "legacy-secret",
+        "username": "legacy-reader",
+    }
+    assert resolved.allowed_schemas == ["public"]
+    assert resolved.max_rows == 321
+    assert resolved.max_result_bytes == 654_321
+    assert resolved.query_timeout_ms == 7_654
+
+    same_alias_other_workspace = data_sources.get_workspace_database_by_alias(
+        workspace_id=_PROJECT_B,
+        mcp_alias="analytics_warehouse",
+    )
+    assert same_alias_other_workspace.link_id == _LINK_OTHER_PROJECT
+
+    original_links = data_sources.list_links(project_id=_PROJECT_A)
+    original_by_id = {link.id: link for link in original_links}
+    swapped = data_sources.replace_project_links(
+        _PROJECT_A,
+        [
+            replace(
+                original_by_id[_LINK_A],
+                mcp_alias=original_by_id[_LINK_B].mcp_alias,
+            ),
+            replace(
+                original_by_id[_LINK_B],
+                mcp_alias=original_by_id[_LINK_A].mcp_alias,
+            ),
+        ],
+    )
+    assert {link.id: link.mcp_alias for link in swapped} == {
+        _LINK_A: aliases[_LINK_B],
+        _LINK_B: aliases[_LINK_A],
+    }
+    assert (
+        data_sources.get_workspace_database_by_alias(
+            workspace_id=_PROJECT_A,
+            mcp_alias="analytics_warehouse",
+        ).link_id
+        == _LINK_B
+    )
+    restored = data_sources.replace_project_links(_PROJECT_A, original_links)
+    assert {link.id: link.mcp_alias for link in restored} == {
+        _LINK_A: aliases[_LINK_A],
+        _LINK_B: aliases[_LINK_B],
+    }
     _assert_task_project_snapshot_survives_project_deletion(database_url)
 
 
@@ -339,7 +348,186 @@ def test_trace_list_keeps_ordinary_tasks_without_internal_calls_and_excludes_sys
     assert records_by_task["ordinary-read-without-prepare"].prepare_call_count == 0
 
 
-def test_project_task_history_only_lists_tasks_with_document_reads(
+def test_workspace_alias_migration_rejects_conflicts_without_renaming(
+    isolated_postgres_database: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_url = isolated_postgres_database
+    monkeypatch.setenv("CONTEXT_ROUTER_DATABASE_URL", database_url)
+    alembic_config = _alembic_config()
+    command.upgrade(alembic_config, _REVISION_0013)
+
+    workspace_id = "56565656565656565656565656565656"
+    project_a = "67676767676767676767676767676767"
+    project_b = "78787878787878787878787878787878"
+    source_id = "89898989898989898989898989898989"
+    database_a = "90909090909090909090909090909090"
+    database_b = "ababababababababababababababab01"
+    link_a = "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcd01"
+    link_b = "efefefefefefefefefefefefefefef01"
+    with psycopg.connect(database_url) as connection:
+        connection.execute(
+            """
+            INSERT INTO workspaces
+                (id, name, workspace_type, root_path, enabled)
+            VALUES (%s, '冲突工作空间', '公司项目', '/workspace/conflict', true)
+            """,
+            (workspace_id,),
+        )
+        connection.execute(
+            """
+            INSERT INTO document_projects (
+                id, name, agents_path, enabled, project_type,
+                workspace_id, relative_path
+            )
+            VALUES
+                (%s, '前端', '/workspace/conflict/frontend/AGENTS.md', true,
+                 '公司项目', %s, 'frontend'),
+                (%s, '后端', '/workspace/conflict/backend/AGENTS.md', true,
+                 '公司项目', %s, 'backend')
+            """,
+            (project_a, workspace_id, project_b, workspace_id),
+        )
+        connection.execute(
+            """
+            INSERT INTO data_sources (
+                id, name, category, engine, description, connection_config,
+                enabled, config_version
+            )
+            VALUES (%s, '冲突数据源', '本机电脑', 'postgresql', '', %s, true, 1)
+            """,
+            (source_id, Jsonb({})),
+        )
+        connection.execute(
+            """
+            INSERT INTO data_source_databases (
+                id, data_source_id, remote_name, display_name,
+                namespace_type, available, system_database, metadata
+            )
+            VALUES
+                (%s, %s, 'frontend_db', '前端库', 'database', true, false, %s),
+                (%s, %s, 'backend_db', '后端库', 'database', true, false, %s)
+            """,
+            (
+                database_a,
+                source_id,
+                Jsonb({}),
+                database_b,
+                source_id,
+                Jsonb({}),
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO project_databases (
+                id, project_id, database_id, alias, mcp_alias, purpose,
+                enabled, readonly, allowed_schemas
+            )
+            VALUES
+                (%s, %s, %s, '前端库', 'shared_db', '', true, true, %s),
+                (%s, %s, %s, '后端库', 'shared_db', '', true, true, %s)
+            """,
+            (
+                link_a,
+                project_a,
+                database_a,
+                Jsonb([]),
+                link_b,
+                project_b,
+                database_b,
+                Jsonb([]),
+            ),
+        )
+
+    with pytest.raises(RuntimeError, match="工作空间内存在重复 MCP 数据库别名"):
+        command.upgrade(alembic_config, _REVISION_0014)
+
+    assert _current_revision(database_url) == _REVISION_0013
+    with psycopg.connect(database_url) as connection:
+        rows = connection.execute(
+            """
+            SELECT id, mcp_alias
+            FROM project_databases
+            WHERE id IN (%s, %s)
+            ORDER BY id
+            """,
+            (link_a, link_b),
+        ).fetchall()
+        project_kind_column = connection.execute(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = 'document_projects'
+              AND column_name = 'project_kind'
+            """
+        ).fetchone()
+    assert rows == [(link_a, "shared_db"), (link_b, "shared_db")]
+    assert project_kind_column is None
+
+
+def test_postgres_workspace_and_project_repositories_keep_legacy_fields_in_sync(
+    isolated_postgres_database: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_url = isolated_postgres_database
+    monkeypatch.setenv("CONTEXT_ROUTER_DATABASE_URL", database_url)
+    command.upgrade(_alembic_config(), "head")
+    workspaces = PostgresWorkspaceRepository(database_url)
+    projects = PostgresProjectRepository(database_url)
+    workspace_id = "abababababababababababababababab"
+    project_id = "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+
+    workspaces.create_workspace(
+        workspace_id=workspace_id,
+        name="业务工作空间",
+        workspace_type="业务系统",
+        root_path="/workspace/company",
+        enabled=True,
+    )
+    projects.create_project(
+        project_id=project_id,
+        workspace_id=workspace_id,
+        relative_path="services/order",
+        name="订单服务",
+        project_kind="frontend",
+    )
+    created = projects.get_project(project_id)
+    assert created.project_type == "业务系统"
+    assert created.project_kind == "frontend"
+    assert created.agents_path == "/workspace/company/services/order/AGENTS.md"
+    assert created.workspace_name == "业务工作空间"
+
+    workspaces.update_workspace(
+        workspace_id,
+        name="新工作空间",
+        workspace_type="交通物流",
+        root_path="/workspace/moved",
+    )
+    updated = projects.get_project(project_id)
+    assert updated.project_type == "交通物流"
+    assert updated.agents_path == "/workspace/moved/services/order/AGENTS.md"
+    assert updated.workspace_name == "新工作空间"
+
+    projects.update_project(
+        project_id,
+        name="订单根项目",
+        workspace_id=workspace_id,
+        relative_path=".",
+        project_kind="backend",
+    )
+    moved = projects.get_project(project_id)
+    assert moved.agents_path == "/workspace/moved/AGENTS.md"
+    assert moved.project_kind == "backend"
+
+    workspaces.set_workspace_enabled(workspace_id, enabled=False)
+    assert projects.get_project(project_id).workspace_enabled is False
+
+    workspaces.delete_workspace(workspace_id)
+    assert projects.list_projects(workspace_id) == []
+
+
+def test_legacy_project_task_history_lists_document_and_database_activity(
     isolated_postgres_database: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -395,7 +583,118 @@ def test_project_task_history_only_lists_tasks_with_document_reads(
         limit=30,
     )
 
-    assert [(task.task, task.read_call_count) for task in tasks] == [("document-read", 1)]
+    assert [(task.task, task.read_call_count, task.scope) for task in tasks] == [
+        ("document-read", 1, "project"),
+        ("database-only", 0, "project"),
+    ]
+
+
+def test_workspace_task_repository_persists_scope_and_stable_snapshots(
+    isolated_postgres_database: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_url = isolated_postgres_database
+    monkeypatch.setenv("CONTEXT_ROUTER_DATABASE_URL", database_url)
+    command.upgrade(_alembic_config(), "head")
+
+    workspace_id = "12121212121212121212121212121212"
+    project_id = "34343434343434343434343434343434"
+    workspace_root = "/workspace/task-scope"
+    workspace_key = hashlib.sha256(workspace_root.encode()).hexdigest()
+    project_key = hashlib.sha256(f"{workspace_root}/frontend/AGENTS.md".encode()).hexdigest()
+    workspaces = PostgresWorkspaceRepository(database_url)
+    projects = PostgresProjectRepository(database_url)
+    tasks = PostgresTaskRepository(database_url)
+
+    workspaces.create_workspace(
+        workspace_id=workspace_id,
+        name="任务工作空间",
+        workspace_type="业务系统",
+        root_path=workspace_root,
+        enabled=True,
+    )
+    projects.create_project(
+        project_id=project_id,
+        workspace_id=workspace_id,
+        relative_path="frontend",
+        name="前端项目",
+        project_kind="frontend",
+    )
+
+    document_task_id = tasks.create_workspace_task(
+        workspace_id=workspace_id,
+        workspace_key=workspace_key,
+        workspace_name="任务工作空间",
+        active_project_id=project_id,
+        active_project_name="前端项目",
+        active_project_kind="frontend",
+        task="读取前端文档",
+        cwd=f"{workspace_root}/frontend",
+        agent_name="codex",
+    )
+    database_task_id = tasks.create_workspace_task(
+        workspace_id=workspace_id,
+        workspace_key=workspace_key,
+        workspace_name="任务工作空间",
+        task="查询工作空间数据库",
+        cwd=workspace_root,
+        agent_name="codex",
+    )
+    legacy_task_id = tasks.create_task(
+        project_id=project_id,
+        project_key=project_key,
+        project_name="前端项目",
+        task="历史项目任务",
+        cwd=f"{workspace_root}/frontend",
+        agent_name="codex",
+    )
+
+    with psycopg.connect(database_url) as connection:
+        connection.execute(
+            "INSERT INTO mcp_document_read_calls (task_id) VALUES (%s)",
+            (document_task_id,),
+        )
+        connection.execute(
+            """
+            INSERT INTO mcp_database_calls (
+                task_id, operation, database_alias, engine, status
+            )
+            VALUES (%s, 'search_objects', 'workspace_db', 'postgresql', 'ok')
+            """,
+            (database_task_id,),
+        )
+
+    document_task = tasks.get_task(document_task_id)
+    assert document_task.scope == "workspace"
+    assert document_task.workspace_id == workspace_id
+    assert document_task.workspace_key == workspace_key
+    assert document_task.workspace_name == "任务工作空间"
+    assert document_task.active_project_id == project_id
+    assert document_task.active_project_name == "前端项目"
+    assert document_task.active_project_kind == "frontend"
+
+    database_task = tasks.get_task(database_task_id)
+    assert database_task.scope == "workspace"
+    assert database_task.active_project_id is None
+    assert database_task.active_project_kind is None
+    assert tasks.get_task(legacy_task_id).scope == "project"
+
+    workspace_history = tasks.list_workspace_tasks(
+        workspace_id,
+        workspace_key=workspace_key,
+    )
+    assert [
+        (record.task, record.read_call_count, record.scope) for record in workspace_history
+    ] == [
+        ("查询工作空间数据库", 0, "workspace"),
+        ("读取前端文档", 1, "workspace"),
+    ]
+
+    workspaces.delete_workspace(workspace_id)
+    retained = tasks.get_task(document_task_id)
+    assert retained.workspace_id == workspace_id
+    assert retained.active_project_id == project_id
+    assert tasks.get_task(legacy_task_id).project_id == project_id
 
 
 def _alembic_config() -> Config:
@@ -408,10 +707,19 @@ def _assert_task_project_snapshot_survives_project_deletion(database_url: str) -
     project_id = "ffffffffffffffffffffffffffffffff"
     with psycopg.connect(database_url) as connection:
         connection.execute(
-            """INSERT INTO document_projects
-            (id, name, agents_path, enabled, project_type)
-            VALUES (%s, 'Disposable Project', '/disposable/AGENTS.md', true, '公司项目')""",
+            """INSERT INTO workspaces
+            (id, name, workspace_type, root_path, enabled)
+            VALUES (%s, 'Disposable Workspace', '公司项目', '/disposable', true)""",
             (project_id,),
+        )
+        connection.execute(
+            """INSERT INTO document_projects
+            (id, name, agents_path, project_type, project_kind, workspace_id, relative_path)
+            VALUES (
+                %s, 'Disposable Project', '/disposable/AGENTS.md',
+                '公司项目', 'backend', %s, '.'
+            )""",
+            (project_id, project_id),
         )
         task_row = connection.execute(
             """INSERT INTO mcp_tasks
@@ -581,6 +889,32 @@ def _assert_case_insensitive_unique_index(database_url: str, alias: str) -> None
             )
 
 
+def _assert_workspace_alias_unique_index(database_url: str, alias: str) -> None:
+    with psycopg.connect(database_url) as connection:
+        index_row = connection.execute(
+            """SELECT indexdef FROM pg_indexes
+            WHERE schemaname = current_schema()
+              AND tablename = 'project_databases'
+              AND indexname = 'uq_project_databases_workspace_mcp_alias'"""
+        ).fetchone()
+    assert index_row is not None
+    index_definition = str(index_row[0]).lower()
+    assert "unique index" in index_definition
+    assert "workspace_id" in index_definition
+    assert "lower" in index_definition
+
+    with pytest.raises(psycopg.errors.UniqueViolation):
+        with psycopg.connect(database_url) as connection:
+            connection.execute(
+                """
+                UPDATE project_databases
+                SET workspace_id = %s, mcp_alias = %s
+                WHERE id = %s
+                """,
+                (_PROJECT_A, alias, _LINK_OTHER_PROJECT),
+            )
+
+
 def _insert_legacy_call_rows(database_url: str, task_id: int) -> tuple[int, int]:
     created_read = datetime(2026, 1, 3, tzinfo=UTC)
     created_database = datetime(2026, 1, 4, tzinfo=UTC)
@@ -690,6 +1024,62 @@ def _assert_legacy_rows_survive(database_url: str) -> None:
         654_321,
         7_654,
     )
+
+
+def _assert_legacy_projects_migrated_to_workspaces(database_url: str) -> None:
+    with psycopg.connect(database_url) as connection:
+        rows = connection.execute(
+            """
+            SELECT
+                p.id,
+                p.workspace_id,
+                p.relative_path,
+                p.agents_path,
+                p.project_kind,
+                w.id,
+                w.name,
+                w.workspace_type,
+                w.root_path
+            FROM document_projects AS p
+            JOIN workspaces AS w ON w.id = p.workspace_id
+            ORDER BY p.id
+            """
+        ).fetchall()
+    assert rows == [
+        (
+            _PROJECT_A,
+            _PROJECT_A,
+            ".",
+            _PROJECT_A_PATH,
+            "backend",
+            _PROJECT_A,
+            "Legacy Project A",
+            "公司项目",
+            "/legacy/project-a",
+        ),
+        (
+            _PROJECT_B,
+            _PROJECT_B,
+            ".",
+            "/legacy/project-b/AGENTS.md",
+            "backend",
+            _PROJECT_B,
+            "Legacy Project B",
+            "公司项目",
+            "/legacy/project-b",
+        ),
+    ]
+    with psycopg.connect(database_url) as connection:
+        enabled_column = connection.execute(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = 'document_projects'
+              AND column_name = 'enabled'
+            """
+        ).fetchone()
+    assert enabled_column is None
 
 
 def _current_revision(database_url: str) -> str:

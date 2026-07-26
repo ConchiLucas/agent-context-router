@@ -164,7 +164,11 @@ def _error_document_id(parent_path: Path, relative_path: str) -> str:
     return hashlib.sha256(source.encode()).hexdigest()[:20]
 
 
-def build_document_cache(root_path: Path) -> DocumentCache:
+def build_document_cache(
+    root_path: Path,
+    *,
+    root_description: str = "项目文档入口",
+) -> DocumentCache:
     resolved_root = root_path.resolve()
     if resolved_root.name != "AGENTS.md":
         raise DocumentTreeError("项目入口文件必须命名为 AGENTS.md")
@@ -344,7 +348,7 @@ def build_document_cache(root_path: Path) -> DocumentCache:
 
     root = walk(
         resolved_root,
-        description="项目文档入口",
+        description=root_description,
         relative_path=None,
         ancestors=frozenset(),
     )
@@ -366,4 +370,13 @@ def build_document_cache(root_path: Path) -> DocumentCache:
         documents=documents,
         project_root=resolved_root.parent,
         version=version_hasher.hexdigest(),
+    )
+
+
+def build_workspace_document_cache(
+    root_path: Path,
+) -> DocumentCache:
+    return build_document_cache(
+        root_path,
+        root_description="工作空间文档入口",
     )

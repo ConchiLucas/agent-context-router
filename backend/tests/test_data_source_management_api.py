@@ -342,7 +342,7 @@ def test_project_database_mcp_alias_can_be_generated_edited_and_is_unique(
     assert explicit.status_code == 201
     assert explicit.json()["mcp_alias"] == "warehouse"
     assert conflict.status_code == 400
-    assert conflict.json()["detail"] == "项目内 MCP 数据库别名已存在"
+    assert conflict.json()["detail"] == "工作空间内 MCP 数据库别名已存在"
     assert edited.status_code == 200
     assert edited.json()["mcp_alias"] == "offline_warehouse"
     assert patched.status_code == 200

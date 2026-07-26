@@ -206,6 +206,16 @@ test("uses the existing concise labels in subtree breadcrumbs", () => {
   );
   assert.equal(
     documentNodeLabel(
+      documentNode("workspace-root", [], {
+        description: "工作空间文档入口",
+        relative_path: null,
+        path: "/workspace",
+      }),
+    ),
+    "工作空间文档入口",
+  );
+  assert.equal(
+    documentNodeLabel(
       documentNode("subprojects", [], {
         path: "/workspace/panzhihua-dsly-workforce-subprojects-overview.md",
       }),

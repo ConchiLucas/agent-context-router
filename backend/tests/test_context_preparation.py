@@ -15,7 +15,7 @@ class FakeTaskRepository:
         self.next_id = 40
         self.created: list[dict[str, object]] = []
 
-    def create_task(self, **values: object) -> int:
+    def create_workspace_task(self, **values: object) -> int:
         self.next_id += 1
         self.created.append(values)
         return self.next_id
@@ -70,30 +70,37 @@ def test_prepare_returns_complete_tree_and_explicit_metadata(tmp_path: Path) -> 
     payload = result.model_dump(exclude_none=True)
 
     assert payload["task_id"] == 41
+    assert payload["workspace"]["name"] == "测试项目"
     assert payload["project"]["node_count"] == 2
-    assert payload["documents"]["path"] == "AGENTS.md"
-    assert payload["documents"]["summary"] == "提供项目的完整文档导航。"
-    child = payload["documents"]["children"][0]
+    assert payload["projects"] == [payload["active_project"]]
+    project_root = payload["documents"]
+    assert project_root["path"] == "AGENTS.md"
+    assert project_root["summary"] == "提供项目的完整文档导航。"
+    child = project_root["children"][0]
     assert child["path"] == "docs/details.md"
     assert "summary" not in child
     assert "content" not in str(payload)
     assert repository.created[0]["agent_name"] == "codex"
-    assert repository.created[0]["project_id"] == payload["project"]["project_id"]
-    assert repository.created[0]["project_key"] == registry.get_project_key(
-        payload["project"]["project_id"]
+    assert repository.created[0]["active_project_id"] == payload["project"]["project_id"]
+    assert repository.created[0]["workspace_key"] == registry.get_workspace_key(
+        payload["workspace"]["workspace_id"]
     )
 
 
-def test_preview_uses_same_result_shape(tmp_path: Path) -> None:
+def test_workspace_preview_uses_same_result_shape(tmp_path: Path) -> None:
     registry, project_id = build_registry(tmp_path)
     repository = FakeTaskRepository()
     service = ContextPreparationService(registry, repository)
+    workspace_id = registry.get_project_summary(project_id).workspace_id
+    assert workspace_id is not None
 
-    payload = service.prepare_for_project(project_id).model_dump(exclude_none=True)
+    payload = service.prepare_for_workspace(workspace_id).model_dump(exclude_none=True)
 
     assert payload["task_id"] == 41
-    assert payload["project"]["project_id"] == project_id
+    assert payload["workspace"]["workspace_id"] == workspace_id
+    assert payload["projects"][0]["project_id"] == project_id
     assert payload["documents"]["children"][0]["title"] == "详情"
+    assert "project" not in payload
     assert repository.created[0]["agent_name"] == "web-preview"
 
 

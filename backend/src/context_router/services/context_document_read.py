@@ -61,12 +61,18 @@ class ContextDocumentReadService:
             raise ContextDocumentReadError(str(exc)) from exc
 
         try:
-            project = self._registry.get_snapshot_for_task(
-                project_id=task.project_id,
-                project_key=task.project_key,
-            )
+            if getattr(task, "scope", "project") == "workspace":
+                context_snapshot = self._registry.get_workspace_snapshot_for_task(
+                    workspace_id=getattr(task, "workspace_id", None),
+                    workspace_key=getattr(task, "workspace_key", None),
+                )
+            else:
+                context_snapshot = self._registry.get_snapshot_for_task(
+                    project_id=task.project_id,
+                    project_key=task.project_key,
+                )
         except ProjectRegistryError as exc:
-            raise ContextDocumentReadError("任务绑定的项目当前不可用，请重新 prepare") from exc
+            raise ContextDocumentReadError("任务绑定的上下文当前不可用，请重新 prepare") from exc
 
         results: list[ContextDocumentReadItem] = []
         writes: list[DocumentReadItemWrite] = []
@@ -76,7 +82,7 @@ class ContextDocumentReadService:
             result, write = self._resolve_request(
                 position=position,
                 request=request,
-                cache=project.cache,
+                cache=context_snapshot.cache,
                 response_characters=response_characters,
             )
             results.append(result)
@@ -120,7 +126,7 @@ class ContextDocumentReadService:
                 position=position,
                 request=request,
                 code="document_not_found",
-                message="文档不在当前任务项目的映射中",
+                message="文档不在当前任务工作空间的映射中",
             )
 
         path = self._relative_path(document, cache)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from pathlib import Path
 
 from context_router.repositories.document_search_repository import (
     DocumentSearchHit,
@@ -17,7 +18,12 @@ from context_router.services.document_search_index import (
     DOCUMENT_SEARCH_INDEX_FORMAT_VERSION,
 )
 from context_router.services.markdown_search_parser import normalize_search_text
-from context_router.services.project_registry import ProjectRegistry, ProjectRegistryError
+from context_router.services.project_registry import (
+    ProjectRegistry,
+    ProjectRegistryError,
+    ProjectSnapshot,
+    WorkspaceSnapshot,
+)
 
 MAX_SEARCH_QUERY_CHARACTERS = 200
 MAX_SEARCH_RESULTS = 50
@@ -102,43 +108,33 @@ class ContextDocumentSearchService:
                 else "document_search_unavailable",
             ) from exc
 
-        try:
-            project = self._registry.get_snapshot_for_task(
-                project_id=task.project_id,
-                project_key=task.project_key,
-            )
-        except ProjectRegistryError as exc:
-            raise ContextDocumentSearchError(
-                "任务绑定的项目当前不可用，请重新 prepare",
-                code="task_project_unavailable",
-            ) from exc
-
-        try:
-            state = self._search_repository.get_index_state(project.id)
-        except DocumentSearchRepositoryError as exc:
-            raise ContextDocumentSearchError(
-                "文档检索服务暂时不可用",
-                code="document_search_unavailable",
-            ) from exc
-
-        if (
-            state is None
-            or state.index_version != project.cache.version
-            or state.index_format_version != DOCUMENT_SEARCH_INDEX_FORMAT_VERSION
-        ):
-            raise ContextDocumentSearchError(
-                "当前项目的文档检索索引尚未就绪，请刷新项目映射后重试",
-                code="document_search_index_not_ready",
-            )
-
         candidate_limit = min(limit * 5, MAX_CANDIDATE_HITS)
         try:
-            hits = self._search_repository.search(
-                project_id=project.id,
-                index_version=project.cache.version,
-                query=normalized_query,
-                limit=candidate_limit,
-            )
+            if getattr(task, "scope", "project") == "workspace":
+                workspace = self._registry.get_workspace_snapshot_for_task(
+                    workspace_id=getattr(task, "workspace_id", None),
+                    workspace_key=getattr(task, "workspace_key", None),
+                )
+                hits = self._search_workspace(
+                    workspace,
+                    query=normalized_query,
+                    candidate_limit=candidate_limit,
+                )
+            else:
+                project = self._registry.get_snapshot_for_task(
+                    project_id=task.project_id,
+                    project_key=task.project_key,
+                )
+                hits = self._search_project(
+                    project,
+                    query=normalized_query,
+                    candidate_limit=candidate_limit,
+                )
+        except ProjectRegistryError as exc:
+            raise ContextDocumentSearchError(
+                "任务绑定的上下文当前不可用，请重新 prepare",
+                code="task_context_unavailable",
+            ) from exc
         except DocumentSearchRepositoryError as exc:
             raise ContextDocumentSearchError(
                 "文档检索失败",
@@ -170,6 +166,92 @@ class ContextDocumentSearchService:
             returned_count=len(results),
             truncated=len(ordered) > limit or len(hits) >= candidate_limit,
             results=results,
+        )
+
+    def _search_workspace(
+        self,
+        workspace: WorkspaceSnapshot,
+        *,
+        query: str,
+        candidate_limit: int,
+    ) -> list[DocumentSearchHit]:
+        hits: list[DocumentSearchHit] = []
+        if workspace.document_cache is not None:
+            state = self._search_repository.get_workspace_index_state(workspace.id)
+            if (
+                state is None
+                or state.index_version != workspace.document_cache.version
+                or state.index_format_version != DOCUMENT_SEARCH_INDEX_FORMAT_VERSION
+            ):
+                raise ContextDocumentSearchError(
+                    "当前工作空间的文档检索索引尚未就绪，请刷新工作空间映射后重试",
+                    code="document_search_index_not_ready",
+                )
+            hits.extend(
+                self._search_repository.search_workspace(
+                    workspace_id=workspace.id,
+                    index_version=workspace.document_cache.version,
+                    query=query,
+                    limit=candidate_limit,
+                )
+            )
+
+        for project in workspace.projects:
+            project_hits = self._search_project(
+                project,
+                query=query,
+                candidate_limit=candidate_limit,
+            )
+            for hit in project_hits:
+                if (
+                    workspace.document_cache is not None
+                    and hit.document_id in workspace.document_cache.documents
+                ):
+                    continue
+                owner = self._registry.workspace_document_owner(
+                    workspace,
+                    hit.document_id,
+                )
+                if owner is None or owner.id != project.id:
+                    continue
+                document = workspace.cache.documents.get(hit.document_id)
+                path = hit.path
+                if document is not None:
+                    try:
+                        path = (
+                            Path(document.path)
+                            .resolve()
+                            .relative_to(workspace.cache.project_root)
+                            .as_posix()
+                        )
+                    except ValueError:
+                        pass
+                hits.append(replace(hit, path=path))
+        hits.sort(key=lambda item: (-item.relevance, item.path, item.document_id))
+        return hits[:candidate_limit]
+
+    def _search_project(
+        self,
+        project: ProjectSnapshot,
+        *,
+        query: str,
+        candidate_limit: int,
+    ) -> list[DocumentSearchHit]:
+        state = self._search_repository.get_index_state(project.id)
+        if (
+            state is None
+            or state.index_version != project.cache.version
+            or state.index_format_version != DOCUMENT_SEARCH_INDEX_FORMAT_VERSION
+        ):
+            raise ContextDocumentSearchError(
+                "当前工作空间的文档检索索引尚未就绪，请刷新工作空间映射后重试",
+                code="document_search_index_not_ready",
+            )
+        return self._search_repository.search(
+            project_id=project.id,
+            index_version=project.cache.version,
+            query=query,
+            limit=candidate_limit,
         )
 
     @staticmethod

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from context_router.repositories.task_repository import TaskRepositoryError, TaskWriter
 from context_router.schemas.context import (
     ContextDocumentNode,
     PreparedProject,
+    PreparedWorkspace,
     PrepareTaskContextResult,
 )
 from context_router.services.database_access import DatabaseAccessError, DatabaseAccessService
@@ -14,6 +16,7 @@ from context_router.services.project_registry import (
     ProjectRegistry,
     ProjectRegistryError,
     ProjectSnapshot,
+    WorkspaceSnapshot,
 )
 
 
@@ -50,28 +53,43 @@ class ContextPreparationService:
     ) -> PrepareTaskContextResult:
         normalized_task, normalized_agent = self._validate_input(task, agent_name)
         try:
-            project = self._registry.find_project_for_cwd(cwd)
+            workspace = self._registry.find_workspace_for_cwd(cwd)
         except ProjectRegistryError as exc:
             raise ContextPreparationError(str(exc)) from exc
         return self._prepare_snapshot(
-            project,
+            workspace,
             task=normalized_task,
             cwd=cwd.strip(),
             agent_name=normalized_agent,
         )
 
-    def prepare_for_project(self, project_id: str) -> PrepareTaskContextResult:
+    def prepare_for_workspace(self, workspace_id: str) -> PrepareTaskContextResult:
         try:
-            project = self._registry.get_snapshot(project_id)
+            workspace = self._registry.get_workspace_snapshot(workspace_id)
         except ProjectRegistryError as exc:
             raise ContextPreparationError(str(exc)) from exc
 
-        task = f"查看项目 {project.name} 的 MCP JSON"
-        cwd = str(Path(project.agents_path).expanduser().parent)
         return self._prepare_snapshot(
-            project,
-            task=task,
-            cwd=cwd,
+            workspace,
+            task=f"查看工作空间 {workspace.name} 的 MCP JSON",
+            cwd=workspace.root_path,
+            agent_name="web-preview",
+        )
+
+    def prepare_for_project(self, project_id: str) -> PrepareTaskContextResult:
+        """Compatibility wrapper for callers that still hold a Project id."""
+        try:
+            project = self._registry.get_snapshot(project_id)
+            if project.workspace_id is None:
+                raise ProjectRegistryError("项目尚未归属工作空间")
+            workspace = self._registry.get_workspace_snapshot(project.workspace_id)
+            active_project = next(item for item in workspace.projects if item.id == project.id)
+        except (ProjectRegistryError, StopIteration) as exc:
+            raise ContextPreparationError(str(exc)) from exc
+        return self._prepare_snapshot(
+            replace(workspace, active_project=active_project),
+            task=f"查看工作空间 {workspace.name} 的 MCP JSON",
+            cwd=workspace.root_path,
             agent_name="web-preview",
         )
 
@@ -90,21 +108,50 @@ class ContextPreparationService:
 
     def _prepare_snapshot(
         self,
-        project: ProjectSnapshot,
+        workspace: WorkspaceSnapshot,
         *,
         task: str,
         cwd: str,
         agent_name: str | None,
     ) -> PrepareTaskContextResult:
         try:
-            task_id = self._task_repository.create_task(
-                project_id=project.id,
-                project_key=project.project_key,
-                project_name=project.name,
-                task=task,
-                cwd=cwd,
-                agent_name=agent_name,
+            active_project = workspace.active_project
+            create_workspace_task = getattr(
+                self._task_repository,
+                "create_workspace_task",
+                None,
             )
+            if callable(create_workspace_task):
+                task_id = create_workspace_task(
+                    workspace_id=workspace.id,
+                    workspace_key=workspace.workspace_key,
+                    workspace_name=workspace.name,
+                    task=task,
+                    cwd=cwd,
+                    agent_name=agent_name,
+                    active_project_id=(active_project.id if active_project is not None else None),
+                    active_project_name=(
+                        active_project.name if active_project is not None else None
+                    ),
+                    active_project_kind=(
+                        active_project.project_kind if active_project is not None else None
+                    ),
+                )
+            else:
+                fallback_project = active_project or next(
+                    iter(workspace.projects),
+                    None,
+                )
+                if fallback_project is None:
+                    raise TaskRepositoryError("工作空间至少需要一个项目才能创建任务")
+                task_id = self._task_repository.create_task(
+                    project_id=fallback_project.id,
+                    project_key=fallback_project.project_key,
+                    project_name=fallback_project.name,
+                    task=task,
+                    cwd=cwd,
+                    agent_name=agent_name,
+                )
         except TaskRepositoryError as exc:
             raise ContextPreparationError(str(exc)) from exc
 
@@ -113,18 +160,29 @@ class ContextPreparationService:
             warnings: list[str] | None = None
             if self._database_access_service is not None:
                 try:
-                    databases = self._database_access_service.list_prepared_databases(project.id)
+                    databases = self._database_access_service.list_prepared_workspace_databases(
+                        workspace.id
+                    )
                 except DatabaseAccessError:
-                    warnings = ["项目数据库摘要暂时不可用；文档上下文不受影响"]
+                    warnings = ["工作空间数据库摘要暂时不可用；文档上下文不受影响"]
+
+            projects = [self._prepared_project(project) for project in workspace.projects]
+            prepared_active_project = (
+                self._prepared_project(workspace.active_project)
+                if workspace.active_project is not None
+                else None
+            )
 
             return PrepareTaskContextResult(
                 task_id=task_id,
-                project=PreparedProject(
-                    project_id=project.id,
-                    name=project.name,
-                    node_count=len(project.cache.documents),
+                workspace=PreparedWorkspace(
+                    workspace_id=workspace.id,
+                    name=workspace.name,
                 ),
-                documents=self._context_node(project.cache.root, project.cache),
+                projects=projects,
+                active_project=prepared_active_project,
+                project=prepared_active_project,
+                documents=self._context_node(workspace.cache.root, workspace.cache),
                 databases=databases,
                 warnings=warnings,
             )
@@ -135,6 +193,16 @@ class ContextPreparationService:
                 "任务上下文准备失败",
                 task_id=task_id,
             ) from exc
+
+    @staticmethod
+    def _prepared_project(project: ProjectSnapshot) -> PreparedProject:
+        return PreparedProject(
+            project_id=project.id,
+            name=project.name,
+            node_count=len(project.cache.documents),
+            relative_path=project.relative_path,
+            project_kind=project.project_kind,
+        )
 
     def _context_node(
         self,

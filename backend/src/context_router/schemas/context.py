@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
+
+ProjectKind = Literal["frontend", "backend"]
+TaskScope = Literal["project", "workspace"]
 
 
 class ContextDocumentNode(BaseModel):
@@ -18,6 +22,13 @@ class PreparedProject(BaseModel):
     project_id: str
     name: str
     node_count: int
+    relative_path: str = "."
+    project_kind: ProjectKind = "backend"
+
+
+class PreparedWorkspace(BaseModel):
+    workspace_id: str
+    name: str
 
 
 class PreparedDatabase(BaseModel):
@@ -27,12 +38,18 @@ class PreparedDatabase(BaseModel):
     purpose: str
     readonly: bool = True
     capabilities: list[str] = Field(default_factory=list)
+    project_id: str | None = None
+    project_name: str | None = None
+    project_kind: ProjectKind | None = None
 
 
 class PrepareTaskContextResult(BaseModel):
     task_id: int
-    project: PreparedProject
+    workspace: PreparedWorkspace
     documents: ContextDocumentNode
+    projects: list[PreparedProject] = Field(default_factory=list)
+    active_project: PreparedProject | None = None
+    project: PreparedProject | None = None
     databases: list[PreparedDatabase] = Field(default_factory=list)
     warnings: list[str] | None = None
 
@@ -94,6 +111,12 @@ class ContextTaskSummary(BaseModel):
     agent_name: str | None = None
     created_at: datetime
     read_call_count: int
+    scope: TaskScope = "project"
+    workspace_id: str | None = None
+    workspace_name: str | None = None
+    active_project_id: str | None = None
+    active_project_name: str | None = None
+    active_project_kind: ProjectKind | None = None
 
 
 class ContextReadHistoryItem(BaseModel):
@@ -130,7 +153,13 @@ class ContextDatabaseCallHistoryItem(BaseModel):
 class ContextTaskReadHistory(BaseModel):
     task_id: int
     task: str
-    project_name: str
+    project_name: str | None = None
+    workspace_id: str | None = None
+    workspace_name: str | None = None
+    active_project_id: str | None = None
+    active_project_name: str | None = None
+    active_project_kind: ProjectKind | None = None
+    scope: TaskScope = "project"
     agent_name: str | None = None
     created_at: datetime
     calls: list[ContextReadHistoryCall]

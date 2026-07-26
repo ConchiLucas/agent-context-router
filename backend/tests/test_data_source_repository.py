@@ -53,6 +53,8 @@ def _link(
     source: DataSourceRecord,
     *,
     mcp_alias: str | None = None,
+    workspace_id: str | None = None,
+    project_kind: str = "backend",
 ) -> ProjectDatabaseLinkRecord:
     now = datetime.now(UTC)
     return ProjectDatabaseLinkRecord(
@@ -75,10 +77,12 @@ def _link(
         query_timeout_ms=8_000,
         created_at=now,
         updated_at=now,
+        workspace_id=workspace_id,
+        project_kind=project_kind,
     )
 
 
-def test_generates_stable_project_aliases_and_resolves_current_state() -> None:
+def test_generates_stable_workspace_aliases_and_resolves_current_state() -> None:
     repository = InMemoryDataSourceRepository()
     source_a = _source("source-a", "主库")
     source_b = _source("source-b", "归档库")
@@ -89,15 +93,52 @@ def test_generates_stable_project_aliases_and_resolves_current_state() -> None:
     repository.create_database(database_a)
     repository.create_database(database_b)
 
-    first = repository.create_link(_link("a" * 32, "project-a", database_a, source_a))
-    second = repository.create_link(_link("b" * 32, "project-a", database_b, source_b))
+    first = repository.create_link(
+        _link(
+            "a" * 32,
+            "project-a",
+            database_a,
+            source_a,
+            workspace_id="workspace-a",
+            project_kind="frontend",
+        )
+    )
+    second = repository.create_link(
+        _link(
+            "b" * 32,
+            "project-a",
+            database_b,
+            source_b,
+            workspace_id="workspace-a",
+            project_kind="frontend",
+        )
+    )
     other_project = repository.create_link(
-        _link("c" * 32, "project-b", database_b, source_b, mcp_alias="orders")
+        _link(
+            "c" * 32,
+            "project-b",
+            database_b,
+            source_b,
+            mcp_alias="orders",
+            workspace_id="workspace-b",
+        )
+    )
+    same_workspace_other_project = repository.create_link(
+        _link(
+            "d" * 32,
+            "project-c",
+            database_b,
+            source_b,
+            workspace_id="workspace-a",
+        )
     )
 
     assert first.mcp_alias == "orders"
     assert second.mcp_alias is not None
     assert second.mcp_alias.startswith("orders_")
+    assert same_workspace_other_project.mcp_alias is not None
+    assert same_workspace_other_project.mcp_alias.startswith("orders_")
+    assert same_workspace_other_project.mcp_alias != second.mcp_alias
     assert other_project.mcp_alias == "orders"
 
     resolved = repository.get_project_database_by_alias(
@@ -115,12 +156,25 @@ def test_generates_stable_project_aliases_and_resolves_current_state() -> None:
     assert resolved.readonly is True
     assert resolved.allowed_schemas == ["public"]
     assert resolved.config_version == 3
+    assert resolved.workspace_id == "workspace-a"
+    assert resolved.project_kind == "frontend"
 
     listed = repository.list_project_databases_for_mcp("project-a")
     assert [item.mcp_alias for item in listed] == sorted(
         [first.mcp_alias, second.mcp_alias],
         key=str.casefold,
     )
+    workspace_resolved = repository.get_workspace_database_by_alias(
+        workspace_id="workspace-b",
+        mcp_alias="ORDERS",
+    )
+    assert workspace_resolved.link_id == other_project.id
+    workspace_databases = repository.list_workspace_databases_for_mcp("workspace-a")
+    assert {item.link_id for item in workspace_databases} == {
+        first.id,
+        second.id,
+        same_workspace_other_project.id,
+    }
 
 
 def test_rejects_manual_alias_conflicts_and_invalid_repository_input() -> None:
@@ -134,17 +188,38 @@ def test_rejects_manual_alias_conflicts_and_invalid_repository_input() -> None:
     repository.create_database(database_a)
     repository.create_database(database_b)
     repository.create_link(
-        _link("a" * 32, "project-a", database_a, source_a, mcp_alias="analytics")
+        _link(
+            "a" * 32,
+            "project-a",
+            database_a,
+            source_a,
+            mcp_alias="analytics",
+            workspace_id="workspace-a",
+        )
     )
 
-    with pytest.raises(DataSourceRepositoryError, match="项目内 MCP 数据库别名已存在"):
+    with pytest.raises(DataSourceRepositoryError, match="工作空间内 MCP 数据库别名已存在"):
         repository.create_link(
-            _link("b" * 32, "project-a", database_b, source_b, mcp_alias="analytics")
+            _link(
+                "b" * 32,
+                "project-b",
+                database_b,
+                source_b,
+                mcp_alias="analytics",
+                workspace_id="workspace-a",
+            )
         )
 
     with pytest.raises(DataSourceRepositoryError, match="MCP 数据库别名格式不正确"):
         repository.create_link(
-            _link("c" * 32, "project-b", database_b, source_b, mcp_alias="Bad Alias")
+            _link(
+                "c" * 32,
+                "project-b",
+                database_b,
+                source_b,
+                mcp_alias="Bad Alias",
+                workspace_id="workspace-b",
+            )
         )
 
 
@@ -154,7 +229,13 @@ def test_replace_project_links_returns_and_preserves_generated_aliases() -> None
     database = _database("database-a", source.id, "orders")
     repository.create_data_source(source)
     repository.create_database(database)
-    link = _link("a" * 32, "project-a", database, source)
+    link = _link(
+        "a" * 32,
+        "project-a",
+        database,
+        source,
+        workspace_id="workspace-a",
+    )
 
     saved = repository.replace_project_links("project-a", [link])
     repeated = repository.replace_project_links("project-a", saved)

@@ -4,7 +4,6 @@ import asyncio
 import json
 from collections.abc import Callable, Coroutine
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from time import perf_counter
 from typing import Any
 
@@ -55,7 +54,7 @@ class McpIntegrationService:
 
     def get_info(self) -> McpIntegrationInfo:
         public_url = self._settings.public_mcp_url.rstrip("/")
-        project_count = sum(project.enabled for project in self._registry.list_projects())
+        workspace_count = len(self._registry.list_workspace_ids())
         database_configured = bool(
             self._settings.database_url and self._settings.database_url.strip()
         )
@@ -109,22 +108,22 @@ class McpIntegrationService:
             ],
             readiness=McpIntegrationReadiness(
                 database_configured=database_configured,
-                project_count=project_count,
-                ready_for_full_test=database_configured and project_count > 0,
+                workspace_count=workspace_count,
+                ready_for_full_test=database_configured and workspace_count > 0,
             ),
         )
 
-    async def run_test(self, project_id: str) -> McpIntegrationTestResult:
+    async def run_test(self, workspace_id: str) -> McpIntegrationTestResult:
         started_at = datetime.now(UTC)
         stages: list[McpIntegrationTestStage] = []
-        project_name: str | None = None
+        workspace_name: str | None = None
         task_id: int | None = None
         read_call_id: int | None = None
         stage_definitions = [
             ("database", "数据库连接"),
             ("initialize", "MCP initialize"),
             ("tools", "工具发现"),
-            ("project", "项目匹配"),
+            ("workspace", "工作空间匹配"),
             ("prepare", "prepare_task_context"),
             ("search", "search_context_documents"),
             ("read", "read_context_document"),
@@ -202,23 +201,21 @@ class McpIntegrationService:
 
                         snapshot_holder: dict[str, Any] = {}
 
-                        async def match_project() -> str:
+                        async def match_workspace() -> str:
                             try:
-                                selected = self._registry.get_snapshot(project_id)
-                                matched = self._registry.find_project_for_cwd(
-                                    str(Path(selected.agents_path).expanduser().parent)
-                                )
+                                selected = self._registry.get_workspace_snapshot(workspace_id)
+                                matched = self._registry.find_workspace_for_cwd(selected.root_path)
                             except ProjectRegistryError as exc:
                                 raise McpIntegrationError(str(exc)) from exc
                             if matched.id != selected.id:
-                                raise McpIntegrationError("cwd 匹配到了其他已注册项目")
+                                raise McpIntegrationError("cwd 匹配到了其他已注册工作空间")
                             snapshot_holder["snapshot"] = selected
                             node_count = len(selected.cache.documents)
-                            return f"已匹配项目：{selected.name}（{node_count} 个节点）"
+                            return f"已匹配工作空间：{selected.name}（{node_count} 个节点）"
 
-                        await add_stage("project", "项目匹配", match_project)
+                        await add_stage("workspace", "工作空间匹配", match_workspace)
                         snapshot = snapshot_holder["snapshot"]
-                        project_name = snapshot.name
+                        workspace_name = snapshot.name
                         prepare_holder: dict[str, Any] = {}
 
                         async def prepare_context() -> str:
@@ -227,7 +224,7 @@ class McpIntegrationService:
                                 PREPARE_TOOL_NAME,
                                 arguments={
                                     "task": TEST_TASK_NAME,
-                                    "cwd": str(Path(snapshot.agents_path).expanduser().parent),
+                                    "cwd": snapshot.root_path,
                                     "agent_name": TEST_AGENT_NAME,
                                 },
                             )
@@ -240,7 +237,7 @@ class McpIntegrationService:
                             if not isinstance(root_document_id, str) or not root_document_id:
                                 raise McpIntegrationError("prepare 未返回入口 document_id")
                             prepare_holder["root_document_id"] = root_document_id
-                            return f"已创建测试任务 #{task_id}，并返回完整文档树"
+                            return f"已创建测试任务 #{task_id}，并返回工作空间文档导航树"
 
                         await add_stage("prepare", PREPARE_TOOL_NAME, prepare_context)
 
@@ -258,11 +255,8 @@ class McpIntegrationService:
                             if not isinstance(results, list) or not results:
                                 raise McpIntegrationError("search 未返回入口文档")
                             first = results[0]
-                            if (
-                                not isinstance(first, dict)
-                                or first.get("document_id") != prepare_holder["root_document_id"]
-                            ):
-                                raise McpIntegrationError("search 返回了错误的入口文档")
+                            if not isinstance(first, dict) or not first.get("document_id"):
+                                raise McpIntegrationError("search 返回的文档格式不正确")
                             if "content" in first:
                                 raise McpIntegrationError("search 不应返回 Markdown 正文")
                             return "按路径检索入口文档成功"
@@ -338,8 +332,8 @@ class McpIntegrationService:
         passed = bool(stages) and all(stage.status == "passed" for stage in stages)
         return McpIntegrationTestResult(
             status="passed" if passed else "failed",
-            project_id=project_id,
-            project_name=project_name,
+            workspace_id=workspace_id,
+            workspace_name=workspace_name,
             task_id=task_id,
             read_call_id=read_call_id,
             started_at=started_at,

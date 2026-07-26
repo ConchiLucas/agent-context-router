@@ -105,6 +105,40 @@ class IntegrationTaskRepository:
         )
         return task_id
 
+    def create_workspace_task(
+        self,
+        *,
+        workspace_id: str,
+        workspace_key: str,
+        workspace_name: str,
+        task: str,
+        cwd: str,
+        agent_name: str | None,
+        active_project_id: str | None = None,
+        active_project_name: str | None = None,
+        active_project_kind: str | None = None,
+    ) -> int:
+        task_id = self._next_task_id
+        self._next_task_id += 1
+        self._tasks[task_id] = TaskRecord(
+            id=task_id,
+            project_id=active_project_id,
+            project_key=workspace_key,
+            project_name=active_project_name or workspace_name,
+            task=task,
+            cwd=cwd,
+            agent_name=agent_name,
+            created_at=datetime.now(UTC),
+            scope="workspace",
+            workspace_id=workspace_id,
+            workspace_key=workspace_key,
+            workspace_name=workspace_name,
+            active_project_id=active_project_id,
+            active_project_name=active_project_name,
+            active_project_kind=active_project_kind,  # type: ignore[arg-type]
+        )
+        return task_id
+
     def get_task(self, task_id: int) -> TaskRecord:
         try:
             return self._tasks[task_id]
