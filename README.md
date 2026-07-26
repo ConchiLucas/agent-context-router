@@ -40,10 +40,9 @@ CONTEXT_ROUTER_WORKSPACE_HOST_ROOT=/absolute/workspace/root
 CONTEXT_ROUTER_DEFAULT_PROJECT_NAME=示例项目
 CONTEXT_ROUTER_DEFAULT_AGENTS_PATH=/absolute/workspace/root/project/AGENTS.md
 CONTEXT_ROUTER_DATABASE_URL=postgresql://USER:PASSWORD@host.docker.internal:5432/context_router
-CONTEXT_ROUTER_DATABASE_PAYLOAD_CAPTURE_ENABLED=false
 ```
 
-页面可以长期维护多个项目和物理数据源。项目配置、数据库关联、MCP task、文档读取与数据库调用元数据保存在 PostgreSQL；后端重启时恢复配置并重新构建内存文档树。Markdown 原文仍以磁盘文件为唯一真源，数据库只额外保存用于词法检索的规范化派生分块，不保存文档工具完整出入参。数据库 MCP 工具的完整 SQL 与有界结果快照默认不采集；只有显式设置 `CONTEXT_ROUTER_DATABASE_PAYLOAD_CAPTURE_ENABLED=true` 后，才会写入独立、可过期的 payload 表供本机链路页面按需查看。
+页面可以长期维护多个项目和物理数据源。项目配置、数据库关联、MCP task、文档读取与数据库调用元数据保存在 PostgreSQL；后端重启时恢复配置并重新构建内存文档树。Markdown 原文仍以磁盘文件为唯一真源，数据库只额外保存用于词法检索的规范化派生分块，不保存文档工具完整出入参。数据库 MCP 工具的完整 SQL 与有界结果快照默认自动写入独立、可过期的 payload 表供本机链路页面按需查看。
 
 ## MCP 工具
 

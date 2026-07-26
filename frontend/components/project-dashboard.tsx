@@ -35,6 +35,10 @@ import {
   validateDatabaseAliases,
 } from "@/lib/database-access";
 import {
+  documentNodeLabel,
+  resolveDocumentPath,
+} from "@/lib/document-tree";
+import {
   buildDocumentCallNumbers,
   buildTaskReadRows,
   buildTaskReadSteps,
@@ -52,6 +56,18 @@ import type {
 const ALL_PROJECT_TYPES = "__all__";
 const ALL_DATA_SOURCE_CATEGORIES = "__all__";
 const DEFAULT_PROJECT_TYPE = "公司项目";
+const TREE_OVERVIEW_KEY = "__tree_overview__";
+
+interface TreeScrollPosition {
+  scrollLeft: number;
+  scrollTop: number;
+}
+
+function treeViewKey(documentPath: readonly number[] | null): string {
+  return documentPath
+    ? `document-path:${documentPath.join(".")}`
+    : TREE_OVERVIEW_KEY;
+}
 
 function formattedTime(value: string | null): string {
   if (!value) return "尚未刷新";
@@ -86,26 +102,71 @@ function DocumentDetailDrawer({
       >
         ×
       </button>
-      {loading ? (
-        <p className="empty-message">正在读取内存中的文档内容…</p>
-      ) : detail ? (
-        <>
-          <header className="document-detail-header">
-            <div>
-              <span className="file-chip">Markdown</span>
-              <h2>{detail.description}</h2>
-            </div>
-            <code>{detail.relative_path ?? detail.path}</code>
-          </header>
-          {detail.error ? (
-            <div className="error-banner">{detail.error}</div>
-          ) : null}
-          <MarkdownViewer content={detail.content} />
-        </>
-      ) : (
-        <p className="empty-message">文档内容读取失败。</p>
-      )}
+      <div className="document-detail-content">
+        {loading ? (
+          <p className="empty-message">正在读取内存中的文档内容…</p>
+        ) : detail ? (
+          <>
+            <header className="document-detail-header">
+              <div>
+                <span className="file-chip">Markdown</span>
+                <h2>{detail.description}</h2>
+              </div>
+              <code>{detail.relative_path ?? detail.path}</code>
+            </header>
+            {detail.error ? (
+              <div className="error-banner">{detail.error}</div>
+            ) : null}
+            <MarkdownViewer content={detail.content} />
+          </>
+        ) : (
+          <p className="empty-message">文档内容读取失败。</p>
+        )}
+      </div>
     </aside>
+  );
+}
+
+interface DocumentTreeBreadcrumbsProps {
+  path: DocumentTreeNode[];
+  focusPath: readonly number[];
+  onNavigate: (documentPath: number[] | null) => void;
+}
+
+function DocumentTreeBreadcrumbs({
+  path,
+  focusPath,
+  onNavigate,
+}: DocumentTreeBreadcrumbsProps) {
+  return (
+    <nav className="tree-breadcrumbs" aria-label="文档子树路径">
+      <button type="button" onClick={() => onNavigate(null)}>
+        ← 整棵树
+      </button>
+      {path.map((node, index) => {
+        const current = index === path.length - 1;
+        return (
+          <span
+            className="tree-breadcrumb-segment"
+            key={`${node.id}-${index}`}
+          >
+            <span className="tree-breadcrumb-separator" aria-hidden="true">
+              /
+            </span>
+            {current ? (
+              <span aria-current="page">{documentNodeLabel(node)}</span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onNavigate(focusPath.slice(0, index))}
+              >
+                {documentNodeLabel(node)}
+              </button>
+            )}
+          </span>
+        );
+      })}
+    </nav>
   );
 }
 
@@ -115,6 +176,7 @@ export function ProjectDashboard() {
     useState(ALL_PROJECT_TYPES);
   const [activeProject, setActiveProject] = useState<ProjectSummary | null>(null);
   const [tree, setTree] = useState<DocumentTreeNode | null>(null);
+  const [treeFocusPath, setTreeFocusPath] = useState<number[] | null>(null);
   const [detail, setDetail] = useState<DocumentDetail | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -168,12 +230,25 @@ export function ProjectDashboard() {
   >(null);
   const [history, setHistory] = useState<ContextTaskReadHistory | null>(null);
   const [historyTree, setHistoryTree] = useState<DocumentTreeNode | null>(null);
+  const [historyTreeFocusPath, setHistoryTreeFocusPath] = useState<
+    number[] | null
+  >(
+    null,
+  );
   const [historyView, setHistoryView] = useState<"tree" | "list">("tree");
   const [historyLoading, setHistoryLoading] = useState(false);
   const [draggingHistory, setDraggingHistory] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const treeViewportRef = useRef<HTMLDivElement>(null);
   const historyViewportRef = useRef<HTMLElement>(null);
+  const treeScrollPositionsRef = useRef<Map<string, TreeScrollPosition>>(
+    new Map(),
+  );
+  const historyScrollPositionsRef = useRef<Map<string, TreeScrollPosition>>(
+    new Map(),
+  );
+  const treeFocusPendingRef = useRef(false);
+  const historyTreeFocusPendingRef = useRef(false);
   const treeDragRef = useRef<{
     pointerId: number;
     startX: number;
@@ -220,31 +295,80 @@ export function ProjectDashboard() {
     const frame = window.requestAnimationFrame(() => {
       const viewport = treeViewportRef.current;
       if (!viewport) return;
-      viewport.scrollLeft = Math.max(
-        0,
-        (viewport.scrollWidth - viewport.clientWidth) / 2,
+
+      const savedPosition = treeScrollPositionsRef.current.get(
+        treeViewKey(treeFocusPath),
       );
-      viewport.scrollTop = Math.min(90, viewport.scrollHeight);
+      if (savedPosition) {
+        viewport.scrollLeft = savedPosition.scrollLeft;
+        viewport.scrollTop = savedPosition.scrollTop;
+      } else {
+        viewport.scrollLeft = Math.max(
+          0,
+          (viewport.scrollWidth - viewport.clientWidth) / 2,
+        );
+        viewport.scrollTop = Math.min(90, viewport.scrollHeight);
+      }
+
+      if (treeFocusPendingRef.current) {
+        viewport
+          .querySelector<HTMLButtonElement>(
+            ".document-tree > .document-tree-item > .document-node > .document-node-main",
+          )
+          ?.focus({ preventScroll: true });
+        treeFocusPendingRef.current = false;
+      }
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [activeProject, tree]);
+  }, [activeProject, tree, treeFocusPath]);
 
   useEffect(() => {
-    if (!historyProject || !history) return;
+    if (
+      !historyProject ||
+      !historyTree ||
+      historyLoading ||
+      historyView !== "tree"
+    ) {
+      return;
+    }
 
     const frame = window.requestAnimationFrame(() => {
       const viewport = historyViewportRef.current;
       if (!viewport) return;
-      viewport.scrollLeft = Math.max(
-        0,
-        (viewport.scrollWidth - viewport.clientWidth) / 2,
+
+      const savedPosition = historyScrollPositionsRef.current.get(
+        treeViewKey(historyTreeFocusPath),
       );
-      viewport.scrollTop = 0;
+      if (savedPosition) {
+        viewport.scrollLeft = savedPosition.scrollLeft;
+        viewport.scrollTop = savedPosition.scrollTop;
+      } else {
+        viewport.scrollLeft = Math.max(
+          0,
+          (viewport.scrollWidth - viewport.clientWidth) / 2,
+        );
+        viewport.scrollTop = 0;
+      }
+
+      if (historyTreeFocusPendingRef.current) {
+        viewport
+          .querySelector<HTMLButtonElement>(
+            ".document-tree > .document-tree-item > .document-node > .document-node-main",
+          )
+          ?.focus({ preventScroll: true });
+        historyTreeFocusPendingRef.current = false;
+      }
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [historyProject, history]);
+  }, [
+    historyLoading,
+    historyProject,
+    historyTree,
+    historyTreeFocusPath,
+    historyView,
+  ]);
 
   async function loadTree(project: ProjectSummary) {
     setBusyProjectId(project.id);
@@ -252,6 +376,9 @@ export function ProjectDashboard() {
       const nextTree = await getProjectTree(project.id);
       setActiveProject(project);
       setTree(nextTree);
+      setTreeFocusPath(null);
+      treeScrollPositionsRef.current.clear();
+      treeFocusPendingRef.current = false;
       setDetail(null);
       setSelectedId(null);
       setError(null);
@@ -290,6 +417,9 @@ export function ProjectDashboard() {
         const nextTree = await getProjectTree(project.id);
         setActiveProject(updated);
         setTree(nextTree);
+        setTreeFocusPath(null);
+        treeScrollPositionsRef.current.clear();
+        treeFocusPendingRef.current = false;
         setDetail(null);
         setSelectedId(null);
       }
@@ -446,6 +576,7 @@ export function ProjectDashboard() {
   }
 
   async function selectHistoryTask(taskId: number) {
+    rememberHistoryTreeScrollPosition();
     setSelectedHistoryTaskId(taskId);
     setHistoryLoading(true);
     setHistory(null);
@@ -467,6 +598,9 @@ export function ProjectDashboard() {
     setSelectedHistoryTaskId(null);
     setHistory(null);
     setHistoryTree(null);
+    setHistoryTreeFocusPath(null);
+    historyScrollPositionsRef.current.clear();
+    historyTreeFocusPendingRef.current = false;
     setHistoryView("tree");
     closeDetail();
     setHistoryLoading(true);
@@ -590,6 +724,9 @@ export function ProjectDashboard() {
   function closeTree() {
     setActiveProject(null);
     setTree(null);
+    setTreeFocusPath(null);
+    treeScrollPositionsRef.current.clear();
+    treeFocusPendingRef.current = false;
     setDetail(null);
     setSelectedId(null);
   }
@@ -597,6 +734,56 @@ export function ProjectDashboard() {
   function closeDetail() {
     setDetail(null);
     setSelectedId(null);
+  }
+
+  function openTreeSubtree(documentPath: readonly number[]) {
+    const viewport = treeViewportRef.current;
+    if (viewport) {
+      treeScrollPositionsRef.current.set(treeViewKey(treeFocusPath), {
+        scrollLeft: viewport.scrollLeft,
+        scrollTop: viewport.scrollTop,
+      });
+    }
+    closeDetail();
+    treeFocusPendingRef.current = true;
+    setTreeFocusPath([...documentPath]);
+  }
+
+  function navigateTreeSubtree(documentPath: number[] | null) {
+    const viewport = treeViewportRef.current;
+    if (viewport) {
+      treeScrollPositionsRef.current.set(treeViewKey(treeFocusPath), {
+        scrollLeft: viewport.scrollLeft,
+        scrollTop: viewport.scrollTop,
+      });
+    }
+    closeDetail();
+    treeFocusPendingRef.current = true;
+    setTreeFocusPath(documentPath);
+  }
+
+  function rememberHistoryTreeScrollPosition() {
+    if (historyView !== "tree") return;
+    const viewport = historyViewportRef.current;
+    if (!viewport) return;
+    historyScrollPositionsRef.current.set(treeViewKey(historyTreeFocusPath), {
+      scrollLeft: viewport.scrollLeft,
+      scrollTop: viewport.scrollTop,
+    });
+  }
+
+  function openHistorySubtree(documentPath: readonly number[]) {
+    rememberHistoryTreeScrollPosition();
+    closeDetail();
+    historyTreeFocusPendingRef.current = true;
+    setHistoryTreeFocusPath([...documentPath]);
+  }
+
+  function navigateHistorySubtree(documentPath: number[] | null) {
+    rememberHistoryTreeScrollPosition();
+    closeDetail();
+    historyTreeFocusPendingRef.current = true;
+    setHistoryTreeFocusPath(documentPath);
   }
 
   function closeMcpPreview() {
@@ -610,6 +797,9 @@ export function ProjectDashboard() {
     setSelectedHistoryTaskId(null);
     setHistory(null);
     setHistoryTree(null);
+    setHistoryTreeFocusPath(null);
+    historyScrollPositionsRef.current.clear();
+    historyTreeFocusPendingRef.current = false;
     setHistoryView("tree");
     setHistoryLoading(false);
     closeDetail();
@@ -687,6 +877,17 @@ export function ProjectDashboard() {
     setDraggingTree(false);
   }
 
+  const treeBreadcrumbPath =
+    tree && treeFocusPath !== null
+      ? (resolveDocumentPath(tree, treeFocusPath) ?? [])
+      : [];
+  const focusedTreeNode = treeBreadcrumbPath.at(-1) ?? tree;
+  const historyTreeBreadcrumbPath =
+    historyTree && historyTreeFocusPath !== null
+      ? (resolveDocumentPath(historyTree, historyTreeFocusPath) ?? [])
+      : [];
+  const focusedHistoryTreeNode =
+    historyTreeBreadcrumbPath.at(-1) ?? historyTree;
   const selectedHistoryTask =
     historyTasks.find((task) => task.task_id === selectedHistoryTaskId) ?? null;
   const historySteps = history ? buildTaskReadSteps(history.calls) : [];
@@ -1457,6 +1658,15 @@ export function ProjectDashboard() {
               ) : (
                 <p>当前项目还没有文档读取任务</p>
               )}
+              {historyView === "tree" &&
+              historyTreeFocusPath !== null &&
+              historyTreeBreadcrumbPath.length > 0 ? (
+                <DocumentTreeBreadcrumbs
+                  path={historyTreeBreadcrumbPath}
+                  focusPath={historyTreeFocusPath}
+                  onNavigate={navigateHistorySubtree}
+                />
+              ) : null}
             </div>
             <div className="tree-toolbar-actions">
               <div className="task-history-tabs" role="tablist" aria-label="调用记录视图">
@@ -1480,6 +1690,7 @@ export function ProjectDashboard() {
                   className="task-history-tab"
                   data-active={historyView === "list"}
                   onClick={() => {
+                    rememberHistoryTreeScrollPosition();
                     closeDetail();
                     setHistoryView("list");
                   }}
@@ -1655,15 +1866,17 @@ export function ProjectDashboard() {
               {!historyLoading &&
               historyView === "tree" &&
               historyTasks.length > 0 &&
-              historyTree ? (
+              focusedHistoryTreeNode ? (
                 <div className="tree-content">
                   <ul className="document-tree">
                     <DocumentTree
-                      node={historyTree}
+                      node={focusedHistoryTreeNode}
+                      nodePath={historyTreeFocusPath ?? []}
                       selectedId={selectedId}
                       onSelect={(node) =>
                         void selectDocument(historyProject, node.id)
                       }
+                      onOpenSubtree={openHistorySubtree}
                       callNumbersByDocumentId={historyCallNumbers}
                     />
                   </ul>
@@ -1690,6 +1903,13 @@ export function ProjectDashboard() {
               <p>
                 {activeProject.node_count} 个文档节点 · 按住空白区域拖动画布
               </p>
+              {treeFocusPath !== null && treeBreadcrumbPath.length > 0 ? (
+                <DocumentTreeBreadcrumbs
+                  path={treeBreadcrumbPath}
+                  focusPath={treeFocusPath}
+                  onNavigate={navigateTreeSubtree}
+                />
+              ) : null}
             </div>
             <div className="tree-toolbar-actions">
               <button
@@ -1727,11 +1947,13 @@ export function ProjectDashboard() {
               <div className="tree-content">
                 <ul className="document-tree">
                   <DocumentTree
-                    node={tree}
+                    node={focusedTreeNode ?? tree}
+                    nodePath={treeFocusPath ?? []}
                     selectedId={selectedId}
                     onSelect={(node) =>
                       void selectDocument(activeProject, node.id)
                     }
+                    onOpenSubtree={openTreeSubtree}
                   />
                 </ul>
               </div>

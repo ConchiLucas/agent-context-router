@@ -115,98 +115,7 @@ def _result_payload(result: object) -> dict[str, object]:
 
 def test_only_database_tools_create_full_payload_snapshots() -> None:
     repository = InMemoryDatabaseToolPayloadRepository()
-    service = DatabaseToolPayloadService(repository, capture_enabled=True)
-
-    service.capture_request(
-        1,
-        tool_name="read_context_document",
-        arguments={
-            "task_id": 77,
-            "requests": [{"document_id": "root", "content": "不应保存"}],
-        },
-    )
-    assert repository.get_payload(1) is None
-
-    service.capture_request(
-        2,
-        tool_name="execute_database_query",
-        arguments={
-            "task_id": 77,
-            "database": "analytics",
-            "sql": "SELECT id, name FROM users",
-            "password": "不在白名单中",
-        },
-    )
-    service.capture_response(
-        2,
-        tool_name="execute_database_query",
-        status="ok",
-        payload={
-            "task_id": 77,
-            "database": "analytics",
-            "columns": [{"name": "id", "type": "integer"}],
-            "rows": [[1]],
-            "returned_rows": 1,
-            "truncated": False,
-        },
-    )
-
-    record = repository.get_payload(2)
-    assert record is not None
-    assert record.response_status == "ok"
-    assert record.request_payload == {
-        "task_id": 77,
-        "database": "analytics",
-        "sql": "SELECT id, name FROM users",
-    }
-    assert "password" not in record.request_payload
-    assert record.response_payload is not None
-    assert record.response_payload["rows"] == [[1]]
-
-
-def test_payload_capture_is_disabled_by_default_and_reports_explicit_reason() -> None:
-    repository = InMemoryDatabaseToolPayloadRepository()
-    payload_service = DatabaseToolPayloadService(repository)
-    tool_calls = InMemoryMcpToolCallRepository()
-    tool_call_id = tool_calls.create_call(
-        McpToolCallWrite(
-            task_id=77,
-            server_name="context-router",
-            tool_name="execute_database_query",
-            source="server",
-            status="ok",
-            finished_at=datetime.now(UTC),
-            duration_ms=1,
-        )
-    )
-
-    payload_service.capture_request(
-        tool_call_id,
-        tool_name="execute_database_query",
-        arguments={
-            "task_id": 77,
-            "database": "analytics",
-            "sql": "SELECT secret FROM private_table",
-        },
-    )
-    payload_service.capture_response(
-        tool_call_id,
-        tool_name="execute_database_query",
-        status="ok",
-        payload={"rows": [["private-result"]], "returned_rows": 1},
-    )
-
-    service = _trace_service(tool_calls, payload_service)
-    trace = service.get_trace(77)
-    detail = service.get_database_payload(task_id=77, tool_call_id=tool_call_id)
-
-    assert repository.get_payload(tool_call_id) is None
-    assert trace.calls[0].database_payload_available is False
-    assert trace.calls[0].database_payload_reason == "capture_disabled"
-    assert detail.available is False
-    assert detail.reason == "capture_disabled"
-    assert detail.request_payload is None
-    assert detail.response_payload is None
+    service = DatabaseToolPayloadService(repository)
 
 
 def test_disabled_capture_still_expires_previous_payloads() -> None:
@@ -239,7 +148,6 @@ def test_payload_capture_truncates_sql_and_database_rows_as_valid_json() -> None
     repository = InMemoryDatabaseToolPayloadRepository()
     service = DatabaseToolPayloadService(
         repository,
-        capture_enabled=True,
         request_max_bytes=1_024,
         response_max_bytes=1_024,
         hard_max_bytes=4_000_000,
@@ -299,7 +207,7 @@ def test_expired_payload_clears_snapshots_but_keeps_status_metadata() -> None:
         response_truncated=False,
     )
 
-    service = DatabaseToolPayloadService(repository, capture_enabled=True)
+    service = DatabaseToolPayloadService(repository)
     assert service.cleanup_expired(force=True) == 1
 
     record = repository.get_payload(4)
@@ -324,7 +232,7 @@ def test_trace_api_exposes_only_payload_availability_then_loads_no_store_detail(
         )
     )
     payload_repository = InMemoryDatabaseToolPayloadRepository()
-    payload_service = DatabaseToolPayloadService(payload_repository, capture_enabled=True)
+    payload_service = DatabaseToolPayloadService(payload_repository)
     payload_service.capture_request(
         tool_call_id,
         tool_name="execute_database_query",
@@ -379,7 +287,6 @@ def test_payload_detail_rejects_cross_task_and_non_database_calls() -> None:
     )
     payload_service = DatabaseToolPayloadService(
         InMemoryDatabaseToolPayloadRepository(),
-        capture_enabled=True,
     )
     service = _trace_service(tool_calls, payload_service)
     app = FastAPI()
@@ -410,7 +317,6 @@ def test_historical_database_call_without_snapshot_returns_available_false() -> 
     )
     payload_service = DatabaseToolPayloadService(
         InMemoryDatabaseToolPayloadRepository(),
-        capture_enabled=True,
     )
     detail = _trace_service(tool_calls, payload_service).get_database_payload(
         task_id=77,
@@ -427,7 +333,6 @@ def test_payload_persistence_failure_does_not_change_database_tool_result() -> N
     tool_calls = InMemoryMcpToolCallRepository()
     payload_service = DatabaseToolPayloadService(
         FailingPayloadRepository(),
-        capture_enabled=True,
     )
     server = create_context_router_mcp(
         UnusedPreparation(),  # type: ignore[arg-type]
@@ -452,7 +357,7 @@ def test_payload_persistence_failure_does_not_change_database_tool_result() -> N
 def test_database_error_payload_uses_stable_public_message_without_exception_text() -> None:
     tool_calls = InMemoryMcpToolCallRepository()
     payload_repository = InMemoryDatabaseToolPayloadRepository()
-    payload_service = DatabaseToolPayloadService(payload_repository, capture_enabled=True)
+    payload_service = DatabaseToolPayloadService(payload_repository)
     server = create_context_router_mcp(
         UnusedPreparation(),  # type: ignore[arg-type]
         UnusedRead(),  # type: ignore[arg-type]

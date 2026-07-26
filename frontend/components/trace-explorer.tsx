@@ -274,9 +274,7 @@ function TraceCallDetail({
           </button>
           {call.database_payload_available === false ? (
             <small>
-              {call.database_payload_reason === "capture_disabled"
-                ? "详情采集未启用"
-                : call.database_payload_status === "expired"
+              {call.database_payload_status === "expired"
                 ? "详情已过期"
                 : call.database_payload_status === "capture_failed"
                   ? "详情采集失败"

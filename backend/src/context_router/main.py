@@ -172,7 +172,6 @@ def create_app(
     )
     database_payload_service = DatabaseToolPayloadService(
         resolved_database_payload_repository,
-        capture_enabled=resolved_settings.database_payload_capture_enabled,
         request_max_bytes=resolved_settings.database_payload_request_bytes,
         response_max_bytes=resolved_settings.database_payload_response_bytes,
         hard_max_bytes=resolved_settings.database_payload_hard_max_bytes,

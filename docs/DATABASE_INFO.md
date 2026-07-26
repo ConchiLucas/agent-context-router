@@ -45,7 +45,7 @@ task_id、tool_call_id 和 read_call_id 都由 PostgreSQL identity 自动生成�
 
 `20260724_0009` 会把已有文档读取和数据库调用按历史时间恢复为 `legacy` 工具调用，并回写明细表的 `tool_call_id`；历史数据没有 prepare 事件或可靠开始时间，因此不会补造 prepare 节点，页面也会明确标记“历史记录”。`20260724_0010` 会按旧 `project_key` 为可匹配的历史任务回填稳定 `project_id`。`20260725_0011` 新增数据库工具 payload 表，不为历史调用反向生成无法确认的出入参。`20260725_0012` 启用 `pg_trgm` 并新增文档搜索索引表；扩展在 downgrade 时保留，索引数据可从磁盘 Markdown 重建。
 
-数据库 payload 采集默认关闭，需要显式设置 `CONTEXT_ROUTER_DATABASE_PAYLOAD_CAPTURE_ENABLED=true`。启用后，请求和响应各限 1 MB、保留 7 天、硬上限 4 MB。保存的是已经过查询行数和结果字节预算处理、实际返回给 MCP 客户端的最终结构，不是 Connector 的原始无限结果。超出快照预算时优先按 `objects` 或 `rows` 保留前部元素并写入 `_capture` 截断标记；到期清理会删除 JSON 内容但保留 `expired` 状态。采集和清理都是 best-effort，失败不会改变原 MCP 调用结果。
+数据库 payload 采集默认自动运行。请求和响应各限 1 MB、保留 7 天、硬上限 4 MB。保存的是已经过查询行数和结果字节预算处理、实际返回给 MCP 客户端的最终结构，不是 Connector 的原始无限结果。超出快照预算时优先按 `objects` 或 `rows` 保留前部元素并写入 `_capture` 截断标记；到期清理会删除 JSON 内容但保留 `expired` 状态。采集和清理都是 best-effort，失败不会改变原 MCP 调用结果。
 
 项目创建、编辑、类型调整、启停和删除会同步写入 `document_projects`；未显式指定类型的项目默认归入“公司项目”。数据源以物理连接为单位保存在 `data_sources`，拥有与项目类型完全独立的分类字段，未显式指定时默认归入“本机电脑”；一个连接可包含多个库，项目通过“管理数据源”一次选择一个或多个连接下的多个库，并由 `project_databases` 持久化。批量保存会在一个事务中替换指定项目的关联，保留仍被选中的既有查询策略，新关联使用默认只读限制。当前版本不加密本地连接参数，列表 API 会过滤所有口令；编辑时口令留空会保留原值，只有用户点击眼睛时才通过 `POST /api/data-sources/{id}/reveal-password` 按需读取，并明确禁止缓存响应。MySQL/MariaDB/PostgreSQL/ClickHouse 的数据库清单可从远端自动同步，已不存在或当前账号不可见的旧库只标记 `available=false`，不直接删除项目关联。ClickHouse 使用官方 `clickhouse-connect` HTTP/HTTPS Client；后端容器访问宿主机服务时 Host 使用 `host.docker.internal`。
 

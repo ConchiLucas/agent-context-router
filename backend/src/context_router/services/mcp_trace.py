@@ -366,14 +366,7 @@ class McpTraceService:
                     database_payload_status=(
                         payload_metadata.response_status if payload_metadata is not None else None
                     ),
-                    database_payload_reason=(
-                        "capture_disabled"
-                        if call.tool_name in DATABASE_PAYLOAD_TOOL_NAMES
-                        and payload_metadata is None
-                        and self._database_payloads is not None
-                        and not self._database_payloads.capture_enabled
-                        else None
-                    ),
+                    database_payload_reason=None,
                 )
             )
         error_count = sum(1 for call in calls if call.status == "error")
@@ -438,12 +431,7 @@ class McpTraceService:
                 tool_call_id=tool_call_id,
                 tool_name=call.tool_name,
                 available=False,
-                reason=(
-                    "capture_disabled"
-                    if self._database_payloads is not None
-                    and not self._database_payloads.capture_enabled
-                    else "not_captured"
-                ),
+                reason="not_captured",
             )
 
         available = record.response_status != "expired" and (

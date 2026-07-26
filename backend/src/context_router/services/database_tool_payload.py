@@ -38,7 +38,6 @@ class DatabaseToolPayloadService:
         self,
         repository: DatabaseToolPayloadStore,
         *,
-        capture_enabled: bool = False,
         request_max_bytes: int = 1_000_000,
         response_max_bytes: int = 1_000_000,
         hard_max_bytes: int = _ABSOLUTE_MAX_BYTES,
@@ -47,17 +46,12 @@ class DatabaseToolPayloadService:
     ) -> None:
         hard_limit = min(max(hard_max_bytes, 1), _ABSOLUTE_MAX_BYTES)
         self._repository = repository
-        self._capture_enabled = capture_enabled
         self._request_max_bytes = min(max(request_max_bytes, 1), hard_limit)
         self._response_max_bytes = min(max(response_max_bytes, 1), hard_limit)
         self._ttl = timedelta(days=max(ttl_days, 1))
         self._cleanup_interval_seconds = max(cleanup_interval_seconds, 60)
         self._cleanup_lock = Lock()
         self._last_cleanup_at = 0.0
-
-    @property
-    def capture_enabled(self) -> bool:
-        return self._capture_enabled
 
     def capture_request(
         self,
@@ -67,9 +61,6 @@ class DatabaseToolPayloadService:
         arguments: dict[str, Any],
     ) -> None:
         if tool_call_id is None or tool_name not in DATABASE_PAYLOAD_TOOL_NAMES:
-            return
-        if not self._capture_enabled:
-            self.cleanup_expired()
             return
         try:
             request = _database_request_payload(tool_name, arguments)
@@ -103,11 +94,7 @@ class DatabaseToolPayloadService:
         payload: dict[str, Any] | None,
         capture_error_code: str | None = None,
     ) -> None:
-        if (
-            not self._capture_enabled
-            or tool_call_id is None
-            or tool_name not in DATABASE_PAYLOAD_TOOL_NAMES
-        ):
+        if tool_call_id is None or tool_name not in DATABASE_PAYLOAD_TOOL_NAMES:
             return
         try:
             bounded_payload: dict[str, object] | None = None

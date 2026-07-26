@@ -11,7 +11,6 @@ const DATABASE_MCP_TOOL_NAMES = new Set([
 ]);
 
 const UNAVAILABLE_MESSAGES: Readonly<Record<string, string>> = {
-  capture_disabled: "数据库 MCP 出入参详情采集当前未启用。",
   not_captured: "该调用产生于详情采集功能上线前，没有保存出入参详情。",
   expired: "该调用的出入参详情已超过保留期限。",
   capture_failed: "工具调用已完成，但服务端未能保存出入参详情。",

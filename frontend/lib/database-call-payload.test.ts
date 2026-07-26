@@ -73,12 +73,6 @@ test("separates SQL from the request JSON and builds copy text", () => {
 test("maps unavailable payload reasons to explicit messages", () => {
   assert.equal(
     databasePayloadUnavailableMessage(
-      payload({ available: false, reason: "capture_disabled" }),
-    ),
-    "数据库 MCP 出入参详情采集当前未启用。",
-  );
-  assert.equal(
-    databasePayloadUnavailableMessage(
       payload({ available: false, reason: "not_captured" }),
     ),
     "该调用产生于详情采集功能上线前，没有保存出入参详情。",

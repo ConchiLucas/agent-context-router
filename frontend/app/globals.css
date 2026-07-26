@@ -2034,6 +2034,46 @@ p {
   font-size: 0.82rem;
 }
 
+.tree-breadcrumbs {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 9px;
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.tree-breadcrumbs button {
+  border: 0;
+  padding: 2px 0;
+  color: var(--accent);
+  background: transparent;
+  box-shadow: none;
+  font: inherit;
+  font-weight: 700;
+}
+
+.tree-breadcrumbs button:hover {
+  color: var(--foreground);
+  text-decoration: underline;
+}
+
+.tree-breadcrumb-segment {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.tree-breadcrumb-segment > span[aria-current="page"] {
+  color: var(--foreground);
+  font-weight: 700;
+}
+
+.tree-breadcrumb-separator {
+  color: var(--border-strong);
+}
+
 .tree-toolbar-actions {
   display: flex;
   gap: 10px;
@@ -2097,23 +2137,32 @@ p {
 
 .document-detail-drawer {
   position: absolute;
-  z-index: 5;
-  top: 92px;
+  z-index: 50;
+  top: 136px;
   right: 20px;
   bottom: 20px;
   width: min(1120px, calc(100% - 40px));
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 18px;
-  padding: 30px;
+  padding: 0;
   background: var(--surface);
   box-shadow: var(--shadow);
 }
 
 .detail-close-button {
   position: absolute;
-  top: 14px;
-  right: 14px;
+  top: 16px;
+  right: 16px;
+  z-index: 10;
+}
+
+.document-detail-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 30px;
 }
 
 .document-detail-header {
@@ -2163,11 +2212,22 @@ p {
   content: "";
 }
 
-.document-tree-row:not(:first-child)::before {
+.document-children-rows[data-wrapped="true"]
+  > .document-tree-row:not(:first-child)::before {
   position: absolute;
   top: -46px;
   left: 50%;
   height: 65px;
+  border-left: 1px solid var(--border-strong);
+  content: "";
+}
+
+.document-children-rows[data-wrapped="true"]
+  > .document-tree-row:not(:last-child)::after {
+  position: absolute;
+  top: 19px;
+  bottom: 0;
+  left: 50%;
   border-left: 1px solid var(--border-strong);
   content: "";
 }
@@ -2219,20 +2279,37 @@ p {
 }
 
 .document-node {
-  display: grid;
+  display: flex;
   position: relative;
   z-index: 1;
   width: 190px;
   min-height: 92px;
-  gap: 7px;
-  align-content: center;
+  overflow: hidden;
+  flex-direction: column;
   border: 1px solid var(--border);
   border-radius: 13px;
-  padding: 14px;
   color: var(--foreground);
   background: var(--surface);
   box-shadow: 0 7px 20px rgb(32 33 31 / 7%);
+}
+
+.document-node-main {
+  display: grid;
+  width: 100%;
+  min-height: 92px;
+  flex: 1;
+  gap: 7px;
+  align-content: center;
+  border: 0;
+  border-radius: 0;
+  padding: 14px;
+  color: inherit;
+  background: transparent;
   text-align: left;
+}
+
+.document-node-main:hover {
+  background: var(--surface-soft);
 }
 
 .document-node span {
@@ -2260,8 +2337,40 @@ p {
   color: var(--danger);
 }
 
-.document-node[data-has-call-numbers="true"] {
+.document-node[data-has-call-numbers="true"] .document-node-main {
   padding-top: 40px;
+}
+
+.document-subtree-button {
+  display: flex;
+  width: 100%;
+  min-height: 44px;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  padding: 9px 13px;
+  color: var(--accent);
+  background: var(--surface-soft);
+  font-size: 0.72rem;
+  font-weight: 750;
+  text-align: left;
+}
+
+.document-subtree-button:hover {
+  color: var(--accent-foreground);
+  background: var(--accent);
+}
+
+.document-node-main:focus-visible,
+.document-subtree-button:focus-visible,
+.tree-breadcrumbs button:focus-visible {
+  position: relative;
+  z-index: 3;
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
 }
 
 .document-call-badges {
@@ -3459,11 +3568,15 @@ p {
   }
 
   .document-detail-drawer {
-    top: 76px;
+    top: 120px;
     right: 10px;
     bottom: 10px;
     width: calc(100% - 20px);
-    padding: 24px;
+    padding: 0;
+  }
+
+  .document-detail-content {
+    padding: 20px;
   }
 
   .mcp-json-modal {

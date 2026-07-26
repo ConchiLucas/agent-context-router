@@ -367,7 +367,6 @@ export type McpDatabasePayloadStatus =
   | "expired";
 
 export type McpDatabasePayloadUnavailableReason =
-  | "capture_disabled"
   | "not_captured"
   | "expired"
   | "capture_failed";

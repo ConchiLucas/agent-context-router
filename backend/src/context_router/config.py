@@ -17,7 +17,6 @@ class Settings(BaseSettings):
     database_max_cached_connectors: int = 16
     database_max_concurrency_per_source: int = 4
     database_schema_result_bytes: int = 1_000_000
-    database_payload_capture_enabled: bool = False
     database_payload_request_bytes: int = Field(default=1_000_000, ge=1_024, le=4_000_000)
     database_payload_response_bytes: int = Field(default=1_000_000, ge=1_024, le=4_000_000)
     database_payload_hard_max_bytes: int = Field(default=4_000_000, ge=1_024, le=4_000_000)

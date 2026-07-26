@@ -20,7 +20,6 @@ McpDatabasePayloadStatus = Literal[
     "expired",
 ]
 McpDatabasePayloadUnavailableReason = Literal[
-    "capture_disabled",
     "not_captured",
     "expired",
     "capture_failed",
