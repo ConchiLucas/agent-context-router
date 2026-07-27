@@ -9,6 +9,14 @@
 
 ## 记录
 
+### 2026-07-27
+
+- Project 的源码目录与文档入口正式解耦：`relative_path` 只表示源码根和 cwd 活动项目匹配范围，新增 `document_relative_path` 表示 Workspace 内的 Markdown 入口；兼容 `agents_path` 继续保存后者的绝对路径镜像。
+- 新建或编辑 Workspace Project 时，文档入口必须位于 `docs/` 下并以 `AGENTS.md` 结尾，推荐目录为 `docs/{frontend|backend}/{项目目录名}/AGENTS.md`。migration `20260727_0016` 只从旧 `agents_path` 回填新字段，不擅自移动宿主机文件；各工作空间在文件准备完成后独立迁移。
+- ProjectRegistry 同时保存解析后的源码根和文档入口。Workspace 仍按根目录最长前缀路由，`active_project` 改为按源码根最长前缀选择；将入口集中到 docs 不会改变数据库授权归属或 Codex 当前开发项目。
+- Workspace 刷新继续采用全量原子替换，但预构建阶段不再遇到首个坏项目就退出，而是遍历全部 Project、把错误写回对应卡片并一次性返回完整问题清单；任一失败时旧缓存仍保持不变。
+- 当前 migration head 为 `20260727_0016`。旧 `scope='project'` task、项目 ID、数据库授权和调用历史不变。
+
 ### 2026-07-26
 
 - 顶层管理实体和 Codex 运行时上下文边界统一为 Workspace。Workspace 保存唯一绝对根目录和总启停状态；Project 必须归属一个 Workspace，只保存名称、`frontend/backend` 类型和工作空间内唯一的 `relative_path`，没有独立 enabled。根项目用 `.`，`AGENTS.md` 入口由两者确定性推导；当前不自动扫描目录注册项目。

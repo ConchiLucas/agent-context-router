@@ -33,6 +33,9 @@ summary: 项目导航。
         encoding="utf-8",
     )
     child.write_text("# 无显式概要", encoding="utf-8")
+    project_entry = root.parent / "docs" / "backend" / "test" / "AGENTS.md"
+    project_entry.parent.mkdir(parents=True)
+    project_entry.write_text("# 测试项目文档入口", encoding="utf-8")
 
     app = create_app(
         Settings(
@@ -53,7 +56,11 @@ summary: 项目导航。
         assert workspace.status_code == 201
         project = client.post(
             f"/api/workspaces/{workspace.json()['id']}/projects",
-            json={"name": "测试项目", "relative_path": "."},
+            json={
+                "name": "测试项目",
+                "relative_path": ".",
+                "document_relative_path": "docs/backend/test/AGENTS.md",
+            },
         )
         assert project.status_code == 201
 

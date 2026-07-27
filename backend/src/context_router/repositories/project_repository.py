@@ -33,6 +33,7 @@ class ProjectRecord:
     project_kind: str
     workspace_id: str
     relative_path: str
+    document_relative_path: str
     agents_path: str
     created_at: datetime
     updated_at: datetime
@@ -57,6 +58,7 @@ class ProjectStore(Protocol):
         agents_path: str | None = None,
         workspace_id: str | None = None,
         relative_path: str | None = None,
+        document_relative_path: str | None = None,
     ) -> None: ...
 
     def update_project(
@@ -69,6 +71,7 @@ class ProjectStore(Protocol):
         agents_path: str | None = None,
         workspace_id: str | None = None,
         relative_path: str | None = None,
+        document_relative_path: str | None = None,
     ) -> None: ...
 
     def delete_project(self, project_id: str) -> None: ...
@@ -85,6 +88,27 @@ def _resolved_project_kind(project_kind: str | None) -> str:
     resolved = DEFAULT_PROJECT_KIND if project_kind is None else project_kind.strip()
     if resolved not in PROJECT_KINDS:
         raise ProjectRepositoryError("项目类型必须是 frontend 或 backend")
+    return resolved
+
+
+def _legacy_document_relative_path(relative_path: str) -> str:
+    if relative_path == ".":
+        return "AGENTS.md"
+    return f"{relative_path.rstrip('/')}/AGENTS.md"
+
+
+def _resolved_document_relative_path(
+    document_relative_path: str | None,
+    *,
+    relative_path: str,
+) -> str:
+    resolved = (
+        _legacy_document_relative_path(relative_path)
+        if document_relative_path is None
+        else document_relative_path.strip()
+    )
+    if not resolved:
+        raise ProjectRepositoryError("项目文档入口相对路径不能为空")
     return resolved
 
 
@@ -123,6 +147,7 @@ class InMemoryProjectRepository:
         agents_path: str | None = None,
         workspace_id: str | None = None,
         relative_path: str | None = None,
+        document_relative_path: str | None = None,
     ) -> None:
         if project_id in self._projects:
             raise ProjectRepositoryError("项目已存在")
@@ -134,13 +159,18 @@ class InMemoryProjectRepository:
             workspace_id=workspace_id,
             relative_path=relative_path,
         )
+        resolved_document_relative_path = _resolved_document_relative_path(
+            document_relative_path,
+            relative_path=resolved_relative_path,
+        )
         resolved_agents_path = build_project_agents_path(
             workspace.root_path,
-            resolved_relative_path,
+            resolved_document_relative_path,
         )
         self._ensure_unique_location(
             workspace_id=workspace.id,
             relative_path=resolved_relative_path,
+            document_relative_path=resolved_document_relative_path,
             agents_path=resolved_agents_path,
         )
         now = datetime.now(UTC)
@@ -151,6 +181,7 @@ class InMemoryProjectRepository:
             project_kind=_resolved_project_kind(project_kind),
             workspace_id=workspace.id,
             relative_path=resolved_relative_path,
+            document_relative_path=resolved_document_relative_path,
             agents_path=resolved_agents_path,
             created_at=now,
             updated_at=now,
@@ -170,6 +201,7 @@ class InMemoryProjectRepository:
         agents_path: str | None = None,
         workspace_id: str | None = None,
         relative_path: str | None = None,
+        document_relative_path: str | None = None,
     ) -> None:
         record = self._get(project_id)
         legacy_update = workspace_id is None and relative_path is None and agents_path is not None
@@ -181,6 +213,8 @@ class InMemoryProjectRepository:
                 > 1
             ):
                 raise ProjectRepositoryError("包含多个项目的工作空间请使用工作空间接口更新")
+            if record.document_relative_path != "AGENTS.md":
+                raise ProjectRepositoryError("工作空间项目请使用工作空间项目接口更新")
             try:
                 current_workspace = self._workspace_repository.get_workspace(record.workspace_id)
                 self._workspace_repository.update_workspace(
@@ -200,13 +234,22 @@ class InMemoryProjectRepository:
             if relative_path is not None
             else record.relative_path
         )
+        target_document_relative_path = (
+            _resolved_document_relative_path(
+                document_relative_path,
+                relative_path=target_relative_path,
+            )
+            if document_relative_path is not None
+            else record.document_relative_path
+        )
         resolved_agents_path = build_project_agents_path(
             workspace.root_path,
-            target_relative_path,
+            target_document_relative_path,
         )
         self._ensure_unique_location(
             workspace_id=target_workspace_id,
             relative_path=target_relative_path,
+            document_relative_path=target_document_relative_path,
             agents_path=resolved_agents_path,
             exclude_project_id=project_id,
         )
@@ -217,6 +260,7 @@ class InMemoryProjectRepository:
             project_kind=_resolved_project_kind(project_kind or record.project_kind),
             workspace_id=target_workspace_id,
             relative_path=target_relative_path,
+            document_relative_path=target_document_relative_path,
             agents_path=resolved_agents_path,
             updated_at=datetime.now(UTC),
             workspace_name=workspace.name,
@@ -272,7 +316,7 @@ class InMemoryProjectRepository:
             project_type=workspace.workspace_type,
             agents_path=build_project_agents_path(
                 workspace.root_path,
-                record.relative_path,
+                record.document_relative_path,
             ),
             workspace_name=workspace.name,
             workspace_type=workspace.workspace_type,
@@ -285,6 +329,7 @@ class InMemoryProjectRepository:
         *,
         workspace_id: str,
         relative_path: str,
+        document_relative_path: str,
         agents_path: str,
         exclude_project_id: str | None = None,
     ) -> None:
@@ -292,6 +337,10 @@ class InMemoryProjectRepository:
             record.id != exclude_project_id
             and (
                 (record.workspace_id == workspace_id and record.relative_path == relative_path)
+                or (
+                    record.workspace_id == workspace_id
+                    and record.document_relative_path == document_relative_path
+                )
                 or record.agents_path == agents_path
             )
             for record in self._projects.values()
@@ -308,7 +357,8 @@ class InMemoryProjectRepository:
 class PostgresProjectRepository:
     _SELECT_FIELDS = """
         p.id, p.name, p.project_type, p.project_kind, p.workspace_id,
-        p.relative_path, p.agents_path, p.created_at, p.updated_at,
+        p.relative_path, p.document_relative_path, p.agents_path,
+        p.created_at, p.updated_at,
         w.name, w.workspace_type, w.root_path, w.enabled
     """
 
@@ -354,6 +404,7 @@ class PostgresProjectRepository:
         agents_path: str | None = None,
         workspace_id: str | None = None,
         relative_path: str | None = None,
+        document_relative_path: str | None = None,
     ) -> None:
         try:
             with psycopg.connect(self._database_url) as connection:
@@ -386,18 +437,22 @@ class PostgresProjectRepository:
                     raise ProjectRepositoryError("工作空间不存在")
                 workspace_type = str(workspace[2])
                 root_path = str(workspace[3])
+                resolved_document_relative_path = _resolved_document_relative_path(
+                    document_relative_path,
+                    relative_path=resolved_relative_path,
+                )
                 resolved_agents_path = build_project_agents_path(
                     root_path,
-                    resolved_relative_path,
+                    resolved_document_relative_path,
                 )
                 connection.execute(
                     """
                     INSERT INTO document_projects
                         (
                             id, name, project_type, project_kind, workspace_id,
-                            relative_path, agents_path
+                            relative_path, document_relative_path, agents_path
                         )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         project_id,
@@ -406,6 +461,7 @@ class PostgresProjectRepository:
                         _resolved_project_kind(project_kind),
                         resolved_workspace_id,
                         resolved_relative_path,
+                        resolved_document_relative_path,
                         resolved_agents_path,
                     ),
                 )
@@ -428,6 +484,7 @@ class PostgresProjectRepository:
         agents_path: str | None = None,
         workspace_id: str | None = None,
         relative_path: str | None = None,
+        document_relative_path: str | None = None,
     ) -> None:
         try:
             with psycopg.connect(self._database_url) as connection:
@@ -437,6 +494,7 @@ class PostgresProjectRepository:
                 current_project_kind = str(project_row[3])
                 current_workspace_id = str(project_row[4])
                 current_relative_path = str(project_row[5])
+                current_document_relative_path = str(project_row[6])
                 legacy_update = (
                     workspace_id is None and relative_path is None and agents_path is not None
                 )
@@ -453,6 +511,8 @@ class PostgresProjectRepository:
                     ).fetchone()
                     if project_count is None or int(project_count[0]) != 1:
                         raise ProjectRepositoryError("包含多个项目的工作空间请使用工作空间接口更新")
+                    if current_document_relative_path != "AGENTS.md":
+                        raise ProjectRepositoryError("工作空间项目请使用工作空间项目接口更新")
                     current_workspace = self._fetch_workspace(
                         connection,
                         current_workspace_id,
@@ -479,15 +539,24 @@ class PostgresProjectRepository:
                     else current_relative_path
                 )
                 resolved_workspace_type = str(target_workspace[2])
+                target_document_relative_path = (
+                    _resolved_document_relative_path(
+                        document_relative_path,
+                        relative_path=target_relative_path,
+                    )
+                    if document_relative_path is not None
+                    else current_document_relative_path
+                )
                 resolved_agents_path = build_project_agents_path(
                     str(target_workspace[3]),
-                    target_relative_path,
+                    target_document_relative_path,
                 )
                 connection.execute(
                     """
                     UPDATE document_projects
                     SET name = %s, project_type = %s, project_kind = %s,
-                        workspace_id = %s, relative_path = %s, agents_path = %s,
+                        workspace_id = %s, relative_path = %s,
+                        document_relative_path = %s, agents_path = %s,
                         updated_at = CURRENT_TIMESTAMP
                     WHERE id = %s
                     """,
@@ -497,6 +566,7 @@ class PostgresProjectRepository:
                         _resolved_project_kind(project_kind or current_project_kind),
                         target_workspace_id,
                         target_relative_path,
+                        target_document_relative_path,
                         resolved_agents_path,
                         project_id,
                     ),
@@ -582,13 +652,13 @@ class PostgresProjectRepository:
         )
         projects = connection.execute(
             """
-            SELECT id, relative_path
+            SELECT id, document_relative_path
             FROM document_projects
             WHERE workspace_id = %s
             """,
             (workspace_id,),
         ).fetchall()
-        for child_project_id, child_relative_path in projects:
+        for child_project_id, child_document_relative_path in projects:
             connection.execute(
                 """
                 UPDATE document_projects
@@ -598,7 +668,10 @@ class PostgresProjectRepository:
                 """,
                 (
                     workspace_type,
-                    build_project_agents_path(root_path, str(child_relative_path)),
+                    build_project_agents_path(
+                        root_path,
+                        str(child_document_relative_path),
+                    ),
                     child_project_id,
                 ),
             )
@@ -612,11 +685,12 @@ class PostgresProjectRepository:
             project_kind=str(row[3]),
             workspace_id=str(row[4]),
             relative_path=str(row[5]),
-            agents_path=str(row[6]),
-            created_at=row[7],  # type: ignore[arg-type]
-            updated_at=row[8],  # type: ignore[arg-type]
-            workspace_name=str(row[9]),
-            workspace_type=str(row[10]),
-            workspace_root_path=str(row[11]),
-            workspace_enabled=bool(row[12]),
+            document_relative_path=str(row[6]),
+            agents_path=str(row[7]),
+            created_at=row[8],  # type: ignore[arg-type]
+            updated_at=row[9],  # type: ignore[arg-type]
+            workspace_name=str(row[10]),
+            workspace_type=str(row[11]),
+            workspace_root_path=str(row[12]),
+            workspace_enabled=bool(row[13]),
         )

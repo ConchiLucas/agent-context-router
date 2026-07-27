@@ -135,6 +135,7 @@ def create_workspace_project(
             workspace_id,
             name=payload.name,
             relative_path=payload.relative_path,
+            document_relative_path=payload.document_relative_path,
             project_kind=payload.project_kind,
         )
     except WorkspaceManagementError as exc:
@@ -157,6 +158,7 @@ def update_workspace_project(
             project_id,
             name=payload.name,
             relative_path=payload.relative_path,
+            document_relative_path=payload.document_relative_path,
             project_kind=payload.project_kind,
         )
     except WorkspaceManagementError as exc:

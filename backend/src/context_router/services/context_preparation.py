@@ -201,6 +201,7 @@ class ContextPreparationService:
             name=project.name,
             node_count=len(project.cache.documents),
             relative_path=project.relative_path,
+            document_relative_path=project.document_relative_path,
             project_kind=project.project_kind,
         )
 

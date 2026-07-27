@@ -9,10 +9,11 @@ Browser
   -> PostgreSQL workspaces
   -> 可选 workspace.root_path / AGENTS.md
   -> 工作空间详情中的项目配置卡片
-  -> PostgreSQL document_projects(workspace_id, relative_path)
+  -> PostgreSQL document_projects(workspace_id, relative_path, document_relative_path)
   -> ProjectRegistry 当前运行时缓存
-  -> workspace.root_path + project.relative_path + AGENTS.md
-  -> 映射到容器只读工作区并校验不能越出工作空间
+  -> workspace.root_path + project.relative_path 定位源码根
+  -> workspace.root_path + project.document_relative_path 定位 docs 项目入口
+  -> 分别映射到容器只读工作区并校验不能越出工作空间
   -> 分别递归解析 Workspace/Project 的“下级文档”表格
   -> 真实 Workspace 根严格保留显式父子关系；缺少真实根时由合成根直接挂载 Project 入口
   -> 生成确定性文档版本并重建独立的 Workspace/Project PostgreSQL 词法搜索索引
@@ -25,7 +26,7 @@ Codex / Antigravity
   -> prepare_task_context
   -> ContextPreparationService
   -> ProjectRegistry 按 cwd 最长前缀选择最深 Workspace
-  -> 在 Workspace 内选择最深 Project 作为 active_project 元数据
+  -> 在 Workspace 内按源码根选择最深 Project 作为 active_project 元数据
   -> 检查 Workspace 开关和全部项目缓存
   -> PostgreSQL mcp_tasks 生成 scope=workspace 的 task_id
   -> 保存稳定 workspace 与可选 active_project 快照
@@ -36,7 +37,7 @@ Codex / Antigravity
   -> PostgreSQL 生成 read_call_id 并保存 position/status
 ```
 
-cwd 匹配只决定 Workspace 边界；最深 Project 仅作为“当前主要开发位置”的快照返回，不会把文档和数据库范围收窄到该项目。Project 没有 enabled。工作空间停用或任一子项目映射不可用时，新的 Workspace prepare 会明确失败。
+cwd 匹配先决定 Workspace 边界，再按 Project 源码 `relative_path` 选择最深活动项目；docs 文档入口目录不参与源码归属。最深 Project 仅作为“当前主要开发位置”的快照返回，不会把文档和数据库范围收窄到该项目。Project 没有 enabled。工作空间停用或任一子项目映射不可用时，新的 Workspace prepare 会明确失败。
 
 ```text
 Codex / Antigravity
@@ -134,16 +135,16 @@ api/workspaces.py
 ```
 
 - `WorkspaceManagementService` 编排工作空间 CRUD、工作空间内项目 CRUD 和数据源汇总；`workspace_repository.py` 持久化工作空间根目录、类型和总开关。
-- `project_repository.py` 持久化稳定项目 ID、`workspace_id`、`frontend/backend` 的 `project_kind`、工作空间内唯一的 `relative_path` 和兼容字段；`document_projects` 不再有 enabled。项目实际入口由工作空间根目录和相对路径推导，后端启动时读取全部项目并从磁盘重建缓存，路径失效项目保留配置和错误。
-- `ProjectRegistry` 管理可选的 Workspace 根文档缓存和每个 Project 缓存；根 `AGENTS.md` 存在时，导航树严格采用其显式父子关系，未声明的 Project 根不自动挂入树中；根入口不存在时动态构建直接列出 Project 的合成入口。两种情况下 Workspace 聚合缓存都保留全部项目文档，供搜索和按 ID 读取。cwd 先按根目录深度选择最深 Workspace，再选择最深 Project 作为 `active_project`。
+- `project_repository.py` 持久化稳定项目 ID、`workspace_id`、`frontend/backend` 的 `project_kind`、工作空间内分别唯一的源码 `relative_path`、文档入口 `document_relative_path` 和兼容字段；`document_projects` 不再有 enabled。后端启动时从独立文档入口重建缓存，路径失效项目保留配置和错误。
+- `ProjectRegistry` 管理可选的 Workspace 根文档缓存和每个 Project 缓存；根 `AGENTS.md` 存在时，导航树严格采用其显式父子关系，未声明的 Project 根不自动挂入树中；根入口不存在时动态构建直接列出 Project 的合成入口。两种情况下 Workspace 聚合缓存都保留全部项目文档，供搜索和按 ID 读取。cwd 先按根目录深度选择最深 Workspace，再按源码根选择最深 Project 作为 `active_project`。
 - 工作空间类型用于管理页面分类，并作为所属项目的兼容 `project_type`；Project 的业务类型只允许 `frontend/backend`。数据源分类由 `data_sources.category` 独立持久化，不复用工作空间类型。
 - 数据源列表始终过滤口令；只有编辑弹窗的眼睛按钮调用独立接口读取明文密码。连接测试使用临时 Connector，完成后关闭，不进入长期缓存，也不向响应暴露连接配置。
 - MySQL/MariaDB/PostgreSQL/ClickHouse 自动同步由 `database_discovery.py` 使用对应驱动读取远端数据库清单，保留已有记录 ID 和项目关联，新增可见库并把本次未发现的旧库标记为不可用。同步失败不会替换现有数据库清单。
 - 项目侧数据源选择接口按数据源分组返回数据库清单且不返回连接口令；批量保存使用单个数据库事务替换该项目关联，保留仍被选中的既有策略，新关联使用默认只读限制。`mcp_alias` 虽保存在项目关联上，但更新接口、Repository 和数据库唯一索引都按 Workspace 校验。
-- 工作空间根目录必须是绝对目录；项目相对路径禁止绝对路径、`~`、反斜杠和 `..`，并通过真实路径校验阻止软链接越界。项目新增、编辑和删除先完成必要的磁盘验证与数据库写入，再原子更新注册表；数据库写入失败时不改变当前内存项目。
+- 工作空间根目录必须是绝对目录；项目源码和文档入口相对路径禁止绝对路径、`~`、反斜杠和 `..`，并通过真实路径校验阻止软链接越界。新文档入口必须位于 `docs/` 下并以 `AGENTS.md` 结尾。项目新增、编辑和删除先完成必要的磁盘验证与数据库写入，再原子更新注册表；数据库写入失败时不改变当前内存项目。
 - 工作空间是唯一运行时开关；停用后所有子项目仍在管理页面可见，但不能生成 Workspace snapshot，数据源汇总会把相关授权标记为 `workspace_disabled`。
 - `build_document_cache` 负责递归读取、路径校验、循环检测和正文缓存。
-- Workspace 刷新先构建可选根入口和全部子项目的新 `DocumentCache`，任一构建失败时保留全部旧缓存；全部构建成功后再统一替换，并生成显式根树或合成根树，同时把全部项目文档合并到 Workspace 搜索和读取范围。
+- Workspace 刷新先构建可选根入口并遍历全部子项目生成新的 `DocumentCache`，把所有失败入口写回对应项目后统一返回问题；任一构建失败时保留全部旧缓存。全部构建成功后再统一替换，并生成显式根树或合成根树，同时把全部项目文档合并到 Workspace 搜索和读取范围。
 - `document_metadata.py` 在刷新时安全解析显式 title 和 summary。
 - `markdown_search_parser.py` 剥离 Front Matter、按 fenced-code-aware ATX 章节解析并生成有界、带重叠的规范化分块。
 - `document_search_repository.py` 使用 PostgreSQL `simple` FTS、`pg_trgm` 和短词精确子串查询 Workspace 或 Project 的当前索引版本；两类索引分别持久化，避免使用伪 Project。
@@ -198,7 +199,7 @@ app/page.tsx
 
 Markdown 解析器只生成 React 元素，不使用 `dangerouslySetInnerHTML`，也不执行文档里的原始 HTML。
 
-工作空间列表负责顶层新增、编辑、启停和删除。进入详情后，页面按“前端项目 / 后端项目 / 数据源汇总”三页签组织内容；项目新增/编辑提交 `project_kind` 和工作空间内相对路径。“刷新映射 / 查看调用记录 / 查看文档树 / 查看 MCP JSON”位于 Workspace 工具栏并调用 Workspace API；项目卡片只保留“编辑项目 / 管理数据源 / 删除项目”。“数据源汇总”按数据源展示数据库数、项目数、授权数和每条授权状态，不提供另一套工作空间级授权编辑。
+工作空间列表负责顶层新增、编辑、启停和删除。进入详情后，页面按“前端项目 / 后端项目 / 数据源汇总”三页签组织内容；项目新增/编辑分别提交 `project_kind`、源码 `relative_path` 和 docs 文档入口 `document_relative_path`，卡片也分开展示两条路径。“刷新映射 / 查看调用记录 / 查看文档树 / 查看 MCP JSON”位于 Workspace 工具栏并调用 Workspace API；项目卡片只保留“编辑项目 / 管理数据源 / 删除项目”。“数据源汇总”按数据源展示数据库数、项目数、授权数和每条授权状态，不提供另一套工作空间级授权编辑。
 
 Workspace 调用记录通过 `task-history.ts` 保留文档读取批次和单批位置，通过 `database-access.ts` 把文档 read call 与数据库 call 按创建时间合并为上下文时间线。后端工作空间任务列表在 `LIMIT` 前过滤既没有 read call 也没有数据库调用的任务；同一次批量读取的文档在一行横向展示，读取成功的卡片复用 Workspace 文档详情接口和 Markdown 抽屉。数据库卡片仍只展示客观摘要。
 

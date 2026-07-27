@@ -39,6 +39,7 @@ _REVISION_0012 = "20260725_0012"
 _REVISION_0013 = "20260726_0013"
 _REVISION_0014 = "20260726_0014"
 _REVISION_0015 = "20260726_0015"
+_REVISION_0016 = "20260727_0016"
 
 _PROJECT_A = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 _PROJECT_B = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -193,7 +194,7 @@ def test_migration_and_postgres_repositories_preserve_legacy_data(
         )
 
     command.upgrade(alembic_config, "head")
-    assert _current_revision(database_url) == _REVISION_0015
+    assert _current_revision(database_url) == _REVISION_0016
     assert _aliases(database_url) == aliases
     _assert_legacy_rows_survive(database_url)
     _assert_legacy_projects_migrated_to_workspaces(database_url)
@@ -489,13 +490,15 @@ def test_postgres_workspace_and_project_repositories_keep_legacy_fields_in_sync(
         project_id=project_id,
         workspace_id=workspace_id,
         relative_path="services/order",
+        document_relative_path="docs/frontend/order/AGENTS.md",
         name="订单服务",
         project_kind="frontend",
     )
     created = projects.get_project(project_id)
     assert created.project_type == "业务系统"
     assert created.project_kind == "frontend"
-    assert created.agents_path == "/workspace/company/services/order/AGENTS.md"
+    assert created.document_relative_path == "docs/frontend/order/AGENTS.md"
+    assert created.agents_path == "/workspace/company/docs/frontend/order/AGENTS.md"
     assert created.workspace_name == "业务工作空间"
 
     workspaces.update_workspace(
@@ -506,7 +509,7 @@ def test_postgres_workspace_and_project_repositories_keep_legacy_fields_in_sync(
     )
     updated = projects.get_project(project_id)
     assert updated.project_type == "交通物流"
-    assert updated.agents_path == "/workspace/moved/services/order/AGENTS.md"
+    assert updated.agents_path == "/workspace/moved/docs/frontend/order/AGENTS.md"
     assert updated.workspace_name == "新工作空间"
 
     projects.update_project(
@@ -514,10 +517,11 @@ def test_postgres_workspace_and_project_repositories_keep_legacy_fields_in_sync(
         name="订单根项目",
         workspace_id=workspace_id,
         relative_path=".",
+        document_relative_path="docs/backend/root/AGENTS.md",
         project_kind="backend",
     )
     moved = projects.get_project(project_id)
-    assert moved.agents_path == "/workspace/moved/AGENTS.md"
+    assert moved.agents_path == "/workspace/moved/docs/backend/root/AGENTS.md"
     assert moved.project_kind == "backend"
 
     workspaces.set_workspace_enabled(workspace_id, enabled=False)
@@ -714,10 +718,13 @@ def _assert_task_project_snapshot_survives_project_deletion(database_url: str) -
         )
         connection.execute(
             """INSERT INTO document_projects
-            (id, name, agents_path, project_type, project_kind, workspace_id, relative_path)
+            (
+                id, name, agents_path, project_type, project_kind,
+                workspace_id, relative_path, document_relative_path
+            )
             VALUES (
                 %s, 'Disposable Project', '/disposable/AGENTS.md',
-                '公司项目', 'backend', %s, '.'
+                '公司项目', 'backend', %s, '.', 'AGENTS.md'
             )""",
             (project_id, project_id),
         )
@@ -1034,6 +1041,7 @@ def _assert_legacy_projects_migrated_to_workspaces(database_url: str) -> None:
                 p.id,
                 p.workspace_id,
                 p.relative_path,
+                p.document_relative_path,
                 p.agents_path,
                 p.project_kind,
                 w.id,
@@ -1050,6 +1058,7 @@ def _assert_legacy_projects_migrated_to_workspaces(database_url: str) -> None:
             _PROJECT_A,
             _PROJECT_A,
             ".",
+            "AGENTS.md",
             _PROJECT_A_PATH,
             "backend",
             _PROJECT_A,
@@ -1061,6 +1070,7 @@ def _assert_legacy_projects_migrated_to_workspaces(database_url: str) -> None:
             _PROJECT_B,
             _PROJECT_B,
             ".",
+            "AGENTS.md",
             "/legacy/project-b/AGENTS.md",
             "backend",
             _PROJECT_B,

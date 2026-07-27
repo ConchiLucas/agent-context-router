@@ -164,6 +164,7 @@ class WorkspaceManagementService:
         *,
         name: str,
         relative_path: str,
+        document_relative_path: str,
         project_kind: str,
     ) -> WorkspaceProjectSummary:
         workspace = self._workspace_record(workspace_id)
@@ -172,6 +173,7 @@ class WorkspaceManagementService:
                 workspace,
                 name=name,
                 relative_path=relative_path,
+                document_relative_path=document_relative_path,
                 project_kind=project_kind,
             )
         except ProjectRegistryError as exc:
@@ -185,6 +187,7 @@ class WorkspaceManagementService:
         *,
         name: str,
         relative_path: str,
+        document_relative_path: str,
         project_kind: str | None,
     ) -> WorkspaceProjectSummary:
         workspace = self._workspace_record(workspace_id)
@@ -194,6 +197,7 @@ class WorkspaceManagementService:
                 project_id,
                 name=name,
                 relative_path=relative_path,
+                document_relative_path=document_relative_path,
                 project_kind=project_kind,
             )
         except ProjectRegistryError as exc:
@@ -301,6 +305,7 @@ class WorkspaceManagementService:
             project_type=project.project_type,
             project_kind=project.project_kind,
             relative_path=project.relative_path,
+            document_relative_path=project.document_relative_path,
             agents_path=project.agents_path,
             node_count=project.node_count,
             data_source_count=len({link.data_source_id for link in links}),

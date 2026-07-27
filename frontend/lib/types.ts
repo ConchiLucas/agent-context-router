@@ -6,6 +6,7 @@ export interface ProjectSummary {
   project_kind: ProjectKind;
   project_type?: string;
   agents_path: string;
+  document_relative_path: string;
   workspace_id?: string | null;
   workspace_name?: string | null;
   workspace_enabled?: boolean | null;
@@ -50,12 +51,14 @@ export interface WorkspaceUpdate {
 export interface WorkspaceProjectCreate {
   name: string;
   relative_path: string;
+  document_relative_path: string;
   project_kind: ProjectKind;
 }
 
 export interface WorkspaceProjectUpdate {
   name: string;
   relative_path: string;
+  document_relative_path: string;
   project_kind: ProjectKind;
 }
 
@@ -262,6 +265,7 @@ export interface PreparedProject {
   name: string;
   node_count: number;
   relative_path: string;
+  document_relative_path: string;
   project_kind: ProjectKind;
 }
 

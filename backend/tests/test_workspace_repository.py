@@ -24,6 +24,7 @@ def test_workspace_and_projects_share_in_memory_backing_and_legacy_fields() -> N
         project_id="project-a",
         workspace_id="workspace-a",
         relative_path="services/order",
+        document_relative_path="docs/backend/order/AGENTS.md",
         name="订单服务",
         project_kind="backend",
     )
@@ -32,7 +33,9 @@ def test_workspace_and_projects_share_in_memory_backing_and_legacy_fields() -> N
 
     assert project.project_type == "业务系统"
     assert project.project_kind == "backend"
-    assert project.agents_path == "/workspace/company/services/order/AGENTS.md"
+    assert project.relative_path == "services/order"
+    assert project.document_relative_path == "docs/backend/order/AGENTS.md"
+    assert project.agents_path == "/workspace/company/docs/backend/order/AGENTS.md"
     assert project.workspace_name == "业务工作空间"
     assert project.workspace_root_path == "/workspace/company"
     assert project.workspace_enabled is True
@@ -45,7 +48,7 @@ def test_workspace_and_projects_share_in_memory_backing_and_legacy_fields() -> N
     )
     updated = projects.get_project("project-a")
     assert updated.project_type == "交通物流"
-    assert updated.agents_path == "/workspace/new-company/services/order/AGENTS.md"
+    assert updated.agents_path == "/workspace/new-company/docs/backend/order/AGENTS.md"
     assert updated.workspace_name == "新工作空间名"
 
     workspaces.set_workspace_enabled("workspace-a", enabled=False)

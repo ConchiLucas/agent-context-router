@@ -35,7 +35,9 @@ from context_router.services.document_tree import (
 from context_router.services.workspace_paths import (
     WorkspacePathError,
     derive_agents_path,
+    normalize_document_relative_path,
     normalize_project_relative_path,
+    resolve_project_root,
 )
 
 logger = logging.getLogger(__name__)
@@ -52,11 +54,13 @@ class ProjectState:
     project_type: str
     agents_path: str
     resolved_agents_path: Path
+    resolved_project_root: Path
     workspace_id: str | None = None
     workspace_name: str | None = None
     workspace_root_path: str | None = None
     workspace_enabled: bool = True
     relative_path: str = "."
+    document_relative_path: str = "AGENTS.md"
     project_kind: str = "backend"
     cache: DocumentCache | None = None
     refreshed_at: datetime | None = None
@@ -70,10 +74,12 @@ class ProjectSnapshot:
     name: str
     agents_path: str
     resolved_agents_path: Path
+    resolved_project_root: Path
     cache: DocumentCache
     workspace_id: str | None = None
     workspace_name: str | None = None
     relative_path: str = "."
+    document_relative_path: str = "AGENTS.md"
     project_kind: str = "backend"
 
 
@@ -274,10 +280,12 @@ class ProjectRegistry:
             name=project.name,
             agents_path=project.agents_path,
             resolved_agents_path=project.resolved_agents_path,
+            resolved_project_root=project.resolved_project_root,
             cache=project.cache,
             workspace_id=project.workspace_id,
             workspace_name=project.workspace_name,
             relative_path=project.relative_path,
+            document_relative_path=project.document_relative_path,
             project_kind=project.project_kind,
         )
 
@@ -296,6 +304,7 @@ class ProjectRegistry:
             workspace_name=project.workspace_name,
             workspace_enabled=project.workspace_enabled,
             relative_path=project.relative_path,
+            document_relative_path=project.document_relative_path,
         )
 
     def _workspace_snapshot(
@@ -588,19 +597,46 @@ class ProjectRegistry:
         self,
         workspace: WorkspaceRecord,
         relative_path: str,
-    ) -> tuple[str, str, Path]:
-        try:
-            normalized_relative = normalize_project_relative_path(relative_path)
-            agents_path = derive_agents_path(workspace.root_path, normalized_relative)
-        except WorkspacePathError as exc:
-            raise ProjectRegistryError(str(exc)) from exc
-        resolved_agents_path = self._resolve_agents_path(agents_path)
+        document_relative_path: str,
+        *,
+        require_docs: bool,
+    ) -> tuple[str, str, str, Path, Path]:
         resolved_workspace_root = self._resolve_cwd(workspace.root_path)
         try:
-            resolved_agents_path.parent.relative_to(resolved_workspace_root)
+            normalized_relative = normalize_project_relative_path(relative_path)
+            normalized_document_relative = normalize_document_relative_path(
+                document_relative_path,
+                require_docs=require_docs,
+            )
+            resolved_project_root = resolve_project_root(
+                resolved_workspace_root,
+                normalized_relative,
+            )
+            agents_path = derive_agents_path(
+                workspace.root_path,
+                normalized_document_relative,
+            )
+        except WorkspacePathError as exc:
+            raise ProjectRegistryError(str(exc)) from exc
+        if not resolved_project_root.is_dir():
+            project_root = (
+                workspace.root_path
+                if normalized_relative == "."
+                else f"{workspace.root_path.rstrip('/')}/{normalized_relative}"
+            )
+            raise ProjectRegistryError(f"找不到项目目录：{project_root}")
+        resolved_agents_path = self._resolve_agents_path(agents_path)
+        try:
+            resolved_agents_path.relative_to(resolved_workspace_root)
         except ValueError as exc:
-            raise ProjectRegistryError("项目路径不能越出工作空间") from exc
-        return normalized_relative, agents_path, resolved_agents_path
+            raise ProjectRegistryError("项目文档入口不能越出工作空间") from exc
+        return (
+            normalized_relative,
+            normalized_document_relative,
+            agents_path,
+            resolved_project_root,
+            resolved_agents_path,
+        )
 
     def add_workspace_project(
         self,
@@ -608,6 +644,7 @@ class ProjectRegistry:
         *,
         name: str,
         relative_path: str,
+        document_relative_path: str,
         project_kind: str = "backend",
     ) -> ProjectSummary:
         normalized_name = name.strip()
@@ -616,9 +653,17 @@ class ProjectRegistry:
             raise ProjectRegistryError("项目名称不能为空")
         if normalized_kind not in {"frontend", "backend"}:
             raise ProjectRegistryError("项目类型必须是 frontend 或 backend")
-        normalized_relative, agents_path, resolved_path = self._resolve_workspace_project(
+        (
+            normalized_relative,
+            normalized_document_relative,
+            agents_path,
+            resolved_project_root,
+            resolved_path,
+        ) = self._resolve_workspace_project(
             workspace,
             relative_path,
+            document_relative_path,
+            require_docs=True,
         )
         try:
             new_cache = build_document_cache(resolved_path)
@@ -640,6 +685,7 @@ class ProjectRegistry:
                     agents_path=agents_path,
                     workspace_id=workspace.id,
                     relative_path=normalized_relative,
+                    document_relative_path=normalized_document_relative,
                     project_kind=normalized_kind,
                 )
             except ProjectRepositoryError as exc:
@@ -653,11 +699,13 @@ class ProjectRegistry:
                 project_type=workspace.workspace_type,
                 agents_path=agents_path,
                 resolved_agents_path=resolved_path,
+                resolved_project_root=resolved_project_root,
                 workspace_id=workspace.id,
                 workspace_name=workspace.name,
                 workspace_root_path=workspace.root_path,
                 workspace_enabled=workspace.enabled,
                 relative_path=normalized_relative,
+                document_relative_path=normalized_document_relative,
                 project_kind=normalized_kind,
                 cache=new_cache,
                 refreshed_at=datetime.now(UTC),
@@ -673,14 +721,23 @@ class ProjectRegistry:
         *,
         name: str,
         relative_path: str,
+        document_relative_path: str,
         project_kind: str | None,
     ) -> ProjectSummary:
         normalized_name = name.strip()
         if not normalized_name:
             raise ProjectRegistryError("项目名称不能为空")
-        normalized_relative, agents_path, resolved_path = self._resolve_workspace_project(
+        (
+            normalized_relative,
+            normalized_document_relative,
+            agents_path,
+            resolved_project_root,
+            resolved_path,
+        ) = self._resolve_workspace_project(
             workspace,
             relative_path,
+            document_relative_path,
+            require_docs=True,
         )
         try:
             new_cache = build_document_cache(resolved_path)
@@ -708,6 +765,7 @@ class ProjectRegistry:
                     name=normalized_name,
                     workspace_id=workspace.id,
                     relative_path=normalized_relative,
+                    document_relative_path=normalized_document_relative,
                     project_kind=normalized_kind,
                 )
             except ProjectRepositoryError as exc:
@@ -719,10 +777,12 @@ class ProjectRegistry:
             project.project_type = workspace.workspace_type
             project.agents_path = agents_path
             project.resolved_agents_path = resolved_path
+            project.resolved_project_root = resolved_project_root
             project.workspace_name = workspace.name
             project.workspace_root_path = workspace.root_path
             project.workspace_enabled = workspace.enabled
             project.relative_path = normalized_relative
+            project.document_relative_path = normalized_document_relative
             project.project_kind = normalized_kind
             project.cache = new_cache
             project.refreshed_at = datetime.now(UTC)
@@ -748,9 +808,11 @@ class ProjectRegistry:
                 created_at=datetime.now(UTC),
                 updated_at=datetime.now(UTC),
             )
-            _, _, resolved_path = self._resolve_workspace_project(
+            _, _, _, _, resolved_path = self._resolve_workspace_project(
                 candidate_workspace,
                 project.relative_path,
+                project.document_relative_path,
+                require_docs=False,
             )
             try:
                 build_document_cache(resolved_path)
@@ -764,7 +826,10 @@ class ProjectRegistry:
                 for project in self._projects.values()
                 if project.workspace_id == workspace.id
             ]
-        prepared: dict[str, tuple[str, str, Path, DocumentCache]] = {}
+        prepared: dict[
+            str,
+            tuple[str, str, str, Path, Path, DocumentCache],
+        ] = {}
         failures: dict[str, str] = {}
         resolved_workspace_root = self._resolve_cwd(workspace.root_path)
         workspace_document_path: Path | None = None
@@ -782,14 +847,24 @@ class ProjectRegistry:
 
         for project in projects:
             try:
-                relative_path, agents_path, resolved_path = self._resolve_workspace_project(
+                (
+                    relative_path,
+                    document_relative_path,
+                    agents_path,
+                    resolved_project_root,
+                    resolved_path,
+                ) = self._resolve_workspace_project(
                     workspace,
                     project.relative_path,
+                    project.document_relative_path,
+                    require_docs=False,
                 )
                 cache = build_document_cache(resolved_path)
                 prepared[project.id] = (
                     relative_path,
+                    document_relative_path,
                     agents_path,
+                    resolved_project_root,
                     resolved_path,
                     cache,
                 )
@@ -808,7 +883,7 @@ class ProjectRegistry:
             for project in projects:
                 self._ensure_search_index(
                     project.id,
-                    prepared[project.id][3],
+                    prepared[project.id][5],
                     force=True,
                 )
 
@@ -819,14 +894,12 @@ class ProjectRegistry:
                 resolved_root=resolved_workspace_root,
             )
             workspace_state.error = next(iter(failures.values()), None)
+            workspace_state.document_error = workspace_document_error
             if not failures:
                 workspace_state.document_entry_path = workspace_document_path
                 workspace_state.document_cache = workspace_document_cache
-                workspace_state.document_error = None
                 workspace_state.document_entry_checked = True
                 workspace_state.refreshed_at = now
-            elif workspace_document_error is not None:
-                workspace_state.document_error = workspace_document_error
 
             for project in projects:
                 project.workspace_name = workspace.name
@@ -836,9 +909,18 @@ class ProjectRegistry:
                 if failures:
                     project.error = failures.get(project.id)
                     continue
-                relative_path, agents_path, resolved_path, cache = prepared[project.id]
+                (
+                    relative_path,
+                    document_relative_path,
+                    agents_path,
+                    resolved_project_root,
+                    resolved_path,
+                    cache,
+                ) = prepared[project.id]
                 project.relative_path = relative_path
+                project.document_relative_path = document_relative_path
                 project.agents_path = agents_path
+                project.resolved_project_root = resolved_project_root
                 project.resolved_agents_path = resolved_path
                 project.cache = cache
                 project.refreshed_at = now
@@ -869,15 +951,41 @@ class ProjectRegistry:
             refreshed_at: datetime | None = None
             error: str | None = None
             resolved_path = Path(record.agents_path).expanduser()
+            workspace_root_path = record.workspace_root_path or str(
+                Path(record.agents_path).expanduser().parent
+            )
+            resolved_workspace_root = self._resolve_cwd(workspace_root_path)
+            resolved_project_root = (
+                resolved_workspace_root
+                if record.relative_path == "."
+                else resolved_workspace_root.joinpath(*record.relative_path.split("/"))
+            )
             try:
+                normalized_document_relative = normalize_document_relative_path(
+                    record.document_relative_path,
+                    require_docs=False,
+                )
+                resolved_project_root = resolve_project_root(
+                    resolved_workspace_root,
+                    record.relative_path,
+                )
+                if not resolved_project_root.is_dir():
+                    raise ProjectRegistryError(
+                        f"找不到项目目录：{workspace_root_path.rstrip('/')}/{record.relative_path}"
+                    )
                 resolved_path = self._map_agents_path(record.agents_path)
                 if not resolved_path.is_file():
                     raise ProjectRegistryError(f"找不到入口文件：{record.agents_path}")
+                try:
+                    resolved_path.relative_to(resolved_workspace_root)
+                except ValueError as exc:
+                    raise ProjectRegistryError("项目文档入口不能越出工作空间") from exc
                 cache = build_document_cache(resolved_path)
                 self._ensure_search_index(record.id, cache)
                 refreshed_at = datetime.now(UTC)
-            except (ProjectRegistryError, DocumentTreeError) as exc:
+            except (ProjectRegistryError, WorkspacePathError, DocumentTreeError) as exc:
                 error = str(exc)
+                normalized_document_relative = record.document_relative_path
 
             restored[record.id] = ProjectState(
                 id=record.id,
@@ -885,11 +993,13 @@ class ProjectRegistry:
                 project_type=record.project_type,
                 agents_path=record.agents_path,
                 resolved_agents_path=resolved_path,
+                resolved_project_root=resolved_project_root,
                 workspace_id=getattr(record, "workspace_id", None),
                 workspace_name=getattr(record, "workspace_name", None),
                 workspace_root_path=getattr(record, "workspace_root_path", None),
                 workspace_enabled=getattr(record, "workspace_enabled", True),
                 relative_path=getattr(record, "relative_path", "."),
+                document_relative_path=normalized_document_relative,
                 project_kind=getattr(record, "project_kind", "backend"),
                 cache=cache,
                 refreshed_at=refreshed_at,
@@ -991,6 +1101,14 @@ class ProjectRegistry:
             if persisted_record is not None
             else str(Path(normalized_path).expanduser().parent)
         )
+        resolved_project_root = (
+            resolve_project_root(
+                self._resolve_cwd(resolved_workspace_root),
+                persisted_record.relative_path,
+            )
+            if persisted_record is not None
+            else resolved_path.parent
+        )
         resolved_workspace_document = build_workspace_document_cache(resolved_path)
         self._ensure_search_index(project_id, new_cache, force=True)
         self._ensure_workspace_search_index(
@@ -1003,8 +1121,13 @@ class ProjectRegistry:
                 id=project_id,
                 name=normalized_name,
                 project_type=normalized_type,
-                agents_path=normalized_path,
+                agents_path=(
+                    persisted_record.agents_path
+                    if persisted_record is not None
+                    else normalized_path
+                ),
                 resolved_agents_path=resolved_path,
+                resolved_project_root=resolved_project_root,
                 workspace_id=resolved_workspace_id,
                 workspace_name=resolved_workspace_name,
                 workspace_root_path=resolved_workspace_root,
@@ -1013,6 +1136,11 @@ class ProjectRegistry:
                 ),
                 relative_path=(
                     persisted_record.relative_path if persisted_record is not None else "."
+                ),
+                document_relative_path=(
+                    persisted_record.document_relative_path
+                    if persisted_record is not None
+                    else "AGENTS.md"
                 ),
                 project_kind=getattr(persisted_record, "project_kind", normalized_kind),
                 cache=new_cache,
@@ -1071,6 +1199,8 @@ class ProjectRegistry:
                 > 1
             ):
                 raise ProjectRegistryError("包含多个项目的工作空间请使用工作空间接口更新")
+            if current_project.document_relative_path != "AGENTS.md":
+                raise ProjectRegistryError("工作空间项目请使用工作空间项目接口更新")
         resolved_path = self._resolve_agents_path(normalized_path)
         try:
             new_cache = build_document_cache(resolved_path)
@@ -1127,6 +1257,14 @@ class ProjectRegistry:
                 project.workspace_root_path = persisted_record.workspace_root_path
                 project.workspace_enabled = persisted_record.workspace_enabled
                 project.relative_path = persisted_record.relative_path
+                project.document_relative_path = persisted_record.document_relative_path
+                project.resolved_project_root = resolve_project_root(
+                    self._resolve_cwd(persisted_record.workspace_root_path or ""),
+                    persisted_record.relative_path,
+                )
+            else:
+                project.document_relative_path = "AGENTS.md"
+                project.resolved_project_root = resolved_path.parent
             project.cache = new_cache
             project.refreshed_at = datetime.now(UTC)
             project.error = None
@@ -1180,6 +1318,9 @@ class ProjectRegistry:
                 if project.workspace_id == workspace_id
             ]
 
+        workspace_document_path: Path | None = None
+        workspace_document_cache: DocumentCache | None = None
+        failures: dict[str, str] = {}
         try:
             workspace_document_path, workspace_document_cache = (
                 self._build_optional_workspace_document_cache(
@@ -1187,34 +1328,57 @@ class ProjectRegistry:
                 )
             )
         except ProjectRegistryError as exc:
-            with self._lock:
-                current_workspace = self._workspaces.get(workspace_id)
-                if current_workspace is not None:
-                    current_workspace.error = str(exc)
-                    current_workspace.document_error = str(exc)
-            raise ProjectRegistryError(
-                f"工作空间刷新失败，已保留上一版映射：工作空间文档入口：{exc}"
-            ) from exc
+            failures["__workspace_document__"] = str(exc)
 
-        prepared: dict[str, tuple[Path, DocumentCache]] = {}
+        prepared: dict[
+            str,
+            tuple[str, str, str, Path, Path, DocumentCache],
+        ] = {}
         for project in projects:
             try:
-                resolved_path = self._resolve_agents_path(project.agents_path)
+                (
+                    relative_path,
+                    document_relative_path,
+                    agents_path,
+                    resolved_project_root,
+                    resolved_path,
+                ) = self._resolve_workspace_project(
+                    workspace,  # type: ignore[arg-type]
+                    project.relative_path,
+                    project.document_relative_path,
+                    require_docs=False,
+                )
                 prepared[project.id] = (
+                    relative_path,
+                    document_relative_path,
+                    agents_path,
+                    resolved_project_root,
                     resolved_path,
                     build_document_cache(resolved_path),
                 )
             except (ProjectRegistryError, DocumentTreeError) as exc:
-                with self._lock:
-                    current_workspace = self._workspaces.get(workspace_id)
-                    if current_workspace is not None:
-                        current_workspace.error = str(exc)
+                failures[project.id] = str(exc)
+
+        if failures:
+            failure_messages: list[str] = []
+            workspace_document_error = failures.get("__workspace_document__")
+            if workspace_document_error is not None:
+                failure_messages.append(f"工作空间文档入口：{workspace_document_error}")
+            for project in projects:
+                project_error = failures.get(project.id)
+                if project_error is not None:
+                    failure_messages.append(f"{project.name}：{project_error}")
+            combined_error = "；".join(failure_messages)
+            with self._lock:
+                current_workspace = self._workspaces.get(workspace_id)
+                if current_workspace is not None:
+                    current_workspace.error = combined_error
+                    current_workspace.document_error = workspace_document_error
+                for project in projects:
                     current_project = self._projects.get(project.id)
                     if current_project is not None:
-                        current_project.error = str(exc)
-                raise ProjectRegistryError(
-                    f"工作空间刷新失败，已保留上一版映射：{project.name}：{exc}"
-                ) from exc
+                        current_project.error = failures.get(project.id)
+            raise ProjectRegistryError(f"工作空间刷新失败，已保留上一版映射：{combined_error}")
 
         if workspace_document_cache is not None:
             self._ensure_workspace_search_index(
@@ -1227,7 +1391,7 @@ class ProjectRegistry:
         for project in projects:
             self._ensure_search_index(
                 project.id,
-                prepared[project.id][1],
+                prepared[project.id][5],
                 force=True,
             )
 
@@ -1244,7 +1408,18 @@ class ProjectRegistry:
                 current_project = self._projects.get(project.id)
                 if current_project is None:
                     raise ProjectRegistryError("工作空间项目配置在刷新期间发生变化")
-                resolved_path, cache = prepared[project.id]
+                (
+                    relative_path,
+                    document_relative_path,
+                    agents_path,
+                    resolved_project_root,
+                    resolved_path,
+                    cache,
+                ) = prepared[project.id]
+                current_project.relative_path = relative_path
+                current_project.document_relative_path = document_relative_path
+                current_project.agents_path = agents_path
+                current_project.resolved_project_root = resolved_project_root
                 current_project.resolved_agents_path = resolved_path
                 current_project.cache = cache
                 current_project.refreshed_at = now
@@ -1302,15 +1477,15 @@ class ProjectRegistry:
                 project
                 for project in self._projects.values()
                 if (
-                    resolved_cwd == project.resolved_agents_path.parent
-                    or project.resolved_agents_path.parent in resolved_cwd.parents
+                    resolved_cwd == project.resolved_project_root
+                    or project.resolved_project_root in resolved_cwd.parents
                 )
             ]
             if not candidates:
                 raise ProjectRegistryError("cwd 没有匹配已注册项目")
             project = max(
                 candidates,
-                key=lambda item: len(item.resolved_agents_path.parent.parts),
+                key=lambda item: len(item.resolved_project_root.parts),
             )
             # Ownership is selected before availability is checked. A disabled or
             # broken nested project must not fall back to an enabled parent project,
@@ -1340,15 +1515,15 @@ class ProjectRegistry:
                 if (
                     project.workspace_id == workspace.id
                     and (
-                        resolved_cwd == project.resolved_agents_path.parent
-                        or project.resolved_agents_path.parent in resolved_cwd.parents
+                        resolved_cwd == project.resolved_project_root
+                        or project.resolved_project_root in resolved_cwd.parents
                     )
                 )
             ]
             active_project = (
                 max(
                     project_candidates,
-                    key=lambda item: len(item.resolved_agents_path.parent.parts),
+                    key=lambda item: len(item.resolved_project_root.parts),
                 )
                 if project_candidates
                 else None

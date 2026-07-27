@@ -160,6 +160,9 @@ def test_lists_workspace_tasks_and_ordered_read_history(tmp_path: Path) -> None:
     root = tmp_path / "project" / "AGENTS.md"
     root.parent.mkdir(parents=True)
     root.write_text("# 项目入口", encoding="utf-8")
+    document_entry = root.parent / "docs" / "backend" / "test" / "AGENTS.md"
+    document_entry.parent.mkdir(parents=True)
+    document_entry.write_text("# 测试项目入口", encoding="utf-8")
     task_store = FakeTaskStore()
     read_store = FakeReadStore(task_store.created_at)
     database_call_store = FakeDatabaseCallStore(task_store.created_at)
@@ -183,7 +186,11 @@ def test_lists_workspace_tasks_and_ordered_read_history(tmp_path: Path) -> None:
         ).json()
         project = client.post(
             f"/api/workspaces/{workspace['id']}/projects",
-            json={"name": "测试项目", "relative_path": "."},
+            json={
+                "name": "测试项目",
+                "relative_path": ".",
+                "document_relative_path": "docs/backend/test/AGENTS.md",
+            },
         ).json()
         client.post(f"/api/workspaces/{workspace['id']}/prepare-preview")
         disabled_workspace = client.patch(

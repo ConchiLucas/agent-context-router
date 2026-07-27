@@ -46,7 +46,15 @@ def _app(tmp_path: Path, *, with_tasks: bool = False):
 def test_workspace_projects_and_data_source_summary(tmp_path: Path) -> None:
     workspace_root = tmp_path / "company"
     _write_agents(workspace_root / "AGENTS.md", "根项目")
-    _write_agents(workspace_root / "services" / "order" / "AGENTS.md", "订单项目")
+    (workspace_root / "services" / "order").mkdir(parents=True)
+    _write_agents(
+        workspace_root / "docs" / "frontend" / "root" / "AGENTS.md",
+        "根项目",
+    )
+    _write_agents(
+        workspace_root / "docs" / "backend" / "order" / "AGENTS.md",
+        "订单项目",
+    )
     app = _app(tmp_path, with_tasks=True)
 
     with TestClient(app) as client:
@@ -66,6 +74,7 @@ def test_workspace_projects_and_data_source_summary(tmp_path: Path) -> None:
             json={
                 "name": "根项目",
                 "relative_path": ".",
+                "document_relative_path": "docs/frontend/root/AGENTS.md",
                 "project_kind": "frontend",
             },
         )
@@ -74,6 +83,7 @@ def test_workspace_projects_and_data_source_summary(tmp_path: Path) -> None:
             json={
                 "name": "订单项目",
                 "relative_path": "services/order",
+                "document_relative_path": "docs/backend/order/AGENTS.md",
                 "project_kind": "backend",
             },
         )
@@ -166,6 +176,10 @@ def test_workspace_projects_and_data_source_summary(tmp_path: Path) -> None:
         ".",
         "services/order",
     ]
+    assert [item["document_relative_path"] for item in projects.json()] == [
+        "docs/frontend/root/AGENTS.md",
+        "docs/backend/order/AGENTS.md",
+    ]
     assert summary.status_code == 200
     assert summary.json()["source_count"] == 1
     assert summary.json()["database_count"] == 1
@@ -179,6 +193,10 @@ def test_workspace_projects_and_data_source_summary(tmp_path: Path) -> None:
     assert {item["relative_path"] for item in preview.json()["projects"]} == {
         ".",
         "services/order",
+    }
+    assert {item["document_relative_path"] for item in preview.json()["projects"]} == {
+        "docs/frontend/root/AGENTS.md",
+        "docs/backend/order/AGENTS.md",
     }
     assert {item["database"] for item in preview.json()["databases"]} == {
         "frontend_orders",
@@ -206,7 +224,35 @@ def test_workspace_project_rejects_path_escape(tmp_path: Path) -> None:
         ).json()
         response = client.post(
             f"/api/workspaces/{workspace['id']}/projects",
-            json={"name": "越界项目", "relative_path": "../outside"},
+            json={
+                "name": "越界项目",
+                "relative_path": "../outside",
+                "document_relative_path": "docs/backend/outside/AGENTS.md",
+            },
         )
 
     assert response.status_code == 422
+
+
+def test_workspace_project_requires_document_entry_under_docs(tmp_path: Path) -> None:
+    workspace_root = tmp_path / "company"
+    workspace_root.mkdir()
+    _write_agents(workspace_root / "service" / "AGENTS.md", "旧入口")
+    app = _app(tmp_path)
+
+    with TestClient(app) as client:
+        workspace = client.post(
+            "/api/workspaces",
+            json={"name": "公司工作空间", "root_path": str(workspace_root)},
+        ).json()
+        response = client.post(
+            f"/api/workspaces/{workspace['id']}/projects",
+            json={
+                "name": "旧入口项目",
+                "relative_path": "service",
+                "document_relative_path": "service/AGENTS.md",
+            },
+        )
+
+    assert response.status_code == 422
+    assert "docs/" in response.text

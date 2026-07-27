@@ -58,6 +58,7 @@ def test_project_locations_are_unique_inside_a_workspace() -> None:
         project_id="project-a",
         workspace_id="workspace-a",
         relative_path="services/order",
+        document_relative_path="docs/backend/order/AGENTS.md",
         name="订单",
         project_kind="backend",
     )
@@ -67,6 +68,7 @@ def test_project_locations_are_unique_inside_a_workspace() -> None:
             project_id="project-b",
             workspace_id="workspace-a",
             relative_path="services/order",
+            document_relative_path="docs/frontend/order/AGENTS.md",
             name="重复订单",
             project_kind="frontend",
         )
@@ -89,6 +91,7 @@ def test_project_can_move_between_workspaces_and_list_by_workspace() -> None:
         project_id="project-a",
         workspace_id="workspace-a",
         relative_path=".",
+        document_relative_path="docs/frontend/root/AGENTS.md",
         name="根项目",
         project_kind="frontend",
     )
@@ -98,13 +101,14 @@ def test_project_can_move_between_workspaces_and_list_by_workspace() -> None:
         name="订单服务",
         workspace_id="workspace-b",
         relative_path="services/order",
+        document_relative_path="docs/backend/order/AGENTS.md",
         project_kind="backend",
     )
 
     assert projects.list_projects("workspace-a") == []
     moved = projects.list_projects("workspace-b")
     assert len(moved) == 1
-    assert moved[0].agents_path == "/workspace/b/services/order/AGENTS.md"
+    assert moved[0].agents_path == "/workspace/b/docs/backend/order/AGENTS.md"
     assert moved[0].project_kind == "backend"
 
 
@@ -121,6 +125,7 @@ def test_legacy_update_rejects_workspace_child_project() -> None:
         project_id="project-a",
         workspace_id="workspace-a",
         relative_path="services/order",
+        document_relative_path="docs/backend/order/AGENTS.md",
         name="订单",
     )
 
@@ -136,7 +141,39 @@ def test_legacy_update_rejects_workspace_child_project() -> None:
     project = projects.get_project("project-a")
     assert workspace.root_path == "/workspace/a"
     assert project.relative_path == "services/order"
-    assert project.agents_path == "/workspace/a/services/order/AGENTS.md"
+    assert project.agents_path == "/workspace/a/docs/backend/order/AGENTS.md"
+
+
+def test_legacy_update_rejects_docs_entry_for_single_root_project() -> None:
+    workspaces = InMemoryWorkspaceRepository()
+    projects = InMemoryProjectRepository(workspaces)
+    workspaces.create_workspace(
+        workspace_id="workspace-a",
+        name="A",
+        root_path="/workspace/a",
+        enabled=True,
+    )
+    projects.create_project(
+        project_id="project-a",
+        workspace_id="workspace-a",
+        relative_path=".",
+        document_relative_path="docs/frontend/root/AGENTS.md",
+        name="根项目",
+        project_kind="frontend",
+    )
+
+    with pytest.raises(ProjectRepositoryError, match="工作空间项目接口"):
+        projects.update_project(
+            "project-a",
+            name="错误更新",
+            project_type="公司项目",
+            agents_path="/workspace/moved/AGENTS.md",
+        )
+
+    workspace = workspaces.get_workspace("workspace-a")
+    project = projects.get_project("project-a")
+    assert workspace.root_path == "/workspace/a"
+    assert project.agents_path == "/workspace/a/docs/frontend/root/AGENTS.md"
 
 
 def test_legacy_update_rejects_root_project_with_siblings() -> None:
@@ -152,12 +189,14 @@ def test_legacy_update_rejects_root_project_with_siblings() -> None:
         project_id="root-project",
         workspace_id="workspace-a",
         relative_path=".",
+        document_relative_path="docs/backend/root/AGENTS.md",
         name="根项目",
     )
     projects.create_project(
         project_id="child-project",
         workspace_id="workspace-a",
         relative_path="services/order",
+        document_relative_path="docs/frontend/order/AGENTS.md",
         name="订单",
         project_kind="frontend",
     )
@@ -173,7 +212,7 @@ def test_legacy_update_rejects_root_project_with_siblings() -> None:
     workspace = workspaces.get_workspace("workspace-a")
     assert workspace.root_path == "/workspace/a"
     assert projects.get_project("child-project").agents_path == (
-        "/workspace/a/services/order/AGENTS.md"
+        "/workspace/a/docs/frontend/order/AGENTS.md"
     )
 
 

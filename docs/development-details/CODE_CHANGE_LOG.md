@@ -11,6 +11,14 @@
 
 ## 记录
 
+### 2026-07-27
+
+- 新增 migration `20260727_0016` 和 `document_projects.document_relative_path`，从旧 `agents_path` 相对 Workspace 根目录的位置回填，并增加 Workspace 内文档入口唯一约束。`agents_path` 保留为绝对路径兼容镜像。
+- Workspace Project API、前端类型和 MCP `PreparedProject` 同时返回源码 `relative_path` 与文档入口 `document_relative_path`；新 Workspace 项目入口限制在 `docs/` 下并以 `AGENTS.md` 结尾。
+- ProjectRegistry 分离 `resolved_project_root` 与 `resolved_agents_path`。项目缓存从 docs 入口递归构建，cwd 和 `active_project` 继续按源码目录定位，避免集中式文档目录改变任务归属。
+- Workspace 刷新改为遍历全部项目并聚合入口错误；任一失败仍不替换旧缓存。前端刷新失败后重新拉取项目卡片和工作空间摘要，使全部错误立即可见。
+- 工作空间详情的新增/编辑表单、项目卡片和删除说明同步采用源码/文档双路径，并提供 `docs/{kind}/{项目目录名}/AGENTS.md` 建议。
+
 ### 2026-07-26
 
 - 新增 migration `20260726_0015` 和 Workspace 文档独立搜索状态/分块表。工作空间固定自动探测根 `AGENTS.md`：存在时作为真实聚合树根并参与 prepare/search/read，不存在时保持合成根；不新增 Workspace 路径配置字段，也不把根文档伪装成 frontend/backend Project。

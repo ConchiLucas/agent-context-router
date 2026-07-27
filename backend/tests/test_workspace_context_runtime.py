@@ -68,25 +68,29 @@ def test_workspace_task_aggregates_project_documents_and_routes_by_workspace(
     root_path = tmp_path / "workspace"
     _write_agents(
         root_path / "AGENTS.md",
-        """# 前端入口
+        """# 工作空间入口
 
-frontend marker
+        ## 下级文档
 
-## 下级文档
-
-| 功能说明 | 相对路径 |
-| --- | --- |
-| 后端入口 | `./server/AGENTS.md` |
-""",
+        | 功能说明 | 相对路径 |
+        | --- | --- |
+        | 后端入口 | `./docs/backend/server/AGENTS.md` |
+        """,
     )
     _write_agents(
-        root_path / "server" / "AGENTS.md",
+        root_path / "docs" / "frontend" / "root" / "AGENTS.md",
+        "# 前端入口\n\nfrontend marker",
+    )
+    _write_agents(
+        root_path / "docs" / "backend" / "server" / "AGENTS.md",
         "# 后端入口\n\nworkspace backend needle",
     )
     _write_agents(
-        root_path / "worker" / "AGENTS.md",
+        root_path / "docs" / "backend" / "worker" / "AGENTS.md",
         "# 后台任务入口\n\nworkspace worker needle",
     )
+    (root_path / "server").mkdir()
+    (root_path / "worker").mkdir()
 
     workspace_repository = InMemoryWorkspaceRepository()
     workspace_repository.create_workspace(
@@ -112,18 +116,21 @@ frontend marker
         workspace,
         name="前端",
         relative_path=".",
+        document_relative_path="docs/frontend/root/AGENTS.md",
         project_kind="frontend",
     )
     backend = registry.add_workspace_project(
         workspace,
         name="后端",
         relative_path="server",
+        document_relative_path="docs/backend/server/AGENTS.md",
         project_kind="backend",
     )
     worker = registry.add_workspace_project(
         workspace,
         name="后台任务",
         relative_path="worker",
+        document_relative_path="docs/backend/worker/AGENTS.md",
         project_kind="backend",
     )
 
@@ -143,7 +150,7 @@ frontend marker
     }
     assert prepared.active_project is not None
     assert prepared.active_project.project_id == backend.id
-    assert [node.path for node in prepared.documents.children] == ["server/AGENTS.md"]
+    assert [node.path for node in prepared.documents.children] == ["docs/backend/server/AGENTS.md"]
     tree_ids = [
         prepared.documents.document_id,
         *[node.document_id for node in prepared.documents.children],
@@ -156,7 +163,9 @@ frontend marker
         task_repository,
         search_repository,
     ).search(task_id=prepared.task_id, query="worker needle")
-    worker_result = next(result for result in searched.results if result.path == "worker/AGENTS.md")
+    worker_result = next(
+        result for result in searched.results if result.path == "docs/backend/worker/AGENTS.md"
+    )
     assert worker_result.document_id not in tree_ids
 
     document_id = worker_result.document_id
@@ -171,7 +180,7 @@ frontend marker
     assert read.documents[0].content is not None
     assert "workspace worker needle" in read.documents[0].content
 
-    (root_path / "server" / "AGENTS.md").unlink()
+    (root_path / "docs" / "backend" / "server" / "AGENTS.md").unlink()
     with pytest.raises(ProjectRegistryError, match="已保留上一版映射"):
         registry.refresh_workspace("workspace-id")
     retained = registry.get_workspace_snapshot("workspace-id")
@@ -266,9 +275,10 @@ def test_workspace_without_root_agents_keeps_synthetic_root(
     root_path = tmp_path / "workspace"
     root_path.mkdir()
     _write_agents(
-        root_path / "service" / "AGENTS.md",
+        root_path / "docs" / "backend" / "service" / "AGENTS.md",
         "# 合成根下的服务入口",
     )
+    (root_path / "service").mkdir()
     workspace_repository = InMemoryWorkspaceRepository()
     workspace_repository.create_workspace(
         workspace_id="workspace-empty",
@@ -292,6 +302,7 @@ def test_workspace_without_root_agents_keeps_synthetic_root(
         workspace,
         name="服务项目",
         relative_path="service",
+        document_relative_path="docs/backend/service/AGENTS.md",
         project_kind="backend",
     )
 
@@ -337,6 +348,59 @@ def test_workspace_refresh_removes_deleted_root_document_index(
     assert snapshot.document_cache is None
     assert snapshot.cache.root.title == "刷新工作空间"
     assert search_repository.get_workspace_index_state("workspace-refresh") is None
+
+
+def test_workspace_refresh_collects_all_project_failures_and_retains_caches(
+    tmp_path: Path,
+) -> None:
+    root_path = tmp_path / "workspace"
+    for project_name in ("alpha", "beta"):
+        (root_path / "services" / project_name).mkdir(parents=True)
+        _write_agents(
+            root_path / "docs" / "backend" / project_name / "AGENTS.md",
+            f"# {project_name}",
+        )
+
+    workspace_repository = InMemoryWorkspaceRepository()
+    workspace_repository.create_workspace(
+        workspace_id="workspace-failures",
+        name="失败聚合工作空间",
+        workspace_type="公司项目",
+        root_path=str(root_path),
+        enabled=True,
+    )
+    registry = ProjectRegistry(
+        Settings(
+            workspace_host_root=tmp_path,
+            workspace_container_root=tmp_path,
+        ),
+        InMemoryProjectRepository(workspace_repository),
+    )
+    workspace = workspace_repository.get_workspace("workspace-failures")
+    registry.register_workspace(workspace)
+    projects = [
+        registry.add_workspace_project(
+            workspace,
+            name=project_name,
+            relative_path=f"services/{project_name}",
+            document_relative_path=f"docs/backend/{project_name}/AGENTS.md",
+        )
+        for project_name in ("alpha", "beta")
+    ]
+    retained_document_ids = {project.id: registry.get_tree(project.id).id for project in projects}
+    for project_name in ("alpha", "beta"):
+        (root_path / "docs" / "backend" / project_name / "AGENTS.md").unlink()
+
+    with pytest.raises(ProjectRegistryError) as raised:
+        registry.refresh_workspace("workspace-failures")
+
+    message = str(raised.value)
+    assert "alpha" in message
+    assert "beta" in message
+    for project in projects:
+        summary = registry.get_project_summary(project.id)
+        assert "找不到入口文件" in (summary.error or "")
+        assert registry.get_tree(project.id).id == retained_document_ids[project.id]
 
 
 def test_workspace_root_agents_symlink_cannot_escape_workspace(

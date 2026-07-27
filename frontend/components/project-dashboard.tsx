@@ -39,6 +39,7 @@ import {
   documentNodeLabel,
   resolveDocumentPath,
 } from "@/lib/document-tree";
+import { suggestProjectDocumentRelativePath } from "@/lib/project-paths";
 import {
   buildDocumentCallNumbers,
   buildTaskReadRows,
@@ -220,7 +221,8 @@ export const ProjectDashboard = forwardRef<
   const [editName, setEditName] = useState("");
   const [editProjectKind, setEditProjectKind] =
     useState<ProjectKind>("backend");
-  const [editAgentsPath, setEditAgentsPath] = useState("");
+  const [editRelativePath, setEditRelativePath] = useState("");
+  const [editDocumentRelativePath, setEditDocumentRelativePath] = useState("");
   const [deletingProject, setDeletingProject] =
     useState<ProjectSummary | null>(null);
   const [dataSourceProject, setDataSourceProject] =
@@ -244,7 +246,8 @@ export const ProjectDashboard = forwardRef<
   const [name, setName] = useState("");
   const [newProjectKind, setNewProjectKind] =
     useState<ProjectKind>(projectKind);
-  const [agentsPath, setAgentsPath] = useState("");
+  const [relativePath, setRelativePath] = useState("");
+  const [documentRelativePath, setDocumentRelativePath] = useState("");
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [draggingTree, setDraggingTree] = useState(false);
@@ -301,6 +304,7 @@ export const ProjectDashboard = forwardRef<
     project_kind: projectKind,
     project_type: workspace.workspace_type,
     agents_path: `${workspace.root_path}/AGENTS.md`,
+    document_relative_path: "AGENTS.md",
     workspace_id: workspace.id,
     workspace_name: workspace.name,
     workspace_enabled: workspace.enabled,
@@ -479,7 +483,12 @@ export const ProjectDashboard = forwardRef<
       }
       setError(null);
     } catch (requestError) {
-      setError((requestError as Error).message);
+      const refreshError = (requestError as Error).message;
+      await Promise.allSettled([
+        loadProjects(),
+        onWorkspaceChanged?.() ?? Promise.resolve(),
+      ]);
+      setError(refreshError);
     } finally {
       setBusyProjectId(null);
     }
@@ -682,20 +691,48 @@ export const ProjectDashboard = forwardRef<
     }
   }
 
+  function changeNewProjectKind(nextKind: ProjectKind) {
+    const currentSuggestion = suggestProjectDocumentRelativePath(
+      newProjectKind,
+      relativePath,
+    );
+    setNewProjectKind(nextKind);
+    setDocumentRelativePath((current) =>
+      !current || current === currentSuggestion
+        ? suggestProjectDocumentRelativePath(nextKind, relativePath)
+        : current,
+    );
+  }
+
+  function changeNewProjectRelativePath(nextPath: string) {
+    const currentSuggestion = suggestProjectDocumentRelativePath(
+      newProjectKind,
+      relativePath,
+    );
+    setRelativePath(nextPath);
+    setDocumentRelativePath((current) =>
+      !current || current === currentSuggestion
+        ? suggestProjectDocumentRelativePath(newProjectKind, nextPath)
+        : current,
+    );
+  }
+
   async function submitProject(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusyProjectId("new");
     try {
       const project = await createWorkspaceProject(workspace.id, {
         name: name.trim(),
-        relative_path: agentsPath.trim(),
+        relative_path: relativePath.trim(),
+        document_relative_path: documentRelativePath.trim(),
         project_kind: newProjectKind,
       });
       setProjects((current) => [...current, project]);
       await onWorkspaceChanged?.();
       setName("");
       setNewProjectKind(projectKind);
-      setAgentsPath("");
+      setRelativePath("");
+      setDocumentRelativePath("");
       setShowCreate(false);
       setError(null);
     } catch (requestError) {
@@ -709,7 +746,8 @@ export const ProjectDashboard = forwardRef<
     setEditingProject(project);
     setEditName(project.name);
     setEditProjectKind(project.project_kind);
-    setEditAgentsPath(project.relative_path ?? ".");
+    setEditRelativePath(project.relative_path ?? ".");
+    setEditDocumentRelativePath(project.document_relative_path);
   }
 
   async function submitProjectUpdate(event: FormEvent<HTMLFormElement>) {
@@ -722,7 +760,8 @@ export const ProjectDashboard = forwardRef<
         editingProject.id,
         {
           name: editName.trim(),
-          relative_path: editAgentsPath.trim(),
+          relative_path: editRelativePath.trim(),
+          document_relative_path: editDocumentRelativePath.trim(),
           project_kind: editProjectKind,
         },
       );
@@ -1032,7 +1071,7 @@ export const ProjectDashboard = forwardRef<
                 <select
                   value={newProjectKind}
                   onChange={(event) =>
-                    setNewProjectKind(event.target.value as ProjectKind)
+                    changeNewProjectKind(event.target.value as ProjectKind)
                   }
                 >
                   <option value="frontend">前端项目</option>
@@ -1040,13 +1079,29 @@ export const ProjectDashboard = forwardRef<
                 </select>
               </label>
               <label>
-                项目相对路径
+                源码相对路径
                 <input
-                  value={agentsPath}
-                  onChange={(event) => setAgentsPath(event.target.value)}
-                  placeholder="例如：services/order；根项目填写 ."
+                  value={relativePath}
+                  onChange={(event) =>
+                    changeNewProjectRelativePath(event.target.value)
+                  }
+                  placeholder="例如：backend/c12-mtp；根项目填写 ."
                   required
                 />
+              </label>
+              <label>
+                文档入口相对路径
+                <input
+                  value={documentRelativePath}
+                  onChange={(event) =>
+                    setDocumentRelativePath(event.target.value)
+                  }
+                  placeholder={`docs/${newProjectKind}/项目目录名/AGENTS.md`}
+                  required
+                />
+                <small>
+                  默认约定：docs/{newProjectKind}/项目目录名/AGENTS.md
+                </small>
               </label>
               <div className="create-project-actions">
                 <button
@@ -1074,7 +1129,7 @@ export const ProjectDashboard = forwardRef<
             <div className="empty-state">
               <h2>这个工作空间还没有项目</h2>
               <p>
-                添加工作空间目录下的相对路径，系统会从该项目的 AGENTS.md 建立映射。
+                分别配置源码目录和 docs 下的文档入口，系统会从文档入口建立映射。
               </p>
             </div>
           ) : null}
@@ -1092,7 +1147,6 @@ export const ProjectDashboard = forwardRef<
                 <div className="project-card-heading">
                   <div>
                     <div className="project-card-chips">
-                      <span className="file-chip">AGENTS.md</span>
                       <span className="project-type-chip">
                         {projectKindLabel(project.project_kind)}
                       </span>
@@ -1113,9 +1167,14 @@ export const ProjectDashboard = forwardRef<
                     </span>
                   </div>
                 </div>
-                <code className="project-path">
-                  {`${project.relative_path ?? "."}/AGENTS.md`}
-                </code>
+                <div className="project-path">
+                  <div>
+                    源码：<code>{project.relative_path ?? "."}</code>
+                  </div>
+                  <div>
+                    文档：<code>{project.document_relative_path}</code>
+                  </div>
+                </div>
                 <p className="refresh-time">
                   最近映射：{formattedTime(project.refreshed_at)}
                 </p>
@@ -1450,7 +1509,7 @@ export const ProjectDashboard = forwardRef<
               <div>
                 <span className="file-chip">项目配置</span>
                 <h2>编辑项目</h2>
-                <p>保存前会重新读取 AGENTS.md 并验证完整文档树。</p>
+                <p>保存前会从 docs 下的文档入口重新读取并验证完整文档树。</p>
               </div>
               <button
                 type="button"
@@ -1482,12 +1541,26 @@ export const ProjectDashboard = forwardRef<
               </select>
             </label>
             <label>
-              项目相对路径
+              源码相对路径
               <input
-                value={editAgentsPath}
+                value={editRelativePath}
                 required
-                onChange={(event) => setEditAgentsPath(event.target.value)}
+                onChange={(event) => setEditRelativePath(event.target.value)}
               />
+            </label>
+            <label>
+              文档入口相对路径
+              <input
+                value={editDocumentRelativePath}
+                required
+                placeholder={`docs/${editProjectKind}/项目目录名/AGENTS.md`}
+                onChange={(event) =>
+                  setEditDocumentRelativePath(event.target.value)
+                }
+              />
+              <small>
+                默认约定：docs/{editProjectKind}/项目目录名/AGENTS.md
+              </small>
             </label>
             <footer>
               <button
@@ -1520,8 +1593,8 @@ export const ProjectDashboard = forwardRef<
             <span className="file-chip">删除项目配置</span>
             <h2>确定删除“{deletingProject.name}”吗？</h2>
             <p>
-              只删除 Context Router 中保存的项目配置，不会删除磁盘上的
-              AGENTS.md、文档或历史 MCP 调用记录。
+              只删除 Context Router 中保存的项目配置，不会删除源码目录、docs
+              下的文档或历史 MCP 调用记录。
             </p>
             <footer>
               <button

@@ -2,26 +2,26 @@
 
 ## 产品目标
 
-让开发者先把本机代码根目录注册为工作空间，再在工作空间内按相对路径配置一个或多个前端/后端项目，并把工作空间级文档、全部项目文档和只读数据库授权提供给本地 Codex、Antigravity 等 MCP 客户端。真实 Workspace 根 `AGENTS.md` 定义工作空间文档树的显式层级；各项目 `AGENTS.md` 递归文档独立加入 Workspace 搜索和按 ID 读取范围。缺少真实根时才使用直接列出项目入口的合成根。数据库以 Workspace 内唯一别名暴露渐进 Schema 搜索和有界只读查询，不把连接信息交给 Agent。
+让开发者先把本机代码根目录注册为工作空间，再在工作空间内分别配置一个或多个前端/后端项目的源码相对路径和文档入口相对路径，并把工作空间级文档、全部项目文档和只读数据库授权提供给本地 Codex、Antigravity 等 MCP 客户端。真实 Workspace 根 `AGENTS.md` 定义工作空间文档树的显式层级；各项目位于 `docs/` 层级下的 `AGENTS.md` 递归文档独立加入 Workspace 搜索和按 ID 读取范围。缺少真实根时才使用直接列出项目入口的合成根。数据库以 Workspace 内唯一别名暴露渐进 Schema 搜索和有界只读查询，不把连接信息交给 Agent。
 
 ## 工作空间与项目
 
 - 工作空间是顶层管理和聚合边界，包含名称、工作空间类型、唯一的绝对根目录 `root_path` 和启停状态；未显式指定类型时默认归入“公司项目”。
-- 一个工作空间可以没有项目，也可以配置根项目和多个嵌套项目。项目属于且只属于一个工作空间，只保存项目名称、`frontend/backend` 类型和工作空间内的 `relative_path`；根项目使用 `.`，Project 没有独立 enabled。
-- 项目入口固定由 `workspace.root_path / project.relative_path / AGENTS.md` 推导。相对路径不能是绝对路径，不能使用 `~`、反斜杠或 `..`，解析后也不能通过软链接越出工作空间；同一工作空间内相对路径唯一。
-- 当前页面按工作空间手工配置项目相对路径，不自动扫描目录或猜测哪些子目录是项目。
+- 一个工作空间可以没有项目，也可以配置根项目和多个嵌套项目。项目属于且只属于一个工作空间，保存项目名称、`frontend/backend` 类型、源码 `relative_path` 和文档入口 `document_relative_path`；源码根项目使用 `.`，Project 没有独立 enabled。
+- 源码根由 `workspace.root_path / project.relative_path` 定位，项目入口由 `workspace.root_path / project.document_relative_path` 定位；兼容 `agents_path` 只保存后者的绝对路径镜像。两类相对路径都不能是绝对路径，不能使用 `~`、反斜杠或 `..`，解析后也不能通过软链接越出工作空间；同一工作空间内两类路径分别唯一。
+- 当前页面按工作空间手工配置项目源码路径和文档入口路径，不自动扫描目录或猜测哪些子目录是项目。新项目文档入口必须位于 `docs/` 下并以 `AGENTS.md` 结尾，推荐使用 `docs/{frontend|backend}/{项目目录名}/AGENTS.md`。
 - Workspace 根目录存在 `AGENTS.md` 时自动作为工作空间级文档入口；没有该文件时保留合成工作空间根。这个约定不新增配置字段，也不把工作空间文档伪装成 frontend/backend Project。
 - 环境变量可以配置一个随后端启动自动加载的默认项目。
-- 工作空间配置以及项目 ID、归属、类型、相对路径和推导后的兼容 `agents_path` 持久化到 PostgreSQL，后端重启后自动恢复。
+- 工作空间配置以及项目 ID、归属、类型、源码路径、文档入口路径和推导后的兼容 `agents_path` 持久化到 PostgreSQL，后端重启后自动恢复。
 - 页面支持编辑、停用/启用和删除工作空间，也支持在工作空间详情中添加、编辑和删除项目；项目映射只在 Workspace 工具栏统一刷新。删除配置不会删除磁盘文档或历史 MCP 调用记录。
 - 环境变量声明的默认项目被删除后会在下次启动时重新创建；永久移除需要同时清除默认项目环境变量。
 - 新增或编辑项目时先验证并重建完整文档树，成功后才更新数据库和当前内存状态；工作空间停用是全部项目、文档上下文和数据库访问的唯一总开关。
 - 持久化路径失效时项目卡片仍保留并显示错误，修复路径后可编辑或刷新整个工作空间。
-- migration `20260726_0013` 会为每个旧项目建立一个同 ID 工作空间，工作空间根目录取旧 `AGENTS.md` 的父目录，旧项目作为 `relative_path='.'` 的根项目；`20260726_0014` 为项目增加 `project_kind`（旧记录默认 `backend`）并删除 Project enabled；`20260726_0015` 增加 Workspace 根文档派生搜索索引。原项目 ID、数据库授权和调用历史不变。
+- migration `20260726_0013` 会为每个旧项目建立一个同 ID 工作空间，工作空间根目录取旧 `AGENTS.md` 的父目录，旧项目作为 `relative_path='.'` 的根项目；`20260726_0014` 为项目增加 `project_kind`（旧记录默认 `backend`）并删除 Project enabled；`20260726_0015` 增加 Workspace 根文档派生搜索索引；`20260727_0016` 增加 `document_relative_path` 并从旧 `agents_path` 回填，迁移本身不移动磁盘文档。原项目 ID、数据库授权和调用历史不变。
 
 ## 文档映射
 
-Workspace 和 Project 的入口都固定命名为 `AGENTS.md`；每个参与递归的文档使用固定格式：
+Workspace 和 Project 的入口都固定命名为 `AGENTS.md`；Workspace 入口仍位于根目录，新的 Project 入口集中到 `docs/` 分层目录。每个参与递归的文档使用固定格式：
 
 ```markdown
 ## 下级文档
@@ -56,26 +56,26 @@ title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 sum
 
 ## 内存缓存与刷新
 
-- 注册 Workspace 时读取可选的根 `AGENTS.md`；首次添加项目时立即递归读取该项目全部文档。
+- 注册 Workspace 时读取可选的根 `AGENTS.md`；首次添加项目时从独立的 `document_relative_path` 立即递归读取该项目全部文档。
 - 缓存包含完整树和每个文件的 Markdown 原文。
 - PostgreSQL 只保存从当前缓存版本生成的规范化检索分块和索引状态；Markdown 原文仍以磁盘文件为唯一真源。
 - 树接口不返回正文，详情接口按节点 ID 从内存读取正文。
 - 手动刷新以 Workspace 为单位，在临时区重建可选根入口和全部子项目，不在旧缓存上合并；启动恢复和工作空间刷新成功时同步重建工作空间级及相应项目的词法索引。
 - 成功刷新后，已删除的节点和旧正文不会残留。
-- 任一 Workspace/Project 入口构建失败时保留上一份完整工作空间缓存。
+- 刷新会完成全部 Project 的预校验并记录每个失败项目；任一 Workspace/Project 入口构建失败时保留上一份完整工作空间缓存，一次响应汇总全部入口问题。
 - Workspace 根文档和 Project 文档分别使用独立派生索引；搜索必须命中与当前缓存相同的 index_version。索引缺失、构建失败或版本落后时返回明确的 index-not-ready 错误，不扫描内存正文兜底。
 
 ## 页面
 
 - 首页左侧主导航为“工作空间管理 / 数据源管理 / 链路管理”。工作空间管理顶部使用“全部工作空间 / 动态工作空间类型”Tab 筛选工作空间卡片。
 - 工作空间卡片展示根目录、项目数量、数据源/数据库授权汇总、状态和更新时间；支持新增、编辑、停用/启用、删除和进入详情。
-- 工作空间详情提供“前端项目 / 后端项目 / 数据源汇总”三个 Tab；前两个 Tab 按 `project_kind` 展示根项目和嵌套项目卡片，项目名称、类型和相对路径都在这里维护。
+- 工作空间详情提供“前端项目 / 后端项目 / 数据源汇总”三个 Tab；前两个 Tab 按 `project_kind` 展示根项目和嵌套项目卡片，项目名称、类型、源码相对路径和文档入口相对路径都在这里维护。
 - 工作空间详情工具栏提供“MCP 接入 / 刷新映射 / 查看调用记录 / 查看文档树 / 查看 MCP JSON / 添加项目”。其中刷新、调用记录、文档树和 MCP JSON 都以整个 Workspace 为对象。
 - 每张项目卡片只保留“编辑项目 / 管理数据源 / 删除项目”三个按钮，不再提供“更多操作”、项目启停、逐项目刷新、逐项目文档树或逐项目 MCP JSON。
 - 文档树使用全屏可拖动画布和矩形节点，从上到下展示层级。每个总览或子树详情视图都以单个文档为第一层，其全部直接子文档作为第二层横向平铺；从第三层开始按父文档独立判断，直接子文档不超过 4 个时继续递归，超过 4 个时每行最多显示 4 个并停止该分支继续内联后代。被停止分支中仍有下级文档的卡片显示下级数量入口，叶子卡片不显示；点击卡片主体查看 Markdown，点击下级入口以该卡片为新根进入子树详情，并通过面包屑逐级返回。不同分支独立判断，一条分支换行不会阻止其他未超限分支继续向下展示。
 - 点击节点后，通过独立详情抽屉展示 Markdown 标题、表格、列表、代码块和引用。
 - Markdown 渲染不执行原始 HTML 或脚本。
-- Workspace 工具栏支持查看 MCP JSON，结果与 `prepare_task_context` 返回结构一致，包含 Workspace、全部 Project、可选 `active_project`、显式根树或合成根树和全工作空间数据库摘要。
+- Workspace 工具栏支持查看 MCP JSON，结果与 `prepare_task_context` 返回结构一致，包含 Workspace、全部 Project 的源码路径与文档入口路径、可选 `active_project`、显式根树或合成根树和全工作空间数据库摘要。
 - Workspace 工具栏支持查看 MCP 调用记录，并在同一个全屏网格画布中切换“文档树”和“调用列表”：任务选择器列出该工作空间内至少产生过 read call 或数据库调用的 task；文档树遵循真实根的显式层级，缺少真实根时展示合成根下的项目入口，在可见的已读取节点右上角标记文档读取批次；未进入显式树的项目文档读取仍保留在调用列表中。调用列表按时间合并文档读取和数据库调用，同一次批量读取的文档横向排在同一行，读取成功的文档仍可打开 Markdown 详情。
 - 左侧主导航提供独立“链路管理”页面，统一按任务查看 Context Router MCP 工具调用。页面支持任务搜索、Agent、五个固定内部工具和状态筛选，只在“调用树 / 调用列表”之间切换；不加载完整项目文档树，也不在这里打开 Markdown。
 - 调用树以任务为根节点，按服务端稳定顺序展示 MCP 工具调用。一次 `read_context_document` 仍是一个工具调用节点，其批量读取的多个文档作为同一节点的横向产物；普通连续调用只表达顺序，只有显式父调用时才表达因果关系。任务列表和详情同时展示“完整 / 运行中 / 可能不完整”，prepare 记录缺失、历史恢复、服务重启中断或明细失联会显示明确提示。
@@ -96,8 +96,8 @@ title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 sum
 ## MCP
 
 - MCP 固定提供五个工具：`prepare_task_context`、`search_context_documents`、`read_context_document`、`search_database_objects` 和 `execute_database_query`。数据源增删或停用不会改变 `tools/list`。
-- 服务端先在全部工作空间根目录中按 cwd 最长前缀确定 Workspace，再在其中计算最深匹配 Project 作为 `active_project` 快照。活动项目只帮助说明 Codex 当前开发位置，不限制文档、搜索、read 或数据库授权范围。
-- prepare 不搜索、不排名、不截断，也不返回 Markdown 正文；它返回工作空间 ID/名称、全部项目的 ID/名称/类型/相对路径、可选活动项目、真实根显式文档树或合成根树，以及所有子项目当前可用于 MCP 的数据库别名、所属项目信息、Engine、用途和能力摘要。未进入真实根显式树的 Project 文档仍可由 `search_context_documents` 定位并按结果 ID 读取。prepare 只读取本地配置，不连接业务数据库；数据库摘要暂时失败时以 warning 降级，文档上下文仍可返回。
+- 服务端先在全部工作空间根目录中按 cwd 最长前缀确定 Workspace，再按源码 `relative_path` 计算最深匹配 Project 作为 `active_project` 快照；docs 文档入口目录不参与活动项目归属。活动项目只帮助说明 Codex 当前开发位置，不限制文档、搜索、read 或数据库授权范围。
+- prepare 不搜索、不排名、不截断，也不返回 Markdown 正文；它返回工作空间 ID/名称、全部项目的 ID/名称/类型/源码相对路径/文档入口相对路径、可选活动项目、真实根显式文档树或合成根树，以及所有子项目当前可用于 MCP 的数据库别名、所属项目信息、Engine、用途和能力摘要。未进入真实根显式树的 Project 文档仍可由 `search_context_documents` 定位并按结果 ID 读取。prepare 只读取本地配置，不连接业务数据库；数据库摘要暂时失败时以 warning 降级，文档上下文仍可返回。
 - 每次成功调用 prepare 都由 PostgreSQL 生成独立 task_id。
 - 新 task 保存 `scope='workspace'`、稳定的 workspace_id/workspace_key/name 和可选 active_project 快照。活动项目删除或同路径重建不会改变 task 的历史展示身份，但后续工具授权始终重新校验 task 绑定 Workspace 的当前状态。
 - `20260726_0014` 之前的 task 保持 `scope='project'`：read/search/database 继续按稳定 project_id，无法回填时按 project_key 兼容解析；migration 同时回填 Workspace 和活动项目字段，使旧调用可出现在工作空间调用记录中，但不会扩大旧 task 的权限范围。
@@ -123,7 +123,7 @@ title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 sum
 - 不实时监听文件变动。
 - 不自动扫描工作空间目录来注册项目；项目相对路径由用户显式配置。
 - 不把文档树或 Markdown 原文作为数据库真源；它们始终从本地磁盘重建。数据库仅持久化可随时重建的规范化检索分块。
-- 除固定的 Workspace/Project `AGENTS.md` 入口外，不扫描没有被“下级文档”表格引用的 Markdown。
+- 除固定的 Workspace 根入口和各 Project 配置的 `document_relative_path` 外，不扫描没有被“下级文档”表格引用的 Markdown。
 - 不使用大模型解析文档层级。
 - 不自动修改 Codex 或 Antigravity 的本地配置，也不负责重启客户端。
 - 当前接入面板不处理远程 HTTPS、鉴权和 Skill 安装。

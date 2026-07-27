@@ -23,6 +23,7 @@ class PreparedProject(BaseModel):
     name: str
     node_count: int
     relative_path: str = "."
+    document_relative_path: str = "AGENTS.md"
     project_kind: ProjectKind = "backend"
 
 

@@ -36,13 +36,43 @@ def normalize_project_relative_path(value: str) -> str:
     return "." if rendered in {"", "."} else rendered.removeprefix("./")
 
 
-def derive_agents_path(workspace_root_path: str, relative_path: str) -> str:
+def normalize_document_relative_path(
+    value: str,
+    *,
+    require_docs: bool = False,
+) -> str:
+    normalized = value.strip()
+    if not normalized:
+        raise WorkspacePathError("项目文档入口相对路径不能为空")
+    if "\\" in normalized:
+        raise WorkspacePathError("项目文档入口相对路径必须使用 / 分隔")
+    if normalized.startswith("~"):
+        raise WorkspacePathError("项目文档入口相对路径不能使用 ~")
+
+    path = PurePosixPath(normalized)
+    if path.is_absolute():
+        raise WorkspacePathError("项目文档入口路径必须相对于工作空间")
+    if ".." in path.parts:
+        raise WorkspacePathError("项目文档入口相对路径不能包含 ..")
+    if path.name != "AGENTS.md":
+        raise WorkspacePathError("项目文档入口文件必须命名为 AGENTS.md")
+
+    rendered = path.as_posix().removeprefix("./")
+    if require_docs and (not path.parts or path.parts[0] != "docs"):
+        raise WorkspacePathError("项目文档入口必须位于工作空间 docs/ 目录下")
+    return rendered
+
+
+def derive_agents_path(
+    workspace_root_path: str,
+    document_relative_path: str,
+) -> str:
     root = Path(normalize_workspace_root_path(workspace_root_path))
-    normalized_relative = normalize_project_relative_path(relative_path)
-    project_root = (
-        root if normalized_relative == "." else root.joinpath(*normalized_relative.split("/"))
+    normalized_relative = normalize_document_relative_path(
+        document_relative_path,
+        require_docs=False,
     )
-    return str(project_root / "AGENTS.md")
+    return str(root.joinpath(*normalized_relative.split("/")))
 
 
 def resolve_project_root(workspace_root: Path, relative_path: str) -> Path:

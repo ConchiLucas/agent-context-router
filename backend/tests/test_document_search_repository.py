@@ -318,11 +318,11 @@ def test_migration_and_postgres_repository_support_search_and_atomic_replacement
             """
             INSERT INTO document_projects (
                 id, name, project_type, project_kind,
-                workspace_id, relative_path, agents_path
+                workspace_id, relative_path, document_relative_path, agents_path
             )
             VALUES (
                 %s, 'Search Project', '公司项目', 'backend',
-                %s, '.', '/search/AGENTS.md'
+                %s, '.', 'AGENTS.md', '/search/AGENTS.md'
             )
             """,
             (_PROJECT_ID, _PROJECT_ID),

@@ -173,6 +173,13 @@ code {
   padding: 56px 0 72px;
 }
 
+.app-content--traces {
+  width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
 .section-heading {
   display: flex;
   gap: 24px;
@@ -2465,18 +2472,20 @@ p {
 }
 
 .trace-explorer {
+  min-height: 100vh;
   min-width: 0;
 }
 
 .trace-workspace {
   display: grid;
-  min-height: min(760px, calc(100vh - 190px));
+  height: 100vh;
+  min-height: 100vh;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: 0;
   grid-template-columns: 310px minmax(0, 1fr);
   background: var(--surface);
-  box-shadow: var(--shadow);
+  box-shadow: none;
 }
 
 .trace-task-panel {
@@ -2530,9 +2539,22 @@ p {
 
 .trace-task-list {
   display: grid;
+  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   align-content: start;
+  scrollbar-color: var(--border-strong) transparent;
+  scrollbar-width: thin;
+}
+
+.trace-task-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.trace-task-list::-webkit-scrollbar-thumb {
+  border: 2px solid var(--surface-soft);
+  border-radius: 999px;
+  background: var(--border-strong);
 }
 
 .trace-task-item {
@@ -3764,6 +3786,21 @@ p {
   .app-content {
     width: min(100% - 28px, 720px);
     padding: 34px 0 48px;
+  }
+
+  .app-content--traces {
+    width: 100%;
+    min-height: auto;
+    padding: 0;
+  }
+
+  .trace-explorer,
+  .trace-workspace {
+    min-height: calc(100vh - 72px);
+  }
+
+  .trace-workspace {
+    height: calc(100vh - 72px);
   }
 
   .data-source-grid {

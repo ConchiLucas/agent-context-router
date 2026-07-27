@@ -28,7 +28,7 @@ Compose 的前端和后端宿主机端口都显式绑定 `127.0.0.1`，不会默
 
 ## 工作区挂载
 
-后端需要读取用户填写的 Workspace 绝对根目录、可选的 Workspace 根 `AGENTS.md`，以及其中按相对路径推导出的各项目 `AGENTS.md`。Compose 将宿主机工作区根目录只读挂载到容器 `/workspace`：
+后端需要读取用户填写的 Workspace 绝对根目录、可选的 Workspace 根 `AGENTS.md`，以及各项目独立配置的 `document_relative_path`。新项目文档入口统一位于 Workspace 的 `docs/` 层级下，源码 `relative_path` 只用于项目定位和 cwd 路由。Compose 将宿主机工作区根目录只读挂载到容器 `/workspace`：
 
 ```text
 CONTEXT_ROUTER_WORKSPACE_HOST_ROOT=/Users/conchi/workforce
@@ -84,9 +84,9 @@ CONTEXT_ROUTER_DATABASE_URL=postgresql://USER:PASSWORD@host.docker.internal:5432
 docker compose exec backend uv run alembic upgrade head
 ```
 
-当前 migration head 为 `20260726_0015`。`0013` 引入 Workspace 与项目相对路径；`0014` 增加 `frontend/backend` 项目类型、移除 Project enabled、把 `mcp_alias` 唯一范围提升到 Workspace，并为新 task 增加 Workspace scope；`0015` 增加工作空间级 Markdown 的独立词法搜索索引。旧 task 保持 `scope='project'` 兼容，迁移同时回填 Workspace/活动项目快照。
+当前 migration head 为 `20260727_0016`。`0013` 引入 Workspace 与项目相对路径；`0014` 增加 `frontend/backend` 项目类型、移除 Project enabled、把 `mcp_alias` 唯一范围提升到 Workspace，并为新 task 增加 Workspace scope；`0015` 增加工作空间级 Markdown 的独立词法搜索索引；`0016` 将项目源码 `relative_path` 与文档入口 `document_relative_path` 拆分。旧 task 保持 `scope='project'` 兼容，迁移同时保留 Workspace/活动项目快照和兼容 `agents_path`。
 
-PostgreSQL 保存 Workspace、Project 类型与相对路径、数据源、数据库清单、项目数据库关联及 Workspace 唯一 `mcp_alias`、带 scope 的 MCP task、read call、文档顺序、数据库调用审计元数据，以及可重建的文档搜索分块与索引状态。文档树和 Markdown 原文仍从磁盘重建，文档工具完整出入参不持久化；`search_database_objects` 和 `execute_database_query` 自动保存有界、可过期的详情快照，供本机链路页面按需查看。后端启动时恢复工作空间和全部项目配置，并从磁盘重建每个项目的内存树与匹配版本词法索引；路径失效的项目仍保留在页面并显示错误。
+PostgreSQL 保存 Workspace、Project 类型、源码相对路径、文档入口相对路径、数据源、数据库清单、项目数据库关联及 Workspace 唯一 `mcp_alias`、带 scope 的 MCP task、read call、文档顺序、数据库调用审计元数据，以及可重建的文档搜索分块与索引状态。文档树和 Markdown 原文仍从磁盘重建，文档工具完整出入参不持久化；`search_database_objects` 和 `execute_database_query` 自动保存有界、可过期的详情快照，供本机链路页面按需查看。后端启动时恢复工作空间和全部项目配置，并从磁盘重建每个项目的内存树与匹配版本词法索引；路径失效的项目仍保留在页面并显示错误。
 
 数据库未配置时后端和 `/health` 仍可启动，默认配置退化为当前进程内存；但 task_id 持久化、prepare/search/read 的完整 MCP 工作流、Workspace MCP JSON 预览和持久化调用记录不可用。文档搜索不会降级为进程内扫描。业务数据源离线不会阻止后端启动，也不会阻止 Workspace 文档 prepare/search/read；连接只在测试、同步、对象搜索或查询时延迟建立。
 

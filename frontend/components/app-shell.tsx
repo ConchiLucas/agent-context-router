@@ -77,7 +77,11 @@ export function AppShell() {
         </nav>
         <p className="app-sidebar-note">连接信息仅保存在本机服务中</p>
       </aside>
-      <main className="app-content">
+      <main
+        className={
+          section === "traces" ? "app-content app-content--traces" : "app-content"
+        }
+      >
         {section === "workspaces" ? <WorkspaceDashboard /> : null}
         {section === "data-sources" ? <DataSourceDashboard /> : null}
         {section === "traces" ? <TraceExplorer /> : null}

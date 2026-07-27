@@ -33,6 +33,7 @@ class ProjectSummary(BaseModel):
     workspace_name: str | None = None
     workspace_enabled: bool = True
     relative_path: str = "."
+    document_relative_path: str = "AGENTS.md"
 
 
 class DocumentTreeNode(BaseModel):

@@ -5,6 +5,7 @@ import pytest
 from context_router.services.workspace_paths import (
     WorkspacePathError,
     derive_agents_path,
+    normalize_document_relative_path,
     normalize_project_relative_path,
     resolve_project_root,
 )
@@ -30,8 +31,28 @@ def test_rejects_unsafe_project_relative_path(value: str) -> None:
 
 
 def test_derives_agents_path_from_workspace_and_project() -> None:
-    assert derive_agents_path("/workspace/company", "services/order") == (
-        "/workspace/company/services/order/AGENTS.md"
+    assert derive_agents_path(
+        "/workspace/company",
+        "docs/backend/order/AGENTS.md",
+    ) == ("/workspace/company/docs/backend/order/AGENTS.md")
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["AGENTS.md", "backend/order/AGENTS.md", "../AGENTS.md", "docs/order/README.md"],
+)
+def test_rejects_invalid_new_project_document_path(value: str) -> None:
+    with pytest.raises(WorkspacePathError):
+        normalize_document_relative_path(value, require_docs=True)
+
+
+def test_allows_legacy_project_document_path_during_restore() -> None:
+    assert (
+        normalize_document_relative_path(
+            "services/order/AGENTS.md",
+            require_docs=False,
+        )
+        == "services/order/AGENTS.md"
     )
 
 

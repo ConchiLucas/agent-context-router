@@ -21,14 +21,14 @@ docker compose exec backend uv run alembic upgrade head
 docker compose exec backend uv run alembic current
 ```
 
-当前 head 为 `20260726_0015`。若要验证 downgrade/upgrade，使用一次性测试数据库，不要在保存真实调用记录的控制面库上直接 downgrade：`0015 -> 0014` 只删除可重建的 Workspace 文档派生索引；`0014 -> 0013` 会删除 Project 类型和 Workspace task 快照、把 alias 唯一范围退回 Project 并恢复 Project enabled；`0013 -> 0012` 会删除工作空间表及项目归属/相对路径字段；更早版本还会依次删除 Project 文档搜索索引、数据库 payload、稳定项目快照、统一 MCP 工具链路、数据库调用历史和 MCP alias。
+当前 head 为 `20260727_0016`。若要验证 downgrade/upgrade，使用一次性测试数据库，不要在保存真实调用记录的控制面库上直接 downgrade：`0016 -> 0015` 会删除独立的项目文档入口相对路径并恢复由兼容 `agents_path` 表达入口；`0015 -> 0014` 只删除可重建的 Workspace 文档派生索引；`0014 -> 0013` 会删除 Project 类型和 Workspace task 快照、把 alias 唯一范围退回 Project 并恢复 Project enabled；`0013 -> 0012` 会删除工作空间表及项目归属/相对路径字段；更早版本还会依次删除 Project 文档搜索索引、数据库 payload、稳定项目快照、统一 MCP 工具链路、数据库调用历史和 MCP alias。
 
 ## 当前表
 
 | 表 | 用途 |
 | --- | --- |
 | `workspaces` | 保存顶层工作空间 ID、名称、类型、唯一绝对根目录、总启停状态和创建/更新时间 |
-| `document_projects` | 保存稳定项目 ID、名称、`frontend/backend` 的 `project_kind`、所属 `workspace_id`、工作空间内唯一 `relative_path`、兼容 `project_type`/`agents_path` 和创建/更新时间；没有 Project enabled |
+| `document_projects` | 保存稳定项目 ID、名称、`frontend/backend` 的 `project_kind`、所属 `workspace_id`、工作空间内分别唯一的源码 `relative_path` 与文档入口 `document_relative_path`、兼容 `project_type`/`agents_path` 和创建/更新时间；没有 Project enabled |
 | `data_sources` | 保存物理数据库连接、独立数据源分类、数据库类型、启停状态和连接参数；密码不进入列表 API，仅可由本机页面通过独立 no-store 接口按需读取 |
 | `data_source_databases` | 保存每个物理连接下可供项目选择的实际库、schema 或 SQLite 文件清单 |
 | `project_databases` | 保存 `workspace_id`、具体项目与数据库的多对多关联、人类展示别名、Workspace 内大小写无关唯一的 `mcp_alias`、用途和只读/查询限制策略 |
@@ -59,9 +59,11 @@ task_id、tool_call_id 和 read_call_id 都由 PostgreSQL identity 自动生成�
 
 `20260726_0015` 为可选的 Workspace 根 `AGENTS.md` 新增独立搜索状态表和分块表，两表都按 `workspace_id` 外键级联清理。迁移不回填 Markdown 或分块；后端启动或刷新时从磁盘重建。Project 搜索表和旧 `scope='project'` task 的范围保持不变。
 
+`20260727_0016` 为 `document_projects` 增加非空 `document_relative_path`，根据旧 `agents_path` 相对 Workspace 根目录的位置回填，并增加 `(workspace_id, document_relative_path)` 唯一约束。`relative_path` 从此只表示源码目录；兼容 `agents_path` 由 Workspace 根目录和文档入口相对路径同步生成。迁移本身不移动宿主机 Markdown，具体工作空间应先准备新入口，再通过项目编辑接口逐项迁移。
+
 数据库 payload 采集默认自动运行。请求和响应各限 1 MB、保留 7 天、硬上限 4 MB。保存的是已经过查询行数和结果字节预算处理、实际返回给 MCP 客户端的最终结构，不是 Connector 的原始无限结果。超出快照预算时优先按 `objects` 或 `rows` 保留前部元素并写入 `_capture` 截断标记；到期清理会删除 JSON 内容但保留 `expired` 状态。采集和清理都是 best-effort，失败不会改变原 MCP 调用结果。
 
-工作空间创建、编辑、类型调整、启停和删除写入 `workspaces`；项目在工作空间内创建、编辑和删除时写入 `document_projects`。项目入口不接受独立绝对路径作为新模型真值，而是由 `workspaces.root_path + document_projects.relative_path + AGENTS.md` 推导；兼容 `agents_path` 和 `project_type` 仍由 Repository 同步维护，供旧 API 和旧代码路径平滑过渡。
+工作空间创建、编辑、类型调整、启停和删除写入 `workspaces`；项目在工作空间内创建、编辑和删除时写入 `document_projects`。源码根由 `workspaces.root_path + document_projects.relative_path` 定位，文档入口由 `workspaces.root_path + document_projects.document_relative_path` 定位；兼容 `agents_path` 和 `project_type` 仍由 Repository 同步维护，供旧 API 和旧代码路径平滑过渡。
 
 数据源以全局物理连接为单位保存在 `data_sources`，拥有与工作空间类型完全独立的分类字段，未显式指定时默认归入“本机电脑”；一个连接可包含多个库。授权记录仍归属具体项目，项目通过“管理数据源”一次选择一个或多个连接下的多个库，并由 `project_databases` 持久化；但 alias 唯一约束和 MCP 解析范围都是 Workspace。工作空间汇总 API 只 JOIN 其项目的现有授权，按物理数据源/数据库去重并返回每条授权的当前状态，不复制授权或改变 MCP 策略。批量保存会在一个事务中替换指定项目的关联，同时校验同 Workspace 其他项目已经占用的 alias；保留仍被选中的既有查询策略，新关联使用默认只读限制。当前版本不加密本地连接参数，列表 API 会过滤所有口令；编辑时口令留空会保留原值，只有用户点击眼睛时才通过 `POST /api/data-sources/{id}/reveal-password` 按需读取，并明确禁止缓存响应。MySQL/MariaDB/PostgreSQL/ClickHouse 的数据库清单可从远端自动同步，已不存在或当前账号不可见的旧库只标记 `available=false`，不直接删除项目关联。ClickHouse 使用官方 `clickhouse-connect` HTTP/HTTPS Client；后端容器访问宿主机服务时 Host 使用 `host.docker.internal`。
 
@@ -80,4 +82,4 @@ CONTEXT_ROUTER_DATABASE_SCHEMA_RESULT_BYTES=1000000
 
 连接参数当前按本机单用户边界以明文 JSON 保存；列表 API、MCP 结果、调用历史和公开错误均不回显口令或驱动堆栈。数据库账号仍应使用只读账号，SQL AST 校验不能替代数据库权限。
 
-后端重启后先恢复工作空间，再按原项目 ID 恢复全部项目记录并从磁盘重建每个项目缓存，以当前缓存版本重建或确认词法索引；路径失效的项目保留配置并记录加载错误。工作空间是唯一运行时开关，停用后不能创建或继续使用 Workspace 上下文。cwd 路由按最长根路径选择 Workspace，再把最深 Project 记录为活动项目；文档导航树遵循真实根的显式层级或使用合成根，search/read 和数据库授权仍覆盖整个 Workspace。搜索只读取与各项目当前缓存 index_version 一致的记录，索引缺失、失败或过期时返回明确错误，不使用内存扫描兜底。控制面数据库不可用时，默认配置仍可作为临时内存数据运行，但新增工作空间、项目和数据源配置无法跨重启保存，MCP prepare/search/read、Workspace MCP JSON 和调用记录会返回明确错误。
+后端重启后先恢复工作空间，再按原项目 ID 恢复全部项目记录并从各自文档入口重建项目缓存，以当前缓存版本重建或确认词法索引；路径失效的项目保留配置并记录加载错误。工作空间是唯一运行时开关，停用后不能创建或继续使用 Workspace 上下文。cwd 路由按最长根路径选择 Workspace，再按源码 `relative_path` 的最深 Project 记录活动项目，不使用 docs 入口目录判断；文档导航树遵循真实根的显式层级或使用合成根，search/read 和数据库授权仍覆盖整个 Workspace。搜索只读取与各项目当前缓存 index_version 一致的记录，索引缺失、失败或过期时返回明确错误，不使用内存扫描兜底。控制面数据库不可用时，默认配置仍可作为临时内存数据运行，但新增工作空间、项目和数据源配置无法跨重启保存，MCP prepare/search/read、Workspace MCP JSON 和调用记录会返回明确错误。

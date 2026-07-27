@@ -38,11 +38,8 @@ def derive_workspace_root_path(agents_path: str) -> str:
     return str(PurePosixPath(agents_path).parent)
 
 
-def build_project_agents_path(root_path: str, relative_path: str) -> str:
-    project_root = PurePosixPath(root_path)
-    if relative_path != ".":
-        project_root /= PurePosixPath(relative_path)
-    return str(project_root / PROJECT_ENTRY_FILENAME)
+def build_project_agents_path(root_path: str, document_relative_path: str) -> str:
+    return str(PurePosixPath(root_path) / PurePosixPath(document_relative_path))
 
 
 class WorkspaceStore(Protocol):
@@ -145,7 +142,7 @@ class InMemoryWorkspaceRepository:
                 project_type=workspace_type,
                 agents_path=build_project_agents_path(
                     root_path,
-                    str(project.relative_path),
+                    str(project.document_relative_path),
                 ),
                 workspace_name=name,
                 workspace_type=workspace_type,
@@ -261,13 +258,13 @@ class PostgresWorkspaceRepository:
                     raise WorkspaceRepositoryError("工作空间不存在")
                 projects = connection.execute(
                     """
-                    SELECT id, relative_path
+                    SELECT id, document_relative_path
                     FROM document_projects
                     WHERE workspace_id = %s
                     """,
                     (workspace_id,),
                 ).fetchall()
-                for project_id, relative_path in projects:
+                for project_id, document_relative_path in projects:
                     connection.execute(
                         """
                         UPDATE document_projects
@@ -277,7 +274,10 @@ class PostgresWorkspaceRepository:
                         """,
                         (
                             workspace_type,
-                            build_project_agents_path(root_path, str(relative_path)),
+                            build_project_agents_path(
+                                root_path,
+                                str(document_relative_path),
+                            ),
                             project_id,
                         ),
                     )

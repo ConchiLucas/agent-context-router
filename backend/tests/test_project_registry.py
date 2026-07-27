@@ -107,6 +107,7 @@ def test_project_configuration_survives_registry_recreation(tmp_path: Path) -> N
 
 def test_missing_persisted_project_path_is_retained_with_error(tmp_path: Path) -> None:
     missing_root = tmp_path / "missing" / "AGENTS.md"
+    missing_root.parent.mkdir()
     repository = InMemoryProjectRepository()
     repository.create_project(
         project_id="persisted-project",
@@ -165,9 +166,14 @@ def test_missing_nested_project_does_not_fall_back_after_workspace_reload(
     container_root = tmp_path / "container"
     workspace_host_root = host_root / "workspace"
     parent_root = container_root / "workspace" / "AGENTS.md"
-    nested_root = container_root / "workspace" / "services" / "order" / "AGENTS.md"
+    nested_root = container_root / "workspace" / "docs" / "backend" / "order" / "AGENTS.md"
     write_document(parent_root, "# 根项目")
     write_document(nested_root, "# 订单项目")
+    (container_root / "workspace" / "services" / "order").mkdir(parents=True)
+    write_document(
+        container_root / "workspace" / "docs" / "backend" / "root" / "AGENTS.md",
+        "# 根项目",
+    )
 
     workspace_repository = InMemoryWorkspaceRepository()
     workspace_repository.create_workspace(
@@ -190,11 +196,13 @@ def test_missing_nested_project_does_not_fall_back_after_workspace_reload(
         workspace,
         name="根项目",
         relative_path=".",
+        document_relative_path="docs/backend/root/AGENTS.md",
     )
     registry.add_workspace_project(
         workspace,
         name="订单项目",
         relative_path="services/order",
+        document_relative_path="docs/backend/order/AGENTS.md",
     )
 
     nested_root.unlink()
