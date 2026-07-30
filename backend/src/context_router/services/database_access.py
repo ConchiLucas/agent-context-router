@@ -128,7 +128,7 @@ class DatabaseAccessService:
             ):
                 raise DatabaseAccessError(
                     "environment_changed",
-                    "工作空间已启用环境配置，旧项目任务请重新 prepare",
+                    "工作空间已配置环境，旧项目任务请重新 prepare",
                 )
             try:
                 database = self._data_source_repository.get_project_database_by_alias(
@@ -201,7 +201,7 @@ class DatabaseAccessService:
         workspace_id: str,
     ) -> DatabaseEnvironmentConfigRecord | None:
         config = self.get_active_workspace_environment(workspace_id)
-        if config is None or not config.enabled:
+        if config is None or not self._database_mappings_configured(workspace_id):
             return None
         return config
 
@@ -289,7 +289,7 @@ class DatabaseAccessService:
         if selected_environment is None and selector is not None:
             selected_environment = selector.active_environment
 
-        if selector is not None and selector.enabled:
+        if selector is not None and self._database_mappings_configured(workspace_id):
             if selected_environment is None:
                 raise DatabaseAccessError(
                     "environment_changed",
@@ -377,7 +377,7 @@ class DatabaseAccessService:
             if config is not None:
                 raise DatabaseAccessError(
                     "environment_changed",
-                    "工作空间已启用环境配置，请重新 prepare",
+                    "工作空间已配置环境，请重新 prepare",
                 )
             try:
                 return self._data_source_repository.get_workspace_database_by_alias(
@@ -393,9 +393,9 @@ class DatabaseAccessService:
         if config is None:
             raise DatabaseAccessError(
                 "environment_changed",
-                "工作空间环境配置已关闭，请重新 prepare",
+                "工作空间环境配置已变化，请重新 prepare",
             )
-        if not config.enabled:
+        if not self._database_mappings_configured(workspace_id):
             try:
                 return self._data_source_repository.get_workspace_database_by_alias(
                     workspace_id=workspace_id,
@@ -563,11 +563,20 @@ class DatabaseAccessService:
     @staticmethod
     def _is_available(database: ResolvedProjectDatabase) -> bool:
         return bool(
-            database.workspace_enabled
-            and database.link_enabled
-            and database.readonly
-            and database.source_enabled
+            database.readonly
             and database.database_available
             and not database.database_system
             and database.mcp_alias
         )
+
+    def _database_mappings_configured(self, workspace_id: str) -> bool:
+        repository = self._database_environment_repository
+        if repository is None:
+            return False
+        try:
+            return bool(repository.list_mappings(workspace_id))
+        except DatabaseEnvironmentRepositoryError as exc:
+            raise DatabaseAccessError(
+                "database_environment_unavailable",
+                "工作空间数据库环境映射暂时不可用",
+            ) from exc

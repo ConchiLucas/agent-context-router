@@ -320,11 +320,6 @@ p {
   box-shadow: 0 6px 24px rgb(32 33 31 / 4%);
 }
 
-.data-source-card[data-enabled="false"] {
-  border-style: dashed;
-  background: var(--surface-soft);
-}
-
 .data-source-card > header {
   display: flex;
   gap: 16px;
@@ -1906,11 +1901,6 @@ p {
 .project-status-chip {
   color: var(--accent);
   background: var(--accent-soft);
-}
-
-.project-status-chip[data-enabled="false"] {
-  color: var(--muted);
-  background: var(--border);
 }
 
 .project-path {
@@ -3998,11 +3988,6 @@ p {
   box-shadow: 0 6px 24px rgb(32 33 31 / 4%);
 }
 
-.workspace-card[data-enabled="false"] {
-  border-style: dashed;
-  background: var(--surface-soft);
-}
-
 .workspace-card > header,
 .workspace-source-card > header {
   display: flex;
@@ -4165,17 +4150,6 @@ p {
   justify-content: flex-end;
 }
 
-.workspace-disabled-banner {
-  margin-bottom: 20px;
-  border: 1px solid #d8cda5;
-  border-radius: 12px;
-  padding: 12px 15px;
-  color: #6d5c24;
-  background: #f6f0d8;
-  font-size: 0.8rem;
-  line-height: 1.55;
-}
-
 .workspace-detail-tabs {
   display: flex;
   gap: 7px;
@@ -4295,11 +4269,6 @@ p {
   padding: 22px;
   background: var(--surface);
   box-shadow: 0 6px 24px rgb(32 33 31 / 4%);
-}
-
-.workspace-source-card[data-enabled="false"] {
-  border-style: dashed;
-  background: var(--surface-soft);
 }
 
 .workspace-source-metrics {

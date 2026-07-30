@@ -11,39 +11,30 @@ import type {
   McpTraceSummary,
   PrepareTaskContextResult,
   ProjectSummary,
-  DataSourceDatabasePayload,
   DataSourceConnectionTestResult,
   DataSourceEngineCapability,
-  DataSourceDatabaseSyncResult,
   DataSourceDatabaseSummary,
   DataSourcePasswordReveal,
-  DataSourcePayload,
   DataSourceSummary,
-  ProjectDatabaseLinkPayload,
   ProjectDatabaseLinkSummary,
   ProjectDataSourceOptions,
-  WorkspaceCreate,
   WorkspaceDatabaseEnvironmentMappings,
-  WorkspaceDatabaseEnvironmentMappingsUpdate,
-  WorkspaceDatabaseEnvironmentSwitch,
   WorkspaceDataSourceSummary,
   WorkspaceEnvironmentConfig,
-  WorkspaceEnvironmentConfigUpdate,
-  WorkspaceProjectCreate,
-  WorkspaceProjectUpdate,
   WorkspaceSummary,
-  WorkspaceUpdate,
 } from "@/lib/types";
 import {
   buildMcpTraceListPath,
   type McpTraceListQuery,
 } from "@/lib/mcp-traces";
 import { buildDatabasePayloadPath } from "@/lib/database-call-payload";
+import { assertBrowserApiRequestAllowed } from "@/lib/browser-api-policy";
 
 const API_URL =
   process.env.NEXT_PUBLIC_CONTEXT_ROUTER_API_URL ?? "http://127.0.0.1:49173";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  assertBrowserApiRequestAllowed(path, init?.method);
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: {
@@ -71,83 +62,11 @@ export function getWorkspace(workspaceId: string): Promise<WorkspaceSummary> {
   return request<WorkspaceSummary>(`/api/workspaces/${workspaceId}`);
 }
 
-export function createWorkspace(
-  payload: WorkspaceCreate,
-): Promise<WorkspaceSummary> {
-  return request<WorkspaceSummary>("/api/workspaces", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
-
-export function updateWorkspace(
-  workspaceId: string,
-  payload: WorkspaceUpdate,
-): Promise<WorkspaceSummary> {
-  return request<WorkspaceSummary>(`/api/workspaces/${workspaceId}`, {
-    method: "PUT",
-    body: JSON.stringify(payload),
-  });
-}
-
-export function setWorkspaceEnabled(
-  workspaceId: string,
-  enabled: boolean,
-): Promise<WorkspaceSummary> {
-  return request<WorkspaceSummary>(`/api/workspaces/${workspaceId}/enabled`, {
-    method: "PATCH",
-    body: JSON.stringify({ enabled }),
-  });
-}
-
-export async function deleteWorkspace(workspaceId: string): Promise<void> {
-  await request<unknown>(`/api/workspaces/${workspaceId}`, {
-    method: "DELETE",
-  });
-}
-
 export function listWorkspaceProjects(
   workspaceId: string,
 ): Promise<ProjectSummary[]> {
   return request<ProjectSummary[]>(
     `/api/workspaces/${workspaceId}/projects`,
-  );
-}
-
-export function createWorkspaceProject(
-  workspaceId: string,
-  payload: WorkspaceProjectCreate,
-): Promise<ProjectSummary> {
-  return request<ProjectSummary>(
-    `/api/workspaces/${workspaceId}/projects`,
-    {
-      method: "POST",
-      body: JSON.stringify(payload),
-    },
-  );
-}
-
-export function updateWorkspaceProject(
-  workspaceId: string,
-  projectId: string,
-  payload: WorkspaceProjectUpdate,
-): Promise<ProjectSummary> {
-  return request<ProjectSummary>(
-    `/api/workspaces/${workspaceId}/projects/${projectId}`,
-    {
-      method: "PUT",
-      body: JSON.stringify(payload),
-    },
-  );
-}
-
-export async function deleteWorkspaceProject(
-  workspaceId: string,
-  projectId: string,
-): Promise<void> {
-  await request<unknown>(
-    `/api/workspaces/${workspaceId}/projects/${projectId}`,
-    { method: "DELETE" },
   );
 }
 
@@ -168,32 +87,6 @@ export function getWorkspaceDatabaseEnvironmentMappings(
   );
 }
 
-export function replaceWorkspaceDatabaseEnvironmentMappings(
-  workspaceId: string,
-  payload: WorkspaceDatabaseEnvironmentMappingsUpdate,
-): Promise<WorkspaceDatabaseEnvironmentMappings> {
-  return request<WorkspaceDatabaseEnvironmentMappings>(
-    `/api/workspaces/${workspaceId}/database-environment-mappings`,
-    {
-      method: "PUT",
-      body: JSON.stringify(payload),
-    },
-  );
-}
-
-export function setWorkspaceDatabaseEnvironment(
-  workspaceId: string,
-  payload: WorkspaceDatabaseEnvironmentSwitch,
-): Promise<WorkspaceDatabaseEnvironmentMappings> {
-  return request<WorkspaceDatabaseEnvironmentMappings>(
-    `/api/workspaces/${workspaceId}/database-environment`,
-    {
-      method: "PATCH",
-      body: JSON.stringify(payload),
-    },
-  );
-}
-
 export function getWorkspaceEnvironmentConfig(
   workspaceId: string,
 ): Promise<WorkspaceEnvironmentConfig> {
@@ -201,27 +94,6 @@ export function getWorkspaceEnvironmentConfig(
     `/api/workspaces/${workspaceId}/environment-config`,
     { cache: "no-store" },
   );
-}
-
-export function replaceWorkspaceEnvironmentConfig(
-  workspaceId: string,
-  payload: WorkspaceEnvironmentConfigUpdate,
-): Promise<WorkspaceEnvironmentConfig> {
-  return request<WorkspaceEnvironmentConfig>(
-    `/api/workspaces/${workspaceId}/environment-config`,
-    {
-      method: "PUT",
-      body: JSON.stringify(payload),
-    },
-  );
-}
-
-export function refreshWorkspaceMapping(
-  workspaceId: string,
-): Promise<WorkspaceSummary> {
-  return request<WorkspaceSummary>(`/api/workspaces/${workspaceId}/refresh`, {
-    method: "POST",
-  });
 }
 
 export function getWorkspaceTree(
@@ -324,31 +196,6 @@ export function testDataSourceConnection(
   );
 }
 
-export function createDataSource(
-  payload: DataSourcePayload,
-): Promise<DataSourceSummary> {
-  return request<DataSourceSummary>("/api/data-sources", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
-
-export function updateDataSource(
-  dataSourceId: string,
-  payload: DataSourcePayload,
-): Promise<DataSourceSummary> {
-  return request<DataSourceSummary>(`/api/data-sources/${dataSourceId}`, {
-    method: "PUT",
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function deleteDataSource(dataSourceId: string): Promise<void> {
-  await request<unknown>(`/api/data-sources/${dataSourceId}`, {
-    method: "DELETE",
-  });
-}
-
 export function revealDataSourcePassword(
   dataSourceId: string,
 ): Promise<DataSourcePasswordReveal> {
@@ -366,46 +213,6 @@ export function listDataSourceDatabases(
   );
 }
 
-export function syncDataSourceDatabases(
-  dataSourceId: string,
-): Promise<DataSourceDatabaseSyncResult> {
-  return request<DataSourceDatabaseSyncResult>(
-    `/api/data-sources/${dataSourceId}/databases/sync`,
-    { method: "POST" },
-  );
-}
-
-export function createDataSourceDatabase(
-  dataSourceId: string,
-  payload: DataSourceDatabasePayload,
-): Promise<DataSourceDatabaseSummary> {
-  return request<DataSourceDatabaseSummary>(
-    `/api/data-sources/${dataSourceId}/databases`,
-    { method: "POST", body: JSON.stringify(payload) },
-  );
-}
-
-export function updateDataSourceDatabase(
-  dataSourceId: string,
-  databaseId: string,
-  payload: DataSourceDatabasePayload,
-): Promise<DataSourceDatabaseSummary> {
-  return request<DataSourceDatabaseSummary>(
-    `/api/data-sources/${dataSourceId}/databases/${databaseId}`,
-    { method: "PUT", body: JSON.stringify(payload) },
-  );
-}
-
-export async function deleteDataSourceDatabase(
-  dataSourceId: string,
-  databaseId: string,
-): Promise<void> {
-  await request<unknown>(
-    `/api/data-sources/${dataSourceId}/databases/${databaseId}`,
-    { method: "DELETE" },
-  );
-}
-
 export function listDatabaseProjects(
   databaseId: string,
 ): Promise<ProjectDatabaseLinkSummary[]> {
@@ -419,50 +226,5 @@ export function getProjectDataSourceOptions(
 ): Promise<ProjectDataSourceOptions> {
   return request<ProjectDataSourceOptions>(
     `/api/projects/${projectId}/data-source-options`,
-  );
-}
-
-export function replaceProjectDatabases(
-  projectId: string,
-  databaseIds: string[],
-  mcpAliases: Record<string, string> = {},
-): Promise<ProjectDataSourceOptions> {
-  return request<ProjectDataSourceOptions>(`/api/projects/${projectId}/databases`, {
-    method: "PUT",
-    body: JSON.stringify({ database_ids: databaseIds, mcp_aliases: mcpAliases }),
-  });
-}
-
-export function updateProjectDatabaseAlias(
-  projectId: string,
-  linkId: string,
-  mcpAlias: string,
-): Promise<ProjectDatabaseLinkSummary> {
-  return request<ProjectDatabaseLinkSummary>(
-    `/api/projects/${projectId}/databases/${linkId}/mcp-alias`,
-    {
-      method: "PATCH",
-      body: JSON.stringify({ mcp_alias: mcpAlias }),
-    },
-  );
-}
-
-export function createDatabaseProjectLink(
-  databaseId: string,
-  payload: ProjectDatabaseLinkPayload,
-): Promise<ProjectDatabaseLinkSummary> {
-  return request<ProjectDatabaseLinkSummary>(
-    `/api/data-sources/databases/${databaseId}/projects`,
-    { method: "POST", body: JSON.stringify(payload) },
-  );
-}
-
-export async function deleteDatabaseProjectLink(
-  databaseId: string,
-  linkId: string,
-): Promise<void> {
-  await request<unknown>(
-    `/api/data-sources/databases/${databaseId}/projects/${linkId}`,
-    { method: "DELETE" },
   );
 }

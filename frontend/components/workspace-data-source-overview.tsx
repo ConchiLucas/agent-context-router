@@ -15,11 +15,8 @@ interface WorkspaceDataSourceOverviewProps {
 function assignmentStatus(assignment: WorkspaceDataSourceAssignment): string {
   const labels: Record<string, string> = {
     active: "授权条件满足",
-    workspace_disabled: "工作空间已停用",
-    source_disabled: "数据源已停用",
     database_unavailable: "数据库不可用",
     system_database: "系统库",
-    link_disabled: "授权已停用",
     not_readonly: "不是只读授权",
     missing_mcp_alias: "缺少 MCP 别名",
   };
@@ -76,9 +73,7 @@ export function WorkspaceDataSourceOverview({
       <div className="empty-state workspace-data-source-empty">
         <span className="empty-database-icon">◎</span>
         <h2>这个工作空间还没有数据源授权</h2>
-        <p>
-          请切换到“后端项目”，在项目卡片中打开“管理数据源”，为它选择数据库。
-        </p>
+        <p>当前没有可查看的项目数据库授权记录。</p>
       </div>
     );
   }
@@ -106,11 +101,7 @@ export function WorkspaceDataSourceOverview({
 
       <div className="workspace-source-list">
         {summary.sources.map((source) => (
-          <article
-            className="workspace-source-card"
-            data-enabled={source.enabled}
-            key={source.id}
-          >
+          <article className="workspace-source-card" key={source.id}>
             <header>
               <div>
                 <div className="data-source-card-chips">
@@ -123,12 +114,6 @@ export function WorkspaceDataSourceOverview({
                 </div>
                 <h2>{source.name}</h2>
               </div>
-              <span
-                className="project-status-chip"
-                data-enabled={source.enabled}
-              >
-                {source.enabled ? "已启用" : "已停用"}
-              </span>
             </header>
             <div className="workspace-source-metrics">
               <span>{source.database_count} 个数据库</span>

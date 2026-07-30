@@ -26,6 +26,8 @@ docker compose up -d --force-recreate backend frontend
 
 Compose 的前端和后端宿主机端口都显式绑定 `127.0.0.1`，不会默认监听局域网网卡。后端 CORS 只允许 `http://127.0.0.1:49174` 和 `http://localhost:49174`；本项目当前定位为本机工具，不提供应用层鉴权。若未来需要远程访问，应先补 HTTPS、鉴权和新的 Origin 配置，而不是直接改成公网绑定。
 
+携带任意 `Origin` 或浏览器 Fetch Metadata（`Sec-Fetch-Mode` / `Sec-Fetch-Site`）的请求由后端只读中间件限制为 `GET/HEAD/OPTIONS`，以及四类不会修改配置的安全 `POST`：数据源连接测试、数据源密码按需查看、MCP 接入测试和 Workspace prepare 预览。其他浏览器配置写请求返回 `405 management_read_only`。本机 AI 或运维调用方不携带这些浏览器请求头，仍可使用既有受 Schema、Service 和 Repository 校验的本地 API 维护配置；这只是回环单用户部署下的调用边界，不替代身份认证。
+
 ## 工作区挂载
 
 后端需要读取用户填写的 Workspace 绝对根目录、可选的 Workspace 根 `AGENTS.md`，以及各项目独立配置的 `document_relative_path`。新项目文档入口统一位于 Workspace 的 `docs/` 层级下，源码 `relative_path` 只用于项目定位和 cwd 路由。Compose 将宿主机工作区根目录只读挂载到容器 `/workspace`：
@@ -34,24 +36,20 @@ Compose 的前端和后端宿主机端口都显式绑定 `127.0.0.1`，不会默
 CONTEXT_ROUTER_WORKSPACE_HOST_ROOT=/Users/conchi/workforce
 ```
 
-项目运行配置以 PostgreSQL 为真源，点击“生成文件”后物化到独立运行目录。Compose 默认把宿主机 `./.runtime-runner` 挂载到容器 `/runtime`；可以通过 `CONTEXT_ROUTER_RUNTIME_HOST_ROOT` 改为服务器上的其他绝对目录，运行快照不会写入目标项目源码目录。
+项目运行配置以 PostgreSQL 为真源，并由本机 AI 或 Runtime Runner 通过受校验 API 物化到独立运行目录；浏览器页面只查看快速/完整更新文件、历史运行状态和有界日志，不提供配置保存、物化或执行按钮。Compose 默认把宿主机 `./.runtime-runner` 挂载到容器 `/runtime`；可以通过 `CONTEXT_ROUTER_RUNTIME_HOST_ROOT` 改为服务器上的其他绝对目录，运行快照不会写入目标项目源码目录。
 
 Runtime Runner 只执行快照根目录下固定的 `deploy.sh`，后端镜像提供 Docker CLI，并仅在本机 Compose 中挂载 `/var/run/docker.sock`。该 Socket 等价于宿主机 Docker 管理权限，因此服务必须继续绑定回环地址，不得在缺少 HTTPS 和鉴权时对外暴露。
 
 后端收到宿主机绝对路径后，会将该前缀替换为 `/workspace` 再读取文件。目标文件必须位于挂载的工作区中。
 
-Compose 默认不声明任何工作空间或项目，统一通过页面维护。以下默认项目环境变量仅保留用于兼容旧部署；只有显式配置时，后端才会在启动时声明一个根项目：
+Compose 不声明或自动创建任何工作空间和项目；浏览器只负责查看，配置由本机 AI 或运维通过既有受校验 API 维护。MCP 接入仍可使用以下环境变量：
 
 ```text
-CONTEXT_ROUTER_DEFAULT_PROJECT_NAME=示例项目
-CONTEXT_ROUTER_DEFAULT_AGENTS_PATH=/absolute/workspace/root/project/AGENTS.md
 CONTEXT_ROUTER_PUBLIC_MCP_URL=http://127.0.0.1:49173/mcp
 CONTEXT_ROUTER_MCP_TEST_TIMEOUT_SECONDS=15
 ```
 
-修改挂载路径或默认项目后需要重建容器。
-
-环境变量默认项目属于声明式兼容配置：如果在页面删除了同一路径项目，但 `CONTEXT_ROUTER_DEFAULT_AGENTS_PATH` 仍然存在，后端下次启动时会重新写入对应 Workspace 根项目；需要永久移除时同时清除默认项目环境变量。
+修改挂载路径或上述接入变量后需要重建容器。
 
 `CONTEXT_ROUTER_PUBLIC_MCP_URL` 只用于接入面板生成 Codex 和 Antigravity 配置；后端容器通过固定的 `http://127.0.0.1:8000/mcp` 对自身执行真实协议测试。修改该变量不会改变 Compose 的回环绑定，也不会增加 HTTPS 或鉴权；当前版本不支持远程暴露。若未来设计远程部署，需要先完成安全评审和相应实现，再把公开地址设置为客户端实际可访问的 URL。
 
@@ -76,7 +74,7 @@ CONTEXT_ROUTER_DATABASE_PAYLOAD_CLEANUP_INTERVAL_SECONDS=3600
 
 配置了 Workspace 环境选择器后，`prepare_task_context` 可选传入 `environment='test'` 或 `environment='uat'`。显式传入只为本次 task 固化所选环境并记录 `task_explicit`，不会修改 Workspace 当前环境；省略参数时使用 Workspace 当前环境并记录 `workspace_default`。数据库摘要、`environment_config` 和后续数据库工具都按 task 固化的环境解析。
 
-保存环境映射、保存 TEST/UAT 通用 JSON 或切换 Workspace 当前环境都会递增同一个 revision；无论 task 使用 `workspace_default` 还是 `task_explicit`，revision 不一致时数据库调用都会返回 `environment_changed`，需要重新 prepare。没有配置环境选择器的单环境 Workspace 在省略 `environment` 时保持原有数据库授权行为；显式传参不会隐式创建选择器，而是返回 `environment_not_configured`。
+本机 AI 或运维通过受校验 API 保存环境映射、保存 TEST/UAT 通用 JSON 或切换 Workspace 当前环境时，都会递增同一个 revision；无论 task 使用 `workspace_default` 还是 `task_explicit`，revision 不一致时数据库调用都会返回 `environment_changed`，需要重新 prepare。浏览器环境详情只读取映射、JSON 和默认环境，不修改它们。没有配置环境选择器的单环境 Workspace 在省略 `environment` 时保持原有数据库授权行为；显式传参不会隐式创建选择器，而是返回 `environment_not_configured`。
 
 Workspace 可以独立保存 TEST/UAT 两份 JSON 对象；首次保存默认选择 UAT，不要求先配置数据库映射，数据库会继续沿用原有 Workspace alias。两份 JSON 合计最多 256 KiB、最多嵌套 20 层，超出 JavaScript 安全整数范围的值请改用字符串。task 所选环境的 JSON 会作为 `environment_config` 只返回给可信本机 MCP 调用方。该字段可按明确业务需要保存 MQ、Redis、MinIO、ES 等组件的地址和访问凭据，内容以明文 JSONB 保存在本地；严禁把实际值写入日志、开发文档、链路摘要或示例输出。
 
@@ -94,11 +92,11 @@ CONTEXT_ROUTER_DATABASE_URL=postgresql://USER:PASSWORD@host.docker.internal:5432
 docker compose exec backend uv run alembic upgrade head
 ```
 
-当前 migration head 为 `20260730_0021`。`0013` 引入 Workspace 与项目相对路径；`0014` 增加 `frontend/backend` 项目类型、移除 Project enabled、把 `mcp_alias` 唯一范围提升到 Workspace，并为新 task 增加 Workspace scope；`0015` 增加工作空间级 Markdown 的独立词法搜索索引；`0016` 将项目源码 `relative_path` 与文档入口 `document_relative_path` 拆分；`0017` 增加按项目和更新模式持久化的运行配置文件；`0018` 增加 Runtime Runner 异步执行记录；`0019` 增加 Workspace TEST/UAT 数据库映射和 task 环境 revision；`0020` 增加 TEST/UAT 通用环境 JSON；`0021` 为 task 增加 `database_environment_selection`，并把已有非空环境 task 回填为 `workspace_default`。旧 task 保持 `scope='project'` 兼容，迁移同时保留 Workspace/活动项目快照和兼容 `agents_path`。
+当前 migration head 为 `20260730_0022`。`0013` 引入 Workspace 与项目相对路径；`0014` 增加 `frontend/backend` 项目类型、移除 Project enabled、把 `mcp_alias` 唯一范围提升到 Workspace，并为新 task 增加 Workspace scope；`0015` 增加工作空间级 Markdown 的独立词法搜索索引；`0016` 将项目源码 `relative_path` 与文档入口 `document_relative_path` 拆分；`0017` 增加按项目和更新模式持久化的运行配置文件；`0018` 增加 Runtime Runner 异步执行记录；`0019` 增加 Workspace TEST/UAT 数据库映射和 task 环境 revision；`0020` 增加 TEST/UAT 通用环境 JSON；`0021` 为 task 增加 `database_environment_selection`；`0022` 移除 Workspace、数据源、项目数据库授权和环境映射配置的启停字段与相关索引。旧 task 保持 `scope='project'` 兼容，迁移同时保留 Workspace/活动项目快照和兼容 `agents_path`。
 
 PostgreSQL 保存 Workspace、Project 类型、源码相对路径、文档入口相对路径、数据源、数据库清单、项目数据库关联及 Workspace 唯一 `mcp_alias`、可选 TEST/UAT 数据库映射与通用 JSON、带 scope/环境/revision/选择模式的 MCP task、read call、文档顺序、数据库调用审计元数据，以及可重建的文档搜索分块与索引状态。文档树和 Markdown 原文仍从磁盘重建，文档工具完整出入参不持久化；`search_database_objects` 和 `execute_database_query` 自动保存有界、可过期的详情快照，供本机链路页面按需查看。后端启动时恢复工作空间和全部项目配置，并从磁盘重建每个项目的内存树与匹配版本词法索引；路径失效的项目仍保留在页面并显示错误。
 
-数据库未配置时后端和 `/health` 仍可启动，默认配置退化为当前进程内存；但 task_id 持久化、prepare/search/read 的完整 MCP 工作流、Workspace MCP JSON 预览和持久化调用记录不可用。文档搜索不会降级为进程内扫描。业务数据源离线不会阻止后端启动，也不会阻止 Workspace 文档 prepare/search/read；连接只在测试、同步、对象搜索或查询时延迟建立。
+数据库未配置时后端和 `/health` 仍可启动，但不会自动创建默认 Workspace/Project，且 task_id 持久化、prepare/search/read 的完整 MCP 工作流、Workspace MCP JSON 预览和持久化调用记录不可用。文档搜索不会降级为进程内扫描。业务数据源离线不会阻止后端启动，也不会阻止 Workspace 文档 prepare/search/read；连接只在测试、同步、对象搜索或查询时延迟建立。
 
 ## Docker Desktop 与公司 VPN 数据库
 

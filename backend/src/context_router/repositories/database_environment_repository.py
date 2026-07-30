@@ -29,7 +29,6 @@ class DatabaseEnvironmentRepositoryError(RuntimeError):
 @dataclass(frozen=True, slots=True)
 class DatabaseEnvironmentConfigRecord:
     workspace_id: str
-    enabled: bool
     active_environment: DatabaseEnvironment | None
     revision: int
     created_at: datetime | None = None
@@ -143,7 +142,7 @@ class InMemoryDatabaseEnvironmentRepository:
         self._environment_payloads: dict[str, dict[DatabaseEnvironment, Any]] = {}
 
     def get_active_config(self, workspace_id: str) -> DatabaseEnvironmentConfigRecord:
-        return self._configs.get(workspace_id, _disabled_config(workspace_id))
+        return self._configs.get(workspace_id, _unconfigured_config(workspace_id))
 
     def get_environment_snapshot(
         self,
@@ -221,7 +220,6 @@ class InMemoryDatabaseEnvironmentRepository:
 
         saved = DatabaseEnvironmentConfigRecord(
             workspace_id=workspace_id,
-            enabled=True,
             active_environment=current.active_environment or "uat",
             revision=current.revision + 1,
             created_at=current.created_at or now,
@@ -239,21 +237,21 @@ class InMemoryDatabaseEnvironmentRepository:
     ) -> DatabaseEnvironmentConfigRecord:
         _ensure_environment(environment)
         current = self.get_active_config(workspace_id)
+        selector_configured = workspace_id in self._configs
         payloads_configured = workspace_id in self._environment_payloads
-        if not current.enabled and not payloads_configured:
-            raise DatabaseEnvironmentRepositoryError("工作空间尚未启用环境配置")
+        if not selector_configured:
+            raise DatabaseEnvironmentRepositoryError("工作空间尚未配置环境")
         _ensure_revision(current.revision, expected_revision)
-        if current.enabled:
-            mappings = self.list_mappings(workspace_id)
-            if not mappings:
-                raise DatabaseEnvironmentRepositoryError("至少需要一条数据库环境映射才能切换")
+        mappings = self.list_mappings(workspace_id)
+        if mappings:
             for mapping in mappings:
                 if set(mapping.targets) != set(_ENVIRONMENTS):
                     raise DatabaseEnvironmentRepositoryError("数据库环境映射不完整，无法切换")
+        elif not payloads_configured:
+            raise DatabaseEnvironmentRepositoryError("工作空间环境配置不完整")
         now = datetime.now(UTC)
         saved = DatabaseEnvironmentConfigRecord(
             workspace_id=workspace_id,
-            enabled=current.enabled,
             active_environment=environment,
             revision=current.revision + 1,
             created_at=current.created_at,
@@ -275,7 +273,6 @@ class InMemoryDatabaseEnvironmentRepository:
         now = datetime.now(UTC)
         saved = DatabaseEnvironmentConfigRecord(
             workspace_id=workspace_id,
-            enabled=current.enabled,
             active_environment=current.active_environment or "uat",
             revision=current.revision + 1,
             created_at=current.created_at or now,
@@ -318,9 +315,6 @@ class InMemoryDatabaseEnvironmentRepository:
         environment: DatabaseEnvironment,
     ) -> list[ResolvedEnvironmentMappingTarget]:
         _ensure_environment(environment)
-        config = self.get_active_config(workspace_id)
-        if not config.enabled:
-            return []
         return [
             ResolvedEnvironmentMappingTarget(
                 mapping_id=mapping.id,
@@ -353,7 +347,6 @@ class PostgresDatabaseEnvironmentRepository:
                     """
                     SELECT
                         requested.workspace_id,
-                        config.enabled,
                         config.active_environment,
                         config.revision,
                         config.created_at,
@@ -379,30 +372,29 @@ class PostgresDatabaseEnvironmentRepository:
             raise DatabaseEnvironmentRepositoryError("数据库环境配置读取失败") from exc
         if row is None:
             raise DatabaseEnvironmentRepositoryError("数据库环境配置读取失败")
-        selector_configured = bool(row[6])
+        selector_configured = bool(row[5])
         config = (
             DatabaseEnvironmentConfigRecord(
                 workspace_id=str(row[0]),
-                enabled=bool(row[1]),
-                active_environment=cast(DatabaseEnvironment | None, row[2]),
-                revision=int(row[3]),
-                created_at=cast(datetime, row[4]),
-                updated_at=cast(datetime, row[5]),
+                active_environment=cast(DatabaseEnvironment | None, row[1]),
+                revision=int(row[2]),
+                created_at=cast(datetime, row[3]),
+                updated_at=cast(datetime, row[4]),
             )
             if selector_configured
-            else _disabled_config(workspace_id)
+            else _unconfigured_config(workspace_id)
         )
         environments = _empty_environment_payloads()
-        if bool(row[8]):
-            environments["test"] = row[7]
-        if bool(row[10]):
-            environments["uat"] = row[9]
+        if bool(row[7]):
+            environments["test"] = row[6]
+        if bool(row[9]):
+            environments["uat"] = row[8]
         return EnvironmentConfigurationSnapshot(
             config=config,
             selector_configured=selector_configured,
             payloads=EnvironmentPayloadsRecord(
                 workspace_id=workspace_id,
-                configured=bool(row[8]) and bool(row[10]),
+                configured=bool(row[7]) and bool(row[9]),
                 environments=environments,
             ),
         )
@@ -472,15 +464,14 @@ class PostgresDatabaseEnvironmentRepository:
                 row = connection.execute(
                     """
                     INSERT INTO workspace_database_environment_configs (
-                        workspace_id, enabled, active_environment, revision
+                        workspace_id, active_environment, revision
                     )
-                    VALUES (%s, true, %s, %s)
+                    VALUES (%s, %s, %s)
                     ON CONFLICT (workspace_id) DO UPDATE SET
-                        enabled = true,
                         active_environment = EXCLUDED.active_environment,
                         revision = EXCLUDED.revision,
                         updated_at = CURRENT_TIMESTAMP
-                    RETURNING workspace_id, enabled, active_environment, revision,
+                    RETURNING workspace_id, active_environment, revision,
                               created_at, updated_at
                     """,
                     (workspace_id, active_environment, next_revision),
@@ -522,12 +513,15 @@ class PostgresDatabaseEnvironmentRepository:
                         (workspace_id,),
                     ).fetchone()[0]
                 )
-                if not current.enabled and payload_count != len(_ENVIRONMENTS):
-                    raise DatabaseEnvironmentRepositoryError("工作空间尚未启用环境配置")
+                if current.active_environment is None:
+                    raise DatabaseEnvironmentRepositoryError("工作空间尚未配置环境")
                 _ensure_revision(current.revision, expected_revision)
-                if current.enabled:
+                mappings = self._list_mappings(connection, workspace_id)
+                if mappings:
                     mappings = self._list_mapping_writes(connection, workspace_id)
                     self._validate_physical_targets(connection, workspace_id, mappings)
+                elif payload_count != len(_ENVIRONMENTS):
+                    raise DatabaseEnvironmentRepositoryError("工作空间环境配置不完整")
                 row = connection.execute(
                     """
                     UPDATE workspace_database_environment_configs
@@ -535,7 +529,7 @@ class PostgresDatabaseEnvironmentRepository:
                         revision = revision + 1,
                         updated_at = CURRENT_TIMESTAMP
                     WHERE workspace_id = %s
-                    RETURNING workspace_id, enabled, active_environment, revision,
+                    RETURNING workspace_id, active_environment, revision,
                               created_at, updated_at
                     """,
                     (environment, workspace_id),
@@ -566,14 +560,14 @@ class PostgresDatabaseEnvironmentRepository:
                 row = connection.execute(
                     """
                     INSERT INTO workspace_database_environment_configs (
-                        workspace_id, enabled, active_environment, revision
+                        workspace_id, active_environment, revision
                     )
-                    VALUES (%s, false, %s, %s)
+                    VALUES (%s, %s, %s)
                     ON CONFLICT (workspace_id) DO UPDATE SET
                         active_environment = EXCLUDED.active_environment,
                         revision = EXCLUDED.revision,
                         updated_at = CURRENT_TIMESTAMP
-                    RETURNING workspace_id, enabled, active_environment, revision,
+                    RETURNING workspace_id, active_environment, revision,
                               created_at, updated_at
                     """,
                     (workspace_id, active_environment, next_revision),
@@ -618,7 +612,6 @@ class PostgresDatabaseEnvironmentRepository:
                     WHERE mapping.workspace_id = %s
                       AND target.environment = %s
                       AND lower(mapping.mcp_alias) = lower(%s)
-                      AND config.enabled
                     """,
                     (workspace_id, environment, mcp_alias.strip()),
                 ).fetchone()
@@ -645,7 +638,6 @@ class PostgresDatabaseEnvironmentRepository:
                     + """
                     WHERE mapping.workspace_id = %s
                       AND target.environment = %s
-                      AND config.enabled
                     ORDER BY lower(mapping.mcp_alias), mapping.id
                     """,
                     (workspace_id, environment),
@@ -670,7 +662,7 @@ class PostgresDatabaseEnvironmentRepository:
     ) -> DatabaseEnvironmentConfigRecord:
         row = connection.execute(
             """
-            SELECT workspace_id, enabled, active_environment, revision,
+            SELECT workspace_id, active_environment, revision,
                    created_at, updated_at
             FROM workspace_database_environment_configs
             WHERE workspace_id = %s
@@ -678,7 +670,7 @@ class PostgresDatabaseEnvironmentRepository:
             """,
             (workspace_id,),
         ).fetchone()
-        return _config_record(row) if row is not None else _disabled_config(workspace_id)
+        return _config_record(row) if row is not None else _unconfigured_config(workspace_id)
 
     @staticmethod
     def _ensure_mapping_ids_available(
@@ -721,13 +713,11 @@ class PostgresDatabaseEnvironmentRepository:
                 link.workspace_id,
                 link.project_id,
                 project.project_kind,
-                link.enabled,
                 link.readonly,
                 database.remote_name,
                 database.namespace_type,
                 database.available,
                 database.system_database,
-                source.enabled,
                 source.engine
             FROM project_databases AS link
             JOIN document_projects AS project ON project.id = link.project_id
@@ -761,12 +751,12 @@ class PostgresDatabaseEnvironmentRepository:
                     raise DatabaseEnvironmentRepositoryError("数据库授权不属于当前工作空间项目")
                 if str(row[3]) != "backend":
                     raise DatabaseEnvironmentRepositoryError("仅后端项目可以配置数据库环境映射")
-                if not bool(row[4]) or not bool(row[5]):
-                    raise DatabaseEnvironmentRepositoryError("环境目标必须启用并保持只读")
-                if not bool(row[8]) or bool(row[9]) or not bool(row[10]):
+                if not bool(row[4]):
+                    raise DatabaseEnvironmentRepositoryError("环境目标必须保持只读")
+                if not bool(row[7]) or bool(row[8]):
                     raise DatabaseEnvironmentRepositoryError("环境目标数据库当前不可用")
-                namespace_types.add(str(row[7]))
-                engines.add(str(row[11]))
+                namespace_types.add(str(row[6]))
+                engines.add(str(row[9]))
             if len(engines) != 1:
                 raise DatabaseEnvironmentRepositoryError("同一环境映射的数据库类型必须一致")
             if len(namespace_types) != 1:
@@ -944,7 +934,7 @@ def _validate_mapping_writes(
     mappings: list[DatabaseEnvironmentMappingWrite],
 ) -> None:
     if not mappings:
-        raise DatabaseEnvironmentRepositoryError("至少需要一条数据库环境映射才能启用")
+        raise DatabaseEnvironmentRepositoryError("至少需要一条数据库环境映射")
     ids: set[str] = set()
     aliases: set[str] = set()
     for mapping in mappings:
@@ -965,10 +955,9 @@ def _validate_mapping_writes(
             raise DatabaseEnvironmentRepositoryError("Test 与 UAT 必须映射到不同数据库授权")
 
 
-def _disabled_config(workspace_id: str) -> DatabaseEnvironmentConfigRecord:
+def _unconfigured_config(workspace_id: str) -> DatabaseEnvironmentConfigRecord:
     return DatabaseEnvironmentConfigRecord(
         workspace_id=workspace_id,
-        enabled=False,
         active_environment=None,
         revision=0,
     )
@@ -977,11 +966,10 @@ def _disabled_config(workspace_id: str) -> DatabaseEnvironmentConfigRecord:
 def _config_record(row: tuple[object, ...]) -> DatabaseEnvironmentConfigRecord:
     return DatabaseEnvironmentConfigRecord(
         workspace_id=str(row[0]),
-        enabled=bool(row[1]),
-        active_environment=cast(DatabaseEnvironment, str(row[2])),
-        revision=int(row[3]),
-        created_at=cast(datetime, row[4]),
-        updated_at=cast(datetime, row[5]),
+        active_environment=cast(DatabaseEnvironment, str(row[1])),
+        revision=int(row[2]),
+        created_at=cast(datetime, row[3]),
+        updated_at=cast(datetime, row[4]),
     )
 
 

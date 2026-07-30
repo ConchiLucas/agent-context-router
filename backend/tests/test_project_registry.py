@@ -129,7 +129,7 @@ def test_missing_persisted_project_path_is_retained_with_error(tmp_path: Path) -
     assert "找不到入口文件" in (restored[0].error or "")
 
 
-def test_disabled_nested_workspace_does_not_fall_back_to_parent(tmp_path: Path) -> None:
+def test_nested_workspace_matches_more_specific_root(tmp_path: Path) -> None:
     parent_root = tmp_path / "workspace" / "AGENTS.md"
     nested_root = tmp_path / "workspace" / "services" / "order" / "AGENTS.md"
     write_document(parent_root, "# 根项目")
@@ -149,14 +149,13 @@ def test_disabled_nested_workspace_does_not_fall_back_to_parent(tmp_path: Path) 
             name=nested.workspace_name or nested.name,
             workspace_type=nested.project_type,
             root_path=str(nested_root.parent),
-            enabled=False,
             created_at=datetime.now(UTC),
             updated_at=datetime.now(UTC),
         )
     )
 
-    with pytest.raises(ProjectRegistryError, match="工作空间已停用"):
-        registry.find_workspace_for_cwd(str(nested_root.parent / "src"))
+    matched = registry.find_workspace_for_cwd(str(nested_root.parent / "src"))
+    assert matched.id == nested.workspace_id
 
 
 def test_missing_nested_project_does_not_fall_back_after_workspace_reload(
@@ -181,7 +180,6 @@ def test_missing_nested_project_does_not_fall_back_after_workspace_reload(
         name="测试工作空间",
         workspace_type="公司项目",
         root_path=str(workspace_host_root),
-        enabled=True,
     )
     project_repository = InMemoryProjectRepository(workspace_repository)
     registry = ProjectRegistry(

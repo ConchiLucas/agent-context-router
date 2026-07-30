@@ -19,9 +19,7 @@ class DatabaseEnvironmentTargetSummary(BaseModel):
     namespace_type: str
     mcp_alias: str | None = None
     available: bool
-    source_enabled: bool
     readonly: bool
-    link_enabled: bool
     system_database: bool
 
 
@@ -62,7 +60,6 @@ class DatabaseEnvironmentMappingCounts(BaseModel):
 class WorkspaceDatabaseEnvironmentMappings(BaseModel):
     workspace_id: str
     configured: bool
-    enabled: bool
     active_environment: DatabaseEnvironment | None = None
     revision: int = Field(ge=0)
     summary: DatabaseEnvironmentMappingCounts

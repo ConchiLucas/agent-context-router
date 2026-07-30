@@ -156,8 +156,8 @@ def switch_database_environment(
     try:
         catalog = _workspace_catalog(request, workspace_id)
         store = _environment_store(request)
-        if store.get_active_config(workspace_id).enabled:
-            records = store.list_mappings(workspace_id)
+        records = store.list_mappings(workspace_id)
+        if records:
             _validate_against_catalog(
                 catalog,
                 [_mapping_write(record) for record in records],
@@ -312,7 +312,6 @@ def _build_response(
     return WorkspaceDatabaseEnvironmentMappings(
         workspace_id=workspace_id,
         configured=mappings_configured,
-        enabled=config.enabled,
         active_environment=config.active_environment,
         revision=config.revision,
         summary=DatabaseEnvironmentMappingCounts(
@@ -377,9 +376,7 @@ def _target_summary(
         namespace_type=database.namespace_type,
         mcp_alias=link.mcp_alias,
         available=database.available,
-        source_enabled=source.enabled,
         readonly=link.readonly,
-        link_enabled=link.enabled,
         system_database=database.system_database,
     )
 
@@ -468,11 +465,9 @@ def _mapping_issues(
     for label, target in (("Test", test), ("UAT", uat)):
         if target is None:
             continue
-        if not target.link_enabled:
-            issues.append(f"{label} 数据库授权已停用")
         if not target.readonly:
             issues.append(f"{label} 数据库授权不是只读")
-        if not target.available or target.system_database or not target.source_enabled:
+        if not target.available or target.system_database:
             issues.append(f"{label} 数据库当前不可用")
     if test is not None and uat is not None:
         if test.engine != uat.engine:

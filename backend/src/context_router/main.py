@@ -24,6 +24,7 @@ from context_router.database.policy import SqlSafetyPolicy
 from context_router.database.registry import ConnectorRegistry
 from context_router.database.result import DatabaseResultFormatter
 from context_router.mcp_server import create_context_router_mcp
+from context_router.middleware.browser_read_only import BrowserReadOnlyMiddleware
 from context_router.repositories.data_source_repository import (
     DataSourceStore,
     InMemoryDataSourceRepository,
@@ -286,27 +287,6 @@ def create_app(
     except (WorkspaceRepositoryError, ProjectRegistryError) as exc:
         logger.warning("Unable to restore persisted workspaces: %s", exc)
 
-    if (
-        resolved_settings.default_project_name
-        and resolved_settings.default_agents_path
-        and not registry.has_agents_path(resolved_settings.default_agents_path)
-    ):
-        try:
-            registry.add_project(
-                name=resolved_settings.default_project_name,
-                agents_path=resolved_settings.default_agents_path,
-            )
-        except ProjectRegistryError as exc:
-            logger.warning("Unable to persist default document project: %s", exc)
-            try:
-                registry.add_project(
-                    name=resolved_settings.default_project_name,
-                    agents_path=resolved_settings.default_agents_path,
-                    persist=False,
-                )
-            except ProjectRegistryError as fallback_exc:
-                logger.warning("Unable to load default document project: %s", fallback_exc)
-
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         try:
@@ -350,10 +330,18 @@ def create_app(
     app.state.database_payload_repository = resolved_database_payload_repository
     app.state.database_payload_service = database_payload_service
     app.state.mcp_trace_service = mcp_trace_service
+    frontend_origins = [
+        "http://127.0.0.1:49174",
+        "http://localhost:49174",
+    ]
+    app.add_middleware(
+        BrowserReadOnlyMiddleware,
+        api_prefix=resolved_settings.api_prefix,
+    )
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://127.0.0.1:49174", "http://localhost:49174"],
-        allow_methods=["*"],
+        allow_origins=frontend_origins,
+        allow_methods=["GET", "HEAD", "OPTIONS", "POST"],
         allow_headers=["*"],
     )
     app.include_router(projects_router, prefix=resolved_settings.api_prefix)

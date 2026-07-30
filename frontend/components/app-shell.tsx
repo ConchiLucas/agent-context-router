@@ -46,7 +46,7 @@ export function AppShell() {
           <span className="app-brand-mark">AC</span>
           <div>
             <strong>Agent Context</strong>
-            <span>本地 MCP 工作台</span>
+            <span>本地 MCP 查看台</span>
           </div>
         </div>
         <nav aria-label="主菜单">
@@ -56,7 +56,7 @@ export function AppShell() {
             onClick={() => setSection("workspaces")}
           >
             <NavIcon kind="workspaces" />
-            <span>工作空间管理</span>
+            <span>工作空间</span>
           </button>
           <button
             type="button"
@@ -64,7 +64,7 @@ export function AppShell() {
             onClick={() => setSection("data-sources")}
           >
             <NavIcon kind="data-sources" />
-            <span>数据源管理</span>
+            <span>数据源</span>
           </button>
           <button
             type="button"
@@ -72,10 +72,10 @@ export function AppShell() {
             onClick={() => setSection("traces")}
           >
             <NavIcon kind="traces" />
-            <span>链路管理</span>
+            <span>调用链路</span>
           </button>
         </nav>
-        <p className="app-sidebar-note">连接信息仅保存在本机服务中</p>
+        <p className="app-sidebar-note">只读查看 · 配置由本机 AI 维护</p>
       </aside>
       <main
         className={

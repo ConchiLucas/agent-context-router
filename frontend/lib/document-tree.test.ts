@@ -5,6 +5,7 @@ import {
   buildDocumentChildLayout,
   documentNodeLabel,
   MAX_DOCUMENT_CHILDREN_PER_ROW,
+  retainDocumentTreePaths,
   resolveDocumentPath,
   shouldShowDocumentSubtreeAction,
 } from "./document-tree";
@@ -221,5 +222,98 @@ test("uses the existing concise labels in subtree breadcrumbs", () => {
       }),
     ),
     "子项目总览",
+  );
+});
+
+test("retains called leaves and every ancestor while removing unrelated branches", () => {
+  const input = documentNode("root", [
+    documentNode("unrelated", [documentNode("unrelated-leaf")]),
+    documentNode("called-parent", [
+      documentNode("called-leaf"),
+      documentNode("uncalled-sibling"),
+    ]),
+  ]);
+
+  const retained = retainDocumentTreePaths(
+    input,
+    new Set(["called-leaf"]),
+  );
+
+  assert.deepEqual(retained, documentNode("root", [
+    documentNode("called-parent", [documentNode("called-leaf")]),
+  ]));
+  assert.equal(input.children.length, 2);
+  assert.equal(input.children[1].children.length, 2);
+});
+
+test("merges shared ancestors for calls in multiple branches and keeps sibling order", () => {
+  const input = documentNode("root", [
+    documentNode("first", [
+      documentNode("first-uncalled"),
+      documentNode("first-called"),
+    ]),
+    documentNode("middle"),
+    documentNode("last", [documentNode("last-called")]),
+  ]);
+
+  const retained = retainDocumentTreePaths(
+    input,
+    new Set(["last-called", "first-called"]),
+  );
+
+  assert.deepEqual(
+    retained?.children.map((child) => child.id),
+    ["first", "last"],
+  );
+  assert.deepEqual(
+    retained?.children[0].children.map((child) => child.id),
+    ["first-called"],
+  );
+});
+
+test("keeps a called parent but removes all of its uncalled descendants", () => {
+  const input = documentNode("root", [
+    documentNode("called-parent", [
+      documentNode("uncalled-child"),
+    ]),
+  ]);
+
+  const retained = retainDocumentTreePaths(
+    input,
+    new Set(["called-parent"]),
+  );
+
+  assert.deepEqual(retained, documentNode("root", [
+    documentNode("called-parent"),
+  ]));
+});
+
+test("returns null when no current tree node matches a called document", () => {
+  const input = documentNode("root", [documentNode("child")]);
+
+  assert.equal(retainDocumentTreePaths(input, new Set()), null);
+  assert.equal(
+    retainDocumentTreePaths(input, new Set(["removed-document"])),
+    null,
+  );
+});
+
+test("retains every parent path when one document id is referenced more than once", () => {
+  const input = documentNode("root", [
+    documentNode("first-parent", [documentNode("shared")]),
+    documentNode("second-parent", [documentNode("shared")]),
+  ]);
+
+  const retained = retainDocumentTreePaths(input, new Set(["shared"]));
+
+  assert.deepEqual(
+    retained?.children.map((child) => [
+      child.id,
+      child.children[0]?.id,
+    ]),
+    [
+      ["first-parent", "shared"],
+      ["second-parent", "shared"],
+    ],
   );
 });

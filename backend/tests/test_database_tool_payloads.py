@@ -115,7 +115,7 @@ def _result_payload(result: object) -> dict[str, object]:
 
 def test_only_database_tools_create_full_payload_snapshots() -> None:
     repository = InMemoryDatabaseToolPayloadRepository()
-    service = DatabaseToolPayloadService(repository)
+    DatabaseToolPayloadService(repository)
 
 
 def test_disabled_capture_still_expires_previous_payloads() -> None:

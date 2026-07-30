@@ -18,7 +18,6 @@ def test_workspace_and_projects_share_in_memory_backing_and_legacy_fields() -> N
         name="业务工作空间",
         workspace_type="业务系统",
         root_path="/workspace/company",
-        enabled=True,
     )
     projects.create_project(
         project_id="project-a",
@@ -38,7 +37,6 @@ def test_workspace_and_projects_share_in_memory_backing_and_legacy_fields() -> N
     assert project.agents_path == "/workspace/company/docs/backend/order/AGENTS.md"
     assert project.workspace_name == "业务工作空间"
     assert project.workspace_root_path == "/workspace/company"
-    assert project.workspace_enabled is True
 
     workspaces.update_workspace(
         "workspace-a",
@@ -50,9 +48,6 @@ def test_workspace_and_projects_share_in_memory_backing_and_legacy_fields() -> N
     assert updated.project_type == "交通物流"
     assert updated.agents_path == "/workspace/new-company/docs/backend/order/AGENTS.md"
     assert updated.workspace_name == "新工作空间名"
-
-    workspaces.set_workspace_enabled("workspace-a", enabled=False)
-    assert projects.get_project("project-a").workspace_enabled is False
 
     workspaces.delete_workspace("workspace-a")
     assert projects.list_projects() == []
@@ -66,7 +61,6 @@ def test_workspace_rejects_duplicate_root_path() -> None:
         workspace_id="workspace-a",
         name="A",
         root_path="/workspace/shared",
-        enabled=True,
     )
 
     with pytest.raises(WorkspaceRepositoryError, match="工作空间目录已经添加"):
@@ -74,5 +68,4 @@ def test_workspace_rejects_duplicate_root_path() -> None:
             workspace_id="workspace-b",
             name="B",
             root_path="/workspace/shared",
-            enabled=True,
         )

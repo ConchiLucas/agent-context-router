@@ -31,7 +31,6 @@ class ProjectSummary(BaseModel):
     error: str | None
     workspace_id: str | None = None
     workspace_name: str | None = None
-    workspace_enabled: bool = True
     relative_path: str = "."
     document_relative_path: str = "AGENTS.md"
 

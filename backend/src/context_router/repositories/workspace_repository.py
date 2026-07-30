@@ -21,7 +21,6 @@ class WorkspaceRecord:
     name: str
     workspace_type: str
     root_path: str
-    enabled: bool
     created_at: datetime
     updated_at: datetime
 
@@ -54,7 +53,6 @@ class WorkspaceStore(Protocol):
         name: str,
         workspace_type: str,
         root_path: str,
-        enabled: bool,
     ) -> None: ...
 
     def update_workspace(
@@ -65,8 +63,6 @@ class WorkspaceStore(Protocol):
         workspace_type: str,
         root_path: str,
     ) -> None: ...
-
-    def set_workspace_enabled(self, workspace_id: str, *, enabled: bool) -> None: ...
 
     def delete_workspace(self, workspace_id: str) -> None: ...
 
@@ -95,7 +91,6 @@ class InMemoryWorkspaceRepository:
         name: str,
         workspace_type: str = DEFAULT_WORKSPACE_TYPE,
         root_path: str,
-        enabled: bool,
     ) -> None:
         if workspace_id in self._state.workspaces:
             raise WorkspaceRepositoryError("工作空间已存在")
@@ -107,7 +102,6 @@ class InMemoryWorkspaceRepository:
             name=name,
             workspace_type=workspace_type,
             root_path=root_path,
-            enabled=enabled,
             created_at=now,
             updated_at=now,
         )
@@ -150,20 +144,6 @@ class InMemoryWorkspaceRepository:
                 updated_at=now,
             )
 
-    def set_workspace_enabled(self, workspace_id: str, *, enabled: bool) -> None:
-        record = self.get_workspace(workspace_id)
-        self._state.workspaces[workspace_id] = replace(
-            record,
-            enabled=enabled,
-            updated_at=datetime.now(UTC),
-        )
-        for project_id, project in list(self._state.projects.items()):
-            if getattr(project, "workspace_id", None) == workspace_id:
-                self._state.projects[project_id] = replace(
-                    project,
-                    workspace_enabled=enabled,
-                )
-
     def delete_workspace(self, workspace_id: str) -> None:
         self.get_workspace(workspace_id)
         remaining_projects = {
@@ -185,7 +165,7 @@ class PostgresWorkspaceRepository:
             with psycopg.connect(self._database_url) as connection:
                 rows = connection.execute(
                     """
-                    SELECT id, name, workspace_type, root_path, enabled, created_at, updated_at
+                    SELECT id, name, workspace_type, root_path, created_at, updated_at
                     FROM workspaces
                     ORDER BY created_at, id
                     """
@@ -199,7 +179,7 @@ class PostgresWorkspaceRepository:
             with psycopg.connect(self._database_url) as connection:
                 row = connection.execute(
                     """
-                    SELECT id, name, workspace_type, root_path, enabled, created_at, updated_at
+                    SELECT id, name, workspace_type, root_path, created_at, updated_at
                     FROM workspaces
                     WHERE id = %s
                     """,
@@ -218,17 +198,16 @@ class PostgresWorkspaceRepository:
         name: str,
         workspace_type: str = DEFAULT_WORKSPACE_TYPE,
         root_path: str,
-        enabled: bool,
     ) -> None:
         try:
             with psycopg.connect(self._database_url) as connection:
                 connection.execute(
                     """
                     INSERT INTO workspaces
-                        (id, name, workspace_type, root_path, enabled)
-                    VALUES (%s, %s, %s, %s, %s)
+                        (id, name, workspace_type, root_path)
+                    VALUES (%s, %s, %s, %s)
                     """,
-                    (workspace_id, name, workspace_type, root_path, enabled),
+                    (workspace_id, name, workspace_type, root_path),
                 )
         except psycopg.errors.UniqueViolation as exc:
             raise WorkspaceRepositoryError("这个工作空间目录已经添加") from exc
@@ -288,24 +267,6 @@ class PostgresWorkspaceRepository:
         except psycopg.Error as exc:
             raise WorkspaceRepositoryError("工作空间配置更新失败") from exc
 
-    def set_workspace_enabled(self, workspace_id: str, *, enabled: bool) -> None:
-        try:
-            with psycopg.connect(self._database_url) as connection:
-                cursor = connection.execute(
-                    """
-                    UPDATE workspaces
-                    SET enabled = %s, updated_at = CURRENT_TIMESTAMP
-                    WHERE id = %s
-                    """,
-                    (enabled, workspace_id),
-                )
-                if cursor.rowcount == 0:
-                    raise WorkspaceRepositoryError("工作空间不存在")
-        except WorkspaceRepositoryError:
-            raise
-        except psycopg.Error as exc:
-            raise WorkspaceRepositoryError("工作空间启停状态更新失败") from exc
-
     def delete_workspace(self, workspace_id: str) -> None:
         try:
             with psycopg.connect(self._database_url) as connection:
@@ -327,7 +288,6 @@ class PostgresWorkspaceRepository:
             name=str(row[1]),
             workspace_type=str(row[2]),
             root_path=str(row[3]),
-            enabled=bool(row[4]),
-            created_at=row[5],  # type: ignore[arg-type]
-            updated_at=row[6],  # type: ignore[arg-type]
+            created_at=row[4],  # type: ignore[arg-type]
+            updated_at=row[5],  # type: ignore[arg-type]
         )

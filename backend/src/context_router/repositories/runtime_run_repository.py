@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from threading import RLock
 from typing import Protocol
 from uuid import uuid4
@@ -103,7 +103,7 @@ class InMemoryRuntimeRunRepository:
             decision_reason=decision_reason,
             exit_code=None,
             error_message=None,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             started_at=None,
             finished_at=None,
         )
@@ -115,7 +115,7 @@ class InMemoryRuntimeRunRepository:
         return self._update(
             run_id,
             status="running",
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
         )
 
     def finish_run(
@@ -131,7 +131,7 @@ class InMemoryRuntimeRunRepository:
             status=status,
             exit_code=exit_code,
             error_message=error_message,
-            finished_at=datetime.now(timezone.utc),
+            finished_at=datetime.now(UTC),
         )
 
     def get_run(self, run_id: str) -> RuntimeRunRecord | None:
@@ -140,9 +140,7 @@ class InMemoryRuntimeRunRepository:
 
     def list_runs(self, project_id: str, limit: int = 20) -> list[RuntimeRunRecord]:
         with self._lock:
-            records = [
-                item for item in self._runs.values() if item.project_id == project_id
-            ]
+            records = [item for item in self._runs.values() if item.project_id == project_id]
         return sorted(records, key=lambda item: item.created_at, reverse=True)[:limit]
 
     def reconcile_interrupted(self) -> int:

@@ -58,7 +58,6 @@ class ProjectState:
     workspace_id: str | None = None
     workspace_name: str | None = None
     workspace_root_path: str | None = None
-    workspace_enabled: bool = True
     relative_path: str = "."
     document_relative_path: str = "AGENTS.md"
     project_kind: str = "backend"
@@ -90,7 +89,6 @@ class WorkspaceState:
     workspace_type: str
     root_path: str
     resolved_root_path: Path
-    enabled: bool
     document_entry_path: Path | None = None
     document_cache: DocumentCache | None = None
     document_error: str | None = None
@@ -107,7 +105,6 @@ class WorkspaceSnapshot:
     workspace_type: str
     root_path: str
     resolved_root_path: Path
-    enabled: bool
     cache: DocumentCache
     document_cache: DocumentCache | None
     projects: tuple[ProjectSnapshot, ...]
@@ -268,8 +265,6 @@ class ProjectRegistry:
 
     @classmethod
     def _snapshot(cls, project: ProjectState) -> ProjectSnapshot:
-        if not project.workspace_enabled:
-            raise ProjectRegistryError("工作空间已停用")
         if project.cache is None:
             if project.error:
                 raise ProjectRegistryError(f"项目映射不可用：{project.error}")
@@ -302,7 +297,6 @@ class ProjectRegistry:
             error=project.error,
             workspace_id=project.workspace_id,
             workspace_name=project.workspace_name,
-            workspace_enabled=project.workspace_enabled,
             relative_path=project.relative_path,
             document_relative_path=project.document_relative_path,
         )
@@ -313,8 +307,6 @@ class ProjectRegistry:
         *,
         active_project: ProjectState | None = None,
     ) -> WorkspaceSnapshot:
-        if not workspace.enabled:
-            raise ProjectRegistryError("工作空间已停用")
         if workspace.document_error:
             raise ProjectRegistryError(
                 f"工作空间映射不可用：工作空间文档入口：{workspace.document_error}"
@@ -355,7 +347,6 @@ class ProjectRegistry:
             workspace_type=workspace.workspace_type,
             root_path=workspace.root_path,
             resolved_root_path=workspace.resolved_root_path,
-            enabled=workspace.enabled,
             cache=cache,
             document_cache=workspace.document_cache,
             projects=project_snapshots,
@@ -569,7 +560,6 @@ class ProjectRegistry:
             workspace_type=workspace.workspace_type,
             root_path=workspace.root_path,
             resolved_root_path=resolved_root or self._resolve_cwd(workspace.root_path),
-            enabled=workspace.enabled,
             document_entry_path=(current.document_entry_path if current is not None else None),
             document_cache=current.document_cache if current is not None else None,
             document_error=current.document_error if current is not None else None,
@@ -703,7 +693,6 @@ class ProjectRegistry:
                 workspace_id=workspace.id,
                 workspace_name=workspace.name,
                 workspace_root_path=workspace.root_path,
-                workspace_enabled=workspace.enabled,
                 relative_path=normalized_relative,
                 document_relative_path=normalized_document_relative,
                 project_kind=normalized_kind,
@@ -780,7 +769,6 @@ class ProjectRegistry:
             project.resolved_project_root = resolved_project_root
             project.workspace_name = workspace.name
             project.workspace_root_path = workspace.root_path
-            project.workspace_enabled = workspace.enabled
             project.relative_path = normalized_relative
             project.document_relative_path = normalized_document_relative
             project.project_kind = normalized_kind
@@ -804,7 +792,6 @@ class ProjectRegistry:
                 name=project.workspace_name or "",
                 workspace_type=project.project_type,
                 root_path=root_path,
-                enabled=project.workspace_enabled,
                 created_at=datetime.now(UTC),
                 updated_at=datetime.now(UTC),
             )
@@ -905,7 +892,6 @@ class ProjectRegistry:
                 project.workspace_name = workspace.name
                 project.project_type = workspace.workspace_type
                 project.workspace_root_path = workspace.root_path
-                project.workspace_enabled = workspace.enabled
                 if failures:
                     project.error = failures.get(project.id)
                     continue
@@ -997,7 +983,6 @@ class ProjectRegistry:
                 workspace_id=getattr(record, "workspace_id", None),
                 workspace_name=getattr(record, "workspace_name", None),
                 workspace_root_path=getattr(record, "workspace_root_path", None),
-                workspace_enabled=getattr(record, "workspace_enabled", True),
                 relative_path=getattr(record, "relative_path", "."),
                 document_relative_path=normalized_document_relative,
                 project_kind=getattr(record, "project_kind", "backend"),
@@ -1019,7 +1004,6 @@ class ProjectRegistry:
                         ),
                         root_path=workspace_root_path,
                         resolved_root_path=self._resolve_cwd(workspace_root_path),
-                        enabled=getattr(record, "workspace_enabled", True),
                         refreshed_at=refreshed_at,
                         error=error,
                     ),
@@ -1131,9 +1115,6 @@ class ProjectRegistry:
                 workspace_id=resolved_workspace_id,
                 workspace_name=resolved_workspace_name,
                 workspace_root_path=resolved_workspace_root,
-                workspace_enabled=(
-                    persisted_record.workspace_enabled if persisted_record is not None else True
-                ),
                 relative_path=(
                     persisted_record.relative_path if persisted_record is not None else "."
                 ),
@@ -1153,7 +1134,6 @@ class ProjectRegistry:
                 workspace_type=project.project_type,
                 root_path=resolved_workspace_root,
                 resolved_root_path=self._resolve_cwd(resolved_workspace_root),
-                enabled=project.workspace_enabled,
                 document_entry_path=resolved_path,
                 document_cache=resolved_workspace_document,
                 document_entry_checked=True,
@@ -1255,7 +1235,6 @@ class ProjectRegistry:
                 project.workspace_id = persisted_record.workspace_id
                 project.workspace_name = persisted_record.workspace_name
                 project.workspace_root_path = persisted_record.workspace_root_path
-                project.workspace_enabled = persisted_record.workspace_enabled
                 project.relative_path = persisted_record.relative_path
                 project.document_relative_path = persisted_record.document_relative_path
                 project.resolved_project_root = resolve_project_root(
@@ -1310,8 +1289,6 @@ class ProjectRegistry:
             workspace = self._workspaces.get(workspace_id)
             if workspace is None:
                 raise ProjectRegistryError("工作空间不存在")
-            if not workspace.enabled:
-                raise ProjectRegistryError("工作空间已停用")
             projects = [
                 project
                 for project in self._projects.values()
@@ -1488,7 +1465,7 @@ class ProjectRegistry:
                 key=lambda item: len(item.resolved_project_root.parts),
             )
             # Ownership is selected before availability is checked. A disabled or
-            # broken nested project must not fall back to an enabled parent project,
+            # broken nested project must not fall back to a valid parent project,
             # because the parent can have different document and database grants.
             return self._snapshot(project)
 

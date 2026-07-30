@@ -308,10 +308,10 @@ def test_migration_and_postgres_repository_support_search_and_atomic_replacement
         }
         connection.execute(
             """
-            INSERT INTO workspaces
-                (id, name, workspace_type, root_path, enabled)
-            VALUES (%s, 'Search Workspace', '公司项目', '/search', true)
-            """,
+                INSERT INTO workspaces
+                    (id, name, workspace_type, root_path)
+                VALUES (%s, 'Search Workspace', '公司项目', '/search')
+                """,
             (_PROJECT_ID,),
         )
         connection.execute(

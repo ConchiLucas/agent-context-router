@@ -7,7 +7,6 @@ from context_router.schemas.data_sources import WorkspaceDataSourceSummary
 from context_router.schemas.projects import DocumentDetail, DocumentTreeNode
 from context_router.schemas.workspaces import (
     WorkspaceCreate,
-    WorkspaceEnabledUpdate,
     WorkspaceProjectCreate,
     WorkspaceProjectSummary,
     WorkspaceProjectUpdate,
@@ -53,7 +52,6 @@ def create_workspace(payload: WorkspaceCreate, request: Request) -> WorkspaceSum
             name=payload.name,
             workspace_type=payload.workspace_type,
             root_path=payload.root_path,
-            enabled=payload.enabled,
         )
     except WorkspaceManagementError as exc:
         raise _http_error(exc) from exc
@@ -79,21 +77,6 @@ def update_workspace(
             name=payload.name,
             workspace_type=payload.workspace_type,
             root_path=payload.root_path,
-        )
-    except WorkspaceManagementError as exc:
-        raise _http_error(exc) from exc
-
-
-@router.patch("/{workspace_id}/enabled", response_model=WorkspaceSummary)
-def set_workspace_enabled(
-    workspace_id: str,
-    payload: WorkspaceEnabledUpdate,
-    request: Request,
-) -> WorkspaceSummary:
-    try:
-        return _service(request).set_workspace_enabled(
-            workspace_id,
-            enabled=payload.enabled,
         )
     except WorkspaceManagementError as exc:
         raise _http_error(exc) from exc

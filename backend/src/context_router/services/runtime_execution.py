@@ -142,9 +142,7 @@ class RuntimeExecutionService:
         log_directory.mkdir(parents=True, exist_ok=True, mode=0o750)
         log_path = log_directory / "execution.log"
         normalized_changed_files = [
-            item.strip().replace("\\", "/")[:1000]
-            for item in (changed_files or [])
-            if item.strip()
+            item.strip().replace("\\", "/")[:1000] for item in (changed_files or []) if item.strip()
         ][:500]
         try:
             run = self._run_repository.create_run(
@@ -204,7 +202,10 @@ class RuntimeExecutionService:
                 stream.seek(0, os.SEEK_END)
                 size = stream.tell()
                 truncated = size > max_bytes
-                stream.seek(-max_bytes if truncated else 0, os.SEEK_END if truncated else os.SEEK_SET)
+                stream.seek(
+                    -max_bytes if truncated else 0,
+                    os.SEEK_END if truncated else os.SEEK_SET,
+                )
                 content = stream.read().decode("utf-8", errors="replace")
         except OSError as exc:
             raise RuntimeExecutionError("runtime_log_unavailable", "运行日志读取失败") from exc
@@ -308,14 +309,12 @@ class RuntimeExecutionService:
                 self._active_projects.discard(run.project_id)
 
     def _resolve_project_paths(self, project: object) -> tuple[Path, str, Path, str]:
-        agents_path = PurePosixPath(str(getattr(project, "agents_path")))
-        document_path = PurePosixPath(str(getattr(project, "document_relative_path")))
+        agents_path = PurePosixPath(str(project.agents_path))
+        document_path = PurePosixPath(str(project.document_relative_path))
         workspace_host_path = agents_path
         for _ in document_path.parts:
             workspace_host_path = workspace_host_path.parent
-        project_host_path = workspace_host_path.joinpath(
-            PurePosixPath(str(getattr(project, "relative_path")))
-        )
+        project_host_path = workspace_host_path.joinpath(PurePosixPath(str(project.relative_path)))
         mounted_host_root = PurePosixPath(self._settings.workspace_host_root.as_posix())
         try:
             workspace_relative = workspace_host_path.relative_to(mounted_host_root)
@@ -325,12 +324,8 @@ class RuntimeExecutionService:
                 "project_path_unavailable",
                 "项目源码不在 Runtime Runner 的工作区挂载范围内",
             ) from exc
-        workspace_root = self._settings.workspace_container_root.joinpath(
-            *workspace_relative.parts
-        )
-        project_root = self._settings.workspace_container_root.joinpath(
-            *project_relative.parts
-        )
+        workspace_root = self._settings.workspace_container_root.joinpath(*workspace_relative.parts)
+        project_root = self._settings.workspace_container_root.joinpath(*project_relative.parts)
         if not project_root.is_dir():
             raise RuntimeExecutionError(
                 "project_path_unavailable",

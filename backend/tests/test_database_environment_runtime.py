@@ -72,7 +72,7 @@ def test_in_memory_environment_mapping_defaults_to_uat_and_switches_atomically()
         )
 
 
-def test_environment_mapping_cannot_be_enabled_without_mappings() -> None:
+def test_environment_mapping_requires_at_least_one_mapping() -> None:
     repository = InMemoryDatabaseEnvironmentRepository()
 
     with pytest.raises(
@@ -86,7 +86,7 @@ def test_environment_mapping_cannot_be_enabled_without_mappings() -> None:
         )
 
 
-def test_environment_json_can_enable_and_switch_without_database_mappings() -> None:
+def test_environment_json_can_switch_without_database_mappings() -> None:
     repository = InMemoryDatabaseEnvironmentRepository()
 
     saved = repository.replace_environment_payloads(
@@ -98,7 +98,6 @@ def test_environment_json_can_enable_and_switch_without_database_mappings() -> N
         },
     )
 
-    assert saved.enabled is False
     assert saved.active_environment == "uat"
     assert saved.revision == 1
     assert repository.list_mappings("workspace-1") == []
@@ -109,7 +108,6 @@ def test_environment_json_can_enable_and_switch_without_database_mappings() -> N
         expected_revision=1,
     )
 
-    assert switched.enabled is False
     assert switched.active_environment == "test"
     assert switched.revision == 2
 
@@ -213,13 +211,13 @@ class _EnvironmentRepository:
         self,
         *,
         revision: int,
-        enabled: bool = True,
+        mappings_configured: bool = True,
         active_environment: str = "uat",
         selector_configured: bool = True,
         payloads_configured: bool = False,
     ) -> None:
         self.revision = revision
-        self.enabled = enabled
+        self.mappings_configured = mappings_configured
         self.active_environment = active_environment
         self.selector_configured = selector_configured
         self.payloads_configured = payloads_configured
@@ -228,10 +226,13 @@ class _EnvironmentRepository:
         assert workspace_id == "workspace-1"
         return DatabaseEnvironmentConfigRecord(
             workspace_id=workspace_id,
-            enabled=self.enabled,
             active_environment=self.active_environment,  # type: ignore[arg-type]
             revision=self.revision,
         )
+
+    def list_mappings(self, workspace_id: str) -> list[DatabaseEnvironmentMappingWrite]:
+        assert workspace_id == "workspace-1"
+        return [_mapping()] if self.mappings_configured else []
 
     def get_environment_snapshot(
         self,
@@ -294,14 +295,12 @@ class _DataSourceRepository:
         return ResolvedProjectDatabase(
             link_id=link_id,
             workspace_id="workspace-1",
-            workspace_enabled=True,
             project_id="project-1",
             project_name="c12-admin",
             project_kind="backend",
             mcp_alias=f"c12_admin_{remote_name}",
             alias=remote_name,
             purpose="项目数据源访问",
-            link_enabled=True,
             readonly=True,
             allowed_schemas=[],
             max_rows=1000,
@@ -324,7 +323,6 @@ class _DataSourceRepository:
             engine="mysql",
             data_source_description="",
             connection_config={},
-            source_enabled=True,
             config_version=1,
             source_created_at=now,
             source_updated_at=now,
@@ -346,7 +344,7 @@ def _access_service(
     task_revision: int,
     current_revision: int,
     task_scope: str = "workspace",
-    environment_mapping_enabled: bool = True,
+    mappings_configured: bool = True,
     task_environments: dict[int, tuple[str, str | None]] | None = None,
     active_environment: str = "uat",
     selector_configured: bool = True,
@@ -378,7 +376,7 @@ def _access_service(
         connector_registry=connectors,
         database_environment_repository=_EnvironmentRepository(  # type: ignore[arg-type]
             revision=current_revision,
-            enabled=environment_mapping_enabled,
+            mappings_configured=mappings_configured,
             active_environment=active_environment,
             selector_configured=selector_configured,
             payloads_configured=payloads_configured,
@@ -407,7 +405,7 @@ def test_environment_revision_change_rejects_stale_task_before_database_lookup()
     assert captured.value.code == "environment_changed"
 
 
-def test_legacy_project_task_is_rejected_after_workspace_environment_is_enabled() -> None:
+def test_legacy_project_task_is_rejected_after_workspace_environment_is_configured() -> None:
     with pytest.raises(DatabaseAccessError) as captured:
         _access_service(
             task_revision=1,
@@ -425,7 +423,7 @@ def test_json_only_environment_keeps_legacy_workspace_database_aliases() -> None
     resolved = _access_service(
         task_revision=1,
         current_revision=1,
-        environment_mapping_enabled=False,
+        mappings_configured=False,
     ).resolve(
         task_id=41,
         mcp_alias="c12_admin_db",

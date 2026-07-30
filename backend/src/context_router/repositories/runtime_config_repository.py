@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from threading import RLock
 from typing import Protocol
 from uuid import uuid4
@@ -59,7 +59,7 @@ class InMemoryRuntimeConfigRepository:
         mode: str,
         files: list[RuntimeConfigFileDraft],
     ) -> list[RuntimeConfigFileRecord]:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         records = [
             RuntimeConfigFileRecord(
                 id=uuid4().hex,

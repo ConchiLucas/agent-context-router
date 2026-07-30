@@ -40,7 +40,6 @@ class ProjectRecord:
     workspace_name: str | None = None
     workspace_type: str | None = None
     workspace_root_path: str | None = None
-    workspace_enabled: bool = True
 
 
 class ProjectStore(Protocol):
@@ -188,7 +187,6 @@ class InMemoryProjectRepository:
             workspace_name=workspace.name,
             workspace_type=workspace.workspace_type,
             workspace_root_path=workspace.root_path,
-            workspace_enabled=workspace.enabled,
         )
 
     def update_project(
@@ -266,7 +264,6 @@ class InMemoryProjectRepository:
             workspace_name=workspace.name,
             workspace_type=workspace.workspace_type,
             workspace_root_path=workspace.root_path,
-            workspace_enabled=workspace.enabled,
         )
 
     def delete_project(self, project_id: str) -> None:
@@ -296,7 +293,6 @@ class InMemoryProjectRepository:
                     name=name,
                     workspace_type=project_type,
                     root_path=derive_workspace_root_path(agents_path),
-                    enabled=True,
                 )
                 workspace = self._workspace_repository.get_workspace(project_id)
             except WorkspaceRepositoryError as exc:
@@ -321,7 +317,6 @@ class InMemoryProjectRepository:
             workspace_name=workspace.name,
             workspace_type=workspace.workspace_type,
             workspace_root_path=workspace.root_path,
-            workspace_enabled=workspace.enabled,
         )
 
     def _ensure_unique_location(
@@ -359,7 +354,7 @@ class PostgresProjectRepository:
         p.id, p.name, p.project_type, p.project_kind, p.workspace_id,
         p.relative_path, p.document_relative_path, p.agents_path,
         p.created_at, p.updated_at,
-        w.name, w.workspace_type, w.root_path, w.enabled
+        w.name, w.workspace_type, w.root_path
     """
 
     def __init__(self, database_url: str) -> None:
@@ -418,8 +413,8 @@ class PostgresProjectRepository:
                         connection.execute(
                             """
                             INSERT INTO workspaces
-                                (id, name, workspace_type, root_path, enabled)
-                            VALUES (%s, %s, %s, %s, true)
+                                (id, name, workspace_type, root_path)
+                            VALUES (%s, %s, %s, %s)
                             """,
                             (
                                 resolved_workspace_id,
@@ -625,7 +620,7 @@ class PostgresProjectRepository:
     ) -> tuple[object, ...] | None:
         return connection.execute(
             """
-            SELECT id, name, workspace_type, root_path, enabled, created_at, updated_at
+            SELECT id, name, workspace_type, root_path, created_at, updated_at
             FROM workspaces
             WHERE id = %s
             """,
@@ -692,5 +687,4 @@ class PostgresProjectRepository:
             workspace_name=str(row[10]),
             workspace_type=str(row[11]),
             workspace_root_path=str(row[12]),
-            workspace_enabled=bool(row[13]),
         )

@@ -28,9 +28,6 @@ class Settings(BaseSettings):
     runtime_execution_enabled: bool = False
     runtime_execution_timeout_seconds: int = Field(default=1_800, ge=10, le=7_200)
     runtime_docker_socket: Path = Path("/var/run/docker.sock")
-    default_project_name: str | None = None
-    default_agents_path: str | None = None
-
     model_config = SettingsConfigDict(
         env_prefix="CONTEXT_ROUTER_",
         extra="ignore",

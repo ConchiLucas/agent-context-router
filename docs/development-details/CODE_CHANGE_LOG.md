@@ -11,6 +11,16 @@
 
 ## 记录
 
+### 2026-07-30
+
+- 新增 migration `20260730_0022`，删除 `workspaces`、`data_sources`、`project_databases` 和 `workspace_database_environment_configs` 的 `enabled` 列，并重建不含启停字段的查询索引。后端实体、仓库、Schema、API 与前端类型同步移除启停逻辑和状态展示。
+- 环境配置不再用布尔字段区分 JSON-only 与数据库映射模式：存在数据库映射记录时按 TEST/UAT 目标解析；仅存在环境 JSON 时继续使用原有 Workspace alias，兼容单环境项目。
+- 工作空间、项目、数据源、项目授权、环境映射/JSON和运行配置前端统一改为只读；移除 CRUD、启停、同步、刷新、保存、物化和执行交互，保留查看、筛选、复制、密码按需 reveal、连接测试、MCP 接入测试、文档/调用历史及 Runtime Runner 记录查看。
+- 新增前端 `browser-api-policy.ts`，`lib/api.ts` 和 `runtime-api.ts` 在请求发出前拒绝浏览器配置写操作。安全 `POST` 白名单仅包含数据源连接测试、密码 reveal、MCP integration test 与 Workspace prepare preview。
+- 新增后端 `BrowserReadOnlyMiddleware`，对携带任意 `Origin` 或浏览器 Fetch Metadata 的请求执行同一方法白名单，并对配置写请求返回 `405 management_read_only`；不携带这些浏览器请求头的本机 AI/运维调用方继续使用既有受校验管理 API。
+- 运行配置前端改为加载快速/完整部署文件和已有运行记录、详情、日志；后端写 API 与 Runtime Runner MCP 保留，供 AI/运维执行正确的物化、更新和副作用处理。
+- 移除启动阶段由默认项目环境变量自动声明根项目的兼容逻辑及对应 Settings 字段；Compose 不再声明或自动创建 Workspace/Project。本次无数据库 migration。
+
 ### 2026-07-27
 
 - 新增 migration `20260727_0016` 和 `document_projects.document_relative_path`，从旧 `agents_path` 相对 Workspace 根目录的位置回填，并增加 Workspace 内文档入口唯一约束。`agents_path` 保留为绝对路径兼容镜像。

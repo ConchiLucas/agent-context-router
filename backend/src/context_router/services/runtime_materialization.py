@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path, PurePosixPath
 from uuid import uuid4
@@ -51,10 +51,8 @@ class RuntimeMaterializationService:
         if total_bytes > MAX_MATERIALIZED_BYTES:
             raise RuntimeMaterializationError("部署文件总大小不能超过 20 MB")
 
-        created_at = datetime.now(timezone.utc)
-        snapshot_id = (
-            created_at.strftime("%Y%m%dT%H%M%S%fZ") + "-" + uuid4().hex[:8]
-        )
+        created_at = datetime.now(UTC)
+        snapshot_id = created_at.strftime("%Y%m%dT%H%M%S%fZ") + "-" + uuid4().hex[:8]
         mode_root = self._runtime_root / "projects" / project_id / mode
         temporary_path = mode_root / f".{snapshot_id}.tmp"
         target_path = mode_root / snapshot_id

@@ -65,7 +65,6 @@ class WorkspaceManagementService:
         name: str,
         workspace_type: str,
         root_path: str,
-        enabled: bool,
     ) -> WorkspaceSummary:
         normalized_name = name.strip()
         normalized_type = workspace_type.strip()
@@ -81,7 +80,6 @@ class WorkspaceManagementService:
                 name=normalized_name,
                 workspace_type=normalized_type,
                 root_path=normalized_root,
-                enabled=enabled,
             )
             record = self._workspace_repository.get_workspace(workspace_id)
         except WorkspaceRepositoryError as exc:
@@ -125,23 +123,6 @@ class WorkspaceManagementService:
             raise WorkspaceManagementError(str(exc)) from exc
         self._project_registry.apply_workspace_record(updated)
         return self._workspace_summary(updated)
-
-    def set_workspace_enabled(
-        self,
-        workspace_id: str,
-        *,
-        enabled: bool,
-    ) -> WorkspaceSummary:
-        try:
-            self._workspace_repository.set_workspace_enabled(
-                workspace_id,
-                enabled=enabled,
-            )
-            record = self._workspace_repository.get_workspace(workspace_id)
-        except WorkspaceRepositoryError as exc:
-            raise WorkspaceManagementError(str(exc)) from exc
-        self._project_registry.apply_workspace_record(record)
-        return self._workspace_summary(record)
 
     def delete_workspace(self, workspace_id: str) -> None:
         self._workspace_record(workspace_id)
@@ -241,11 +222,10 @@ class WorkspaceManagementService:
             raise WorkspaceManagementError(str(exc)) from exc
 
     def data_source_summary(self, workspace_id: str) -> WorkspaceDataSourceSummary:
-        workspace = self._workspace_record(workspace_id)
+        self._workspace_record(workspace_id)
         try:
             record = self._data_source_repository.get_workspace_data_source_summary(
                 workspace_id,
-                workspace_enabled=workspace.enabled,
             )
         except DataSourceRepositoryError as exc:
             raise WorkspaceManagementError(str(exc)) from exc
@@ -267,7 +247,6 @@ class WorkspaceManagementService:
         try:
             data_summary = self._data_source_repository.get_workspace_data_source_summary(
                 record.id,
-                workspace_enabled=record.enabled,
             )
             source_count = data_summary.source_count
             database_count = data_summary.database_count
@@ -279,7 +258,6 @@ class WorkspaceManagementService:
             name=record.name,
             workspace_type=record.workspace_type,
             root_path=record.root_path,
-            enabled=record.enabled,
             project_count=len(projects),
             frontend_project_count=sum(project.project_kind == "frontend" for project in projects),
             backend_project_count=sum(project.project_kind == "backend" for project in projects),
@@ -301,7 +279,6 @@ class WorkspaceManagementService:
             name=project.name,
             workspace_id=project.workspace_id or "",
             workspace_name=project.workspace_name or "",
-            workspace_enabled=project.workspace_enabled,
             project_type=project.project_type,
             project_kind=project.project_kind,
             relative_path=project.relative_path,

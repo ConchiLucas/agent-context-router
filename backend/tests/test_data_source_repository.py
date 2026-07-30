@@ -20,7 +20,6 @@ def _source(source_id: str, name: str) -> DataSourceRecord:
         engine="postgresql",
         description="",
         connection_config={"host": "localhost", "username": "reader"},
-        enabled=True,
         config_version=3,
         database_count=0,
         project_count=0,
@@ -69,7 +68,6 @@ def _link(
         alias="订单主库",
         mcp_alias=mcp_alias,
         purpose="查询订单",
-        enabled=True,
         readonly=True,
         allowed_schemas=["public"],
         max_rows=500,
@@ -150,9 +148,7 @@ def test_generates_stable_workspace_aliases_and_resolves_current_state() -> None
     assert resolved.database_metadata == {"owner": "application"}
     assert resolved.data_source_id == source_a.id
     assert resolved.connection_config == {"host": "localhost", "username": "reader"}
-    assert resolved.source_enabled is True
     assert resolved.database_available is True
-    assert resolved.link_enabled is True
     assert resolved.readonly is True
     assert resolved.allowed_schemas == ["public"]
     assert resolved.config_version == 3

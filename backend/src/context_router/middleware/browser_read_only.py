@@ -1,0 +1,91 @@
+from __future__ import annotations
+
+import re
+
+from starlette.datastructures import Headers
+from starlette.responses import JSONResponse
+from starlette.types import ASGIApp, Receive, Scope, Send
+
+_READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
+def _safe_browser_post_patterns(api_prefix: str) -> tuple[re.Pattern[str], ...]:
+    prefix = re.escape(api_prefix.rstrip("/"))
+    return (
+        re.compile(rf"^{prefix}/data-sources/[^/]+/reveal-password$"),
+        re.compile(rf"^{prefix}/data-sources/[^/]+/test$"),
+        re.compile(rf"^{prefix}/mcp/integration/tests$"),
+        re.compile(rf"^{prefix}/workspaces/[^/]+/prepare-preview$"),
+    )
+
+
+def browser_request_allowed(
+    *,
+    method: str,
+    path: str,
+    api_prefix: str,
+) -> bool:
+    normalized_method = method.upper()
+    if normalized_method in _READ_METHODS:
+        return True
+    if normalized_method != "POST":
+        return False
+    return any(pattern.fullmatch(path) for pattern in _safe_browser_post_patterns(api_prefix))
+
+
+class BrowserReadOnlyMiddleware:
+    """Keep the browser management surface read-only.
+
+    Browsers identify themselves through Origin or Fetch Metadata headers.
+    Local AI and operations clients without those browser headers can continue
+    to use the validated command endpoints. Browser requests are limited to
+    reads plus an explicit diagnostic/read-sensitive POST allowlist.
+    """
+
+    def __init__(
+        self,
+        app: ASGIApp,
+        *,
+        api_prefix: str,
+    ) -> None:
+        self._app = app
+        self._api_prefix = api_prefix
+
+    async def __call__(
+        self,
+        scope: Scope,
+        receive: Receive,
+        send: Send,
+    ) -> None:
+        if scope["type"] != "http":
+            await self._app(scope, receive, send)
+            return
+
+        headers = Headers(scope=scope)
+        is_browser_request = any(
+            headers.get(name) is not None for name in ("origin", "sec-fetch-mode", "sec-fetch-site")
+        )
+        method = str(scope.get("method", "GET"))
+        path = str(scope.get("path", ""))
+        if (
+            is_browser_request
+            and path.startswith(self._api_prefix.rstrip("/") + "/")
+            and not browser_request_allowed(
+                method=method,
+                path=path,
+                api_prefix=self._api_prefix,
+            )
+        ):
+            response = JSONResponse(
+                status_code=405,
+                content={
+                    "detail": (
+                        "management_read_only: 管理界面只提供查看；"
+                        "配置变更请由本机 AI 或运维命令执行"
+                    )
+                },
+            )
+            await response(scope, receive, send)
+            return
+
+        await self._app(scope, receive, send)

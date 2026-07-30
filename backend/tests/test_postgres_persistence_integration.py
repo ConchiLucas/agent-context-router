@@ -44,7 +44,7 @@ _REVISION_0014 = "20260726_0014"
 _REVISION_0015 = "20260726_0015"
 _REVISION_0016 = "20260727_0016"
 _REVISION_0020 = "20260730_0020"
-_REVISION_0021 = "20260730_0021"
+_REVISION_0022 = "20260730_0022"
 
 _PROJECT_A = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 _PROJECT_B = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -199,11 +199,12 @@ def test_migration_and_postgres_repositories_preserve_legacy_data(
         )
 
     command.upgrade(alembic_config, "head")
-    assert _current_revision(database_url) == _REVISION_0021
+    assert _current_revision(database_url) == _REVISION_0022
     assert _aliases(database_url) == aliases
     _assert_legacy_rows_survive(database_url)
     _assert_legacy_projects_migrated_to_workspaces(database_url)
     _assert_workspace_alias_unique_index(database_url, aliases[_LINK_A])
+    _assert_business_enabled_columns_removed(database_url)
 
     data_sources = PostgresDataSourceRepository(database_url)
     resolved = data_sources.get_workspace_database_by_alias(
@@ -489,7 +490,6 @@ def test_postgres_workspace_and_project_repositories_keep_legacy_fields_in_sync(
         name="业务工作空间",
         workspace_type="业务系统",
         root_path="/workspace/company",
-        enabled=True,
     )
     projects.create_project(
         project_id=project_id,
@@ -529,9 +529,6 @@ def test_postgres_workspace_and_project_repositories_keep_legacy_fields_in_sync(
     assert moved.agents_path == "/workspace/moved/docs/backend/root/AGENTS.md"
     assert moved.project_kind == "backend"
 
-    workspaces.set_workspace_enabled(workspace_id, enabled=False)
-    assert projects.get_project(project_id).workspace_enabled is False
-
     workspaces.delete_workspace(workspace_id)
     assert projects.list_projects(workspace_id) == []
 
@@ -549,7 +546,6 @@ def test_postgres_environment_json_can_switch_without_database_mappings(
         name="JSON 环境工作空间",
         workspace_type="业务系统",
         root_path="/workspace/environment-json",
-        enabled=True,
     )
     environments = {
         "test": {"rocketmq": {"namespace": "test"}},
@@ -564,7 +560,6 @@ def test_postgres_environment_json_can_switch_without_database_mappings(
     )
     snapshot = repository.get_environment_snapshot(workspace_id)
 
-    assert saved.enabled is False
     assert saved.active_environment == "uat"
     assert snapshot.selector_configured is True
     assert snapshot.payloads.configured is True
@@ -665,7 +660,6 @@ def test_workspace_task_repository_persists_scope_and_stable_snapshots(
         name="任务工作空间",
         workspace_type="业务系统",
         root_path=workspace_root,
-        enabled=True,
     )
     projects.create_project(
         project_id=project_id,
@@ -850,7 +844,7 @@ def test_task_environment_selection_migration_backfills_existing_environment_tas
         ).fetchall()
 
     command.upgrade(alembic_config, "head")
-    assert _current_revision(database_url) == _REVISION_0021
+    assert _current_revision(database_url) == _REVISION_0022
     tasks = PostgresTaskRepository(database_url)
     environment_task = tasks.get_task(int(rows[0][0]))
     environmentless_task = tasks.get_task(int(rows[1][0]))
@@ -905,8 +899,8 @@ def _assert_task_project_snapshot_survives_project_deletion(database_url: str) -
     with psycopg.connect(database_url) as connection:
         connection.execute(
             """INSERT INTO workspaces
-            (id, name, workspace_type, root_path, enabled)
-            VALUES (%s, 'Disposable Workspace', '公司项目', '/disposable', true)""",
+            (id, name, workspace_type, root_path)
+            VALUES (%s, 'Disposable Workspace', '公司项目', '/disposable')""",
             (project_id,),
         )
         connection.execute(
@@ -1292,6 +1286,28 @@ def _current_revision(database_url: str) -> str:
         ).fetchone()
     assert row is not None
     return str(row[0])
+
+
+def _assert_business_enabled_columns_removed(database_url: str) -> None:
+    with psycopg.connect(database_url) as connection:
+        rows = connection.execute(
+            """
+            SELECT table_name
+            FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND column_name = 'enabled'
+              AND table_name = ANY(%s)
+            """,
+            (
+                [
+                    "workspaces",
+                    "data_sources",
+                    "project_databases",
+                    "workspace_database_environment_configs",
+                ],
+            ),
+        ).fetchall()
+    assert rows == []
 
 
 def _drop_temporary_database(admin_url: str, database_name: str) -> None:

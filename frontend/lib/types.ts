@@ -21,7 +21,6 @@ export interface ProjectSummary {
   document_relative_path: string;
   workspace_id?: string | null;
   workspace_name?: string | null;
-  workspace_enabled?: boolean | null;
   relative_path?: string | null;
   node_count: number;
   data_source_count?: number;
@@ -37,7 +36,6 @@ export interface WorkspaceSummary {
   name: string;
   workspace_type: string;
   root_path: string;
-  enabled: boolean;
   project_count: number;
   error_project_count: number;
   data_source_count: number;
@@ -45,33 +43,6 @@ export interface WorkspaceSummary {
   database_authorization_count: number;
   created_at?: string;
   updated_at: string;
-}
-
-export interface WorkspaceCreate {
-  name: string;
-  workspace_type: string;
-  root_path: string;
-  enabled?: boolean;
-}
-
-export interface WorkspaceUpdate {
-  name: string;
-  workspace_type: string;
-  root_path: string;
-}
-
-export interface WorkspaceProjectCreate {
-  name: string;
-  relative_path: string;
-  document_relative_path: string;
-  project_kind: ProjectKind;
-}
-
-export interface WorkspaceProjectUpdate {
-  name: string;
-  relative_path: string;
-  document_relative_path: string;
-  project_kind: ProjectKind;
 }
 
 export interface WorkspaceDataSourceAssignment {
@@ -85,12 +56,9 @@ export interface WorkspaceDataSourceAssignment {
   mcp_alias: string | null;
   alias: string;
   purpose: string;
-  workspace_enabled: boolean;
-  link_enabled: boolean;
   readonly: boolean;
   database_available: boolean;
   database_system: boolean;
-  source_enabled: boolean;
   status: string;
 }
 
@@ -99,7 +67,6 @@ export interface WorkspaceDataSourceUsage {
   name: string;
   category: string;
   engine: DatabaseEngine;
-  enabled: boolean;
   database_count: number;
   assignment_count: number;
   project_count: number;
@@ -108,7 +75,6 @@ export interface WorkspaceDataSourceUsage {
 
 export interface WorkspaceDataSourceSummary {
   workspace_id: string;
-  workspace_enabled: boolean;
   source_count: number;
   database_count: number;
   assignment_count: number;
@@ -126,9 +92,7 @@ export interface DatabaseEnvironmentTarget {
   data_source_name: string;
   engine: DatabaseEngine;
   available: boolean;
-  source_enabled: boolean;
   readonly: boolean;
-  link_enabled: boolean;
   system_database: boolean;
   mcp_alias?: string | null;
 }
@@ -165,29 +129,10 @@ export interface WorkspaceDatabaseEnvironmentSummary {
 export interface WorkspaceDatabaseEnvironmentMappings {
   workspace_id: string;
   configured: boolean;
-  enabled: boolean;
   active_environment: DatabaseEnvironment | null;
   revision: number;
   summary: WorkspaceDatabaseEnvironmentSummary;
   projects: WorkspaceDatabaseEnvironmentProject[];
-}
-
-export interface WorkspaceDatabaseEnvironmentMappingUpdate {
-  id?: string;
-  project_id: string;
-  logical_name: string;
-  mcp_alias: string;
-  targets: Record<DatabaseEnvironment, string | null>;
-}
-
-export interface WorkspaceDatabaseEnvironmentMappingsUpdate {
-  expected_revision: number;
-  mappings: WorkspaceDatabaseEnvironmentMappingUpdate[];
-}
-
-export interface WorkspaceDatabaseEnvironmentSwitch {
-  environment: DatabaseEnvironment;
-  expected_revision: number;
 }
 
 export interface WorkspaceEnvironmentConfig {
@@ -197,11 +142,6 @@ export interface WorkspaceEnvironmentConfig {
   revision: number;
   environments: Record<DatabaseEnvironment, EnvironmentJsonObject>;
   active_config: EnvironmentJsonObject | null;
-}
-
-export interface WorkspaceEnvironmentConfigUpdate {
-  expected_revision: number;
-  environments: Record<DatabaseEnvironment, EnvironmentJsonObject>;
 }
 
 export interface DocumentTreeNode {
@@ -234,17 +174,13 @@ export type DatabaseEngine =
   | "oracle"
   | "clickhouse";
 
-export interface DataSourcePayload {
+export interface DataSourceSummary {
+  id: string;
   name: string;
   category: string;
   engine: DatabaseEngine;
   description: string;
   connection_config: Record<string, string | number | boolean>;
-  enabled: boolean;
-}
-
-export interface DataSourceSummary extends DataSourcePayload {
-  id: string;
   config_version: number;
   database_count: number;
   project_count: number;
@@ -272,46 +208,21 @@ export interface DataSourceConnectionTestResult {
   message: string;
 }
 
-export interface DataSourceDatabasePayload {
+export interface DataSourceDatabaseSummary {
+  id: string;
+  data_source_id: string;
   remote_name: string;
   display_name: string;
   namespace_type: "database" | "schema" | "file";
   available: boolean;
   system_database: boolean;
   metadata: Record<string, string | number | boolean>;
-}
-
-export interface DataSourceDatabaseSummary
-  extends DataSourceDatabasePayload {
-  id: string;
-  data_source_id: string;
   project_count: number;
   created_at: string;
   updated_at: string;
 }
 
-export interface DataSourceDatabaseSyncResult {
-  discovered_count: number;
-  created_count: number;
-  unavailable_count: number;
-  databases: DataSourceDatabaseSummary[];
-}
-
-export interface ProjectDatabaseLinkPayload {
-  project_id: string;
-  alias: string;
-  mcp_alias?: string | null;
-  purpose: string;
-  enabled: boolean;
-  readonly: boolean;
-  allowed_schemas: string[];
-  max_rows: number;
-  max_result_bytes: number;
-  query_timeout_ms: number;
-}
-
-export interface ProjectDatabaseLinkSummary
-  extends ProjectDatabaseLinkPayload {
+export interface ProjectDatabaseLinkSummary {
   id: string;
   project_name: string;
   database_id: string;
@@ -319,6 +230,15 @@ export interface ProjectDatabaseLinkSummary
   data_source_id: string;
   data_source_name: string;
   engine: DatabaseEngine;
+  project_id: string;
+  alias: string;
+  mcp_alias?: string | null;
+  purpose: string;
+  readonly: boolean;
+  allowed_schemas: string[];
+  max_rows: number;
+  max_result_bytes: number;
+  query_timeout_ms: number;
   created_at: string;
   updated_at: string;
 }
@@ -339,7 +259,6 @@ export interface ProjectDataSourceOption {
   name: string;
   category: string;
   engine: DatabaseEngine;
-  enabled: boolean;
   databases: ProjectDatabaseOption[];
 }
 

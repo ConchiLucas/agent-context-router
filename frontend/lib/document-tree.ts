@@ -102,3 +102,21 @@ export function resolveDocumentPath(
 
   return path;
 }
+
+export function retainDocumentTreePaths(
+  node: DocumentTreeNode,
+  includedDocumentIds: ReadonlySet<string>,
+): DocumentTreeNode | null {
+  const children = node.children
+    .map((child) => retainDocumentTreePaths(child, includedDocumentIds))
+    .filter((child): child is DocumentTreeNode => child !== null);
+
+  if (!includedDocumentIds.has(node.id) && children.length === 0) {
+    return null;
+  }
+
+  return {
+    ...node,
+    children,
+  };
+}

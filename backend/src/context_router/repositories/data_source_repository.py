@@ -114,7 +114,6 @@ class DataSourceRecord:
     engine: str
     description: str
     connection_config: dict[str, Any]
-    enabled: bool
     config_version: int
     database_count: int
     project_count: int
@@ -150,7 +149,6 @@ class ProjectDatabaseLinkRecord:
     alias: str
     mcp_alias: str | None
     purpose: str
-    enabled: bool
     readonly: bool
     allowed_schemas: list[str]
     max_rows: int
@@ -159,7 +157,6 @@ class ProjectDatabaseLinkRecord:
     created_at: datetime
     updated_at: datetime
     workspace_id: str | None = None
-    workspace_enabled: bool = True
     project_kind: str = "backend"
 
 
@@ -167,14 +164,12 @@ class ProjectDatabaseLinkRecord:
 class ResolvedProjectDatabase:
     link_id: str
     workspace_id: str
-    workspace_enabled: bool
     project_id: str
     project_name: str
     project_kind: str
     mcp_alias: str
     alias: str
     purpose: str
-    link_enabled: bool
     readonly: bool
     allowed_schemas: list[str]
     max_rows: int
@@ -197,7 +192,6 @@ class ResolvedProjectDatabase:
     engine: str
     data_source_description: str
     connection_config: dict[str, Any]
-    source_enabled: bool
     config_version: int
     source_created_at: datetime
     source_updated_at: datetime
@@ -205,11 +199,8 @@ class ResolvedProjectDatabase:
 
 WorkspaceDataSourceAssignmentStatus = Literal[
     "active",
-    "workspace_disabled",
-    "source_disabled",
     "database_unavailable",
     "system_database",
-    "link_disabled",
     "not_readonly",
     "missing_mcp_alias",
 ]
@@ -228,12 +219,9 @@ class WorkspaceDataSourceAssignmentRecord:
     alias: str
     purpose: str
     status: WorkspaceDataSourceAssignmentStatus
-    workspace_enabled: bool
-    link_enabled: bool
     readonly: bool
     database_available: bool
     database_system: bool
-    source_enabled: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -242,7 +230,6 @@ class WorkspaceDataSourceUsageRecord:
     name: str
     category: str
     engine: str
-    enabled: bool
     database_count: int
     assignment_count: int
     project_count: int
@@ -252,7 +239,6 @@ class WorkspaceDataSourceUsageRecord:
 @dataclass(frozen=True, slots=True)
 class WorkspaceDataSourceSummaryRecord:
     workspace_id: str
-    workspace_enabled: bool
     source_count: int
     database_count: int
     assignment_count: int
@@ -266,29 +252,19 @@ class _WorkspaceDataSourceIdentity:
     name: str
     category: str
     engine: str
-    enabled: bool
 
 
 def _workspace_assignment_status(
     *,
-    workspace_enabled: bool,
-    source_enabled: bool,
     database_available: bool,
     database_system: bool,
-    link_enabled: bool,
     readonly: bool,
     mcp_alias: str | None,
 ) -> WorkspaceDataSourceAssignmentStatus:
-    if not workspace_enabled:
-        return "workspace_disabled"
-    if not source_enabled:
-        return "source_disabled"
     if not database_available:
         return "database_unavailable"
     if database_system:
         return "system_database"
-    if not link_enabled:
-        return "link_disabled"
     if not readonly:
         return "not_readonly"
     if mcp_alias is None:
@@ -299,7 +275,6 @@ def _workspace_assignment_status(
 def _workspace_data_source_summary(
     *,
     workspace_id: str,
-    workspace_enabled: bool,
     assignments: list[tuple[_WorkspaceDataSourceIdentity, WorkspaceDataSourceAssignmentRecord]],
 ) -> WorkspaceDataSourceSummaryRecord:
     grouped: dict[
@@ -327,7 +302,6 @@ def _workspace_data_source_summary(
                 name=source.name,
                 category=source.category,
                 engine=source.engine,
-                enabled=source.enabled,
                 database_count=len({item.database_id for item in source_assignments}),
                 assignment_count=len(source_assignments),
                 project_count=len({item.project_id for item in source_assignments}),
@@ -338,7 +312,6 @@ def _workspace_data_source_summary(
 
     return WorkspaceDataSourceSummaryRecord(
         workspace_id=workspace_id,
-        workspace_enabled=workspace_enabled,
         source_count=len(sources),
         database_count=len(
             {
@@ -390,8 +363,6 @@ class DataSourceStore(Protocol):
     def get_workspace_data_source_summary(
         self,
         workspace_id: str,
-        *,
-        workspace_enabled: bool | None = None,
     ) -> WorkspaceDataSourceSummaryRecord: ...
 
 
@@ -419,7 +390,6 @@ class InMemoryDataSourceRepository:
                 link,
                 project_name=project.name,
                 workspace_id=project.workspace_id,
-                workspace_enabled=project.workspace_enabled,
                 project_kind=project.project_kind,
             )
         self._links = synchronized
@@ -705,16 +675,9 @@ class InMemoryDataSourceRepository:
     def get_workspace_data_source_summary(
         self,
         workspace_id: str,
-        *,
-        workspace_enabled: bool | None = None,
     ) -> WorkspaceDataSourceSummaryRecord:
         self._synchronize_project_links()
         links = [link for link in self._links.values() if _link_workspace_id(link) == workspace_id]
-        resolved_workspace_enabled = (
-            workspace_enabled
-            if workspace_enabled is not None
-            else all(link.workspace_enabled for link in links)
-        )
 
         assignments: list[
             tuple[_WorkspaceDataSourceIdentity, WorkspaceDataSourceAssignmentRecord]
@@ -738,20 +701,14 @@ class InMemoryDataSourceRepository:
                 alias=link.alias,
                 purpose=link.purpose,
                 status=_workspace_assignment_status(
-                    workspace_enabled=resolved_workspace_enabled,
-                    source_enabled=source.enabled,
                     database_available=database.available,
                     database_system=database.system_database,
-                    link_enabled=link.enabled,
                     readonly=link.readonly,
                     mcp_alias=link.mcp_alias,
                 ),
-                workspace_enabled=resolved_workspace_enabled,
-                link_enabled=link.enabled,
                 readonly=link.readonly,
                 database_available=database.available,
                 database_system=database.system_database,
-                source_enabled=source.enabled,
             )
             assignments.append(
                 (
@@ -760,14 +717,12 @@ class InMemoryDataSourceRepository:
                         name=source.name,
                         category=source.category,
                         engine=source.engine,
-                        enabled=source.enabled,
                     ),
                     assignment,
                 )
             )
         return _workspace_data_source_summary(
             workspace_id=workspace_id,
-            workspace_enabled=resolved_workspace_enabled,
             assignments=assignments,
         )
 
@@ -804,14 +759,12 @@ class InMemoryDataSourceRepository:
         return ResolvedProjectDatabase(
             link_id=link.id,
             workspace_id=_link_workspace_id(link),
-            workspace_enabled=link.workspace_enabled,
             project_id=link.project_id,
             project_name=link.project_name,
             project_kind=link.project_kind,
             mcp_alias=link.mcp_alias,
             alias=link.alias,
             purpose=link.purpose,
-            link_enabled=link.enabled,
             readonly=link.readonly,
             allowed_schemas=list(link.allowed_schemas),
             max_rows=link.max_rows,
@@ -834,7 +787,6 @@ class InMemoryDataSourceRepository:
             engine=source.engine,
             data_source_description=source.description,
             connection_config=dict(source.connection_config),
-            source_enabled=source.enabled,
             config_version=source.config_version,
             source_created_at=source.created_at,
             source_updated_at=source.updated_at,
@@ -867,9 +819,9 @@ class PostgresDataSourceRepository:
             with psycopg.connect(self._database_url) as connection:
                 connection.execute(
                     """INSERT INTO data_sources
-                    (id, name, category, engine, description, connection_config, enabled,
+                    (id, name, category, engine, description, connection_config,
                      config_version)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)""",
                     (
                         record.id,
                         record.name,
@@ -877,7 +829,6 @@ class PostgresDataSourceRepository:
                         record.engine,
                         record.description,
                         Jsonb(record.connection_config),
-                        record.enabled,
                         record.config_version,
                     ),
                 )
@@ -891,7 +842,7 @@ class PostgresDataSourceRepository:
             with psycopg.connect(self._database_url) as connection:
                 cursor = connection.execute(
                     """UPDATE data_sources SET name=%s, category=%s, engine=%s,
-                    description=%s, connection_config=%s, enabled=%s, config_version=%s,
+                    description=%s, connection_config=%s, config_version=%s,
                     updated_at=CURRENT_TIMESTAMP WHERE id=%s""",
                     (
                         record.name,
@@ -899,7 +850,6 @@ class PostgresDataSourceRepository:
                         record.engine,
                         record.description,
                         Jsonb(record.connection_config),
-                        record.enabled,
                         record.config_version,
                         record.id,
                     ),
@@ -1107,24 +1057,21 @@ class PostgresDataSourceRepository:
     def get_workspace_data_source_summary(
         self,
         workspace_id: str,
-        *,
-        workspace_enabled: bool | None = None,
     ) -> WorkspaceDataSourceSummaryRecord:
         with self._connect("工作空间数据源汇总读取失败") as connection:
             workspace_row = connection.execute(
-                "SELECT enabled FROM workspaces WHERE id=%s",
+                "SELECT 1 FROM workspaces WHERE id=%s",
                 (workspace_id,),
             ).fetchone()
             if workspace_row is None:
                 raise DataSourceRepositoryError("工作空间不存在")
-            resolved_workspace_enabled = bool(workspace_row[0])
             rows = connection.execute(
                 """SELECT
-                source.id, source.name, source.category, source.engine, source.enabled,
+                source.id, source.name, source.category, source.engine,
                 link.id, project.id, project.name, project.project_kind,
                 database.id, database.remote_name, database.display_name,
                 database.available, database.system_database,
-                link.mcp_alias, link.alias, link.purpose, link.enabled, link.readonly
+                link.mcp_alias, link.alias, link.purpose, link.readonly
                 FROM document_projects AS project
                 JOIN project_databases AS link ON link.project_id=project.id
                 JOIN data_source_databases AS database ON database.id=link.database_id
@@ -1144,44 +1091,35 @@ class PostgresDataSourceRepository:
                 name=str(row[1]),
                 category=str(row[2]),
                 engine=str(row[3]),
-                enabled=bool(row[4]),
             )
-            database_available = bool(row[12])
-            database_system = bool(row[13])
-            mcp_alias = str(row[14]) if row[14] is not None else None
-            link_enabled = bool(row[17])
-            readonly = bool(row[18])
+            database_available = bool(row[11])
+            database_system = bool(row[12])
+            mcp_alias = str(row[13]) if row[13] is not None else None
+            readonly = bool(row[16])
             assignment = WorkspaceDataSourceAssignmentRecord(
-                link_id=str(row[5]),
-                project_id=str(row[6]),
-                project_name=str(row[7]),
-                project_kind=str(row[8]),
-                database_id=str(row[9]),
-                database_name=str(row[10]),
-                database_display_name=str(row[11]),
+                link_id=str(row[4]),
+                project_id=str(row[5]),
+                project_name=str(row[6]),
+                project_kind=str(row[7]),
+                database_id=str(row[8]),
+                database_name=str(row[9]),
+                database_display_name=str(row[10]),
                 mcp_alias=mcp_alias,
-                alias=str(row[15]),
-                purpose=str(row[16]),
+                alias=str(row[14]),
+                purpose=str(row[15]),
                 status=_workspace_assignment_status(
-                    workspace_enabled=resolved_workspace_enabled,
-                    source_enabled=source.enabled,
                     database_available=database_available,
                     database_system=database_system,
-                    link_enabled=link_enabled,
                     readonly=readonly,
                     mcp_alias=mcp_alias,
                 ),
-                workspace_enabled=resolved_workspace_enabled,
-                link_enabled=link_enabled,
                 readonly=readonly,
                 database_available=database_available,
                 database_system=database_system,
-                source_enabled=source.enabled,
             )
             assignments.append((source, assignment))
         return _workspace_data_source_summary(
             workspace_id=workspace_id,
-            workspace_enabled=resolved_workspace_enabled,
             assignments=assignments,
         )
 
@@ -1212,9 +1150,9 @@ class PostgresDataSourceRepository:
                 connection.execute(
                     """INSERT INTO project_databases
                     (id, workspace_id, project_id, database_id, alias, mcp_alias,
-                     purpose, enabled, readonly,
+                     purpose, readonly,
                      allowed_schemas, max_rows, max_result_bytes, query_timeout_ms)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                     (
                         saved_record.id,
                         workspace_id,
@@ -1223,7 +1161,6 @@ class PostgresDataSourceRepository:
                         saved_record.alias,
                         saved_record.mcp_alias,
                         saved_record.purpose,
-                        saved_record.enabled,
                         saved_record.readonly,
                         Jsonb(saved_record.allowed_schemas),
                         saved_record.max_rows,
@@ -1267,7 +1204,7 @@ class PostgresDataSourceRepository:
                 )
                 cursor = connection.execute(
                     """UPDATE project_databases SET workspace_id=%s, project_id=%s,
-                    alias=%s, mcp_alias=%s, purpose=%s, enabled=%s, readonly=%s,
+                    alias=%s, mcp_alias=%s, purpose=%s, readonly=%s,
                     allowed_schemas=%s, max_rows=%s, max_result_bytes=%s, query_timeout_ms=%s,
                     updated_at=CURRENT_TIMESTAMP WHERE id=%s""",
                     (
@@ -1276,7 +1213,6 @@ class PostgresDataSourceRepository:
                         saved_record.alias,
                         saved_record.mcp_alias,
                         saved_record.purpose,
-                        saved_record.enabled,
                         saved_record.readonly,
                         Jsonb(saved_record.allowed_schemas),
                         saved_record.max_rows,
@@ -1371,9 +1307,9 @@ class PostgresDataSourceRepository:
                     connection.execute(
                         """INSERT INTO project_databases
                         (id, workspace_id, project_id, database_id, alias, mcp_alias,
-                         purpose, enabled, readonly,
+                         purpose, readonly,
                          allowed_schemas, max_rows, max_result_bytes, query_timeout_ms)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                         ON CONFLICT (project_id, database_id) DO UPDATE SET
                           workspace_id=EXCLUDED.workspace_id,
                           mcp_alias=EXCLUDED.mcp_alias""",
@@ -1385,7 +1321,6 @@ class PostgresDataSourceRepository:
                             saved_record.alias,
                             saved_record.mcp_alias,
                             saved_record.purpose,
-                            saved_record.enabled,
                             saved_record.readonly,
                             Jsonb(saved_record.allowed_schemas),
                             saved_record.max_rows,
@@ -1458,7 +1393,7 @@ class PostgresDataSourceRepository:
     @staticmethod
     def _source_select() -> str:
         return """SELECT source.id, source.name, source.category, source.engine,
-        source.description, source.connection_config, source.enabled, source.config_version,
+        source.description, source.connection_config, source.config_version,
         COUNT(DISTINCT database.id), COUNT(DISTINCT link.project_id),
         source.created_at, source.updated_at
         FROM data_sources AS source
@@ -1478,10 +1413,9 @@ class PostgresDataSourceRepository:
     def _link_select() -> str:
         return """SELECT link.id, link.project_id, project.name, link.database_id,
         database.remote_name, source.id, source.name, source.engine, link.alias,
-        link.mcp_alias, link.purpose, link.enabled, link.readonly, link.allowed_schemas,
+        link.mcp_alias, link.purpose, link.readonly, link.allowed_schemas,
         link.max_rows, link.max_result_bytes, link.query_timeout_ms,
-        link.created_at, link.updated_at, link.workspace_id, workspace.enabled,
-        project.project_kind
+        link.created_at, link.updated_at, link.workspace_id, project.project_kind
         FROM project_databases AS link
         JOIN document_projects AS project ON project.id=link.project_id
         JOIN workspaces AS workspace ON workspace.id=link.workspace_id
@@ -1491,15 +1425,15 @@ class PostgresDataSourceRepository:
     @staticmethod
     def _resolved_select() -> str:
         return """SELECT
-        link.id, link.workspace_id, workspace.enabled, link.project_id,
+        link.id, link.workspace_id, link.project_id,
         project.name, project.project_kind, link.mcp_alias, link.alias, link.purpose,
-        link.enabled, link.readonly, link.allowed_schemas, link.max_rows,
+        link.readonly, link.allowed_schemas, link.max_rows,
         link.max_result_bytes, link.query_timeout_ms, link.created_at, link.updated_at,
         database.id, database.remote_name, database.display_name,
         database.namespace_type, database.available, database.system_database,
         database.metadata, database.created_at, database.updated_at,
         source.id, source.name, source.category, source.engine, source.description,
-        source.connection_config, source.enabled, source.config_version,
+        source.connection_config, source.config_version,
         source.created_at, source.updated_at
         FROM project_databases AS link
         JOIN document_projects AS project ON project.id=link.project_id
@@ -1516,12 +1450,11 @@ class PostgresDataSourceRepository:
             str(row[3]),
             str(row[4]),
             dict(row[5]),
-            bool(row[6]),
+            int(row[6]),
             int(row[7]),
             int(row[8]),
-            int(row[9]),
+            row[9],
             row[10],
-            row[11],
         )
 
     @staticmethod
@@ -1555,57 +1488,52 @@ class PostgresDataSourceRepository:
             str(row[9]) if row[9] is not None else None,
             str(row[10]),
             bool(row[11]),
-            bool(row[12]),
-            list(row[13]),
+            list(row[12]),
+            int(row[13]),
             int(row[14]),
             int(row[15]),
-            int(row[16]),
+            row[16],
             row[17],
-            row[18],
-            workspace_id=str(row[19]),
-            workspace_enabled=bool(row[20]),
-            project_kind=str(row[21]),
+            workspace_id=str(row[18]),
+            project_kind=str(row[19]),
         )
 
     @staticmethod
     def _resolved_record(row: tuple[object, ...]) -> ResolvedProjectDatabase:
-        if row[6] is None:
+        if row[5] is None:
             raise DataSourceRepositoryError("项目数据库尚未配置 MCP 别名")
         return ResolvedProjectDatabase(
             link_id=str(row[0]),
             workspace_id=str(row[1]),
-            workspace_enabled=bool(row[2]),
-            project_id=str(row[3]),
-            project_name=str(row[4]),
-            project_kind=str(row[5]),
-            mcp_alias=str(row[6]),
-            alias=str(row[7]),
-            purpose=str(row[8]),
-            link_enabled=bool(row[9]),
-            readonly=bool(row[10]),
-            allowed_schemas=list(row[11]),
-            max_rows=int(row[12]),
-            max_result_bytes=int(row[13]),
-            query_timeout_ms=int(row[14]),
-            link_created_at=row[15],
-            link_updated_at=row[16],
-            database_id=str(row[17]),
-            database_remote_name=str(row[18]),
-            database_display_name=str(row[19]),
-            namespace_type=str(row[20]),
-            database_available=bool(row[21]),
-            database_system=bool(row[22]),
-            database_metadata=dict(row[23]),
-            database_created_at=row[24],
-            database_updated_at=row[25],
-            data_source_id=str(row[26]),
-            data_source_name=str(row[27]),
-            data_source_category=str(row[28]),
-            engine=str(row[29]),
-            data_source_description=str(row[30]),
-            connection_config=dict(row[31]),
-            source_enabled=bool(row[32]),
-            config_version=int(row[33]),
-            source_created_at=row[34],
-            source_updated_at=row[35],
+            project_id=str(row[2]),
+            project_name=str(row[3]),
+            project_kind=str(row[4]),
+            mcp_alias=str(row[5]),
+            alias=str(row[6]),
+            purpose=str(row[7]),
+            readonly=bool(row[8]),
+            allowed_schemas=list(row[9]),
+            max_rows=int(row[10]),
+            max_result_bytes=int(row[11]),
+            query_timeout_ms=int(row[12]),
+            link_created_at=row[13],
+            link_updated_at=row[14],
+            database_id=str(row[15]),
+            database_remote_name=str(row[16]),
+            database_display_name=str(row[17]),
+            namespace_type=str(row[18]),
+            database_available=bool(row[19]),
+            database_system=bool(row[20]),
+            database_metadata=dict(row[21]),
+            database_created_at=row[22],
+            database_updated_at=row[23],
+            data_source_id=str(row[24]),
+            data_source_name=str(row[25]),
+            data_source_category=str(row[26]),
+            engine=str(row[27]),
+            data_source_description=str(row[28]),
+            connection_config=dict(row[29]),
+            config_version=int(row[30]),
+            source_created_at=row[31],
+            source_updated_at=row[32],
         )

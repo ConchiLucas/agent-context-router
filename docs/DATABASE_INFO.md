@@ -1,8 +1,10 @@
 # 数据库信息
 
-当前版本使用宿主机已有的 PostgreSQL 作为控制面数据库，持久化工作空间与项目配置、数据源管理配置、可选 TEST/UAT 数据库环境映射及通用环境 JSON、Workspace MCP task、文档读取顺序、数据库调用元数据，以及可重建的文档词法搜索索引。文档树和 Markdown 原文仍以磁盘与进程内缓存为真源，文档 MCP 完整出入参不会写入控制面数据库；两个数据库 MCP 工具会另存有界、可过期的请求与最终响应快照，供本机页面按需查看。
+当前版本使用宿主机已有的 PostgreSQL 作为控制面数据库，持久化工作空间与项目配置、数据源配置、可选 TEST/UAT 数据库环境映射及通用环境 JSON、Workspace MCP task、文档读取顺序、数据库调用元数据，以及可重建的文档词法搜索索引。文档树和 Markdown 原文仍以磁盘与进程内缓存为真源，文档 MCP 完整出入参不会写入控制面数据库；两个数据库 MCP 工具会另存有界、可过期的请求与最终响应快照，供本机页面按需查看。
 
-PostgreSQL 控制面数据库与 MCP 查询的业务数据库是两个概念。业务数据库目前可执行的 Connector 为 ClickHouse、PostgreSQL、MySQL 和 MariaDB；SQL Server、SQLite、Oracle 仍可维护配置，但能力接口会明确标记为不可搜索、不可查询。
+PostgreSQL 控制面数据库与 MCP 查询的业务数据库是两个概念。业务数据库目前可执行的 Connector 为 ClickHouse、PostgreSQL、MySQL 和 MariaDB；SQL Server、SQLite、Oracle 的配置仍可由本机 AI/运维 API 维护，但能力接口会明确标记为不可搜索、不可查询。
+
+浏览器页面只读取控制面数据。携带任意 `Origin` 或浏览器 Fetch Metadata 的请求只允许 `GET/HEAD/OPTIONS`，以及连接测试、密码按需查看、MCP 接入测试和 prepare 预览四类安全 `POST`；配置写请求由后端返回 `405 management_read_only`。不携带这些浏览器请求头的本机 AI/运维调用方仍可使用既有受 Schema、Service 和 Repository 校验的 API，避免直接写表而绕过环境 revision、文档缓存或 Connector 失效处理。
 
 ## 连接配置
 
@@ -21,18 +23,18 @@ docker compose exec backend uv run alembic upgrade head
 docker compose exec backend uv run alembic current
 ```
 
-当前 head 为 `20260730_0021`。若要验证 downgrade/upgrade，使用一次性测试数据库，不要在保存真实调用记录的控制面库上直接 downgrade：`0021 -> 0020` 会删除 task 的 `database_environment_selection`，失去显式任务环境与 Workspace 默认环境的持久化区分；`0020 -> 0019` 会删除 TEST/UAT 通用环境 JSON；`0019 -> 0018` 会删除 Workspace TEST/UAT 环境映射和 task 环境 revision；`0018 -> 0017` 会删除 Runtime Runner 异步执行记录；`0017 -> 0016` 会删除项目运行配置文件；`0016 -> 0015` 会删除独立的项目文档入口相对路径并恢复由兼容 `agents_path` 表达入口；更早版本还会依次删除 Workspace 文档派生索引、Project 类型和 Workspace task 快照、工作空间表、Project 文档搜索索引、数据库 payload、统一 MCP 工具链路、数据库调用历史和 MCP alias。
+当前 head 为 `20260730_0022`。若要验证 downgrade/upgrade，使用一次性测试数据库，不要在保存真实调用记录的控制面库上直接 downgrade：`0022 -> 0021` 会恢复已废弃的 Workspace、数据源、项目数据库授权和环境映射配置 `enabled` 字段；`0021 -> 0020` 会删除 task 的 `database_environment_selection`，失去显式任务环境与 Workspace 默认环境的持久化区分；`0020 -> 0019` 会删除 TEST/UAT 通用环境 JSON；`0019 -> 0018` 会删除 Workspace TEST/UAT 环境映射和 task 环境 revision；`0018 -> 0017` 会删除 Runtime Runner 异步执行记录；`0017 -> 0016` 会删除项目运行配置文件；`0016 -> 0015` 会删除独立的项目文档入口相对路径并恢复由兼容 `agents_path` 表达入口；更早版本还会依次删除 Workspace 文档派生索引、Project 类型和 Workspace task 快照、工作空间表、Project 文档搜索索引、数据库 payload、统一 MCP 工具链路、数据库调用历史和 MCP alias。
 
 ## 当前表
 
 | 表 | 用途 |
 | --- | --- |
-| `workspaces` | 保存顶层工作空间 ID、名称、类型、唯一绝对根目录、总启停状态和创建/更新时间 |
+| `workspaces` | 保存顶层工作空间 ID、名称、类型、唯一绝对根目录和创建/更新时间；记录存在即参与 cwd 匹配 |
 | `document_projects` | 保存稳定项目 ID、名称、`frontend/backend` 的 `project_kind`、所属 `workspace_id`、工作空间内分别唯一的源码 `relative_path` 与文档入口 `document_relative_path`、兼容 `project_type`/`agents_path` 和创建/更新时间；没有 Project enabled |
-| `data_sources` | 保存物理数据库连接、独立数据源分类、数据库类型、启停状态和连接参数；密码不进入列表 API，仅可由本机页面通过独立 no-store 接口按需读取 |
+| `data_sources` | 保存物理数据库连接、独立数据源分类、数据库类型和连接参数；密码不进入列表 API，仅可由本机页面通过独立 no-store 接口按需读取 |
 | `data_source_databases` | 保存每个物理连接下可供项目选择的实际库、schema 或 SQLite 文件清单 |
 | `project_databases` | 保存 `workspace_id`、具体项目与数据库的多对多关联、人类展示别名、Workspace 内大小写无关唯一的 `mcp_alias`、用途和只读/查询限制策略 |
-| `workspace_database_environment_configs` | 保存 Workspace 环境选择器、数据库映射是否启用、当前 `test/uat` 环境和单调递增 revision |
+| `workspace_database_environment_configs` | 保存 Workspace 环境选择器、当前 `test/uat` 环境和单调递增 revision；是否采用数据库环境映射由映射记录是否存在决定 |
 | `workspace_environment_payloads` | 按 Workspace 与 `test/uat` 以明文 JSONB 保存受大小/深度限制的 JSON 对象；可按明确业务需要包含地址和访问凭据，task 所选环境内容只随 prepare 返回给可信本机 MCP 调用方，严禁进入日志、开发文档、链路摘要或示例输出 |
 | `project_database_environment_mappings` | 保存 Project 逻辑数据库、跨环境稳定 `mcp_alias` 和 Workspace 归属 |
 | `project_database_environment_targets` | 把每条逻辑映射的 `test/uat` 目标绑定到既有 `project_databases` 授权；不复制连接和查询策略 |
@@ -67,17 +69,19 @@ task_id、tool_call_id 和 read_call_id 都由 PostgreSQL identity 自动生成�
 
 `20260728_0017` 增加项目快速/完整更新的运行配置文件，`20260728_0018` 增加 Runtime Runner 异步执行记录。`20260730_0019` 增加 Workspace 环境配置、逻辑数据库映射和 TEST/UAT 目标表，并给 `mcp_tasks` 增加环境及 revision 快照。迁移不会自动猜测或写入映射；未配置 Workspace 继续走原有 `project_databases` 解析链。
 
-`20260730_0020` 增加 `workspace_environment_payloads` JSONB 表。两条环境 JSON 引用同一 Workspace 环境选择器，可在没有数据库映射时独立启用选择器；此时 `workspace_database_environment_configs.enabled=false`，数据库继续使用原有 Workspace alias。只有保存数据库映射后 `enabled=true`，数据库才进入严格的环境目标解析。保存 JSON、保存数据库映射和切换环境共用 revision。迁移不自动读取 Nacos 或其他配置中心，也不复制任何凭据。
+`20260730_0020` 增加 `workspace_environment_payloads` JSONB 表。两条环境 JSON 引用同一 Workspace 环境选择器，可在没有数据库映射时独立建立选择器，此时数据库继续使用原有 Workspace alias；存在数据库映射记录后才进入严格的环境目标解析。保存 JSON、保存数据库映射和切换环境共用 revision。迁移不自动读取 Nacos 或其他配置中心，也不复制任何凭据。
 
 `20260730_0021` 为 `mcp_tasks` 增加 `database_environment_selection`。升级时，先把旧约束可能放行的半截环境/revision 快照归一为空，再把所有完整的既有环境 task 回填为 `workspace_default`；新 task 在省略 prepare 的 `environment` 参数时写入 `workspace_default`，显式选择 `test/uat` 时写入 `task_explicit`。数据库环境、revision 和选择模式必须同时为空或同时有效。
 
+`20260730_0022` 删除 `workspaces`、`data_sources`、`project_databases` 和 `workspace_database_environment_configs` 的 `enabled` 列，并把相关查询索引重建为不含启停字段的索引。当前状态模型中记录存在即生效；数据库是否可供 MCP 查询继续由数据库 `available/system_database`、授权 `readonly`、MCP 别名和 Connector 能力共同决定。
+
 数据库 payload 采集默认自动运行。请求和响应各限 1 MB、保留 7 天、硬上限 4 MB。保存的是已经过查询行数和结果字节预算处理、实际返回给 MCP 客户端的最终结构，不是 Connector 的原始无限结果。超出快照预算时优先按 `objects` 或 `rows` 保留前部元素并写入 `_capture` 截断标记；到期清理会删除 JSON 内容但保留 `expired` 状态。采集和清理都是 best-effort，失败不会改变原 MCP 调用结果。
 
-工作空间创建、编辑、类型调整、启停和删除写入 `workspaces`；项目在工作空间内创建、编辑和删除时写入 `document_projects`。源码根由 `workspaces.root_path + document_projects.relative_path` 定位，文档入口由 `workspaces.root_path + document_projects.document_relative_path` 定位；兼容 `agents_path` 和 `project_type` 仍由 Repository 同步维护，供旧 API 和旧代码路径平滑过渡。
+本机 AI/运维通过受校验 API 创建、编辑、调整类型、启停和删除工作空间时写入 `workspaces`；在工作空间内创建、编辑和删除项目时写入 `document_projects`。浏览器只读取这些记录。源码根由 `workspaces.root_path + document_projects.relative_path` 定位，文档入口由 `workspaces.root_path + document_projects.document_relative_path` 定位；兼容 `agents_path` 和 `project_type` 仍由 Repository 同步维护，供旧 API 和旧代码路径平滑过渡。
 
-数据源以全局物理连接为单位保存在 `data_sources`，拥有与工作空间类型完全独立的分类字段，未显式指定时默认归入“本机电脑”；一个连接可包含多个库。授权记录仍归属具体项目，项目通过“管理数据源”一次选择一个或多个连接下的多个库，并由 `project_databases` 持久化；但 alias 唯一约束和 MCP 解析范围都是 Workspace。工作空间汇总 API 只 JOIN 其项目的现有授权，按物理数据源/数据库去重并返回每条授权的当前状态，不复制授权或改变 MCP 策略。批量保存会在一个事务中替换指定项目的关联，同时校验同 Workspace 其他项目已经占用的 alias；保留仍被选中的既有查询策略，新关联使用默认只读限制。当前版本不加密本地连接参数，列表 API 会过滤所有口令；编辑时口令留空会保留原值，只有用户点击眼睛时才通过 `POST /api/data-sources/{id}/reveal-password` 按需读取，并明确禁止缓存响应。MySQL/MariaDB/PostgreSQL/ClickHouse 的数据库清单可从远端自动同步，已不存在或当前账号不可见的旧库只标记 `available=false`，不直接删除项目关联。ClickHouse 使用官方 `clickhouse-connect` HTTP/HTTPS Client；后端容器访问宿主机服务时 Host 使用 `host.docker.internal`。
+数据源以全局物理连接为单位保存在 `data_sources`，拥有与工作空间类型完全独立的分类字段，未显式指定时默认归入“本机电脑”；一个连接可包含多个库。授权记录仍归属具体项目，并由 `project_databases` 持久化；alias 唯一约束和 MCP 解析范围都是 Workspace。浏览器连接详情和项目数据源详情只读展示这些记录，实际维护由 AI/运维调用既有 API。工作空间汇总 API 只 JOIN 其项目的现有授权，按物理数据源/数据库去重并返回每条授权的当前状态，不复制授权或改变 MCP 策略。批量保存会在一个事务中替换指定项目的关联，同时校验同 Workspace 其他项目已经占用的 alias；保留仍被选中的既有查询策略，新关联使用默认只读限制。当前版本不加密本地连接参数，列表 API 会过滤所有口令；只有用户在只读详情点击眼睛时才通过 `POST /api/data-sources/{id}/reveal-password` 按需读取，并明确禁止缓存响应。MySQL/MariaDB/PostgreSQL/ClickHouse 的数据库清单可由 AI/运维从远端同步，已不存在或当前账号不可见的旧库只标记 `available=false`，不直接删除项目关联。ClickHouse 使用官方 `clickhouse-connect` HTTP/HTTPS Client；后端容器访问宿主机服务时 Host 使用 `host.docker.internal`。
 
-没有配置环境选择器的单环境 Workspace 继续使用 `task_id -> task.workspace_id/workspace_key -> Workspace 唯一 mcp_alias -> 所属 Project Link/Database/Source 当前状态与策略` 的旧解析链；省略 prepare 的 `environment` 参数保持旧行为，显式传入 `test/uat` 返回 `environment_not_configured`。配置选择器后，省略参数会把当前 Workspace 环境固化为 `workspace_default`，显式参数会把所选环境固化为 `task_explicit` 且不修改 Workspace 当前环境。只配置通用 JSON 时数据库仍使用 legacy alias；启用数据库映射后，同一稳定 alias 按 task 固化环境解析目标授权。两种选择模式的调用都先比对共享 revision，保存 JSON、保存映射或切换当前环境造成 revision 变化后返回 `environment_changed`，要求客户端重新 prepare。数据库链路始终重新校验当前工作空间、授权、连接和只读策略；只有工作空间、关联和数据源启用，数据库可用、非系统库且 `readonly=true` 的授权会进入数据库摘要。环境选择器启用后，历史 `scope='project'` task 的数据库调用同样必须重新 prepare。
+没有配置环境选择器的单环境 Workspace 继续使用 `task_id -> task.workspace_id/workspace_key -> Workspace 唯一 mcp_alias -> 所属 Project Link/Database/Source 当前状态与策略` 的旧解析链；省略 prepare 的 `environment` 参数保持旧行为，显式传入 `test/uat` 返回 `environment_not_configured`。配置选择器后，省略参数会把当前 Workspace 环境固化为 `workspace_default`，显式参数会把所选环境固化为 `task_explicit` 且不修改 Workspace 当前环境。只配置通用 JSON 时数据库仍使用 legacy alias；存在数据库映射记录后，同一稳定 alias 按 task 固化环境解析目标授权。两种选择模式的调用都先比对共享 revision，保存 JSON、保存映射或切换当前环境造成 revision 变化后返回 `environment_changed`，要求客户端重新 prepare。数据库链路始终重新校验当前工作空间、授权、连接和只读策略；数据库可用、非系统库、`readonly=true` 且存在 MCP 别名的授权才会进入数据库摘要。环境选择器配置后，历史 `scope='project'` task 的数据库调用同样必须重新 prepare。
 
 查询限制取项目关联值与服务硬上限的较小值。当前硬上限由以下环境变量控制：
 
@@ -92,4 +96,4 @@ CONTEXT_ROUTER_DATABASE_SCHEMA_RESULT_BYTES=1000000
 
 连接参数当前按本机单用户边界以明文 JSON 保存；列表 API、MCP 结果、调用历史和公开错误均不回显口令或驱动堆栈。数据库账号仍应使用只读账号，SQL AST 校验不能替代数据库权限。
 
-后端重启后先恢复工作空间，再按原项目 ID 恢复全部项目记录并从各自文档入口重建项目缓存，以当前缓存版本重建或确认词法索引；路径失效的项目保留配置并记录加载错误。工作空间是唯一运行时开关，停用后不能创建或继续使用 Workspace 上下文。cwd 路由按最长根路径选择 Workspace，再按源码 `relative_path` 的最深 Project 记录活动项目，不使用 docs 入口目录判断；文档导航树遵循真实根的显式层级或使用合成根，search/read 和数据库授权仍覆盖整个 Workspace。搜索只读取与各项目当前缓存 index_version 一致的记录，索引缺失、失败或过期时返回明确错误，不使用内存扫描兜底。控制面数据库不可用时，默认配置仍可作为临时内存数据运行，但新增工作空间、项目和数据源配置无法跨重启保存，MCP prepare/search/read、Workspace MCP JSON 和调用记录会返回明确错误。
+后端重启后先恢复工作空间，再按原项目 ID 恢复全部项目记录并从各自文档入口重建项目缓存，以当前缓存版本重建或确认词法索引；不会从环境变量自动创建默认 Workspace/Project。路径失效的项目保留配置并记录加载错误。工作空间没有运行时启停开关，记录存在即参与 cwd 路由；路由按最长根路径选择 Workspace，再按源码 `relative_path` 的最深 Project 记录活动项目，不使用 docs 入口目录判断。文档导航树遵循真实根的显式层级或使用合成根，search/read 和数据库授权仍覆盖整个 Workspace。搜索只读取与各项目当前缓存 index_version 一致的记录，索引缺失、失败或过期时返回明确错误，不使用内存扫描兜底。控制面数据库不可用时不会自动创建默认配置，MCP prepare/search/read、Workspace MCP JSON 和调用记录会返回明确错误。

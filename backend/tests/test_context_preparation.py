@@ -35,7 +35,6 @@ class FakeDatabaseAccessService:
     ) -> DatabaseEnvironmentConfigRecord:
         return DatabaseEnvironmentConfigRecord(
             workspace_id=workspace_id,
-            enabled=True,
             active_environment="uat",
             revision=8,
         )

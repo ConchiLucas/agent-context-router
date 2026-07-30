@@ -5,20 +5,16 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
 } from "react";
-import type {
-  FormEvent,
-  PointerEvent as ReactPointerEvent,
-} from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 
 import { DocumentTree } from "@/components/document-tree";
 import { MarkdownViewer } from "@/components/markdown-viewer";
 import { McpIntegrationPanel } from "@/components/mcp-integration-panel";
 import {
-  createWorkspaceProject,
-  deleteWorkspaceProject,
   getProjectDataSourceOptions,
   getTaskDocumentReads,
   getWorkspaceDocumentDetail,
@@ -26,20 +22,13 @@ import {
   listWorkspaceTasks,
   listWorkspaceProjects,
   prepareWorkspacePreview,
-  refreshWorkspaceMapping,
-  replaceProjectDatabases,
-  updateWorkspaceProject,
 } from "@/lib/api";
-import {
-  buildSelectedDatabaseAliases,
-  buildTaskContextTimeline,
-  validateDatabaseAliases,
-} from "@/lib/database-access";
+import { buildTaskContextTimeline } from "@/lib/database-access";
 import {
   documentNodeLabel,
+  retainDocumentTreePaths,
   resolveDocumentPath,
 } from "@/lib/document-tree";
-import { suggestProjectDocumentRelativePath } from "@/lib/project-paths";
 import {
   buildDocumentCallNumbers,
   buildTaskReadRows,
@@ -177,12 +166,9 @@ interface ProjectDashboardProps {
   projectKind: ProjectKind;
   visible?: boolean;
   onProjectCountsChanged?: (counts: Record<ProjectKind, number>) => void;
-  onWorkspaceChanged?: () => Promise<void>;
 }
 
 export interface ProjectDashboardHandle {
-  openCreateProject: () => void;
-  refreshWorkspaceMapping: () => void;
   showWorkspaceTaskHistory: () => void;
   showWorkspaceTree: () => void;
   showWorkspaceMcpPreview: () => void;
@@ -202,7 +188,6 @@ export const ProjectDashboard = forwardRef<
     projectKind,
     visible = true,
     onProjectCountsChanged,
-    onWorkspaceChanged,
   }: ProjectDashboardProps,
   ref,
 ) {
@@ -213,28 +198,11 @@ export const ProjectDashboard = forwardRef<
   const [treeFocusPath, setTreeFocusPath] = useState<number[] | null>(null);
   const [detail, setDetail] = useState<DocumentDetail | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [showCreate, setShowCreate] = useState(false);
   const [showMcpIntegration, setShowMcpIntegration] = useState(false);
-  const [editingProject, setEditingProject] = useState<ProjectSummary | null>(
-    null,
-  );
-  const [editName, setEditName] = useState("");
-  const [editProjectKind, setEditProjectKind] =
-    useState<ProjectKind>("backend");
-  const [editRelativePath, setEditRelativePath] = useState("");
-  const [editDocumentRelativePath, setEditDocumentRelativePath] = useState("");
-  const [deletingProject, setDeletingProject] =
-    useState<ProjectSummary | null>(null);
   const [dataSourceProject, setDataSourceProject] =
     useState<ProjectSummary | null>(null);
   const [dataSourceOptions, setDataSourceOptions] =
     useState<ProjectDataSourceOptions | null>(null);
-  const [selectedDatabaseIds, setSelectedDatabaseIds] = useState<Set<string>>(
-    new Set(),
-  );
-  const [databaseAliasDrafts, setDatabaseAliasDrafts] = useState<
-    Record<string, string>
-  >({});
   const [selectedDataSourceCategory, setSelectedDataSourceCategory] = useState(
     ALL_DATA_SOURCE_CATEGORIES,
   );
@@ -242,12 +210,6 @@ export const ProjectDashboard = forwardRef<
     null,
   );
   const [dataSourceAccessLoading, setDataSourceAccessLoading] = useState(false);
-  const [dataSourceAccessSaving, setDataSourceAccessSaving] = useState(false);
-  const [name, setName] = useState("");
-  const [newProjectKind, setNewProjectKind] =
-    useState<ProjectKind>(projectKind);
-  const [relativePath, setRelativePath] = useState("");
-  const [documentRelativePath, setDocumentRelativePath] = useState("");
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [draggingTree, setDraggingTree] = useState(false);
@@ -307,7 +269,6 @@ export const ProjectDashboard = forwardRef<
     document_relative_path: "AGENTS.md",
     workspace_id: workspace.id,
     workspace_name: workspace.name,
-    workspace_enabled: workspace.enabled,
     relative_path: ".",
     node_count: projects.reduce(
       (total, project) => total + project.node_count,
@@ -346,10 +307,6 @@ export const ProjectDashboard = forwardRef<
       ).length,
     });
   }, [onProjectCountsChanged, projects]);
-
-  useEffect(() => {
-    setNewProjectKind(projectKind);
-  }, [projectKind]);
 
   useEffect(() => {
     if (!activeProject || !tree) return;
@@ -465,35 +422,6 @@ export const ProjectDashboard = forwardRef<
     }
   }
 
-  async function refresh(project: ProjectSummary, reopenTree = false) {
-    setBusyProjectId("workspace");
-    try {
-      await refreshWorkspaceMapping(workspace.id);
-      await loadProjects();
-      await onWorkspaceChanged?.();
-      if (reopenTree) {
-        const nextTree = await getWorkspaceTree(workspace.id);
-        setActiveProject(project);
-        setTree(nextTree);
-        setTreeFocusPath(null);
-        treeScrollPositionsRef.current.clear();
-        treeFocusPendingRef.current = false;
-        setDetail(null);
-        setSelectedId(null);
-      }
-      setError(null);
-    } catch (requestError) {
-      const refreshError = (requestError as Error).message;
-      await Promise.allSettled([
-        loadProjects(),
-        onWorkspaceChanged?.() ?? Promise.resolve(),
-      ]);
-      setError(refreshError);
-    } finally {
-      setBusyProjectId(null);
-    }
-  }
-
   async function showMcpPreview(project: ProjectSummary) {
     setBusyProjectId("workspace");
     setMcpPreviewProject(project);
@@ -512,34 +440,15 @@ export const ProjectDashboard = forwardRef<
   async function openProjectDataSources(project: ProjectSummary) {
     setDataSourceProject(project);
     setDataSourceOptions(null);
-    setSelectedDatabaseIds(new Set());
     setSelectedDataSourceCategory(ALL_DATA_SOURCE_CATEGORIES);
     setActiveDataSourceId(null);
     setDataSourceAccessLoading(true);
     try {
       const options = await getProjectDataSourceOptions(project.id);
-      const selectedIds = new Set(
-        options.sources.flatMap((source) =>
-          source.databases
-            .filter((database) => database.selected)
-            .map((database) => database.id),
-        ),
+      const initialSource = options.sources.find((source) =>
+        source.databases.some((database) => database.selected),
       );
-      const initialSource =
-        options.sources.find((source) =>
-          source.databases.some((database) => selectedIds.has(database.id)),
-        ) ?? options.sources[0];
       setDataSourceOptions(options);
-      setSelectedDatabaseIds(selectedIds);
-      setDatabaseAliasDrafts(
-        Object.fromEntries(
-          options.sources.flatMap((source) =>
-            source.databases
-              .filter((database) => database.link_id && database.mcp_alias)
-              .map((database) => [database.id, database.mcp_alias as string]),
-          ),
-        ),
-      );
       setActiveDataSourceId(initialSource?.id ?? null);
       setError(null);
     } catch (requestError) {
@@ -551,11 +460,8 @@ export const ProjectDashboard = forwardRef<
   }
 
   function closeProjectDataSources() {
-    if (dataSourceAccessSaving) return;
     setDataSourceProject(null);
     setDataSourceOptions(null);
-    setSelectedDatabaseIds(new Set());
-    setDatabaseAliasDrafts({});
     setSelectedDataSourceCategory(ALL_DATA_SOURCE_CATEGORIES);
     setActiveDataSourceId(null);
   }
@@ -563,80 +469,14 @@ export const ProjectDashboard = forwardRef<
   function selectDataSourceCategory(category: string) {
     setSelectedDataSourceCategory(category);
     if (!dataSourceOptions) return;
-    const visibleSources =
-      category === ALL_DATA_SOURCE_CATEGORIES
-        ? dataSourceOptions.sources
-        : dataSourceOptions.sources.filter(
-            (source) => source.category === category,
-          );
+    const visibleSources = dataSourceOptions.sources.filter(
+      (source) =>
+        source.databases.some((database) => database.selected) &&
+        (category === ALL_DATA_SOURCE_CATEGORIES ||
+          source.category === category),
+    );
     if (!visibleSources.some((source) => source.id === activeDataSourceId)) {
       setActiveDataSourceId(visibleSources[0]?.id ?? null);
-    }
-  }
-
-  function toggleProjectDatabase(databaseId: string) {
-    setSelectedDatabaseIds((current) => {
-      const next = new Set(current);
-      if (next.has(databaseId)) next.delete(databaseId);
-      else next.add(databaseId);
-      return next;
-    });
-  }
-
-  function selectAllSourceDatabases(sourceId: string) {
-    if (!dataSourceOptions) return;
-    const source = dataSourceOptions.sources.find((item) => item.id === sourceId);
-    if (!source?.enabled) return;
-    setSelectedDatabaseIds((current) => {
-      const next = new Set(current);
-      source.databases.forEach((database) => {
-        if (database.available) next.add(database.id);
-      });
-      return next;
-    });
-  }
-
-  function clearSourceDatabases(sourceId: string) {
-    if (!dataSourceOptions) return;
-    const source = dataSourceOptions.sources.find((item) => item.id === sourceId);
-    if (!source) return;
-    setSelectedDatabaseIds((current) => {
-      const next = new Set(current);
-      source.databases.forEach((database) => next.delete(database.id));
-      return next;
-    });
-  }
-
-  async function saveProjectDataSources() {
-    if (!dataSourceProject) return;
-    if (Object.keys(databaseAliasErrors).length > 0) {
-      setError("请先修正 MCP 别名格式或重复问题。");
-      return;
-    }
-    setDataSourceAccessSaving(true);
-    try {
-      const mcpAliases = buildSelectedDatabaseAliases(
-        selectedDatabaseIds,
-        databaseAliasDrafts,
-      );
-      await replaceProjectDatabases(
-        dataSourceProject.id,
-        Array.from(selectedDatabaseIds),
-        mcpAliases,
-      );
-      await loadProjects();
-      await onWorkspaceChanged?.();
-      setError(null);
-      setDataSourceProject(null);
-      setDataSourceOptions(null);
-      setSelectedDatabaseIds(new Set());
-      setDatabaseAliasDrafts({});
-      setSelectedDataSourceCategory(ALL_DATA_SOURCE_CATEGORIES);
-      setActiveDataSourceId(null);
-    } catch (requestError) {
-      setError((requestError as Error).message);
-    } finally {
-      setDataSourceAccessSaving(false);
     }
   }
 
@@ -645,6 +485,9 @@ export const ProjectDashboard = forwardRef<
     setSelectedHistoryTaskId(taskId);
     setHistoryLoading(true);
     setHistory(null);
+    setHistoryTreeFocusPath(null);
+    historyScrollPositionsRef.current.clear();
+    historyTreeFocusPendingRef.current = false;
     closeDetail();
     try {
       setHistory(await getTaskDocumentReads(taskId));
@@ -687,117 +530,6 @@ export const ProjectDashboard = forwardRef<
       setError((requestError as Error).message);
     } finally {
       setHistoryLoading(false);
-      setBusyProjectId(null);
-    }
-  }
-
-  function changeNewProjectKind(nextKind: ProjectKind) {
-    const currentSuggestion = suggestProjectDocumentRelativePath(
-      newProjectKind,
-      relativePath,
-    );
-    setNewProjectKind(nextKind);
-    setDocumentRelativePath((current) =>
-      !current || current === currentSuggestion
-        ? suggestProjectDocumentRelativePath(nextKind, relativePath)
-        : current,
-    );
-  }
-
-  function changeNewProjectRelativePath(nextPath: string) {
-    const currentSuggestion = suggestProjectDocumentRelativePath(
-      newProjectKind,
-      relativePath,
-    );
-    setRelativePath(nextPath);
-    setDocumentRelativePath((current) =>
-      !current || current === currentSuggestion
-        ? suggestProjectDocumentRelativePath(newProjectKind, nextPath)
-        : current,
-    );
-  }
-
-  async function submitProject(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBusyProjectId("new");
-    try {
-      const project = await createWorkspaceProject(workspace.id, {
-        name: name.trim(),
-        relative_path: relativePath.trim(),
-        document_relative_path: documentRelativePath.trim(),
-        project_kind: newProjectKind,
-      });
-      setProjects((current) => [...current, project]);
-      await onWorkspaceChanged?.();
-      setName("");
-      setNewProjectKind(projectKind);
-      setRelativePath("");
-      setDocumentRelativePath("");
-      setShowCreate(false);
-      setError(null);
-    } catch (requestError) {
-      setError((requestError as Error).message);
-    } finally {
-      setBusyProjectId(null);
-    }
-  }
-
-  function startEditingProject(project: ProjectSummary) {
-    setEditingProject(project);
-    setEditName(project.name);
-    setEditProjectKind(project.project_kind);
-    setEditRelativePath(project.relative_path ?? ".");
-    setEditDocumentRelativePath(project.document_relative_path);
-  }
-
-  async function submitProjectUpdate(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!editingProject) return;
-    setBusyProjectId(editingProject.id);
-    try {
-      const updated = await updateWorkspaceProject(
-        workspace.id,
-        editingProject.id,
-        {
-          name: editName.trim(),
-          relative_path: editRelativePath.trim(),
-          document_relative_path: editDocumentRelativePath.trim(),
-          project_kind: editProjectKind,
-        },
-      );
-      setProjects((current) =>
-        current.map((project) =>
-          project.id === updated.id ? updated : project,
-        ),
-      );
-      await onWorkspaceChanged?.();
-      if (activeProject?.id === updated.id) closeTree();
-      if (historyProject?.id === updated.id) closeTaskHistory();
-      setEditingProject(null);
-      setError(null);
-    } catch (requestError) {
-      setError((requestError as Error).message);
-    } finally {
-      setBusyProjectId(null);
-    }
-  }
-
-  async function confirmProjectDeletion() {
-    if (!deletingProject) return;
-    setBusyProjectId(deletingProject.id);
-    try {
-      await deleteWorkspaceProject(workspace.id, deletingProject.id);
-      setProjects((current) =>
-        current.filter((project) => project.id !== deletingProject.id),
-      );
-      await onWorkspaceChanged?.();
-      if (activeProject?.id === deletingProject.id) closeTree();
-      if (historyProject?.id === deletingProject.id) closeTaskHistory();
-      setDeletingProject(null);
-      setError(null);
-    } catch (requestError) {
-      setError((requestError as Error).message);
-    } finally {
       setBusyProjectId(null);
     }
   }
@@ -963,12 +695,38 @@ export const ProjectDashboard = forwardRef<
       ? (resolveDocumentPath(tree, treeFocusPath) ?? [])
       : [];
   const focusedTreeNode = treeBreadcrumbPath.at(-1) ?? tree;
+  const historyCallNumbers = useMemo(
+    () =>
+      history
+        ? buildDocumentCallNumbers(history.calls)
+        : new Map<string, number[]>(),
+    [history],
+  );
+  const historyCalledDocumentIds = useMemo(
+    () => new Set(historyCallNumbers.keys()),
+    [historyCallNumbers],
+  );
+  const visibleHistoryTree = useMemo(
+    () =>
+      historyTree
+        ? retainDocumentTreePaths(
+            historyTree,
+            historyCalledDocumentIds,
+          )
+        : null,
+    [historyCalledDocumentIds, historyTree],
+  );
   const historyTreeBreadcrumbPath =
-    historyTree && historyTreeFocusPath !== null
-      ? (resolveDocumentPath(historyTree, historyTreeFocusPath) ?? [])
+    visibleHistoryTree && historyTreeFocusPath !== null
+      ? (
+          resolveDocumentPath(
+            visibleHistoryTree,
+            historyTreeFocusPath,
+          ) ?? []
+        )
       : [];
   const focusedHistoryTreeNode =
-    historyTreeBreadcrumbPath.at(-1) ?? historyTree;
+    historyTreeBreadcrumbPath.at(-1) ?? visibleHistoryTree;
   const selectedHistoryTask =
     historyTasks.find((task) => task.task_id === selectedHistoryTaskId) ?? null;
   const historySteps = history ? buildTaskReadSteps(history.calls) : [];
@@ -976,58 +734,35 @@ export const ProjectDashboard = forwardRef<
   const historyTimeline = history
     ? buildTaskContextTimeline(historyRows, history.database_calls)
     : [];
-  const historyCallNumbers = history
-    ? buildDocumentCallNumbers(history.calls)
-    : new Map<string, number[]>();
   const visibleProjects = projects.filter(
     (project) => project.project_kind === projectKind,
   );
-  const dataSourceCategories = dataSourceOptions
-    ? Array.from(
-        new Set(dataSourceOptions.sources.map((source) => source.category)),
-      ).sort((left, right) => left.localeCompare(right, "zh-CN"))
-    : [];
-  const visibleDataSources = dataSourceOptions
-    ? selectedDataSourceCategory === ALL_DATA_SOURCE_CATEGORIES
-      ? dataSourceOptions.sources
-      : dataSourceOptions.sources.filter(
+  const authorizedDataSources =
+    dataSourceOptions?.sources
+      .map((source) => ({
+        ...source,
+        databases: source.databases.filter((database) => database.selected),
+      }))
+      .filter((source) => source.databases.length > 0) ?? [];
+  const dataSourceCategories = Array.from(
+    new Set(authorizedDataSources.map((source) => source.category)),
+  ).sort((left, right) => left.localeCompare(right, "zh-CN"));
+  const visibleDataSources =
+    selectedDataSourceCategory === ALL_DATA_SOURCE_CATEGORIES
+      ? authorizedDataSources
+      : authorizedDataSources.filter(
           (source) => source.category === selectedDataSourceCategory,
-        )
-    : [];
+        );
   const activeDataSource =
     visibleDataSources.find((source) => source.id === activeDataSourceId) ??
     visibleDataSources[0] ??
     null;
-  const selectedDataSourceCount = dataSourceOptions
-    ? dataSourceOptions.sources.filter((source) =>
-        source.databases.some((database) =>
-          selectedDatabaseIds.has(database.id),
-        ),
-      ).length
-    : 0;
-  const databaseAliasErrors = validateDatabaseAliases(
-    dataSourceOptions
-      ? dataSourceOptions.sources.flatMap((source) =>
-          source.databases
-            .filter((database) => selectedDatabaseIds.has(database.id))
-            .map((database) => ({
-              databaseId: database.id,
-              value:
-                databaseAliasDrafts[database.id] ?? database.mcp_alias ?? "",
-              required: Boolean(database.link_id),
-            })),
-        )
-      : [],
+  const authorizedDatabaseCount = authorizedDataSources.reduce(
+    (total, source) => total + source.databases.length,
+    0,
   );
 
   useImperativeHandle(ref, () => ({
-    openCreateProject() {
-      setNewProjectKind(projectKind);
-      setShowCreate(true);
-    },
-    refreshWorkspaceMapping() {
-      void refresh(workspaceContextProject);
-    },
     showWorkspaceTaskHistory() {
       void showTaskHistory(workspaceContextProject);
     },
@@ -1052,92 +787,19 @@ export const ProjectDashboard = forwardRef<
 
       {visible ? (
         <>
-          {showCreate ? (
-            <form
-              className="create-project-form workspace-project-form"
-              onSubmit={submitProject}
-            >
-              <label>
-                项目名称
-                <input
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  placeholder="例如：攀枝花多式联运"
-                  required
-                />
-              </label>
-              <label>
-                项目类型
-                <select
-                  value={newProjectKind}
-                  onChange={(event) =>
-                    changeNewProjectKind(event.target.value as ProjectKind)
-                  }
-                >
-                  <option value="frontend">前端项目</option>
-                  <option value="backend">后端项目</option>
-                </select>
-              </label>
-              <label>
-                源码相对路径
-                <input
-                  value={relativePath}
-                  onChange={(event) =>
-                    changeNewProjectRelativePath(event.target.value)
-                  }
-                  placeholder="例如：backend/c12-mtp；根项目填写 ."
-                  required
-                />
-              </label>
-              <label>
-                文档入口相对路径
-                <input
-                  value={documentRelativePath}
-                  onChange={(event) =>
-                    setDocumentRelativePath(event.target.value)
-                  }
-                  placeholder={`docs/${newProjectKind}/项目目录名/AGENTS.md`}
-                  required
-                />
-                <small>
-                  默认约定：docs/{newProjectKind}/项目目录名/AGENTS.md
-                </small>
-              </label>
-              <div className="create-project-actions">
-                <button
-                  type="button"
-                  className="secondary-button"
-                  disabled={busyProjectId === "new"}
-                  onClick={() => setShowCreate(false)}
-                >
-                  取消
-                </button>
-                <button
-                  type="submit"
-                  className="primary-button"
-                  disabled={busyProjectId === "new"}
-                >
-                  {busyProjectId === "new" ? "正在建立映射…" : "创建并映射"}
-                </button>
-              </div>
-            </form>
-          ) : null}
-
           {loading ? <p className="empty-message">正在读取项目…</p> : null}
 
           {!loading && projects.length === 0 ? (
             <div className="empty-state">
               <h2>这个工作空间还没有项目</h2>
-              <p>
-                分别配置源码目录和 docs 下的文档入口，系统会从文档入口建立映射。
-              </p>
+              <p>当前没有可查看的项目配置。</p>
             </div>
           ) : null}
 
           {!loading && projects.length > 0 && visibleProjects.length === 0 ? (
             <div className="empty-state">
               <h2>{`还没有${projectKindLabel(projectKind)}`}</h2>
-              <p>添加项目时可以选择前端项目或后端项目。</p>
+              <p>当前没有可查看的此类项目配置。</p>
             </div>
           ) : null}
 
@@ -1182,38 +844,21 @@ export const ProjectDashboard = forwardRef<
                   <p className="card-error">{project.error}</p>
                 ) : null}
                 <div className="project-card-actions">
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    disabled={busyProjectId === project.id}
-                    onClick={() => startEditingProject(project)}
-                  >
-                    编辑项目
-                  </button>
                   {project.project_kind === "backend" ? (
                     <button
                       type="button"
                       className="primary-button"
-                      disabled={busyProjectId === project.id}
                       onClick={() => void openProjectDataSources(project)}
                     >
-                      管理数据源
+                      查看数据源
                     </button>
                   ) : null}
                   <a
                     className="secondary-button runtime-config-card-link"
                     href={`/projects/${project.id}/runtime`}
                   >
-                    运行配置
+                    查看运行配置
                   </a>
-                  <button
-                    type="button"
-                    className="danger-button"
-                    disabled={busyProjectId === project.id}
-                    onClick={() => setDeletingProject(project)}
-                  >
-                    删除项目
-                  </button>
                 </div>
               </article>
             ))}
@@ -1237,15 +882,14 @@ export const ProjectDashboard = forwardRef<
             className="project-data-source-panel"
             role="dialog"
             aria-modal="true"
-            aria-label={`管理项目数据源 ${dataSourceProject.name}`}
+            aria-label={`查看项目数据源 ${dataSourceProject.name}`}
           >
             <header>
-              <span className="file-chip">数据源授权</span>
+              <span className="file-chip">只读数据源授权</span>
               <button
                 type="button"
                 className="close-button"
-                aria-label="关闭项目数据源管理"
-                disabled={dataSourceAccessSaving}
+                aria-label="关闭项目数据源详情"
                 onClick={closeProjectDataSources}
               >
                 ×
@@ -1259,20 +903,15 @@ export const ProjectDashboard = forwardRef<
                 <div className="project-data-source-summary">
                   <div>
                     <strong>
-                      已选择 {selectedDataSourceCount} 个数据源 · {selectedDatabaseIds.size} 个数据库
+                      已授权 {authorizedDataSources.length} 个数据源 · {authorizedDatabaseCount} 个数据库
                     </strong>
                     <span>
-                      保存后整批替换当前项目关联，新关联默认只读；历史关联若不是只读，不会向 MCP 暴露。
+                      此处仅展示当前项目已有授权和 MCP 别名，配置由 AI 或数据库维护。
                     </span>
-                    {Object.keys(databaseAliasErrors).length > 0 ? (
-                      <span className="database-alias-summary-error" role="alert">
-                        有 {Object.keys(databaseAliasErrors).length} 个 MCP 别名需要修正
-                      </span>
-                    ) : null}
                   </div>
                 </div>
 
-                {dataSourceOptions.sources.length > 0 ? (
+                {authorizedDataSources.length > 0 ? (
                   <>
                     <nav
                       className="data-source-category-tabs project-data-source-tabs"
@@ -1294,8 +933,8 @@ export const ProjectDashboard = forwardRef<
                           selectDataSourceCategory(ALL_DATA_SOURCE_CATEGORIES)
                         }
                       >
-                        <span>全部数据源</span>
-                        <small>{dataSourceOptions.sources.length}</small>
+                        <span>全部授权数据源</span>
+                        <small>{authorizedDataSources.length}</small>
                       </button>
                       {dataSourceCategories.map((category) => (
                         <button
@@ -1311,7 +950,7 @@ export const ProjectDashboard = forwardRef<
                           <span>{category}</span>
                           <small>
                             {
-                              dataSourceOptions.sources.filter(
+                              authorizedDataSources.filter(
                                 (source) => source.category === category,
                               ).length
                             }
@@ -1323,14 +962,9 @@ export const ProjectDashboard = forwardRef<
                     <div className="project-data-source-layout">
                       <aside
                         className="project-source-selector"
-                        aria-label="选择数据源"
+                        aria-label="已授权数据源"
                       >
-                        {visibleDataSources.map((source) => {
-                          const selectedCount = source.databases.filter(
-                            (database) =>
-                              selectedDatabaseIds.has(database.id),
-                          ).length;
-                          return (
+                        {visibleDataSources.map((source) => (
                             <button
                               type="button"
                               data-active={activeDataSource?.id === source.id}
@@ -1344,11 +978,10 @@ export const ProjectDashboard = forwardRef<
                                 </small>
                               </span>
                               <span className="project-source-count">
-                                {selectedCount}
+                                {source.databases.length}
                               </span>
                             </button>
-                          );
-                        })}
+                        ))}
                       </aside>
 
                       <section className="project-database-selector">
@@ -1357,110 +990,43 @@ export const ProjectDashboard = forwardRef<
                             <header>
                               <div>
                                 <h3>{activeDataSource.name}</h3>
-                                <p>
-                                  {activeDataSource.category} · {activeDataSource.enabled ? "连接已启用" : "连接已停用"}
-                                </p>
-                              </div>
-                              <div className="project-database-actions">
-                                <button
-                                  type="button"
-                                  className="secondary-button"
-                                  disabled={!activeDataSource.enabled}
-                                  onClick={() =>
-                                    selectAllSourceDatabases(activeDataSource.id)
-                                  }
-                                >
-                                  全选可用库
-                                </button>
-                                <button
-                                  type="button"
-                                  className="secondary-button"
-                                  onClick={() =>
-                                    clearSourceDatabases(activeDataSource.id)
-                                  }
-                                >
-                                  清空当前
-                                </button>
+                                <p>{activeDataSource.category}</p>
                               </div>
                             </header>
 
-                            {activeDataSource.databases.length > 0 ? (
-                              <div className="project-database-options">
-                                {activeDataSource.databases.map((database) => {
-                                  const selected = selectedDatabaseIds.has(
-                                    database.id,
-                                  );
-                                  const unavailable =
-                                    !activeDataSource.enabled ||
-                                    !database.available;
-                                  return (
-                                    <div
-                                      className="project-database-option"
-                                      data-disabled={!selected && unavailable}
-                                      data-selected={selected}
-                                      key={database.id}
-                                    >
-                                      <input
-                                        id={`project-database-${database.id}`}
-                                        type="checkbox"
-                                        checked={selected}
-                                        disabled={!selected && unavailable}
-                                        aria-label={`选择 ${database.display_name || database.remote_name}`}
-                                        onChange={() =>
-                                          toggleProjectDatabase(database.id)
-                                        }
-                                      />
-                                      <div className="project-database-option-main">
-                                        <label htmlFor={`project-database-${database.id}`}>
-                                          <strong>{database.display_name || database.remote_name}</strong>
-                                          <code>{database.remote_name}</code>
-                                        </label>
-                                        {selected ? (
-                                          <label className="database-alias-field">
-                                            <span>MCP 别名</span>
-                                          <input
-                                            aria-label={`${database.display_name || database.remote_name} MCP 别名`}
-                                            aria-invalid={Boolean(databaseAliasErrors[database.id])}
-                                            aria-describedby={
-                                              databaseAliasErrors[database.id]
-                                                ? `database-alias-error-${database.id}`
-                                                : undefined
-                                            }
-                                            className="database-alias-input"
-                                            maxLength={64}
-                                            value={databaseAliasDrafts[database.id] ?? database.mcp_alias ?? ""}
-                                            onChange={(event) =>
-                                              setDatabaseAliasDrafts((current) => ({
-                                                ...current,
-                                                [database.id]: event.target.value,
-                                              }))
-                                            }
-                                            placeholder={database.link_id ? "MCP 别名" : "留空则自动生成"}
-                                          />
-                                            {databaseAliasErrors[database.id] ? (
-                                              <small
-                                                className="database-alias-error"
-                                                id={`database-alias-error-${database.id}`}
-                                              >
-                                                {databaseAliasErrors[database.id]}
-                                              </small>
-                                            ) : null}
-                                          </label>
-                                        ) : null}
-                                      </div>
-                                      <small>
-                                        {database.available ? database.namespace_type : "不可用"}
-                                      </small>
+                            <div className="project-database-options">
+                              {activeDataSource.databases.map((database) => (
+                                <div
+                                  className="project-database-option"
+                                  data-disabled={!database.available}
+                                  data-selected="true"
+                                  key={database.id}
+                                  style={{ cursor: "default" }}
+                                >
+                                  <span aria-hidden="true">✓</span>
+                                  <div className="project-database-option-main">
+                                    <div className="database-alias-field">
+                                      <strong>
+                                        {database.display_name ||
+                                          database.remote_name}
+                                      </strong>
+                                      <code>{database.remote_name}</code>
                                     </div>
-                                  );
-                                })}
-                              </div>
-                            ) : (
-                              <div className="project-data-source-empty">
-                                <h3>这个数据源还没有数据库清单</h3>
-                                <p>请先到数据源管理中测试连接并刷新数据库。</p>
-                              </div>
-                            )}
+                                    <div className="database-alias-field">
+                                      <span>MCP 别名</span>
+                                      <code>
+                                        {database.mcp_alias || "未设置别名"}
+                                      </code>
+                                    </div>
+                                  </div>
+                                  <small>
+                                    {database.available
+                                      ? database.namespace_type
+                                      : "不可用"}
+                                  </small>
+                                </div>
+                              ))}
+                            </div>
                           </>
                         ) : (
                           <div className="project-data-source-empty">
@@ -1472,8 +1038,8 @@ export const ProjectDashboard = forwardRef<
                   </>
                 ) : (
                   <div className="project-data-source-empty">
-                    <h3>还没有可选择的数据源</h3>
-                    <p>请先到数据源管理中添加连接并刷新数据库清单。</p>
+                    <h3>当前项目没有数据源授权</h3>
+                    <p>这里仅展示已有授权，不提供新增或修改入口。</p>
                   </div>
                 )}
 
@@ -1481,146 +1047,13 @@ export const ProjectDashboard = forwardRef<
                   <button
                     type="button"
                     className="secondary-button"
-                    disabled={dataSourceAccessSaving}
                     onClick={closeProjectDataSources}
                   >
-                    取消
-                  </button>
-                  <button
-                    type="button"
-                    className="primary-button"
-                    disabled={
-                      dataSourceAccessSaving ||
-                      Object.keys(databaseAliasErrors).length > 0
-                    }
-                    onClick={() => void saveProjectDataSources()}
-                  >
-                    {dataSourceAccessSaving ? "正在保存…" : "保存关联"}
+                    关闭
                   </button>
                 </footer>
               </>
             ) : null}
-          </section>
-        </div>
-      ) : null}
-
-      {editingProject ? (
-        <div className="project-settings-modal" role="presentation">
-          <form
-            className="project-settings-panel"
-            role="dialog"
-            aria-modal="true"
-            aria-label={`编辑项目 ${editingProject.name}`}
-            onSubmit={submitProjectUpdate}
-          >
-            <header>
-              <div>
-                <span className="file-chip">项目配置</span>
-                <h2>编辑项目</h2>
-                <p>保存前会从 docs 下的文档入口重新读取并验证完整文档树。</p>
-              </div>
-              <button
-                type="button"
-                className="close-button"
-                aria-label="关闭项目编辑"
-                onClick={() => setEditingProject(null)}
-              >
-                ×
-              </button>
-            </header>
-            <label>
-              项目名称
-              <input
-                value={editName}
-                required
-                onChange={(event) => setEditName(event.target.value)}
-              />
-            </label>
-            <label>
-              项目类型
-              <select
-                value={editProjectKind}
-                onChange={(event) =>
-                  setEditProjectKind(event.target.value as ProjectKind)
-                }
-              >
-                <option value="frontend">前端项目</option>
-                <option value="backend">后端项目</option>
-              </select>
-            </label>
-            <label>
-              源码相对路径
-              <input
-                value={editRelativePath}
-                required
-                onChange={(event) => setEditRelativePath(event.target.value)}
-              />
-            </label>
-            <label>
-              文档入口相对路径
-              <input
-                value={editDocumentRelativePath}
-                required
-                placeholder={`docs/${editProjectKind}/项目目录名/AGENTS.md`}
-                onChange={(event) =>
-                  setEditDocumentRelativePath(event.target.value)
-                }
-              />
-              <small>
-                默认约定：docs/{editProjectKind}/项目目录名/AGENTS.md
-              </small>
-            </label>
-            <footer>
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => setEditingProject(null)}
-              >
-                取消
-              </button>
-              <button
-                type="submit"
-                className="primary-button"
-                disabled={busyProjectId === editingProject.id}
-              >
-                {busyProjectId === editingProject.id ? "正在验证…" : "保存配置"}
-              </button>
-            </footer>
-          </form>
-        </div>
-      ) : null}
-
-      {deletingProject ? (
-        <div className="project-settings-modal" role="presentation">
-          <section
-            className="project-delete-panel"
-            role="alertdialog"
-            aria-modal="true"
-            aria-label={`删除项目 ${deletingProject.name}`}
-          >
-            <span className="file-chip">删除项目配置</span>
-            <h2>确定删除“{deletingProject.name}”吗？</h2>
-            <p>
-              只删除 Context Router 中保存的项目配置，不会删除源码目录、docs
-              下的文档或历史 MCP 调用记录。
-            </p>
-            <footer>
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => setDeletingProject(null)}
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                className="danger-button"
-                disabled={busyProjectId === deletingProject.id}
-                onClick={() => void confirmProjectDeletion()}
-              >
-                {busyProjectId === deletingProject.id ? "正在删除…" : "确认删除"}
-              </button>
-            </footer>
           </section>
         </div>
       ) : null}
@@ -1891,6 +1324,21 @@ export const ProjectDashboard = forwardRef<
               ) : null}
               {!historyLoading &&
               historyView === "tree" &&
+              history &&
+              !focusedHistoryTreeNode ? (
+                <div className="empty-state task-history-empty">
+                  <h3>
+                    {historySteps.length === 0
+                      ? "这个任务没有文档调用"
+                      : "调用的文档已不在当前文档树中"}
+                  </h3>
+                  {historySteps.length > 0 ? (
+                    <p>请切换到调用列表查看完整历史记录。</p>
+                  ) : null}
+                </div>
+              ) : null}
+              {!historyLoading &&
+              historyView === "tree" &&
               historyTasks.length > 0 &&
               focusedHistoryTreeNode ? (
                 <div className="tree-content">
@@ -1936,16 +1384,6 @@ export const ProjectDashboard = forwardRef<
               ) : null}
             </div>
             <div className="tree-toolbar-actions">
-              <button
-                type="button"
-                className="secondary-button"
-                disabled={busyProjectId === "workspace"}
-                onClick={() => void refresh(activeProject, true)}
-              >
-                {busyProjectId === "workspace"
-                  ? "正在刷新…"
-                  : "刷新工作空间映射"}
-              </button>
               <button
                 type="button"
                 className="close-button"

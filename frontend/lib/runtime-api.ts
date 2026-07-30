@@ -1,4 +1,5 @@
 import type { ProjectSummary } from "@/lib/types";
+import { assertBrowserApiRequestAllowed } from "@/lib/browser-api-policy";
 
 export type RuntimeMode = "fast" | "full";
 
@@ -21,23 +22,6 @@ export interface ProjectRuntimeConfig {
   project: ProjectSummary;
   fast: RuntimeConfigMode;
   full: RuntimeConfigMode;
-}
-
-export interface RuntimeConfigFileDraft {
-  relative_path: string;
-  content: string;
-  executable: boolean;
-}
-
-export interface RuntimeMaterializationResult {
-  snapshot_id: string;
-  project_id: string;
-  mode: RuntimeMode;
-  materialized_path: string;
-  file_count: number;
-  total_bytes: number;
-  manifest_sha256: string;
-  created_at: string;
 }
 
 export type RuntimeRunStatus =
@@ -85,6 +69,7 @@ async function runtimeRequest<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
+  assertBrowserApiRequestAllowed(`/api${path}`, init?.method);
   const response = await fetch(`${apiBase}${path}`, {
     ...init,
     cache: "no-store",
@@ -110,37 +95,11 @@ export function getProjectRuntimeConfig(
   );
 }
 
-export function saveProjectRuntimeMode(
+export function listProjectRuntimeRuns(
   projectId: string,
-  mode: RuntimeMode,
-  files: RuntimeConfigFileDraft[],
-): Promise<RuntimeConfigMode> {
-  return runtimeRequest<RuntimeConfigMode>(
-    `/projects/${encodeURIComponent(projectId)}/runtime-config/${mode}`,
-    {
-      method: "PUT",
-      body: JSON.stringify({ files }),
-    },
-  );
-}
-
-export function materializeProjectRuntimeMode(
-  projectId: string,
-  mode: RuntimeMode,
-): Promise<RuntimeMaterializationResult> {
-  return runtimeRequest<RuntimeMaterializationResult>(
-    `/projects/${encodeURIComponent(projectId)}/runtime-config/${mode}/materialize`,
-    { method: "POST" },
-  );
-}
-
-export function executeProjectRuntimeMode(
-  projectId: string,
-  mode: RuntimeMode,
-): Promise<RuntimeRunSummary> {
-  return runtimeRequest<RuntimeRunSummary>(
-    `/projects/${encodeURIComponent(projectId)}/runtime-config/${mode}/execute`,
-    { method: "POST" },
+): Promise<RuntimeRunSummary[]> {
+  return runtimeRequest<RuntimeRunSummary[]>(
+    `/projects/${encodeURIComponent(projectId)}/runtime-runs`,
   );
 }
 

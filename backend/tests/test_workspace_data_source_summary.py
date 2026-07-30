@@ -17,7 +17,7 @@ from context_router.repositories.data_source_repository import (
 from context_router.schemas.data_sources import WorkspaceDataSourceSummary
 
 
-def _source(source_id: str, name: str, *, enabled: bool = True) -> DataSourceRecord:
+def _source(source_id: str, name: str) -> DataSourceRecord:
     now = datetime.now(UTC)
     return DataSourceRecord(
         id=source_id,
@@ -26,7 +26,6 @@ def _source(source_id: str, name: str, *, enabled: bool = True) -> DataSourceRec
         engine="postgresql",
         description="",
         connection_config={},
-        enabled=enabled,
         config_version=1,
         database_count=0,
         project_count=0,
@@ -81,7 +80,6 @@ def _link(
         alias=database.display_name,
         mcp_alias=f"db_{link_id}",
         purpose="工作空间汇总测试",
-        enabled=True,
         readonly=True,
         allowed_schemas=[],
         max_rows=100,
@@ -97,7 +95,7 @@ def _link(
 def test_in_memory_workspace_summary_aggregates_distinct_usage_and_statuses() -> None:
     repository = InMemoryDataSourceRepository()
     primary = _source("source-primary", "Primary")
-    archive = _source("source-archive", "Archive", enabled=False)
+    archive = _source("source-archive", "Archive")
     orders = _database("database-orders", primary.id, "orders")
     events = _database("database-events", primary.id, "events", available=False)
     history = _database("database-history", archive.id, "history")
@@ -148,11 +146,9 @@ def test_in_memory_workspace_summary_aggregates_distinct_usage_and_statuses() ->
 
     summary = repository.get_workspace_data_source_summary(
         "workspace-a",
-        workspace_enabled=True,
     )
 
     assert summary.workspace_id == "workspace-a"
-    assert summary.workspace_enabled is True
     assert summary.source_count == 2
     assert summary.database_count == 3
     assert summary.assignment_count == 4
@@ -175,7 +171,7 @@ def test_in_memory_workspace_summary_aggregates_distinct_usage_and_statuses() ->
         "orders-a": "active",
         "orders-b": "active",
         "events-a": "database_unavailable",
-        "history-a": "source_disabled",
+        "history-a": "active",
     }
     assignments = {
         assignment.link_id: assignment
@@ -194,10 +190,8 @@ def test_in_memory_workspace_summary_accepts_empty_project_membership() -> None:
 
     summary = repository.get_workspace_data_source_summary(
         "workspace-empty",
-        workspace_enabled=False,
     )
 
-    assert summary.workspace_enabled is False
     assert summary.source_count == 0
     assert summary.database_count == 0
     assert summary.assignment_count == 0
@@ -254,14 +248,13 @@ def test_postgres_workspace_summary_reads_current_workspace_and_project_kind(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     connection = _FakeConnection(
-        workspace_row=(False,),
+        workspace_row=(1,),
         assignment_rows=[
             (
                 "source-a",
                 "主库",
                 "公司数据源",
                 "postgresql",
-                True,
                 "link-a",
                 "project-a",
                 "订单项目",
@@ -275,7 +268,6 @@ def test_postgres_workspace_summary_reads_current_workspace_and_project_kind(
                 "订单主库",
                 "查询订单",
                 True,
-                True,
             )
         ],
     )
@@ -284,15 +276,13 @@ def test_postgres_workspace_summary_reads_current_workspace_and_project_kind(
 
     summary = repository.get_workspace_data_source_summary(
         "workspace-a",
-        workspace_enabled=True,
     )
 
-    assert summary.workspace_enabled is False
     assert summary.source_count == 1
     assert summary.database_count == 1
     assert summary.assignment_count == 1
     assert summary.project_count == 1
-    assert summary.sources[0].assignments[0].status == "workspace_disabled"
+    assert summary.sources[0].assignments[0].status == "active"
     assert connection.calls[0][1] == ("workspace-a",)
     assert "project.workspace_id=%s" in connection.calls[1][0]
     assert connection.calls[1][1] == ("workspace-a",)
@@ -311,9 +301,9 @@ def test_postgres_workspace_summary_rejects_missing_workspace(
     assert len(connection.calls) == 1
 
 
-def test_workspace_disabled_status_has_highest_precedence() -> None:
+def test_database_status_has_precedence_over_readonly_and_alias_issues() -> None:
     repository = InMemoryDataSourceRepository()
-    source = _source("source-a", "主库", enabled=False)
+    source = _source("source-a", "主库")
     database = _database("database-a", source.id, "orders", available=False)
     repository.create_data_source(source)
     repository.create_database(database)
@@ -327,7 +317,6 @@ def test_workspace_disabled_status_has_highest_precedence() -> None:
                 source,
                 workspace_id="workspace-a",
             ),
-            enabled=False,
             readonly=False,
             mcp_alias=None,
         )
@@ -335,7 +324,6 @@ def test_workspace_disabled_status_has_highest_precedence() -> None:
 
     summary = repository.get_workspace_data_source_summary(
         "workspace-a",
-        workspace_enabled=False,
     )
 
-    assert summary.sources[0].assignments[0].status == "workspace_disabled"
+    assert summary.sources[0].assignments[0].status == "database_unavailable"

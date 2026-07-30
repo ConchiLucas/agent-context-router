@@ -9,7 +9,6 @@ import {
 import { WorkspaceDataSourceOverview } from "@/components/workspace-data-source-overview";
 import { WorkspaceEnvironmentMapping } from "@/components/workspace-environment-mapping";
 import {
-  getWorkspace,
   getWorkspaceDatabaseEnvironmentMappings,
   getWorkspaceEnvironmentConfig,
 } from "@/lib/api";
@@ -31,8 +30,7 @@ export function WorkspaceDetail({
   onBack,
 }: WorkspaceDetailProps) {
   const [tab, setTab] = useState<WorkspaceDetailTab>("frontend");
-  const [currentWorkspace, setCurrentWorkspace] =
-    useState<WorkspaceSummary>(workspace);
+  const currentWorkspace = workspace;
   const [projectCounts, setProjectCounts] = useState<Record<ProjectKind, number>>({
     frontend: 0,
     backend: 0,
@@ -41,16 +39,6 @@ export function WorkspaceDetail({
   const [activeDatabaseEnvironment, setActiveDatabaseEnvironment] =
     useState<DatabaseEnvironment | null>(null);
   const projectDashboardRef = useRef<ProjectDashboardHandle>(null);
-
-  const refreshWorkspace = useCallback(async () => {
-    try {
-      setCurrentWorkspace(await getWorkspace(workspace.id));
-    } catch {
-      // The project mutation has already succeeded. Keep the current header
-      // counters and let the next navigation reload them instead of presenting
-      // the completed mutation as a failure.
-    }
-  }, [workspace.id]);
 
   const updateProjectCounts = useCallback(
     (counts: Record<ProjectKind, number>) => {
@@ -68,7 +56,7 @@ export function WorkspaceDetail({
       .then(([configuration, environmentConfig]) => {
         if (!active) return;
         setActiveDatabaseEnvironment(
-          configuration.enabled
+          configuration.configured
             ? configuration.active_environment
             : environmentConfig.configured
               ? environmentConfig.active_environment
@@ -83,11 +71,6 @@ export function WorkspaceDetail({
       active = false;
     };
   }, [workspace.id]);
-
-  function addProject() {
-    if (tab === "data-sources") setTab("backend");
-    projectDashboardRef.current?.openCreateProject();
-  }
 
   return (
     <section className="workspace-detail">
@@ -110,23 +93,10 @@ export function WorkspaceDetail({
             <span className="project-type-chip">
               {currentWorkspace.workspace_type}
             </span>
-            <span
-              className="project-status-chip"
-              data-enabled={currentWorkspace.enabled}
-            >
-              {currentWorkspace.enabled
-                ? "工作空间已启用"
-                : "工作空间已停用"}
-            </span>
           </div>
         </div>
       </header>
 
-      {!currentWorkspace.enabled ? (
-        <div className="workspace-disabled-banner">
-          工作空间已停用，目录下的项目不会参与 MCP 的 cwd 匹配。你仍可以查看和修改配置。
-        </div>
-      ) : null}
 
       <div className="workspace-context-actions" aria-label="工作空间操作">
         <button
@@ -142,19 +112,10 @@ export function WorkspaceDetail({
           data-environment={activeDatabaseEnvironment ?? "unconfigured"}
           onClick={() => setShowEnvironmentMapping(true)}
         >
-          环境配置 ·{" "}
+          环境详情 ·{" "}
           {activeDatabaseEnvironment
             ? activeDatabaseEnvironment.toUpperCase()
             : "未配置"}
-        </button>
-        <button
-          type="button"
-          className="secondary-button"
-          onClick={() =>
-            projectDashboardRef.current?.refreshWorkspaceMapping()
-          }
-        >
-          刷新映射
         </button>
         <button
           type="button"
@@ -180,9 +141,6 @@ export function WorkspaceDetail({
           }
         >
           查看 MCP JSON
-        </button>
-        <button type="button" className="primary-button" onClick={addProject}>
-          添加项目
         </button>
       </div>
 
@@ -229,7 +187,6 @@ export function WorkspaceDetail({
         projectKind={tab === "frontend" ? "frontend" : "backend"}
         visible={tab !== "data-sources"}
         onProjectCountsChanged={updateProjectCounts}
-        onWorkspaceChanged={refreshWorkspace}
       />
       {tab === "data-sources" ? (
         <WorkspaceDataSourceOverview workspaceId={currentWorkspace.id} />

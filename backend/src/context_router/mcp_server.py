@@ -490,26 +490,18 @@ def create_context_router_mcp(
 
 def _runtime_run_payload(run: object) -> dict[str, object]:
     return {
-        "operation_id": str(getattr(run, "id")),
-        "project_id": str(getattr(run, "project_id")),
-        "mode": str(getattr(run, "mode")),
-        "status": str(getattr(run, "status")),
-        "snapshot_id": str(getattr(run, "snapshot_id")),
-        "decision_reason": str(getattr(run, "decision_reason")),
-        "changed_files": list(getattr(run, "changed_files")),
-        "exit_code": getattr(run, "exit_code"),
-        "error_message": getattr(run, "error_message"),
-        "created_at": getattr(run, "created_at").isoformat(),
-        "started_at": (
-            getattr(run, "started_at").isoformat()
-            if getattr(run, "started_at") is not None
-            else None
-        ),
-        "finished_at": (
-            getattr(run, "finished_at").isoformat()
-            if getattr(run, "finished_at") is not None
-            else None
-        ),
+        "operation_id": str(run.id),
+        "project_id": str(run.project_id),
+        "mode": str(run.mode),
+        "status": str(run.status),
+        "snapshot_id": str(run.snapshot_id),
+        "decision_reason": str(run.decision_reason),
+        "changed_files": list(run.changed_files),
+        "exit_code": run.exit_code,
+        "error_message": run.error_message,
+        "created_at": run.created_at.isoformat(),
+        "started_at": (run.started_at.isoformat() if run.started_at is not None else None),
+        "finished_at": (run.finished_at.isoformat() if run.finished_at is not None else None),
     }
 
 

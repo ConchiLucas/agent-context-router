@@ -2,49 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  buildSelectedDatabaseAliases,
   buildTaskContextTimeline,
-  clickHouseConfigFromFields,
-  clickHouseFieldsFromConfig,
   supportsConnectionTest,
-  validateDatabaseAliases,
 } from "./database-access";
-
-test("builds one atomic alias payload for selected databases", () => {
-  assert.deepEqual(
-    buildSelectedDatabaseAliases(new Set(["database-a", "database-b"]), {
-      "database-a": " analytics ",
-      "database-b": "",
-      "database-c": "not-selected",
-    }),
-    { "database-a": "analytics" },
-  );
-});
-
-test("round-trips ClickHouse TLS, bootstrap database, and timeout fields", () => {
-  const fields = clickHouseFieldsFromConfig({
-    secure: true,
-    verify: false,
-    bootstrap_database: "analytics",
-    connect_timeout_seconds: 12,
-    send_receive_timeout_seconds: 45,
-  });
-
-  assert.deepEqual(fields, {
-    secure: true,
-    verify: false,
-    bootstrapDatabase: "analytics",
-    connectTimeoutSeconds: "12",
-    sendReceiveTimeoutSeconds: "45",
-  });
-  assert.deepEqual(clickHouseConfigFromFields(fields), {
-    secure: true,
-    verify: false,
-    bootstrap_database: "analytics",
-    connect_timeout_seconds: 12,
-    send_receive_timeout_seconds: 45,
-  });
-});
 
 test("uses backend capabilities to decide whether connection testing is available", () => {
   assert.equal(
@@ -66,25 +26,6 @@ test("uses backend capabilities to decide whether connection testing is availabl
       queryable: false,
     }),
     false,
-  );
-});
-
-test("validates MCP alias format, required values, and project-local duplicates", () => {
-  assert.deepEqual(
-    validateDatabaseAliases([
-      { databaseId: "existing-empty", value: "", required: true },
-      { databaseId: "new-empty", value: "", required: false },
-      { databaseId: "invalid", value: "Bad Alias", required: false },
-      { databaseId: "duplicate-a", value: "analytics", required: true },
-      { databaseId: "duplicate-b", value: "analytics", required: false },
-    ]),
-    {
-      "existing-empty": "MCP 别名不能为空",
-      invalid:
-        "须以小写字母开头，只能包含小写字母、数字、_ 或 -，最长 64 个字符",
-      "duplicate-a": "同一项目内的 MCP 别名不能重复",
-      "duplicate-b": "同一项目内的 MCP 别名不能重复",
-    },
   );
 });
 

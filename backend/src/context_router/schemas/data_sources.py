@@ -20,7 +20,6 @@ class DataSourceCreate(BaseModel):
     engine: DatabaseEngine
     description: str = Field(default="", max_length=500)
     connection_config: dict[str, Any] = Field(default_factory=dict)
-    enabled: bool = True
 
 
 class DataSourceUpdate(DataSourceCreate):
@@ -34,7 +33,6 @@ class DataSourceSummary(BaseModel):
     engine: DatabaseEngine
     description: str
     connection_config: dict[str, Any]
-    enabled: bool
     config_version: int
     database_count: int
     project_count: int
@@ -101,7 +99,6 @@ class ProjectDatabaseLinkCreate(BaseModel):
     alias: str = Field(default="", max_length=120)
     mcp_alias: str | None = Field(default=None, min_length=1, max_length=64)
     purpose: str = Field(default="", max_length=500)
-    enabled: bool = True
     readonly: bool = True
     allowed_schemas: list[str] = Field(default_factory=list)
     max_rows: int = Field(default=1000, ge=1, le=100_000)
@@ -151,7 +148,6 @@ class ProjectDatabaseLinkSummary(BaseModel):
     alias: str
     mcp_alias: str | None
     purpose: str
-    enabled: bool
     readonly: bool
     allowed_schemas: list[str]
     max_rows: int
@@ -196,7 +192,6 @@ class ProjectDataSourceOption(BaseModel):
     name: str
     category: str
     engine: DatabaseEngine
-    enabled: bool
     databases: list[ProjectDatabaseOption]
 
 
@@ -210,11 +205,8 @@ class ProjectDataSourceOptions(BaseModel):
 
 WorkspaceDataSourceAssignmentStatus = Literal[
     "active",
-    "workspace_disabled",
-    "source_disabled",
     "database_unavailable",
     "system_database",
-    "link_disabled",
     "not_readonly",
     "missing_mcp_alias",
 ]
@@ -234,12 +226,9 @@ class WorkspaceDataSourceAssignmentSummary(BaseModel):
     alias: str
     purpose: str
     status: WorkspaceDataSourceAssignmentStatus
-    workspace_enabled: bool
-    link_enabled: bool
     readonly: bool
     database_available: bool
     database_system: bool
-    source_enabled: bool
 
 
 class WorkspaceDataSourceUsageSummary(BaseModel):
@@ -249,7 +238,6 @@ class WorkspaceDataSourceUsageSummary(BaseModel):
     name: str
     category: str
     engine: DatabaseEngine
-    enabled: bool
     database_count: int
     assignment_count: int
     project_count: int
@@ -260,7 +248,6 @@ class WorkspaceDataSourceSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     workspace_id: str
-    workspace_enabled: bool
     source_count: int
     database_count: int
     assignment_count: int

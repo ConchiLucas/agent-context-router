@@ -138,7 +138,6 @@ def _project_data_source_options(request: Request, project_id: str) -> ProjectDa
                 name=source.name,
                 category=source.category,
                 engine=source.engine,
-                enabled=source.enabled,
                 databases=databases,
             )
         )
@@ -212,7 +211,6 @@ def create_data_source(payload: DataSourceCreate, request: Request) -> DataSourc
         engine=payload.engine,
         description=payload.description.strip(),
         connection_config=payload.connection_config,
-        enabled=payload.enabled,
         config_version=1,
         database_count=0,
         project_count=0,
@@ -239,7 +237,6 @@ def update_data_source(
             engine=payload.engine,
             description=payload.description.strip(),
             connection_config=_merged_config(previous.connection_config, payload.connection_config),
-            enabled=payload.enabled,
             config_version=previous.config_version + 1,
             updated_at=datetime.now(UTC),
         )
@@ -519,7 +516,6 @@ def create_database_project_link(
             alias=payload.alias.strip(),
             mcp_alias=payload.mcp_alias,
             purpose=payload.purpose.strip(),
-            enabled=payload.enabled,
             readonly=payload.readonly,
             allowed_schemas=payload.allowed_schemas,
             max_rows=payload.max_rows,
@@ -528,7 +524,6 @@ def create_database_project_link(
             created_at=now,
             updated_at=now,
             workspace_id=project.workspace_id,
-            workspace_enabled=project.workspace_enabled,
             project_kind=project.project_kind,
         )
         saved_record = _store(request).create_link(record)
@@ -566,7 +561,6 @@ def update_database_project_link(
             alias=payload.alias.strip(),
             mcp_alias=payload.mcp_alias or previous.mcp_alias,
             purpose=payload.purpose.strip(),
-            enabled=payload.enabled,
             readonly=payload.readonly,
             allowed_schemas=payload.allowed_schemas,
             max_rows=payload.max_rows,
@@ -574,7 +568,6 @@ def update_database_project_link(
             query_timeout_ms=payload.query_timeout_ms,
             updated_at=datetime.now(UTC),
             workspace_id=project.workspace_id,
-            workspace_enabled=project.workspace_enabled,
             project_kind=project.project_kind,
         )
         saved_record = _store(request).update_link(record)
@@ -699,7 +692,6 @@ def replace_project_databases(
                         existing,
                         mcp_alias=requested_alias or existing.mcp_alias,
                         workspace_id=project.workspace_id,
-                        workspace_enabled=project.workspace_enabled,
                         project_kind=project.project_kind,
                         updated_at=(
                             now
@@ -711,8 +703,6 @@ def replace_project_databases(
                 continue
             database = database_by_id[database_id]
             source = source_by_id[database.data_source_id]
-            if not source.enabled:
-                raise DataSourceRepositoryError(f"数据源“{source.name}”已停用")
             if not database.available:
                 raise DataSourceRepositoryError(f"数据库“{database.remote_name}”当前不可用")
             records.append(
@@ -728,7 +718,6 @@ def replace_project_databases(
                     alias=database.display_name or database.remote_name,
                     mcp_alias=requested_alias,
                     purpose="项目数据源访问",
-                    enabled=True,
                     readonly=True,
                     allowed_schemas=[],
                     max_rows=1000,
@@ -737,7 +726,6 @@ def replace_project_databases(
                     created_at=now,
                     updated_at=now,
                     workspace_id=project.workspace_id,
-                    workspace_enabled=project.workspace_enabled,
                     project_kind=project.project_kind,
                 )
             )

@@ -98,7 +98,6 @@ def test_workspace_task_aggregates_project_documents_and_routes_by_workspace(
         name="测试工作空间",
         workspace_type="公司项目",
         root_path=str(root_path),
-        enabled=True,
     )
     project_repository = InMemoryProjectRepository(workspace_repository)
     search_repository = InMemoryDocumentSearchRepository()
@@ -220,7 +219,6 @@ workspace-only-search-needle
         name="仅工作空间文档",
         workspace_type="公司项目",
         root_path=str(root_path),
-        enabled=True,
     )
     search_repository = InMemoryDocumentSearchRepository()
     registry = ProjectRegistry(
@@ -285,7 +283,6 @@ def test_workspace_without_root_agents_keeps_synthetic_root(
         name="空工作空间",
         workspace_type="公司项目",
         root_path=str(root_path),
-        enabled=True,
     )
     search_repository = InMemoryDocumentSearchRepository()
     registry = ProjectRegistry(
@@ -328,7 +325,6 @@ def test_workspace_refresh_removes_deleted_root_document_index(
         name="刷新工作空间",
         workspace_type="公司项目",
         root_path=str(root_path),
-        enabled=True,
     )
     search_repository = InMemoryDocumentSearchRepository()
     registry = ProjectRegistry(
@@ -367,7 +363,6 @@ def test_workspace_refresh_collects_all_project_failures_and_retains_caches(
         name="失败聚合工作空间",
         workspace_type="公司项目",
         root_path=str(root_path),
-        enabled=True,
     )
     registry = ProjectRegistry(
         Settings(

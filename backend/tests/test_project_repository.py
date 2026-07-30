@@ -52,7 +52,6 @@ def test_project_locations_are_unique_inside_a_workspace() -> None:
         workspace_id="workspace-a",
         name="A",
         root_path="/workspace/a",
-        enabled=True,
     )
     projects.create_project(
         project_id="project-a",
@@ -85,7 +84,6 @@ def test_project_can_move_between_workspaces_and_list_by_workspace() -> None:
             workspace_id=workspace_id,
             name=workspace_id,
             root_path=root_path,
-            enabled=True,
         )
     projects.create_project(
         project_id="project-a",
@@ -119,7 +117,6 @@ def test_legacy_update_rejects_workspace_child_project() -> None:
         workspace_id="workspace-a",
         name="A",
         root_path="/workspace/a",
-        enabled=True,
     )
     projects.create_project(
         project_id="project-a",
@@ -151,7 +148,6 @@ def test_legacy_update_rejects_docs_entry_for_single_root_project() -> None:
         workspace_id="workspace-a",
         name="A",
         root_path="/workspace/a",
-        enabled=True,
     )
     projects.create_project(
         project_id="project-a",
@@ -183,7 +179,6 @@ def test_legacy_update_rejects_root_project_with_siblings() -> None:
         workspace_id="workspace-a",
         name="A",
         root_path="/workspace/a",
-        enabled=True,
     )
     projects.create_project(
         project_id="root-project",
@@ -235,7 +230,6 @@ def test_project_kind_is_limited_to_frontend_or_backend() -> None:
         workspace_id="workspace-a",
         name="A",
         root_path="/workspace/a",
-        enabled=True,
     )
 
     with pytest.raises(ProjectRepositoryError, match="frontend 或 backend"):

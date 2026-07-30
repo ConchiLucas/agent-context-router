@@ -14,8 +14,8 @@
 - 环境切换采用“稳定逻辑别名 + 两个物理目标”的显式映射，不根据运行时数据库名称临时改写。自动匹配仅作为页面建议，规则是去掉 `test_`/`uat_` 后同后缀；最终映射必须由用户保存并由后端校验目标属于同一 Workspace 和 Project 的既有授权。
 - `project_database_environment_targets` 引用 `project_databases`，因此环境层不复制数据源连接、密码和查询限制。映射保存与环境切换都在事务中递增 Workspace revision。
 - prepare 固化 `database_environment + database_environment_revision + database_environment_selection`。省略可选 `environment` 参数时记录 `workspace_default`；显式 `test/uat` 时记录 `task_explicit`，只影响该 task，不修改 Workspace 当前环境。`workspace_default` 还要求调用时当前环境未变；`task_explicit` 可以与当前环境不同，但两者都要求选择器存在且共享 revision 一致。revision 不一致时 fail closed 返回 `environment_changed`。
-- 通用环境差异采用两份有界 JSON 对象，不为每一种中间件增加列或代码分支。JSON 与数据库映射共用环境选择器和 revision，但可独立启用选择器；首次保存默认 UAT。此时数据库映射 `enabled=false`，原有 Workspace alias 保持可用；只有保存数据库映射后才进入严格的环境目标解析。可按明确业务需要保存地址和访问凭据，但内容以明文 JSONB 保存在本地；task 所选环境的 `environment_config` 只供可信本机 MCP 调用方和本机管理预览使用，严禁进入日志、开发文档、链路摘要或示例输出。
-- 环境映射是 Workspace 可选能力。没有配置选择器的单环境 Workspace 在省略 prepare 的 `environment` 时继续使用原有 Workspace alias 链路，显式传参返回 `environment_not_configured`，避免 migration 后改变既有项目行为。当前 migration head 为 `20260730_0021`；`0021` 新增 `database_environment_selection`，并把已有非空环境 task 回填为 `workspace_default`。
+- 通用环境差异采用两份有界 JSON 对象，不为每一种中间件增加列或代码分支。JSON 与数据库映射共用环境选择器和 revision，但不要求映射存在；首次保存默认 UAT。没有映射记录时原有 Workspace alias 保持可用，存在映射记录后才进入严格的环境目标解析。可按明确业务需要保存地址和访问凭据，但内容以明文 JSONB 保存在本地；task 所选环境的 `environment_config` 只供可信本机 MCP 调用方和本机管理预览使用，严禁进入日志、开发文档、链路摘要或示例输出。
+- 环境映射是 Workspace 可选能力。没有配置选择器的单环境 Workspace 在省略 prepare 的 `environment` 时继续使用原有 Workspace alias 链路，显式传参返回 `environment_not_configured`，避免 migration 后改变既有项目行为。当前 migration head 为 `20260730_0022`；`0022` 删除 Workspace、数据源、项目数据库授权和环境配置的 `enabled` 字段，记录存在即生效。
 
 ### 2026-07-27
 

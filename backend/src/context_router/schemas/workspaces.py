@@ -50,7 +50,6 @@ class WorkspaceCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     workspace_type: str = Field(default="公司项目", min_length=1, max_length=60)
     root_path: str = Field(min_length=1)
-    enabled: bool = True
 
 
 class WorkspaceUpdate(BaseModel):
@@ -59,16 +58,11 @@ class WorkspaceUpdate(BaseModel):
     root_path: str = Field(min_length=1)
 
 
-class WorkspaceEnabledUpdate(BaseModel):
-    enabled: bool
-
-
 class WorkspaceSummary(BaseModel):
     id: str
     name: str
     workspace_type: str
     root_path: str
-    enabled: bool
     project_count: int = 0
     frontend_project_count: int = 0
     backend_project_count: int = 0
@@ -119,7 +113,6 @@ class WorkspaceProjectSummary(BaseModel):
     name: str
     workspace_id: str
     workspace_name: str
-    workspace_enabled: bool
     project_type: str
     project_kind: ProjectKind = "backend"
     relative_path: str

@@ -193,16 +193,11 @@ def test_lists_workspace_tasks_and_ordered_read_history(tmp_path: Path) -> None:
             },
         ).json()
         client.post(f"/api/workspaces/{workspace['id']}/prepare-preview")
-        disabled_workspace = client.patch(
-            f"/api/workspaces/{workspace['id']}/enabled",
-            json={"enabled": False},
-        )
         tasks = client.get(f"/api/workspaces/{workspace['id']}/tasks")
         removed_project_tasks = client.get(f"/api/projects/{project['id']}/tasks")
         history = client.get("/api/tasks/12/document-reads")
 
     assert tasks.status_code == 200
-    assert disabled_workspace.status_code == 200
     assert tasks.json()[0]["task_id"] == 12
     assert tasks.json()[0]["read_call_count"] == 1
     assert tasks.json()[0]["scope"] == "workspace"
