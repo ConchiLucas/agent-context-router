@@ -77,7 +77,7 @@ export function WorkspaceDataSourceOverview({
         <span className="empty-database-icon">◎</span>
         <h2>这个工作空间还没有数据源授权</h2>
         <p>
-          请切换到“前端项目”或“后端项目”，在项目卡片中打开“管理数据源”，为它选择数据库。
+          请切换到“后端项目”，在项目卡片中打开“管理数据源”，为它选择数据库。
         </p>
       </div>
     );

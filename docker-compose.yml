@@ -1,14 +1,19 @@
 services:
   backend:
-    image: ghcr.io/astral-sh/uv:python3.12-bookworm
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: agent-context-router-backend:local
     restart: unless-stopped
     working_dir: /app/backend
     command: uv run uvicorn context_router.main:create_app --factory --host 0.0.0.0 --port 8000
     environment:
       CONTEXT_ROUTER_WORKSPACE_HOST_ROOT: ${CONTEXT_ROUTER_WORKSPACE_HOST_ROOT:-/Users/conchi/workforce}
       CONTEXT_ROUTER_WORKSPACE_CONTAINER_ROOT: /workspace
-      CONTEXT_ROUTER_DEFAULT_PROJECT_NAME: ${CONTEXT_ROUTER_DEFAULT_PROJECT_NAME:-攀枝花多式联运}
-      CONTEXT_ROUTER_DEFAULT_AGENTS_PATH: ${CONTEXT_ROUTER_DEFAULT_AGENTS_PATH:-/Users/conchi/workforce/company_workforce/panzhihua_workforce/panzhihua_dsly_workforce/AGENTS.md}
+      CONTEXT_ROUTER_RUNTIME_ROOT: /runtime
+      CONTEXT_ROUTER_RUNTIME_EXECUTION_ENABLED: "true"
+      CONTEXT_ROUTER_RUNTIME_EXECUTION_TIMEOUT_SECONDS: ${CONTEXT_ROUTER_RUNTIME_EXECUTION_TIMEOUT_SECONDS:-1800}
+      CONTEXT_ROUTER_RUNTIME_DOCKER_SOCKET: /var/run/docker.sock
       CONTEXT_ROUTER_DATABASE_URL: ${CONTEXT_ROUTER_DATABASE_URL:-}
       CONTEXT_ROUTER_PUBLIC_MCP_URL: ${CONTEXT_ROUTER_PUBLIC_MCP_URL:-http://127.0.0.1:49173/mcp}
       CONTEXT_ROUTER_INTERNAL_MCP_URL: http://127.0.0.1:8000/mcp
@@ -23,6 +28,8 @@ services:
     volumes:
       - .:/app
       - ${CONTEXT_ROUTER_WORKSPACE_HOST_ROOT:-/Users/conchi/workforce}:/workspace:ro
+      - ${CONTEXT_ROUTER_RUNTIME_HOST_ROOT:-./.runtime-runner}:/runtime
+      - /var/run/docker.sock:/var/run/docker.sock
 
   frontend:
     image: node:22-bookworm

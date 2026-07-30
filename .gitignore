@@ -19,6 +19,7 @@ node_modules/
 .next/
 out/
 coverage/
+.runtime-runner/
 
 # Mounted project documents
 document-sources/*

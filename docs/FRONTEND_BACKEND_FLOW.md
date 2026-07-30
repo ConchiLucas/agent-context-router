@@ -55,11 +55,16 @@ Codex / Antigravity
 
 ```text
 Codex / Antigravity
-  -> prepare_task_context 返回 task_id + databases[].database(mcp_alias)
+  -> prepare_task_context(..., environment?='test'|'uat')
+  -> 有选择器：显式参数记录 task_explicit；省略参数记录 workspace_default
+  -> 显式参数不修改 Workspace 当前环境
+  -> 无选择器：省略参数保持旧链路；显式参数返回 environment_not_configured
+  -> 返回 task_id + 可选 database_environment/selection/revision + databases[].database(mcp_alias)
   -> search_database_objects / execute_database_query
   -> DatabaseAccessService 读取 task_id 绑定的稳定 workspace_id/workspace_key
   -> ProjectRegistry 校验当前 Workspace
-  -> workspace_id + mcp_alias 一次 JOIN 读取所属项目关联、数据库、数据源和查询策略
+  -> 未配置环境映射时按 workspace_id + mcp_alias 读取原项目授权
+  -> 配置环境映射时先校验共享 revision，再按 task 环境和稳定 mcp_alias 解析目标授权
   -> ConnectorRegistry 校验 Engine 能力
   -> SQL/对象范围策略与全局硬上限
   -> ConnectorManager 延迟创建或复用有界连接
@@ -68,7 +73,7 @@ Codex / Antigravity
   -> PostgreSQL mcp_database_calls 保存客观调用元数据
 ```
 
-数据库授权记录仍属于具体 Project，但 `mcp_alias` 在 Workspace 内大小写无关唯一。prepare 会合并全部子项目当前有效的授权，并在每条数据库摘要上返回所属 project_id/name/kind；新 Workspace task 可以使用其中任意 alias。旧 `scope=project` task 保持原项目授权范围。
+数据库授权记录仍属于具体 Project，但 `mcp_alias` 在 Workspace 内大小写无关唯一。未配置环境选择器时，省略 prepare 的 `environment` 保持原有解析，显式传参返回 `environment_not_configured`。配置选择器后，逻辑映射分别指向 TEST/UAT 的既有项目授权：`task_explicit` 使用显式任务环境且不修改 Workspace 当前环境，`workspace_default` 使用 prepare 当时的当前环境；两者都把环境、选择模式和共享 revision 写入 task。保存映射、保存环境 JSON 或切换当前环境引起 revision 变化后，旧 task 再调用数据库工具时返回 `environment_changed`，避免静默换库。旧 `scope=project` task 保持原项目授权范围。
 
 ```text
 Codex / Antigravity
@@ -110,6 +115,9 @@ prepare 和文档搜索不建立业务数据库连接。业务数据库离线时
 | 查看工作空间 MCP JSON | `workspace-detail.tsx`、`project-dashboard.tsx` | `POST /api/workspaces/{id}/prepare-preview` |
 | 查看工作空间调用记录 | `workspace-detail.tsx`、`project-dashboard.tsx`、`task-history.ts` | `GET /api/workspaces/{id}/tasks`、`GET /api/tasks/{task_id}/document-reads` |
 | 查看工作空间数据源汇总 | `workspace-data-source-overview.tsx` | `GET /api/workspaces/{id}/data-source-summary` |
+| 查看/保存项目数据库环境映射 | `workspace-environment-mapping.tsx` | `GET/PUT /api/workspaces/{id}/database-environment-mappings` |
+| 查看/保存 TEST/UAT 通用环境 JSON | `workspace-environment-mapping.tsx` | `GET/PUT /api/workspaces/{id}/environment-config` |
+| 切换当前 TEST/UAT 环境 | `workspace-environment-mapping.tsx` | `PATCH /api/workspaces/{id}/database-environment` |
 | 按数据源分类切换卡片 | `data-source-dashboard.tsx` | 复用 `GET /api/data-sources` 返回的 `category` 在前端筛选 |
 | 按需查看数据源密码 | `data-source-dashboard.tsx` | `POST /api/data-sources/{id}/reveal-password`，响应禁止缓存 |
 | 加载 Engine 能力矩阵 | `data-source-dashboard.tsx` | `GET /api/data-source-engines` |
@@ -141,6 +149,7 @@ api/workspaces.py
 - 数据源列表始终过滤口令；只有编辑弹窗的眼睛按钮调用独立接口读取明文密码。连接测试使用临时 Connector，完成后关闭，不进入长期缓存，也不向响应暴露连接配置。
 - MySQL/MariaDB/PostgreSQL/ClickHouse 自动同步由 `database_discovery.py` 使用对应驱动读取远端数据库清单，保留已有记录 ID 和项目关联，新增可见库并把本次未发现的旧库标记为不可用。同步失败不会替换现有数据库清单。
 - 项目侧数据源选择接口按数据源分组返回数据库清单且不返回连接口令；批量保存使用单个数据库事务替换该项目关联，保留仍被选中的既有策略，新关联使用默认只读限制。`mcp_alias` 虽保存在项目关联上，但更新接口、Repository 和数据库唯一索引都按 Workspace 校验。
+- `database_environments.py`、`DatabaseEnvironmentRepository` 和环境 Schema 负责 Workspace TEST/UAT 选择器、数据库映射及通用 JSON 对象。数据库建议匹配只按名称去掉 `test_`/`uat_` 后的同后缀生成，最终保存仍校验目标属于同一 Workspace 和 Project 的既有授权；通用 JSON 不预设字段且可独立启用选择器，大小、深度和数字范围由后端限制。三类写操作都在单个事务内递增共享 revision。
 - 工作空间根目录必须是绝对目录；项目源码和文档入口相对路径禁止绝对路径、`~`、反斜杠和 `..`，并通过真实路径校验阻止软链接越界。新文档入口必须位于 `docs/` 下并以 `AGENTS.md` 结尾。项目新增、编辑和删除先完成必要的磁盘验证与数据库写入，再原子更新注册表；数据库写入失败时不改变当前内存项目。
 - 工作空间是唯一运行时开关；停用后所有子项目仍在管理页面可见，但不能生成 Workspace snapshot，数据源汇总会把相关授权标记为 `workspace_disabled`。
 - `build_document_cache` 负责递归读取、路径校验、循环检测和正文缓存。
@@ -149,11 +158,11 @@ api/workspaces.py
 - `markdown_search_parser.py` 剥离 Front Matter、按 fenced-code-aware ATX 章节解析并生成有界、带重叠的规范化分块。
 - `document_search_repository.py` 使用 PostgreSQL `simple` FTS、`pg_trgm` 和短词精确子串查询 Workspace 或 Project 的当前索引版本；两类索引分别持久化，避免使用伪 Project。
 - `ContextDocumentSearchService` 按 task scope 选择 Workspace 或旧 Project 兼容链路，校验 Workspace 根入口和各项目 index_version，将分块命中聚合为文档结果；只返回定位信息，不返回 Markdown 正文。
-- `ContextPreparationService` 为 MCP 和 Workspace MCP JSON 预览生成同一个返回模型；除显式根树或合成根树外，还返回全部项目、活动项目和全 Workspace 可用数据库摘要，不 ping 远端数据库。
-- `task_repository.py` 为新 prepare 写入 `scope='workspace'`、Workspace 快照和可选活动项目快照。migration 前的记录保留 `scope='project'`，同时回填 Workspace 字段以便在工作空间调用记录中查询；read/search/database 仍根据 scope 走原 Project 兼容路径。
+- `ContextPreparationService` 为 MCP 和本机 Workspace MCP JSON 预览生成包含显式根树或合成根树、全部项目、活动项目、可选任务数据库环境和全 Workspace 可用数据库摘要的同一返回模型，不 ping 远端数据库。调用方可选传 `environment='test'|'uat'`；显式选择不会调用 Workspace 切换接口。通用 JSON 是用户显式维护内容，不自动读取 Nacos 或数据源连接配置；task 所选环境的 `environment_config` 会返回给可信本机 MCP 调用方和本机预览，但不进入日志、开发文档或链路摘要。
+- `task_repository.py` 为新 prepare 写入 `scope='workspace'`、Workspace 快照、可选活动项目快照、环境、共享 revision 和 `database_environment_selection`。`20260730_0021` 把已有非空环境 task 回填为 `workspace_default`；显式新任务写 `task_explicit`。migration 前的记录保留 `scope='project'`，同时回填 Workspace 字段以便在工作空间调用记录中查询；read/search 仍走原 Project 兼容路径，但 Workspace 启用环境选择器后，旧 Project task 的数据库调用必须重新 prepare。
 - `ContextDocumentReadService` 按 task scope 校验 Workspace 聚合缓存或旧 Project 缓存，批量读取文档或章节，并在返回正文前记录调用。
 - `document_read_repository.py` 保存 read_call_id、单次 position、相对路径、章节和状态，不保存正文。
-- `DatabaseAccessService` 是数据库调用的授权入口。新链路固定执行 `task_id -> 稳定 workspace_id/workspace_key -> Workspace mcp_alias -> 所属项目关联 -> 当前连接/策略`；旧 `scope=project` task 继续执行 `project_id/project_key -> Project alias`。两条链路都不接受 Host、DSN、账号或远端库名。
+- `DatabaseAccessService` 是数据库调用的授权入口。`workspace_default` 同时校验 task 环境仍等于 Workspace 当前环境且共享 revision 一致；`task_explicit` 不要求等于当前环境，但仍要求选择器存在且 revision 一致。只配置通用 JSON 时校验后继续原有 Workspace alias 链；配置数据库映射后，再按 task 环境由稳定 alias 解析目标。没有选择器且 task 没有环境快照时继续旧链路；显式环境缺少选择器则失败关闭。环境选择器启用前的旧 `scope=project` task 必须重新 prepare，防止绕过 revision。所有链路都不接受 Host、DSN、账号或远端库名。
 - `database/policy.py` 使用 SQLGlot fail-closed 校验单条只读 SQL，拒绝写入、多语句、跨数据库、外部表函数、文件/网络读取和调用方自带 SETTINGS。
 - `DatabaseCatalogService` 提供 schema/table/view/column/index 的 `names`、`summary`、`full` 渐进搜索；细节越高，允许返回的对象数越少。
 - `DatabaseQueryService` 执行有界只读查询；`DatabaseResultFormatter` 统一处理复杂类型、结果大小和明确截断元数据。
@@ -199,7 +208,7 @@ app/page.tsx
 
 Markdown 解析器只生成 React 元素，不使用 `dangerouslySetInnerHTML`，也不执行文档里的原始 HTML。
 
-工作空间列表负责顶层新增、编辑、启停和删除。进入详情后，页面按“前端项目 / 后端项目 / 数据源汇总”三页签组织内容；项目新增/编辑分别提交 `project_kind`、源码 `relative_path` 和 docs 文档入口 `document_relative_path`，卡片也分开展示两条路径。“刷新映射 / 查看调用记录 / 查看文档树 / 查看 MCP JSON”位于 Workspace 工具栏并调用 Workspace API；项目卡片只保留“编辑项目 / 管理数据源 / 删除项目”。“数据源汇总”按数据源展示数据库数、项目数、授权数和每条授权状态，不提供另一套工作空间级授权编辑。
+工作空间列表负责顶层新增、编辑、启停和删除。进入详情后，页面按“前端项目 / 后端项目 / 数据源汇总”三页签组织内容；项目新增/编辑分别提交 `project_kind`、源码 `relative_path` 和 docs 文档入口 `document_relative_path`，卡片也分开展示两条路径。“环境配置 / 刷新映射 / 查看调用记录 / 查看文档树 / 查看 MCP JSON”位于 Workspace 工具栏并调用 Workspace API；前端项目卡片隐藏“管理数据源”，后端项目卡片继续提供数据库授权入口。“环境配置”全屏面板以页签分开数据库映射和通用 JSON：前者展示稳定别名及 TEST/UAT 物理目标，后者提供两个无固定字段的 JSON 编辑区并高亮当前环境；“数据源汇总”只做聚合展示，不提供另一套授权编辑。
 
 Workspace 调用记录通过 `task-history.ts` 保留文档读取批次和单批位置，通过 `database-access.ts` 把文档 read call 与数据库 call 按创建时间合并为上下文时间线。后端工作空间任务列表在 `LIMIT` 前过滤既没有 read call 也没有数据库调用的任务；同一次批量读取的文档在一行横向展示，读取成功的卡片复用 Workspace 文档详情接口和 Markdown 抽屉。数据库卡片仍只展示客观摘要。
 

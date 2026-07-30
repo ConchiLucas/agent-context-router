@@ -1190,14 +1190,22 @@ export const ProjectDashboard = forwardRef<
                   >
                     编辑项目
                   </button>
-                  <button
-                    type="button"
-                    className="primary-button"
-                    disabled={busyProjectId === project.id}
-                    onClick={() => void openProjectDataSources(project)}
+                  {project.project_kind === "backend" ? (
+                    <button
+                      type="button"
+                      className="primary-button"
+                      disabled={busyProjectId === project.id}
+                      onClick={() => void openProjectDataSources(project)}
+                    >
+                      管理数据源
+                    </button>
+                  ) : null}
+                  <a
+                    className="secondary-button runtime-config-card-link"
+                    href={`/projects/${project.id}/runtime`}
                   >
-                    管理数据源
-                  </button>
+                    运行配置
+                  </a>
                   <button
                     type="button"
                     className="danger-button"

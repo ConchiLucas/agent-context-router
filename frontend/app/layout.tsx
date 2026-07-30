@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import "./globals.css";
+import "./runtime-config.css";
 
 export const metadata: Metadata = {
   title: "Agent Context Router",

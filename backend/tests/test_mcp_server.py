@@ -3,7 +3,11 @@ import asyncio
 import pytest
 from mcp.server.fastmcp.exceptions import ToolError
 
-from context_router.mcp_server import create_context_router_mcp
+from context_router.mcp_server import (
+    MCP_SERVER_INSTRUCTIONS,
+    PREPARE_TOOL_DESCRIPTION,
+    create_context_router_mcp,
+)
 from context_router.schemas.context import SearchContextDocumentsResult
 
 
@@ -13,6 +17,20 @@ class UnusedService:
 
     def read(self, **_: object) -> None:
         raise AssertionError("tools/list must not call read")
+
+
+class _PrepareResult:
+    def model_dump(self, **_: object) -> dict[str, object]:
+        return {"task_id": 55}
+
+
+class RecordingPreparationService:
+    def __init__(self) -> None:
+        self.arguments: dict[str, object] = {}
+
+    def prepare(self, **arguments: object) -> _PrepareResult:
+        self.arguments = arguments
+        return _PrepareResult()
 
 
 class RecordingCatalogService:
@@ -48,7 +66,7 @@ class RecordingQueryService:
         return {"rows": [[1]], "returned_rows": 1}
 
 
-def test_mcp_exposes_five_stable_context_tools() -> None:
+def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
     service = UnusedService()
     server = create_context_router_mcp(  # type: ignore[arg-type]
         service,
@@ -63,18 +81,40 @@ def test_mcp_exposes_five_stable_context_tools() -> None:
         "read_context_document",
         "search_database_objects",
         "execute_database_query",
+        "apply_project_changes",
+        "get_project_operation",
     ]
     assert tools[0].annotations is not None
     assert tools[0].annotations.readOnlyHint is True
     assert tools[0].annotations.destructiveHint is False
     assert tools[0].annotations.idempotentHint is False
     assert tools[0].annotations.openWorldHint is False
-    for tool in tools[1:]:
+    for tool in tools[1:5]:
         assert tool.annotations is not None
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
         assert tool.annotations.idempotentHint is True
         assert tool.annotations.openWorldHint is False
+    assert tools[5].annotations is not None
+    assert tools[5].annotations.readOnlyHint is False
+    assert tools[5].annotations.destructiveHint is True
+    assert tools[5].annotations.idempotentHint is False
+    assert tools[6].annotations is not None
+    assert tools[6].annotations.readOnlyHint is True
+    assert tools[6].annotations.destructiveHint is False
+    assert tools[6].annotations.idempotentHint is True
+    prepare_schema = tools[0].inputSchema
+    assert prepare_schema["required"] == ["task", "cwd"]
+    assert set(prepare_schema["properties"]) == {
+        "task",
+        "cwd",
+        "agent_name",
+        "environment",
+    }
+    assert "test" in str(prepare_schema["properties"]["environment"])
+    assert "uat" in str(prepare_schema["properties"]["environment"])
+    assert "credentials" in PREPARE_TOOL_DESCRIPTION
+    assert "never echo it into logs" in MCP_SERVER_INSTRUCTIONS
     document_search_schema = tools[1].inputSchema
     database_search_schema = tools[3].inputSchema
     query_schema = tools[4].inputSchema
@@ -93,6 +133,35 @@ def test_mcp_exposes_five_stable_context_tools() -> None:
     }
     assert query_schema["required"] == ["task_id", "database", "sql"]
     assert set(query_schema["properties"]) == {"task_id", "database", "sql"}
+
+
+def test_prepare_forwards_optional_task_environment() -> None:
+    preparation = RecordingPreparationService()
+    document_service = UnusedService()
+    server = create_context_router_mcp(  # type: ignore[arg-type]
+        preparation,
+        document_service,
+    )
+
+    _, result = asyncio.run(
+        server.call_tool(
+            "prepare_task_context",
+            {
+                "task": "检查 TEST 环境",
+                "cwd": "/workspace/project",
+                "agent_name": "codex",
+                "environment": "test",
+            },
+        )
+    )
+
+    assert result == {"task_id": 55}
+    assert preparation.arguments == {
+        "task": "检查 TEST 环境",
+        "cwd": "/workspace/project",
+        "agent_name": "codex",
+        "environment": "test",
+    }
 
 
 def test_document_search_forwards_only_fixed_public_arguments() -> None:

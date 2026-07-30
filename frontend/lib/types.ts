@@ -1,4 +1,16 @@
 export type ProjectKind = "frontend" | "backend";
+export type DatabaseEnvironment = "test" | "uat";
+export type DatabaseEnvironmentSelection =
+  | "workspace_default"
+  | "task_explicit";
+export type JsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+export type EnvironmentJsonObject = Record<string, JsonValue>;
 
 export interface ProjectSummary {
   id: string;
@@ -102,6 +114,94 @@ export interface WorkspaceDataSourceSummary {
   assignment_count: number;
   project_count: number;
   sources: WorkspaceDataSourceUsage[];
+}
+
+export interface DatabaseEnvironmentTarget {
+  link_id: string;
+  database_id: string;
+  database_name: string;
+  database_display_name: string;
+  namespace_type: "database" | "schema" | "file";
+  data_source_id: string;
+  data_source_name: string;
+  engine: DatabaseEngine;
+  available: boolean;
+  source_enabled: boolean;
+  readonly: boolean;
+  link_enabled: boolean;
+  system_database: boolean;
+  mcp_alias?: string | null;
+}
+
+export interface DatabaseEnvironmentTargets {
+  test: DatabaseEnvironmentTarget | null;
+  uat: DatabaseEnvironmentTarget | null;
+}
+
+export interface WorkspaceDatabaseEnvironmentMapping {
+  id: string | null;
+  logical_name: string;
+  mcp_alias: string;
+  status: string;
+  targets: DatabaseEnvironmentTargets;
+  suggested_targets: DatabaseEnvironmentTargets;
+  issues: string[];
+}
+
+export interface WorkspaceDatabaseEnvironmentProject {
+  project_id: string;
+  project_name: string;
+  project_kind: ProjectKind;
+  mappings: WorkspaceDatabaseEnvironmentMapping[];
+  candidates: Record<DatabaseEnvironment, DatabaseEnvironmentTarget[]>;
+}
+
+export interface WorkspaceDatabaseEnvironmentSummary {
+  mapping_count: number;
+  complete_count: number;
+  issue_count: number;
+}
+
+export interface WorkspaceDatabaseEnvironmentMappings {
+  workspace_id: string;
+  configured: boolean;
+  enabled: boolean;
+  active_environment: DatabaseEnvironment | null;
+  revision: number;
+  summary: WorkspaceDatabaseEnvironmentSummary;
+  projects: WorkspaceDatabaseEnvironmentProject[];
+}
+
+export interface WorkspaceDatabaseEnvironmentMappingUpdate {
+  id?: string;
+  project_id: string;
+  logical_name: string;
+  mcp_alias: string;
+  targets: Record<DatabaseEnvironment, string | null>;
+}
+
+export interface WorkspaceDatabaseEnvironmentMappingsUpdate {
+  expected_revision: number;
+  mappings: WorkspaceDatabaseEnvironmentMappingUpdate[];
+}
+
+export interface WorkspaceDatabaseEnvironmentSwitch {
+  environment: DatabaseEnvironment;
+  expected_revision: number;
+}
+
+export interface WorkspaceEnvironmentConfig {
+  workspace_id: string;
+  configured: boolean;
+  active_environment: DatabaseEnvironment | null;
+  revision: number;
+  environments: Record<DatabaseEnvironment, EnvironmentJsonObject>;
+  active_config: EnvironmentJsonObject | null;
+}
+
+export interface WorkspaceEnvironmentConfigUpdate {
+  expected_revision: number;
+  environments: Record<DatabaseEnvironment, EnvironmentJsonObject>;
 }
 
 export interface DocumentTreeNode {
@@ -284,6 +384,14 @@ export interface PreparedDatabase {
   project_id?: string | null;
   project_name?: string | null;
   project_kind?: ProjectKind | null;
+  environment?: DatabaseEnvironment | null;
+}
+
+export interface PreparedDatabaseEnvironment {
+  key: DatabaseEnvironment;
+  name: string;
+  revision: number;
+  selection: DatabaseEnvironmentSelection;
 }
 
 export interface PrepareTaskContextResult {
@@ -294,6 +402,8 @@ export interface PrepareTaskContextResult {
   project?: PreparedProject | null;
   documents: ContextDocumentNode;
   databases: PreparedDatabase[];
+  database_environment?: PreparedDatabaseEnvironment | null;
+  environment_config?: EnvironmentJsonObject | null;
   warnings?: string[];
 }
 
@@ -307,6 +417,9 @@ export interface ContextTaskSummary {
   active_project_id?: string | null;
   active_project_name?: string | null;
   active_project_kind?: ProjectKind | null;
+  database_environment?: DatabaseEnvironment | null;
+  database_environment_revision?: number | null;
+  database_environment_selection?: DatabaseEnvironmentSelection | null;
   agent_name?: string;
   created_at: string;
   read_call_count: number;
@@ -353,6 +466,9 @@ export interface ContextTaskReadHistory {
   active_project_name?: string | null;
   active_project_kind?: ProjectKind | null;
   scope: "project" | "workspace";
+  database_environment?: DatabaseEnvironment | null;
+  database_environment_revision?: number | null;
+  database_environment_selection?: DatabaseEnvironmentSelection | null;
   agent_name?: string;
   created_at: string;
   calls: ContextReadHistoryCall[];

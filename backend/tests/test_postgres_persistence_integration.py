@@ -22,6 +22,9 @@ from context_router.repositories.database_call_repository import (
     DatabaseCallWrite,
     PostgresDatabaseCallRepository,
 )
+from context_router.repositories.database_environment_repository import (
+    PostgresDatabaseEnvironmentRepository,
+)
 from context_router.repositories.mcp_tool_call_repository import PostgresMcpToolCallRepository
 from context_router.repositories.project_repository import PostgresProjectRepository
 from context_router.repositories.task_repository import PostgresTaskRepository
@@ -40,6 +43,8 @@ _REVISION_0013 = "20260726_0013"
 _REVISION_0014 = "20260726_0014"
 _REVISION_0015 = "20260726_0015"
 _REVISION_0016 = "20260727_0016"
+_REVISION_0020 = "20260730_0020"
+_REVISION_0021 = "20260730_0021"
 
 _PROJECT_A = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 _PROJECT_B = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -194,7 +199,7 @@ def test_migration_and_postgres_repositories_preserve_legacy_data(
         )
 
     command.upgrade(alembic_config, "head")
-    assert _current_revision(database_url) == _REVISION_0016
+    assert _current_revision(database_url) == _REVISION_0021
     assert _aliases(database_url) == aliases
     _assert_legacy_rows_survive(database_url)
     _assert_legacy_projects_migrated_to_workspaces(database_url)
@@ -531,6 +536,51 @@ def test_postgres_workspace_and_project_repositories_keep_legacy_fields_in_sync(
     assert projects.list_projects(workspace_id) == []
 
 
+def test_postgres_environment_json_can_switch_without_database_mappings(
+    isolated_postgres_database: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_url = isolated_postgres_database
+    monkeypatch.setenv("CONTEXT_ROUTER_DATABASE_URL", database_url)
+    command.upgrade(_alembic_config(), "head")
+    workspace_id = "56565656565656565656565656565657"
+    PostgresWorkspaceRepository(database_url).create_workspace(
+        workspace_id=workspace_id,
+        name="JSON 环境工作空间",
+        workspace_type="业务系统",
+        root_path="/workspace/environment-json",
+        enabled=True,
+    )
+    environments = {
+        "test": {"rocketmq": {"namespace": "test"}},
+        "uat": {"rocketmq": {"namespace": "uat"}},
+    }
+    repository = PostgresDatabaseEnvironmentRepository(database_url)
+
+    saved = repository.replace_environment_payloads(
+        workspace_id=workspace_id,
+        expected_revision=0,
+        environments=environments,
+    )
+    snapshot = repository.get_environment_snapshot(workspace_id)
+
+    assert saved.enabled is False
+    assert saved.active_environment == "uat"
+    assert snapshot.selector_configured is True
+    assert snapshot.payloads.configured is True
+    assert snapshot.payloads.environments == environments
+    assert repository.list_mappings(workspace_id) == []
+
+    switched = repository.switch_environment(
+        workspace_id=workspace_id,
+        environment="test",
+        expected_revision=1,
+    )
+
+    assert switched.active_environment == "test"
+    assert switched.revision == 2
+
+
 def test_legacy_project_task_history_lists_document_and_database_activity(
     isolated_postgres_database: str,
     monkeypatch: pytest.MonkeyPatch,
@@ -643,6 +693,19 @@ def test_workspace_task_repository_persists_scope_and_stable_snapshots(
         task="查询工作空间数据库",
         cwd=workspace_root,
         agent_name="codex",
+        database_environment="test",
+        database_environment_revision=4,
+        database_environment_selection="task_explicit",
+    )
+    compatible_environment_task_id = tasks.create_workspace_task(
+        workspace_id=workspace_id,
+        workspace_key=workspace_key,
+        workspace_name="任务工作空间",
+        task="沿用工作空间环境",
+        cwd=workspace_root,
+        agent_name="codex",
+        database_environment="uat",
+        database_environment_revision=4,
     )
     legacy_task_id = tasks.create_task(
         project_id=project_id,
@@ -681,6 +744,12 @@ def test_workspace_task_repository_persists_scope_and_stable_snapshots(
     assert database_task.scope == "workspace"
     assert database_task.active_project_id is None
     assert database_task.active_project_kind is None
+    assert database_task.database_environment == "test"
+    assert database_task.database_environment_revision == 4
+    assert database_task.database_environment_selection == "task_explicit"
+    compatible_environment_task = tasks.get_task(compatible_environment_task_id)
+    assert compatible_environment_task.database_environment == "uat"
+    assert compatible_environment_task.database_environment_selection == "workspace_default"
     assert tasks.get_task(legacy_task_id).scope == "project"
 
     workspace_history = tasks.list_workspace_tasks(
@@ -693,12 +762,136 @@ def test_workspace_task_repository_persists_scope_and_stable_snapshots(
         ("查询工作空间数据库", 0, "workspace"),
         ("读取前端文档", 1, "workspace"),
     ]
+    assert workspace_history[0].database_environment_selection == "task_explicit"
 
     workspaces.delete_workspace(workspace_id)
     retained = tasks.get_task(document_task_id)
     assert retained.workspace_id == workspace_id
     assert retained.active_project_id == project_id
     assert tasks.get_task(legacy_task_id).project_id == project_id
+
+
+def test_task_environment_selection_migration_backfills_existing_environment_tasks(
+    isolated_postgres_database: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_url = isolated_postgres_database
+    monkeypatch.setenv("CONTEXT_ROUTER_DATABASE_URL", database_url)
+    alembic_config = _alembic_config()
+    command.upgrade(alembic_config, _REVISION_0020)
+
+    workspace_id = "56565656565656565656565656565656"
+    workspace_key = hashlib.sha256(b"/workspace/environment-selection").hexdigest()
+    with psycopg.connect(database_url) as connection:
+        connection.execute(
+            """
+            INSERT INTO workspaces (
+                id, name, workspace_type, root_path, enabled
+            )
+            VALUES (
+                %s, 'Environment Selection', '公司项目',
+                '/workspace/environment-selection', true
+            )
+            """,
+            (workspace_id,),
+        )
+        rows = connection.execute(
+            """
+            INSERT INTO mcp_tasks (
+                scope,
+                workspace_id,
+                workspace_key,
+                workspace_name,
+                project_key,
+                project_name,
+                task,
+                cwd,
+                agent_name,
+                database_environment,
+                database_environment_revision
+            )
+            VALUES
+                (
+                    'workspace', %s, %s, 'Environment Selection',
+                    %s, 'Environment Selection', 'existing environment task',
+                    '/workspace/environment-selection', 'pytest', 'uat', 3
+                ),
+                (
+                    'workspace', %s, %s, 'Environment Selection',
+                    %s, 'Environment Selection', 'existing environmentless task',
+                    '/workspace/environment-selection', 'pytest', NULL, NULL
+                ),
+                (
+                    'workspace', %s, %s, 'Environment Selection',
+                    %s, 'Environment Selection', 'partial environment task',
+                    '/workspace/environment-selection', 'pytest', 'test', NULL
+                ),
+                (
+                    'workspace', %s, %s, 'Environment Selection',
+                    %s, 'Environment Selection', 'partial revision task',
+                    '/workspace/environment-selection', 'pytest', NULL, 4
+                )
+            RETURNING id
+            """,
+            (
+                workspace_id,
+                workspace_key,
+                workspace_key,
+                workspace_id,
+                workspace_key,
+                workspace_key,
+                workspace_id,
+                workspace_key,
+                workspace_key,
+                workspace_id,
+                workspace_key,
+                workspace_key,
+            ),
+        ).fetchall()
+
+    command.upgrade(alembic_config, "head")
+    assert _current_revision(database_url) == _REVISION_0021
+    tasks = PostgresTaskRepository(database_url)
+    environment_task = tasks.get_task(int(rows[0][0]))
+    environmentless_task = tasks.get_task(int(rows[1][0]))
+    partial_environment_task = tasks.get_task(int(rows[2][0]))
+    partial_revision_task = tasks.get_task(int(rows[3][0]))
+    assert environment_task.database_environment_selection == "workspace_default"
+    assert environmentless_task.database_environment is None
+    assert environmentless_task.database_environment_revision is None
+    assert environmentless_task.database_environment_selection is None
+    assert partial_environment_task.database_environment is None
+    assert partial_environment_task.database_environment_revision is None
+    assert partial_environment_task.database_environment_selection is None
+    assert partial_revision_task.database_environment is None
+    assert partial_revision_task.database_environment_revision is None
+    assert partial_revision_task.database_environment_selection is None
+
+    with pytest.raises(psycopg.errors.CheckViolation):
+        with psycopg.connect(database_url) as connection:
+            connection.execute(
+                """
+                INSERT INTO mcp_tasks (
+                    scope,
+                    workspace_id,
+                    workspace_key,
+                    workspace_name,
+                    project_key,
+                    project_name,
+                    task,
+                    cwd,
+                    database_environment,
+                    database_environment_revision,
+                    database_environment_selection
+                )
+                VALUES (
+                    'workspace', %s, %s, 'Environment Selection',
+                    %s, 'Environment Selection', 'invalid selection',
+                    '/workspace/environment-selection', 'test', 3, NULL
+                )
+                """,
+                (workspace_id, workspace_key, workspace_key),
+            )
 
 
 def _alembic_config() -> Config:

@@ -22,6 +22,9 @@
 - 工作空间根目录必须是绝对路径；项目源码和文档入口相对路径都禁止绝对路径、`~`、反斜杠和 `..`，解析后不能通过软链接越出工作空间，同一工作空间内两类路径分别唯一。新文档入口必须位于 `docs/` 下并以 `AGENTS.md` 结尾。
 - 工作空间/项目配置，以及独立的数据源分类与连接配置保存在 PostgreSQL；文档树和 Markdown 原文只保存在单个后端进程内并在启动时从磁盘重建，PostgreSQL 分别保存可重建的 Workspace/Project 规范化检索分块和版本状态。
 - 物理数据源配置全局共享，数据库授权继续由 `project_databases` 绑定具体 Project；Workspace task 汇总使用所有子项目当前有效的授权，`mcp_alias` 在整个 Workspace 内大小写无关唯一。
+- 可选的 Workspace 数据库环境映射把同一逻辑别名分别绑定到 TEST/UAT 的项目数据库关联。`prepare_task_context` 可选传 `environment='test'|'uat'`：显式值只固定本 task 的 `task_explicit` 环境，不修改 Workspace 当前环境；省略时固化当前环境并记录为 `workspace_default`。两种模式都保存共享 revision，revision 变化后旧 task 必须重新 prepare，禁止静默换库。
+- 没有配置环境选择器的单环境 Workspace 继续使用原有 Workspace alias 链路；省略 `environment` 保持旧行为，显式传入时返回 `environment_not_configured`，不得猜测或自动创建选择器。
+- 同一 Workspace 环境选择器还可分别保存 TEST/UAT JSON 对象，用于 MQ、Redis、MinIO、ES、任务调度或未来组件的环境差异；JSON 不预设字段且可独立于数据库映射启用选择器。可按明确业务需要保存地址和访问凭据，但内容以明文 JSONB 保存在本地，所选环境的 `environment_config` 只随 prepare 返回给可信本机 MCP 调用方，严禁进入日志、开发文档、链路摘要或示例输出。两份 JSON 合计最多 256 KiB、最多嵌套 20 层。
 - 刷新以 Workspace 为单位全量重建可选根入口和全部子项目并统一替换；会遍历并记录全部失败项目，任一入口文档构建失败时仍保留上一版工作空间映射。
 - 前端只从 Workspace 树接口获取显式根树或合成根树，从 Workspace 文档详情接口按需获取内存正文；未出现在真实根显式树中的 Project 文档仍保留在 Workspace 搜索和按 ID 读取范围。
 - 文档读取目录通过 Docker 只读挂载。
@@ -36,8 +39,8 @@
 - `mcp_database_calls` 审计历史只保存客观元数据和 SQL SHA-256；两个数据库 MCP 工具另以独立、可过期的有界 JSON 快照保存实际请求和最终 MCP 响应，主 Trace 接口不内联这些大字段。
 - Context Router 五个 MCP 工具在统一分发入口记录到 `mcp_tool_calls`；任务内顺序由 PostgreSQL 调用 ID 生成，文档/数据库专属明细通过 `tool_call_id` 关联，观测失败不得改变工具业务结果。
 - 链路管理只记录 Codex、Antigravity 等客户端实际发送到 Context Router `/mcp` 的五个内部工具调用；不连接、代理、聚合或接收其他 MCP Server 的调用上报，也不建设跨 Server Trace。
-- 顶层页面管理 Workspace；进入详情后使用“前端项目 / 后端项目 / 数据源汇总”三页签。刷新映射、查看调用记录、查看文档树和查看 MCP JSON 都位于 Workspace 工具栏；Project 卡片只保留“编辑项目 / 管理数据源 / 删除项目”。
+- 顶层页面管理 Workspace；进入详情后使用“前端项目 / 后端项目 / 数据源汇总”三页签。环境映射、刷新映射、查看调用记录、查看文档树和查看 MCP JSON 都位于 Workspace 工具栏；前端项目不显示数据库授权入口，后端项目继续维护项目级数据源授权。
 - 完整出入参只对白名单数据库工具 `search_database_objects`、`execute_database_query` 自动采集，并通过 no-store 详情 API 懒加载；prepare/search/read 不建立完整 payload 快照。
 - 新 task 使用 `scope='workspace'` 和无外键的稳定 Workspace/活动项目快照；`scope='project'` 的旧 task 继续按原 project_id/project_key 读取、搜索和解析数据库，避免升级后历史串链。后端启动会收敛遗留 running 调用，Trace API 与页面明确区分完整、运行中和可能不完整。
-- migration head 为 `20260727_0016`；`0013` 把旧 Project 升级为同 ID Workspace 下 `relative_path='.'` 的根项目，`0014` 增加 `project_kind`、删除 Project enabled、提升 alias 唯一范围并增加 Workspace task 快照，`0015` 增加工作空间级文档派生搜索索引，`0016` 拆分源码相对路径和文档入口相对路径。旧项目 ID、数据库授权和调用历史保持不变。
+- migration head 为 `20260730_0021`；`0013` 把旧 Project 升级为同 ID Workspace 下 `relative_path='.'` 的根项目，`0014` 增加 `project_kind`、删除 Project enabled、提升 alias 唯一范围并增加 Workspace task 快照，`0015` 增加工作空间级文档派生搜索索引，`0016` 拆分源码相对路径和文档入口相对路径，`0017` 增加项目快速/完整更新的运行配置文件，`0018` 增加 Runtime Runner 异步执行记录，`0019` 增加 Workspace TEST/UAT 数据库映射、当前环境和 task 环境 revision，`0020` 增加按环境保存的通用 JSON，`0021` 为 task 增加 `database_environment_selection`，并把已有非空环境 task 回填为 `workspace_default`。旧项目 ID、数据库授权和调用历史保持不变。
 - 本地服务默认只绑定回环地址；真实 ClickHouse 测试使用根 Compose 的 `integration` profile 和固定镜像版本。

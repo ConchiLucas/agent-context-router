@@ -4,6 +4,9 @@ from fastapi.testclient import TestClient
 
 from context_router.config import Settings
 from context_router.main import create_app
+from context_router.repositories.database_environment_repository import (
+    InMemoryDatabaseEnvironmentRepository,
+)
 from context_router.repositories.project_repository import InMemoryProjectRepository
 
 
@@ -46,6 +49,7 @@ summary: 项目导航。
         ),
         task_repository=FakeTaskRepository(),
         project_repository=InMemoryProjectRepository(),
+        database_environment_repository=InMemoryDatabaseEnvironmentRepository(),
     )
 
     with TestClient(app) as client:
@@ -64,7 +68,25 @@ summary: 项目导航。
         )
         assert project.status_code == 201
 
-        response = client.post(f"/api/workspaces/{workspace.json()['id']}/prepare-preview")
+        environment_config = client.put(
+            f"/api/workspaces/{workspace.json()['id']}/environment-config",
+            json={
+                "expected_revision": 0,
+                "environments": {
+                    "test": {"service": {"endpoint": "test.internal"}},
+                    "uat": {"service": {"endpoint": "uat.internal"}},
+                },
+            },
+        )
+        assert environment_config.status_code == 200
+
+        response = client.post(
+            f"/api/workspaces/{workspace.json()['id']}/prepare-preview",
+            params={"environment": "test"},
+        )
+        environment_after_preview = client.get(
+            f"/api/workspaces/{workspace.json()['id']}/environment-config"
+        )
         removed_project_preview = client.post(
             f"/api/projects/{project.json()['id']}/prepare-preview"
         )
@@ -77,4 +99,12 @@ summary: 项目导航。
     assert project_root["summary"] == "项目导航。"
     assert "summary" not in project_root["children"][0]
     assert "content" not in response.text
+    assert payload["database_environment"] == {
+        "key": "test",
+        "name": "TEST",
+        "revision": 1,
+        "selection": "task_explicit",
+    }
+    assert payload["environment_config"] == {"service": {"endpoint": "test.internal"}}
+    assert environment_after_preview.json()["active_environment"] == "uat"
     assert removed_project_preview.status_code == 404

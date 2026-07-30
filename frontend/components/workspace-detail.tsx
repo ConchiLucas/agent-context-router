@@ -1,14 +1,23 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   ProjectDashboard,
   type ProjectDashboardHandle,
 } from "@/components/project-dashboard";
 import { WorkspaceDataSourceOverview } from "@/components/workspace-data-source-overview";
-import { getWorkspace } from "@/lib/api";
-import type { ProjectKind, WorkspaceSummary } from "@/lib/types";
+import { WorkspaceEnvironmentMapping } from "@/components/workspace-environment-mapping";
+import {
+  getWorkspace,
+  getWorkspaceDatabaseEnvironmentMappings,
+  getWorkspaceEnvironmentConfig,
+} from "@/lib/api";
+import type {
+  DatabaseEnvironment,
+  ProjectKind,
+  WorkspaceSummary,
+} from "@/lib/types";
 
 interface WorkspaceDetailProps {
   workspace: WorkspaceSummary;
@@ -28,6 +37,9 @@ export function WorkspaceDetail({
     frontend: 0,
     backend: 0,
   });
+  const [showEnvironmentMapping, setShowEnvironmentMapping] = useState(false);
+  const [activeDatabaseEnvironment, setActiveDatabaseEnvironment] =
+    useState<DatabaseEnvironment | null>(null);
   const projectDashboardRef = useRef<ProjectDashboardHandle>(null);
 
   const refreshWorkspace = useCallback(async () => {
@@ -46,6 +58,31 @@ export function WorkspaceDetail({
     },
     [],
   );
+
+  useEffect(() => {
+    let active = true;
+    void Promise.all([
+      getWorkspaceDatabaseEnvironmentMappings(workspace.id),
+      getWorkspaceEnvironmentConfig(workspace.id),
+    ])
+      .then(([configuration, environmentConfig]) => {
+        if (!active) return;
+        setActiveDatabaseEnvironment(
+          configuration.enabled
+            ? configuration.active_environment
+            : environmentConfig.configured
+              ? environmentConfig.active_environment
+              : null,
+        );
+      })
+      .catch(() => {
+        // Environment mapping is optional. The detail panel will expose a
+        // retryable error if the user chooses to open it.
+      });
+    return () => {
+      active = false;
+    };
+  }, [workspace.id]);
 
   function addProject() {
     if (tab === "data-sources") setTab("backend");
@@ -98,6 +135,17 @@ export function WorkspaceDetail({
           onClick={() => projectDashboardRef.current?.showMcpIntegration()}
         >
           MCP 接入
+        </button>
+        <button
+          type="button"
+          className="secondary-button workspace-environment-button"
+          data-environment={activeDatabaseEnvironment ?? "unconfigured"}
+          onClick={() => setShowEnvironmentMapping(true)}
+        >
+          环境配置 ·{" "}
+          {activeDatabaseEnvironment
+            ? activeDatabaseEnvironment.toUpperCase()
+            : "未配置"}
         </button>
         <button
           type="button"
@@ -185,6 +233,13 @@ export function WorkspaceDetail({
       />
       {tab === "data-sources" ? (
         <WorkspaceDataSourceOverview workspaceId={currentWorkspace.id} />
+      ) : null}
+      {showEnvironmentMapping ? (
+        <WorkspaceEnvironmentMapping
+          workspace={currentWorkspace}
+          onClose={() => setShowEnvironmentMapping(false)}
+          onEnvironmentChanged={setActiveDatabaseEnvironment}
+        />
       ) : null}
     </section>
   );

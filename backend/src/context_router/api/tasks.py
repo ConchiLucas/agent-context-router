@@ -80,6 +80,9 @@ def list_workspace_tasks(
             active_project_id=record.active_project_id,
             active_project_name=record.active_project_name,
             active_project_kind=record.active_project_kind,
+            database_environment=record.database_environment,
+            database_environment_revision=record.database_environment_revision,
+            database_environment_selection=record.database_environment_selection,
         )
         for record in records
     ]
@@ -112,6 +115,9 @@ def get_task_document_reads(task_id: int, request: Request) -> ContextTaskReadHi
         active_project_name=task.active_project_name,
         active_project_kind=task.active_project_kind,
         scope=task.scope,
+        database_environment=task.database_environment,
+        database_environment_revision=task.database_environment_revision,
+        database_environment_selection=task.database_environment_selection,
         agent_name=task.agent_name,
         created_at=task.created_at,
         calls=[

@@ -33,12 +33,10 @@ docker compose up -d --force-recreate backend frontend
 - API 文档：<http://127.0.0.1:49173/docs>
 - MCP：<http://127.0.0.1:49173/mcp>
 
-Compose 默认把 `/Users/conchi/workforce` 只读挂载到后端 `/workspace`，并预置攀枝花多式联运示例。其他机器或服务器通过 `.env` 覆盖：
+Compose 默认把 `/Users/conchi/workforce` 只读挂载到后端 `/workspace`，不预置任何工作空间或项目。其他机器或服务器通过 `.env` 覆盖：
 
 ```text
 CONTEXT_ROUTER_WORKSPACE_HOST_ROOT=/absolute/workspace/root
-CONTEXT_ROUTER_DEFAULT_PROJECT_NAME=示例项目
-CONTEXT_ROUTER_DEFAULT_AGENTS_PATH=/absolute/workspace/root/project/AGENTS.md
 CONTEXT_ROUTER_DATABASE_URL=postgresql://USER:PASSWORD@host.docker.internal:5432/context_router
 ```
 

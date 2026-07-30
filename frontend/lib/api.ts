@@ -1,6 +1,7 @@
 import type {
   ContextTaskReadHistory,
   ContextTaskSummary,
+  DatabaseEnvironment,
   DocumentDetail,
   DocumentTreeNode,
   McpIntegrationInfo,
@@ -22,7 +23,12 @@ import type {
   ProjectDatabaseLinkSummary,
   ProjectDataSourceOptions,
   WorkspaceCreate,
+  WorkspaceDatabaseEnvironmentMappings,
+  WorkspaceDatabaseEnvironmentMappingsUpdate,
+  WorkspaceDatabaseEnvironmentSwitch,
   WorkspaceDataSourceSummary,
+  WorkspaceEnvironmentConfig,
+  WorkspaceEnvironmentConfigUpdate,
   WorkspaceProjectCreate,
   WorkspaceProjectUpdate,
   WorkspaceSummary,
@@ -153,6 +159,63 @@ export function getWorkspaceDataSourceSummary(
   );
 }
 
+export function getWorkspaceDatabaseEnvironmentMappings(
+  workspaceId: string,
+): Promise<WorkspaceDatabaseEnvironmentMappings> {
+  return request<WorkspaceDatabaseEnvironmentMappings>(
+    `/api/workspaces/${workspaceId}/database-environment-mappings`,
+    { cache: "no-store" },
+  );
+}
+
+export function replaceWorkspaceDatabaseEnvironmentMappings(
+  workspaceId: string,
+  payload: WorkspaceDatabaseEnvironmentMappingsUpdate,
+): Promise<WorkspaceDatabaseEnvironmentMappings> {
+  return request<WorkspaceDatabaseEnvironmentMappings>(
+    `/api/workspaces/${workspaceId}/database-environment-mappings`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function setWorkspaceDatabaseEnvironment(
+  workspaceId: string,
+  payload: WorkspaceDatabaseEnvironmentSwitch,
+): Promise<WorkspaceDatabaseEnvironmentMappings> {
+  return request<WorkspaceDatabaseEnvironmentMappings>(
+    `/api/workspaces/${workspaceId}/database-environment`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function getWorkspaceEnvironmentConfig(
+  workspaceId: string,
+): Promise<WorkspaceEnvironmentConfig> {
+  return request<WorkspaceEnvironmentConfig>(
+    `/api/workspaces/${workspaceId}/environment-config`,
+    { cache: "no-store" },
+  );
+}
+
+export function replaceWorkspaceEnvironmentConfig(
+  workspaceId: string,
+  payload: WorkspaceEnvironmentConfigUpdate,
+): Promise<WorkspaceEnvironmentConfig> {
+  return request<WorkspaceEnvironmentConfig>(
+    `/api/workspaces/${workspaceId}/environment-config`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
 export function refreshWorkspaceMapping(
   workspaceId: string,
 ): Promise<WorkspaceSummary> {
@@ -178,9 +241,13 @@ export function getWorkspaceDocumentDetail(
 
 export function prepareWorkspacePreview(
   workspaceId: string,
+  environment?: DatabaseEnvironment,
 ): Promise<PrepareTaskContextResult> {
+  const query = environment
+    ? `?environment=${encodeURIComponent(environment)}`
+    : "";
   return request<PrepareTaskContextResult>(
-    `/api/workspaces/${workspaceId}/prepare-preview`,
+    `/api/workspaces/${workspaceId}/prepare-preview${query}`,
     { method: "POST" },
   );
 }

@@ -6,6 +6,8 @@ from typing import Literal, Protocol
 
 import psycopg
 
+DatabaseEnvironmentSelection = Literal["workspace_default", "task_explicit"]
+
 
 class TaskRepositoryError(RuntimeError):
     pass
@@ -28,6 +30,9 @@ class TaskRecord:
     active_project_id: str | None = None
     active_project_name: str | None = None
     active_project_kind: Literal["frontend", "backend"] | None = None
+    database_environment: str | None = None
+    database_environment_revision: int | None = None
+    database_environment_selection: DatabaseEnvironmentSelection | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,6 +64,9 @@ class TaskWriter(Protocol):
         active_project_id: str | None = None,
         active_project_name: str | None = None,
         active_project_kind: Literal["frontend", "backend"] | None = None,
+        database_environment: str | None = None,
+        database_environment_revision: int | None = None,
+        database_environment_selection: DatabaseEnvironmentSelection | None = None,
     ) -> int: ...
 
 
@@ -142,11 +150,31 @@ class PostgresTaskRepository:
         active_project_id: str | None = None,
         active_project_name: str | None = None,
         active_project_kind: Literal["frontend", "backend"] | None = None,
+        database_environment: str | None = None,
+        database_environment_revision: int | None = None,
+        database_environment_selection: DatabaseEnvironmentSelection | None = None,
     ) -> int:
         if not self._database_url:
             raise TaskRepositoryError("任务数据库尚未配置")
         if active_project_kind not in {None, "frontend", "backend"}:
             raise TaskRepositoryError("活动项目类型必须是 frontend 或 backend")
+        if (database_environment is None) != (database_environment_revision is None):
+            raise TaskRepositoryError("数据库环境和版本必须同时提供")
+        if database_environment not in {None, "test", "uat"}:
+            raise TaskRepositoryError("数据库环境必须是 test 或 uat")
+        if database_environment_revision is not None and database_environment_revision < 1:
+            raise TaskRepositoryError("数据库环境版本必须大于 0")
+        if database_environment_selection not in {
+            None,
+            "workspace_default",
+            "task_explicit",
+        }:
+            raise TaskRepositoryError("数据库环境选择方式必须是 workspace_default 或 task_explicit")
+        if database_environment is None and database_environment_selection is not None:
+            raise TaskRepositoryError("没有数据库环境时不能指定环境选择方式")
+        normalized_environment_selection = database_environment_selection
+        if database_environment is not None and normalized_environment_selection is None:
+            normalized_environment_selection = "workspace_default"
 
         legacy_project_name = active_project_name or workspace_name
         try:
@@ -161,6 +189,9 @@ class PostgresTaskRepository:
                         active_project_id,
                         active_project_name,
                         active_project_kind,
+                        database_environment,
+                        database_environment_revision,
+                        database_environment_selection,
                         project_id,
                         project_key,
                         project_name,
@@ -169,8 +200,8 @@ class PostgresTaskRepository:
                         agent_name
                     )
                     VALUES (
-                        'workspace', %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s, %s
+                        'workspace', %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s, %s
                     )
                     RETURNING id
                     """,
@@ -181,6 +212,9 @@ class PostgresTaskRepository:
                         active_project_id,
                         active_project_name,
                         active_project_kind,
+                        database_environment,
+                        database_environment_revision,
+                        normalized_environment_selection,
                         active_project_id,
                         workspace_key,
                         legacy_project_name,
@@ -219,7 +253,10 @@ class PostgresTaskRepository:
                         workspace_name,
                         active_project_id,
                         active_project_name,
-                        active_project_kind
+                        active_project_kind,
+                        database_environment,
+                        database_environment_revision,
+                        database_environment_selection
                     FROM mcp_tasks
                     WHERE id = %s
                     """,
@@ -264,6 +301,9 @@ class PostgresTaskRepository:
                         task.active_project_id,
                         task.active_project_name,
                         task.active_project_kind,
+                        task.database_environment,
+                        task.database_environment_revision,
+                        task.database_environment_selection,
                         COUNT(read_call.id) AS read_call_count
                     FROM mcp_tasks AS task
                     LEFT JOIN mcp_document_read_calls AS read_call
@@ -323,6 +363,9 @@ class PostgresTaskRepository:
                         task.active_project_id,
                         task.active_project_name,
                         task.active_project_kind,
+                        task.database_environment,
+                        task.database_environment_revision,
+                        task.database_environment_selection,
                         COUNT(read_call.id) AS read_call_count
                     FROM mcp_tasks AS task
                     LEFT JOIN mcp_document_read_calls AS read_call
@@ -377,6 +420,9 @@ class PostgresTaskRepository:
             active_project_id=str(row[12]) if row[12] is not None else None,
             active_project_name=str(row[13]) if row[13] is not None else None,
             active_project_kind=str(row[14]) if row[14] is not None else None,  # type: ignore[arg-type]
+            database_environment=str(row[15]) if row[15] is not None else None,
+            database_environment_revision=int(row[16]) if row[16] is not None else None,
+            database_environment_selection=(str(row[17]) if row[17] is not None else None),  # type: ignore[arg-type]
         )
 
     @classmethod
@@ -398,5 +444,8 @@ class PostgresTaskRepository:
             active_project_id=task.active_project_id,
             active_project_name=task.active_project_name,
             active_project_kind=task.active_project_kind,
-            read_call_count=int(row[15]),
+            database_environment=task.database_environment,
+            database_environment_revision=task.database_environment_revision,
+            database_environment_selection=task.database_environment_selection,
+            read_call_count=int(row[18]),
         )

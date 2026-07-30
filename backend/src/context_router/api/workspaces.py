@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
 from context_router.schemas.context import PrepareTaskContextResult
@@ -201,13 +203,17 @@ def get_workspace_tree(
 def prepare_workspace_preview(
     workspace_id: str,
     request: Request,
+    environment: Literal["test", "uat"] | None = None,
 ) -> PrepareTaskContextResult:
     try:
-        return _context_service(request).prepare_for_workspace(workspace_id)
+        return _context_service(request).prepare_for_workspace(
+            workspace_id,
+            environment=environment,
+        )
     except ContextPreparationError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
+            detail=f"{exc.code}: {exc}",
         ) from exc
 
 

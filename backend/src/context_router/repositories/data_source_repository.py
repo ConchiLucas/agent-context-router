@@ -373,6 +373,7 @@ class DataSourceStore(Protocol):
     def get_project_database_by_alias(
         self, *, project_id: str, mcp_alias: str
     ) -> ResolvedProjectDatabase: ...
+    def get_database_by_link_id(self, link_id: str) -> ResolvedProjectDatabase: ...
     def list_project_databases_for_mcp(self, project_id: str) -> list[ResolvedProjectDatabase]: ...
     def get_workspace_database_by_alias(
         self, *, workspace_id: str, mcp_alias: str
@@ -556,6 +557,13 @@ class InMemoryDataSourceRepository:
         if len(matches) != 1:
             raise DataSourceRepositoryError("项目数据库不存在")
         return self._resolved_record(matches[0])
+
+    def get_database_by_link_id(self, link_id: str) -> ResolvedProjectDatabase:
+        self._synchronize_project_links()
+        link = self._links.get(link_id)
+        if link is None:
+            raise DataSourceRepositoryError("项目数据库不存在")
+        return self._resolved_record(link)
 
     def list_project_databases_for_mcp(self, project_id: str) -> list[ResolvedProjectDatabase]:
         self._synchronize_project_links()
@@ -1048,6 +1056,16 @@ class PostgresDataSourceRepository:
                 self._resolved_select()
                 + " WHERE link.project_id=%s AND lower(link.mcp_alias)=lower(%s)",
                 (project_id, mcp_alias),
+            ).fetchone()
+        if row is None:
+            raise DataSourceRepositoryError("项目数据库不存在")
+        return self._resolved_record(row)
+
+    def get_database_by_link_id(self, link_id: str) -> ResolvedProjectDatabase:
+        with self._connect("项目数据库关联读取失败") as connection:
+            row = connection.execute(
+                self._resolved_select() + " WHERE link.id=%s",
+                (link_id,),
             ).fetchone()
         if row is None:
             raise DataSourceRepositoryError("项目数据库不存在")

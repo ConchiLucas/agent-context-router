@@ -36,6 +36,10 @@ from context_router.services.database_catalog import DatabaseCatalogService
 from context_router.services.database_query import DatabaseQueryService
 from context_router.services.database_tool_payload import DatabaseToolPayloadService
 from context_router.services.mcp_trace import McpTraceService
+from context_router.services.runtime_execution import (
+    RuntimeExecutionError,
+    RuntimeExecutionService,
+)
 
 MCP_SERVER_NAME = "Context Router"
 MCP_SERVER_INSTRUCTIONS = (
@@ -46,7 +50,12 @@ MCP_SERVER_INSTRUCTIONS = (
     "read_context_document. "
     "Use only database aliases returned by prepare. Search database objects before querying "
     "when the schema is uncertain. Database queries are always bounded and read-only. Call "
-    "prepare again for a new conversation when no task_id is available."
+    "prepare again for a new conversation when no task_id is available. "
+    "The returned environment_config may contain connection details and credentials for the "
+    "environment selected by this task. Treat it as sensitive local-only context and never "
+    "echo it into logs or unrelated output. "
+    "After modifying registered project code, call apply_project_changes with the project ID "
+    "and changed relative paths. Use get_project_operation to follow the returned operation."
 )
 (
     PREPARE_TOOL_NAME,
@@ -59,7 +68,10 @@ PREPARE_TOOL_DESCRIPTION = (
     "Locate the registered workspace for cwd, create a server-side task number, and "
     "return its explicit workspace document tree or synthetic project-root tree. Project "
     "documents outside an explicit root remain available through search_context_documents. "
-    "Summaries are only returned when explicitly declared in Markdown Front Matter."
+    "Omit environment to use the workspace default, or pass test/uat for this task only "
+    "without changing the workspace active environment. The returned environment_config may "
+    "contain connection details and credentials for that environment; never echo it into "
+    "logs. Summaries are only returned when explicitly declared in Markdown Front Matter."
 )
 READ_TOOL_DESCRIPTION = (
     "Read one or more Markdown documents or exact ATX-heading sections from the workspace "
@@ -92,6 +104,18 @@ READ_TOOL_ANNOTATIONS = ToolAnnotations(
     openWorldHint=False,
 )
 DATABASE_TOOL_ANNOTATIONS = ToolAnnotations(
+    readOnlyHint=True,
+    destructiveHint=False,
+    idempotentHint=True,
+    openWorldHint=False,
+)
+RUNTIME_APPLY_TOOL_ANNOTATIONS = ToolAnnotations(
+    readOnlyHint=False,
+    destructiveHint=True,
+    idempotentHint=False,
+    openWorldHint=False,
+)
+RUNTIME_READ_TOOL_ANNOTATIONS = ToolAnnotations(
     readOnlyHint=True,
     destructiveHint=False,
     idempotentHint=True,
@@ -271,6 +295,7 @@ def create_context_router_mcp(
     trace_service: McpTraceService | None = None,
     database_payload_service: DatabaseToolPayloadService | None = None,
     document_search_service: ContextDocumentSearchService | None = None,
+    runtime_execution_service: RuntimeExecutionService | None = None,
 ) -> FastMCP:
     server = ContextRouterMCP(
         name=MCP_SERVER_NAME,
@@ -291,11 +316,22 @@ def create_context_router_mcp(
         task: Annotated[str, Field(min_length=1, max_length=4000)],
         cwd: Annotated[str, Field(min_length=1)],
         agent_name: Annotated[str | None, Field(max_length=64)] = None,
+        environment: Annotated[
+            Literal["test", "uat"] | None,
+            Field(
+                description=("Optional task-only environment. Omit to use the workspace default.")
+            ),
+        ] = None,
     ) -> dict[str, Any]:
         try:
-            result = preparation_service.prepare(task=task, cwd=cwd, agent_name=agent_name)
+            result = preparation_service.prepare(
+                task=task,
+                cwd=cwd,
+                agent_name=agent_name,
+                environment=environment,
+            )
         except ContextPreparationError as exc:
-            raise ToolError(str(exc)) from exc
+            raise ToolError(f"{exc.code}: {exc}") from exc
         return result.model_dump(exclude_none=True)
 
     @server.tool(
@@ -392,7 +428,89 @@ def create_context_router_mcp(
         except DatabaseAccessError as exc:
             raise ToolError(f"{exc.code}: {exc}") from exc
 
+    @server.tool(
+        name="apply_project_changes",
+        description=(
+            "Apply changed project files through Runtime Runner. Dependency and build file "
+            "changes select the full profile; other changes select the fast profile. Returns "
+            "an asynchronous operation ID for get_project_operation."
+        ),
+        annotations=RUNTIME_APPLY_TOOL_ANNOTATIONS,
+    )
+    def apply_project_changes(
+        project_id: Annotated[str, Field(min_length=1, max_length=32)],
+        changed_files: Annotated[
+            list[Annotated[str, Field(min_length=1, max_length=1000)]],
+            Field(min_length=1, max_length=500),
+        ],
+    ) -> dict[str, object]:
+        if runtime_execution_service is None:
+            raise ToolError("runtime_execution_disabled: Runtime Runner 当前不可用")
+        mode, reason = runtime_execution_service.select_mode(changed_files)
+        try:
+            run = runtime_execution_service.start(
+                project_id=project_id,
+                mode=mode,
+                trigger="mcp",
+                changed_files=changed_files,
+                decision_reason=reason,
+            )
+        except RuntimeExecutionError as exc:
+            raise ToolError(f"{exc.code}: {exc}") from exc
+        return _runtime_run_payload(run)
+
+    @server.tool(
+        name="get_project_operation",
+        description="Read one Runtime Runner operation and a bounded tail of its execution log.",
+        annotations=RUNTIME_READ_TOOL_ANNOTATIONS,
+    )
+    def get_project_operation(
+        operation_id: Annotated[str, Field(min_length=1, max_length=32)],
+        log_characters: Annotated[int, Field(ge=1000, le=50_000)] = 10_000,
+    ) -> dict[str, object]:
+        if runtime_execution_service is None:
+            raise ToolError("runtime_execution_disabled: Runtime Runner 当前不可用")
+        try:
+            run = runtime_execution_service.get_run(operation_id)
+            log_content, log_truncated = runtime_execution_service.read_log(
+                operation_id,
+                log_characters,
+            )
+        except RuntimeExecutionError as exc:
+            raise ToolError(f"{exc.code}: {exc}") from exc
+        payload = _runtime_run_payload(run)
+        payload["log"] = {
+            "content": log_content,
+            "truncated": log_truncated,
+        }
+        return payload
+
     return server
+
+
+def _runtime_run_payload(run: object) -> dict[str, object]:
+    return {
+        "operation_id": str(getattr(run, "id")),
+        "project_id": str(getattr(run, "project_id")),
+        "mode": str(getattr(run, "mode")),
+        "status": str(getattr(run, "status")),
+        "snapshot_id": str(getattr(run, "snapshot_id")),
+        "decision_reason": str(getattr(run, "decision_reason")),
+        "changed_files": list(getattr(run, "changed_files")),
+        "exit_code": getattr(run, "exit_code"),
+        "error_message": getattr(run, "error_message"),
+        "created_at": getattr(run, "created_at").isoformat(),
+        "started_at": (
+            getattr(run, "started_at").isoformat()
+            if getattr(run, "started_at") is not None
+            else None
+        ),
+        "finished_at": (
+            getattr(run, "finished_at").isoformat()
+            if getattr(run, "finished_at") is not None
+            else None
+        ),
+    }
 
 
 def _elapsed_ms(started_ns: int) -> int:

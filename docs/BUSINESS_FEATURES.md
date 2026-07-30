@@ -70,12 +70,12 @@ title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 sum
 - 首页左侧主导航为“工作空间管理 / 数据源管理 / 链路管理”。工作空间管理顶部使用“全部工作空间 / 动态工作空间类型”Tab 筛选工作空间卡片。
 - 工作空间卡片展示根目录、项目数量、数据源/数据库授权汇总、状态和更新时间；支持新增、编辑、停用/启用、删除和进入详情。
 - 工作空间详情提供“前端项目 / 后端项目 / 数据源汇总”三个 Tab；前两个 Tab 按 `project_kind` 展示根项目和嵌套项目卡片，项目名称、类型、源码相对路径和文档入口相对路径都在这里维护。
-- 工作空间详情工具栏提供“MCP 接入 / 刷新映射 / 查看调用记录 / 查看文档树 / 查看 MCP JSON / 添加项目”。其中刷新、调用记录、文档树和 MCP JSON 都以整个 Workspace 为对象。
-- 每张项目卡片只保留“编辑项目 / 管理数据源 / 删除项目”三个按钮，不再提供“更多操作”、项目启停、逐项目刷新、逐项目文档树或逐项目 MCP JSON。
+- 工作空间详情工具栏提供“MCP 接入 / 环境配置 / 刷新映射 / 查看调用记录 / 查看文档树 / 查看 MCP JSON / 添加项目”。其中环境配置、刷新、调用记录、文档树和 MCP JSON 都以整个 Workspace 为对象。
+- 后端项目卡片提供“编辑项目 / 管理数据源 / 运行配置 / 删除项目”，前端项目卡片隐藏“管理数据源”，只保留“编辑项目 / 运行配置 / 删除项目”；“运行配置”进入独立全屏页面，按快速更新和完整更新维护部署文件列表与内容，并可把已保存配置安全物化为服务器运行目录下的不可变文件快照。页面不再提供“更多操作”、项目启停、逐项目刷新、逐项目文档树或逐项目 MCP JSON。
 - 文档树使用全屏可拖动画布和矩形节点，从上到下展示层级。每个总览或子树详情视图都以单个文档为第一层，其全部直接子文档作为第二层横向平铺；从第三层开始按父文档独立判断，直接子文档不超过 4 个时继续递归，超过 4 个时每行最多显示 4 个并停止该分支继续内联后代。被停止分支中仍有下级文档的卡片显示下级数量入口，叶子卡片不显示；点击卡片主体查看 Markdown，点击下级入口以该卡片为新根进入子树详情，并通过面包屑逐级返回。不同分支独立判断，一条分支换行不会阻止其他未超限分支继续向下展示。
 - 点击节点后，通过独立详情抽屉展示 Markdown 标题、表格、列表、代码块和引用。
 - Markdown 渲染不执行原始 HTML 或脚本。
-- Workspace 工具栏支持查看 MCP JSON，结果与 `prepare_task_context` 返回结构一致，包含 Workspace、全部 Project 的源码路径与文档入口路径、可选 `active_project`、显式根树或合成根树和全工作空间数据库摘要。
+- Workspace 工具栏支持查看 MCP JSON，预览包含 Workspace、全部 Project 的源码路径与文档入口路径、可选 `active_project`、显式根树或合成根树、全工作空间数据库摘要和当前任务环境的 `environment_config`。该本机预览与 MCP 返回都可能包含凭据，只能用于可信本机管理和授权排查，不得进入日志或开发文档。
 - Workspace 工具栏支持查看 MCP 调用记录，并在同一个全屏网格画布中切换“文档树”和“调用列表”：任务选择器列出该工作空间内至少产生过 read call 或数据库调用的 task；文档树遵循真实根的显式层级，缺少真实根时展示合成根下的项目入口，在可见的已读取节点右上角标记文档读取批次；未进入显式树的项目文档读取仍保留在调用列表中。调用列表按时间合并文档读取和数据库调用，同一次批量读取的文档横向排在同一行，读取成功的文档仍可打开 Markdown 详情。
 - 左侧主导航提供独立“链路管理”页面，统一按任务查看 Context Router MCP 工具调用。页面支持任务搜索、Agent、五个固定内部工具和状态筛选，只在“调用树 / 调用列表”之间切换；不加载完整项目文档树，也不在这里打开 Markdown。
 - 调用树以任务为根节点，按服务端稳定顺序展示 MCP 工具调用。一次 `read_context_document` 仍是一个工具调用节点，其批量读取的多个文档作为同一节点的横向产物；普通连续调用只表达顺序，只有显式父调用时才表达因果关系。任务列表和详情同时展示“完整 / 运行中 / 可能不完整”，prepare 记录缺失、历史恢复、服务重启中断或明细失联会显示明确提示。
@@ -92,15 +92,21 @@ title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 sum
 - 项目数据库弹窗把数据库选择和全部 `mcp_alias` 作为一次事务保存；别名 A/B 互换不会经过冲突的中间状态，请求失败也不会留下部分更新，Repository 和数据库唯一索引都会校验其他子项目已经占用的别名。
 - 项目数据库关联默认只读、最多返回 1000 行、结果上限 2 MB、查询超时 15 秒；这些策略持久化后由服务端和全局硬上限共同收紧。工作空间或关联/数据源停用、数据库不可用、系统库、非只读关联以及没有 Connector 的 Engine 都不会出现在 prepare 的数据库清单中。
 - 数据库授权归属仍是项目：物理连接和库清单全局保存在数据源管理中，`project_databases` 只关联具体项目。新 Workspace task 会汇总并使用所有子项目的有效授权，prepare 的每条数据库摘要同时返回所属项目 ID、名称和 `project_kind`；“数据源汇总”只聚合展示，不复制授权或查询策略。
+- Workspace 可选配置 TEST/UAT 环境映射。页面按项目和稳定逻辑别名并列展示两个环境的物理数据库，支持同后缀自动匹配和少量手工修正；保存映射不自动切换环境，显式 prepare 的任务级环境选择同样不修改 Workspace 当前环境。
+- 环境映射复用已有 `project_databases` 的只读策略，不复制连接口令。`prepare_task_context(environment='test'|'uat')` 可为单个 task 显式固化环境并记录 `task_explicit`；省略参数则使用 Workspace 当前环境并记录 `workspace_default`。数据库摘要和后续工具都按 task 环境解析。
+- 保存映射、保存通用 JSON 或切换 Workspace 当前环境都会递增共享 revision；两种选择模式的旧 task 都会在数据库工具调用时返回 `environment_changed` 并要求重新 prepare。未配置环境选择器的单环境 Workspace 在省略参数时保持原有数据库授权行为，显式传参返回 `environment_not_configured`。
+- “环境配置”面板另有通用 JSON 页签，分别维护 TEST/UAT JSON 对象，不为 MQ、Redis、MinIO、ES 或未来组件预设字段；JSON 可以在没有数据库映射时独立启用环境选择器，首次保存默认当前环境为 UAT。两份 JSON 合计最多 256 KiB、最多嵌套 20 层，超出 JavaScript 安全整数范围的值应改用字符串。
+- task 所选环境的 JSON 作为 `environment_config` 随 prepare 返回给可信本机 MCP 调用方，并由同模型的本机 MCP JSON 预览展示。可按明确业务需要保存地址及密码、Token、AccessKey 等访问凭据，但内容以明文 JSONB 保存在本地；严禁把实际值写入日志、开发文档、链路摘要或示例输出。
 
 ## MCP
 
-- MCP 固定提供五个工具：`prepare_task_context`、`search_context_documents`、`read_context_document`、`search_database_objects` 和 `execute_database_query`。数据源增删或停用不会改变 `tools/list`。
+- MCP 提供五个上下文与只读数据库工具，以及两个 Runtime Runner 工具：`apply_project_changes` 根据改动文件自动选择快速或完整更新，`get_project_operation` 查询异步任务与有界日志。数据源增删或停用不会改变 `tools/list`。
 - 服务端先在全部工作空间根目录中按 cwd 最长前缀确定 Workspace，再按源码 `relative_path` 计算最深匹配 Project 作为 `active_project` 快照；docs 文档入口目录不参与活动项目归属。活动项目只帮助说明 Codex 当前开发位置，不限制文档、搜索、read 或数据库授权范围。
-- prepare 不搜索、不排名、不截断，也不返回 Markdown 正文；它返回工作空间 ID/名称、全部项目的 ID/名称/类型/源码相对路径/文档入口相对路径、可选活动项目、真实根显式文档树或合成根树，以及所有子项目当前可用于 MCP 的数据库别名、所属项目信息、Engine、用途和能力摘要。未进入真实根显式树的 Project 文档仍可由 `search_context_documents` 定位并按结果 ID 读取。prepare 只读取本地配置，不连接业务数据库；数据库摘要暂时失败时以 warning 降级，文档上下文仍可返回。
+- prepare 不搜索、不排名、不截断，也不返回 Markdown 正文；它返回工作空间 ID/名称、全部项目的 ID/名称/类型/源码相对路径/文档入口相对路径、可选活动项目、真实根显式文档树或合成根树，以及所有子项目当前可用于 MCP 的稳定数据库别名、所属项目信息、可选任务环境、Engine、用途和能力摘要。未进入真实根显式树的 Project 文档仍可由 `search_context_documents` 定位并按结果 ID 读取。prepare 只读取本地配置，不连接业务数据库；数据库摘要暂时失败时以 warning 降级，文档上下文仍可返回。
+- `prepare_task_context` 的可选 `environment` 只接受 `test/uat`。显式值是 task 局部选择，不执行 Workspace 切换；省略时读取 Workspace 当前环境。配置选择器时，返回的 `database_environment.selection` 分别为 `task_explicit` 或 `workspace_default`；未配置选择器时只能省略该参数。
 - 每次成功调用 prepare 都由 PostgreSQL 生成独立 task_id。
-- 新 task 保存 `scope='workspace'`、稳定的 workspace_id/workspace_key/name 和可选 active_project 快照。活动项目删除或同路径重建不会改变 task 的历史展示身份，但后续工具授权始终重新校验 task 绑定 Workspace 的当前状态。
-- `20260726_0014` 之前的 task 保持 `scope='project'`：read/search/database 继续按稳定 project_id，无法回填时按 project_key 兼容解析；migration 同时回填 Workspace 和活动项目字段，使旧调用可出现在工作空间调用记录中，但不会扩大旧 task 的权限范围。
+- 新 task 保存 `scope='workspace'`、稳定的 workspace_id/workspace_key/name、可选 active_project 快照，以及可选 `database_environment`、共享 revision 和 `database_environment_selection`。活动项目删除或同路径重建不会改变 task 的历史展示身份，但后续工具授权始终重新校验 task 绑定 Workspace 的当前状态。
+- `20260726_0014` 之前的 task 保持 `scope='project'`：read/search 继续按稳定 project_id，无法回填时按 project_key 兼容解析；migration 同时回填 Workspace 和活动项目字段，使旧调用可出现在工作空间调用记录中。Workspace 一旦启用环境选择器，旧 Project task 的数据库调用会返回 `environment_changed`，必须重新 prepare，避免绕过环境 revision。
 - Context Router 收到的每次 `tools/call` 都统一记录为任务下的 MCP 工具调用，包括 Server、工具名、服务端顺序、采集来源、状态、开始/结束时间、耗时、错误码和脱敏摘要。prepare 成功创建 task_id 后补记为该任务的第一个调用；后续工具在执行前创建运行中记录。
 - read 必须携带当前任务的 task_id，一次支持 1 到 10 个文档或精确章节，并保持请求数组顺序。
 - `search_context_documents` 必须携带当前任务的 task_id。Workspace task 会搜索可选的 Workspace 根文档和全部 Project 文档，再按文档 ID 聚合排序；工作空间入口与 Project 重复映射时工作空间入口优先，嵌套项目之间的重复文档归最深项目所有。旧 Project task 继续只搜索原项目。输入为 query 和最多 50 的 limit；输出包含文档 ID、Workspace 相对路径、标题、概要、相关度、命中章节和命中原因，不返回正文或摘录。树较大或目标不明确时先 search，再按结果调用 read。

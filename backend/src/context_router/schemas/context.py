@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
 ProjectKind = Literal["frontend", "backend"]
 TaskScope = Literal["project", "workspace"]
+DatabaseEnvironment = Literal["test", "uat"]
+DatabaseEnvironmentSelection = Literal["workspace_default", "task_explicit"]
 
 
 class ContextDocumentNode(BaseModel):
@@ -32,6 +34,13 @@ class PreparedWorkspace(BaseModel):
     name: str
 
 
+class PreparedDatabaseEnvironment(BaseModel):
+    key: DatabaseEnvironment
+    name: str
+    revision: int = Field(ge=1)
+    selection: DatabaseEnvironmentSelection
+
+
 class PreparedDatabase(BaseModel):
     database: str
     engine: str
@@ -42,6 +51,7 @@ class PreparedDatabase(BaseModel):
     project_id: str | None = None
     project_name: str | None = None
     project_kind: ProjectKind | None = None
+    environment: DatabaseEnvironment | None = None
 
 
 class PrepareTaskContextResult(BaseModel):
@@ -52,6 +62,8 @@ class PrepareTaskContextResult(BaseModel):
     active_project: PreparedProject | None = None
     project: PreparedProject | None = None
     databases: list[PreparedDatabase] = Field(default_factory=list)
+    database_environment: PreparedDatabaseEnvironment | None = None
+    environment_config: dict[str, Any] | None = None
     warnings: list[str] | None = None
 
 
@@ -118,6 +130,9 @@ class ContextTaskSummary(BaseModel):
     active_project_id: str | None = None
     active_project_name: str | None = None
     active_project_kind: ProjectKind | None = None
+    database_environment: str | None = None
+    database_environment_revision: int | None = None
+    database_environment_selection: DatabaseEnvironmentSelection | None = None
 
 
 class ContextReadHistoryItem(BaseModel):
@@ -161,6 +176,9 @@ class ContextTaskReadHistory(BaseModel):
     active_project_name: str | None = None
     active_project_kind: ProjectKind | None = None
     scope: TaskScope = "project"
+    database_environment: str | None = None
+    database_environment_revision: int | None = None
+    database_environment_selection: DatabaseEnvironmentSelection | None = None
     agent_name: str | None = None
     created_at: datetime
     calls: list[ContextReadHistoryCall]

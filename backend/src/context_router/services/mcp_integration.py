@@ -190,11 +190,6 @@ class McpIntegrationService:
                             missing = expected.difference(names)
                             if missing:
                                 raise McpIntegrationError(f"缺少工具：{', '.join(sorted(missing))}")
-                            unexpected = set(names).difference(expected)
-                            if unexpected:
-                                raise McpIntegrationError(
-                                    f"发现未约定工具：{', '.join(sorted(unexpected))}"
-                                )
                             return f"发现 {len(names)} 个工具：{', '.join(names)}"
 
                         await add_stage("tools", "工具发现", list_tools)
