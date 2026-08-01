@@ -62,6 +62,15 @@ export function getWorkspace(workspaceId: string): Promise<WorkspaceSummary> {
   return request<WorkspaceSummary>(`/api/workspaces/${workspaceId}`);
 }
 
+export function refreshWorkspace(
+  workspaceId: string,
+): Promise<WorkspaceSummary> {
+  return request<WorkspaceSummary>(
+    `/api/workspaces/${workspaceId}/refresh`,
+    { method: "POST" },
+  );
+}
+
 export function listWorkspaceProjects(
   workspaceId: string,
 ): Promise<ProjectSummary[]> {

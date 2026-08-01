@@ -21,7 +21,7 @@
 - Workspace 是顶层目录、Codex task 和运行时上下文边界；根目录存在 `AGENTS.md` 时作为工作空间级文档入口。Project 必须属于一个 Workspace，保存名称、`frontend/backend` 类型、源码 `relative_path` 和文档入口 `document_relative_path`。Workspace 和 Project 都没有启停状态。源码根项目使用 `.`；项目文档入口由 `workspace.root_path / document_relative_path` 推导，兼容 `agents_path` 只作为绝对路径镜像。
 - 工作空间根目录必须是绝对路径；项目源码和文档入口相对路径都禁止绝对路径、`~`、反斜杠和 `..`，解析后不能通过软链接越出工作空间，同一工作空间内两类路径分别唯一。新文档入口必须位于 `docs/` 下并以 `AGENTS.md` 结尾。
 - 工作空间/项目配置，以及独立的数据源分类与连接配置保存在 PostgreSQL；文档树和 Markdown 原文只保存在单个后端进程内并在启动时从磁盘重建，PostgreSQL 分别保存可重建的 Workspace/Project 规范化检索分块和版本状态。
-- 浏览器管理面是只读查看台：只提供查看、筛选、复制、连接测试、密码按需 reveal、MCP 接入/测试、文档树、调用历史和运行记录。前端请求策略与后端 `BrowserReadOnlyMiddleware` 都只允许 `GET/HEAD/OPTIONS` 及连接测试、密码 reveal、MCP integration test、prepare preview 四类安全 `POST`。
+- 浏览器管理面以只读查看为主，并允许重建可恢复运行时状态的 Workspace 刷新。前端请求策略与后端 `BrowserReadOnlyMiddleware` 都只允许 `GET/HEAD/OPTIONS` 及连接测试、密码 reveal、MCP integration test、prepare preview、Workspace refresh 五类安全 `POST`；刷新只重建文档缓存和派生搜索索引，不修改 Workspace 或 Project 配置。
 - 工作空间、项目、数据源、数据库清单、项目授权、环境映射/JSON、默认环境和运行配置仍由本机 AI/运维使用既有受校验 API 维护；此类调用不携带 `Origin` 或 `Sec-Fetch-*` 浏览器请求头。不要为了绕过页面限制直接写 PostgreSQL，否则会跳过路径、事务、环境 revision、缓存与 Connector 失效处理。
 - 物理数据源配置全局共享，数据库授权继续由 `project_databases` 绑定具体 Project；Workspace task 汇总使用所有子项目当前有效的授权，`mcp_alias` 在整个 Workspace 内大小写无关唯一。
 - 可选的 Workspace 数据库环境映射把同一逻辑别名分别绑定到 TEST/UAT 的项目数据库关联。`prepare_task_context` 可选传 `environment='test'|'uat'`：显式值只固定本 task 的 `task_explicit` 环境，不修改 Workspace 当前环境；省略时固化当前环境并记录为 `workspace_default`。两种模式都保存共享 revision，revision 变化后旧 task 必须重新 prepare，禁止静默换库。

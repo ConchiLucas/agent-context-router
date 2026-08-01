@@ -212,6 +212,44 @@ def test_workspace_projects_and_data_source_summary(tmp_path: Path) -> None:
     assert sources_after_delete.json()[0]["project_count"] == 0
 
 
+def test_failed_workspace_refresh_updates_error_summary(tmp_path: Path) -> None:
+    workspace_root = tmp_path / "failed-refresh"
+    (workspace_root / "service").mkdir(parents=True)
+    agents_path = workspace_root / "docs" / "backend" / "service" / "AGENTS.md"
+    _write_agents(agents_path, "刷新失败项目")
+    app = _app(tmp_path)
+
+    with TestClient(app) as client:
+        workspace = client.post(
+            "/api/workspaces",
+            json={
+                "name": "刷新失败工作空间",
+                "workspace_type": "个人项目",
+                "root_path": str(workspace_root),
+            },
+        ).json()
+        project_response = client.post(
+            f"/api/workspaces/{workspace['id']}/projects",
+            json={
+                "name": "刷新失败项目",
+                "relative_path": "service",
+                "document_relative_path": "docs/backend/service/AGENTS.md",
+                "project_kind": "backend",
+            },
+        )
+        assert project_response.status_code == 201
+
+        agents_path.unlink()
+        refresh_response = client.post(f"/api/workspaces/{workspace['id']}/refresh")
+        latest_workspace = client.get(f"/api/workspaces/{workspace['id']}")
+        latest_projects = client.get(f"/api/workspaces/{workspace['id']}/projects")
+
+    assert refresh_response.status_code == 400
+    assert latest_workspace.status_code == 200
+    assert latest_workspace.json()["error_project_count"] == 1
+    assert "找不到入口文件" in latest_projects.json()[0]["error"]
+
+
 def test_workspace_project_rejects_path_escape(tmp_path: Path) -> None:
     workspace_root = tmp_path / "company"
     workspace_root.mkdir()

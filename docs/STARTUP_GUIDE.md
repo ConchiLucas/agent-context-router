@@ -26,7 +26,7 @@ docker compose up -d --force-recreate backend frontend
 
 Compose 的前端和后端宿主机端口都显式绑定 `127.0.0.1`，不会默认监听局域网网卡。后端 CORS 只允许 `http://127.0.0.1:49174` 和 `http://localhost:49174`；本项目当前定位为本机工具，不提供应用层鉴权。若未来需要远程访问，应先补 HTTPS、鉴权和新的 Origin 配置，而不是直接改成公网绑定。
 
-携带任意 `Origin` 或浏览器 Fetch Metadata（`Sec-Fetch-Mode` / `Sec-Fetch-Site`）的请求由后端只读中间件限制为 `GET/HEAD/OPTIONS`，以及四类不会修改配置的安全 `POST`：数据源连接测试、数据源密码按需查看、MCP 接入测试和 Workspace prepare 预览。其他浏览器配置写请求返回 `405 management_read_only`。本机 AI 或运维调用方不携带这些浏览器请求头，仍可使用既有受 Schema、Service 和 Repository 校验的本地 API 维护配置；这只是回环单用户部署下的调用边界，不替代身份认证。
+携带任意 `Origin` 或浏览器 Fetch Metadata（`Sec-Fetch-Mode` / `Sec-Fetch-Site`）的请求由后端只读中间件限制为 `GET/HEAD/OPTIONS`，以及五类不会修改配置的安全 `POST`：数据源连接测试、数据源密码按需查看、MCP 接入测试、Workspace prepare 预览和 Workspace 刷新。刷新只重建文档缓存与派生搜索索引；其他浏览器配置写请求返回 `405 management_read_only`。本机 AI 或运维调用方不携带这些浏览器请求头，仍可使用既有受 Schema、Service 和 Repository 校验的本地 API 维护配置；这只是回环单用户部署下的调用边界，不替代身份认证。
 
 ## 工作区挂载
 

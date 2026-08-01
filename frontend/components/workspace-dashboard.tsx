@@ -3,7 +3,15 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { WorkspaceDetail } from "@/components/workspace-detail";
-import { listWorkspaces } from "@/lib/api";
+import { getWorkspace, listWorkspaces, refreshWorkspace } from "@/lib/api";
+import {
+  clearWorkspaceRefreshError,
+  finishWorkspaceRefresh,
+  replaceWorkspaceSummary,
+  runWorkspaceRefresh,
+  setWorkspaceRefreshError,
+  startWorkspaceRefresh,
+} from "@/lib/workspace-dashboard";
 import type { WorkspaceSummary } from "@/lib/types";
 
 const ALL_WORKSPACE_TYPES = "__all__";
@@ -23,6 +31,12 @@ export function WorkspaceDashboard() {
   const [selectedType, setSelectedType] = useState(ALL_WORKSPACE_TYPES);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshingWorkspaceIds, setRefreshingWorkspaceIds] = useState<
+    Set<string>
+  >(() => new Set());
+  const [refreshErrors, setRefreshErrors] = useState<
+    Record<string, string>
+  >({});
 
   const loadWorkspaces = useCallback(async () => {
     setLoading(true);
@@ -40,6 +54,34 @@ export function WorkspaceDashboard() {
   useEffect(() => {
     void loadWorkspaces();
   }, [loadWorkspaces]);
+
+  const handleRefreshWorkspace = useCallback(async (workspaceId: string) => {
+    setRefreshingWorkspaceIds((current) =>
+      startWorkspaceRefresh(current, workspaceId),
+    );
+    setRefreshErrors((current) =>
+      clearWorkspaceRefreshError(current, workspaceId),
+    );
+    const result = await runWorkspaceRefresh(
+      workspaceId,
+      refreshWorkspace,
+      getWorkspace,
+    );
+    const refreshed = result.summary;
+    if (refreshed) {
+      setWorkspaces((current) =>
+        replaceWorkspaceSummary(current, refreshed),
+      );
+    }
+    setRefreshErrors((current) =>
+      result.error
+        ? setWorkspaceRefreshError(current, workspaceId, result.error)
+        : clearWorkspaceRefreshError(current, workspaceId),
+    );
+    setRefreshingWorkspaceIds((current) =>
+      finishWorkspaceRefresh(current, workspaceId),
+    );
+  }, []);
 
   useEffect(() => {
     if (
@@ -74,6 +116,7 @@ export function WorkspaceDashboard() {
       : workspaces.filter(
           (workspace) => workspace.workspace_type === selectedType,
         );
+  const refreshError = Object.values(refreshErrors).join("；");
 
   return (
     <>
@@ -113,9 +156,9 @@ export function WorkspaceDashboard() {
         ))}
       </nav>
 
-      {error ? (
+      {error || refreshError ? (
         <div className="error-banner" role="alert">
-          {error}
+          {error ?? refreshError}
         </div>
       ) : null}
       {loading ? <p className="empty-message">正在读取工作空间…</p> : null}
@@ -136,8 +179,10 @@ export function WorkspaceDashboard() {
       ) : null}
 
       <section className="workspace-grid" aria-label="工作空间列表">
-        {visibleWorkspaces.map((workspace) => (
-          <article className="workspace-card" key={workspace.id}>
+        {visibleWorkspaces.map((workspace) => {
+          const isRefreshing = refreshingWorkspaceIds.has(workspace.id);
+          return (
+            <article className="workspace-card" key={workspace.id}>
             <header>
               <div>
                 <div className="project-card-chips">
@@ -148,6 +193,20 @@ export function WorkspaceDashboard() {
                 </div>
                 <h2>{workspace.name}</h2>
               </div>
+              <button
+                type="button"
+                className="secondary-button workspace-refresh-button"
+                disabled={isRefreshing}
+                aria-busy={isRefreshing}
+                aria-label={
+                  isRefreshing
+                    ? `正在刷新 ${workspace.name} 的映射`
+                    : `刷新 ${workspace.name} 的映射`
+                }
+                onClick={() => void handleRefreshWorkspace(workspace.id)}
+              >
+                {isRefreshing ? "刷新中…" : "刷新映射"}
+              </button>
             </header>
             <code className="workspace-root-path">{workspace.root_path}</code>
             <div className="workspace-card-stats">
@@ -186,8 +245,9 @@ export function WorkspaceDashboard() {
                 进入工作空间
               </button>
             </div>
-          </article>
-        ))}
+            </article>
+          );
+        })}
       </section>
     </>
   );

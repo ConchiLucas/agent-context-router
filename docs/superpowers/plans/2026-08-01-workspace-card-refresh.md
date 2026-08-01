@@ -258,22 +258,35 @@ Run the Step 2 command again. Expected: the helper test PASSes.
 
 - [ ] **Step 5: Wire per-card state and the click handler**
 
-Import `refreshWorkspace` and `replaceWorkspaceSummary`, add `refreshingWorkspaceId`, and add this handler to `WorkspaceDashboard`:
+Import `getWorkspace`, `refreshWorkspace`, and the Workspace dashboard helpers. Track pending IDs in a `Set<string>` and errors in a `Record<string, string>` so concurrent cards remain independent. Use `runWorkspaceRefresh` to recover the latest Workspace summary after a refresh validation error:
 
 ```tsx
 const handleRefreshWorkspace = useCallback(async (workspaceId: string) => {
-  setRefreshingWorkspaceId(workspaceId);
-  try {
-    const refreshed = await refreshWorkspace(workspaceId);
+  setRefreshingWorkspaceIds((current) =>
+    startWorkspaceRefresh(current, workspaceId),
+  );
+  setRefreshErrors((current) =>
+    clearWorkspaceRefreshError(current, workspaceId),
+  );
+  const result = await runWorkspaceRefresh(
+    workspaceId,
+    refreshWorkspace,
+    getWorkspace,
+  );
+  const refreshed = result.summary;
+  if (refreshed) {
     setWorkspaces((current) =>
       replaceWorkspaceSummary(current, refreshed),
     );
-    setError(null);
-  } catch (requestError) {
-    setError((requestError as Error).message);
-  } finally {
-    setRefreshingWorkspaceId(null);
   }
+  setRefreshErrors((current) =>
+    result.error
+      ? setWorkspaceRefreshError(current, workspaceId, result.error)
+      : clearWorkspaceRefreshError(current, workspaceId),
+  );
+  setRefreshingWorkspaceIds((current) =>
+    finishWorkspaceRefresh(current, workspaceId),
+  );
 }, []);
 ```
 
@@ -283,11 +296,16 @@ Add the button as the second child of the card header:
 <button
   type="button"
   className="secondary-button workspace-refresh-button"
-  disabled={refreshingWorkspaceId === workspace.id}
-  aria-label={`刷新 ${workspace.name} 的映射`}
+  disabled={isRefreshing}
+  aria-busy={isRefreshing}
+  aria-label={
+    isRefreshing
+      ? `正在刷新 ${workspace.name} 的映射`
+      : `刷新 ${workspace.name} 的映射`
+  }
   onClick={() => void handleRefreshWorkspace(workspace.id)}
 >
-  {refreshingWorkspaceId === workspace.id ? "刷新中…" : "刷新映射"}
+  {isRefreshing ? "刷新中…" : "刷新映射"}
 </button>
 ```
 

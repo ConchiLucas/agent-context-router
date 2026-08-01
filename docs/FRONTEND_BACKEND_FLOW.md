@@ -25,7 +25,7 @@ Browser with Origin or Fetch Metadata
   -> frontend browser-api-policy
   -> BrowserReadOnlyMiddleware
   -> 允许 GET / HEAD / OPTIONS
-  -> 仅额外允许连接测试、密码 reveal、MCP integration test、prepare preview 四类 POST
+  -> 仅额外允许连接测试、密码 reveal、MCP integration test、prepare preview、Workspace refresh 五类 POST
   -> 其他配置写请求返回 405 management_read_only
 
 Local AI / operations without browser headers
@@ -117,6 +117,7 @@ prepare 和文档搜索不建立业务数据库连接。业务数据库离线时
 | 页面行为 | 前端 | 后端 API |
 | --- | --- | --- |
 | 加载工作空间卡片 | `workspace-dashboard.tsx` | `GET /api/workspaces` |
+| 刷新工作空间映射 | `workspace-dashboard.tsx` | 安全 `POST /api/workspaces/{id}/refresh` |
 | 按工作空间类型切换卡片 | `workspace-dashboard.tsx` | 复用 `GET /api/workspaces` 返回的 `workspace_type` 在前端筛选 |
 | 加载工作空间内项目卡片 | `workspace-detail.tsx`、`project-dashboard.tsx` | `GET /api/workspaces/{id}/projects` |
 | 按前端/后端类型切换项目卡片 | `workspace-detail.tsx`、`project-dashboard.tsx` | 复用项目列表中的 `project_kind` 在前端筛选 |
@@ -139,7 +140,7 @@ prepare 和文档搜索不建立业务数据库连接。业务数据库离线时
 | 打开当前工作空间 MCP 接入面板 | `workspace-detail.tsx`、`mcp-integration-panel.tsx` | `GET /api/mcp/integration` |
 | 对当前工作空间执行 MCP 连接测试 | `mcp-integration-panel.tsx` | 安全 `POST /api/mcp/integration/tests`，请求体使用 `workspace_id` |
 
-浏览器不再调用工作空间、项目、数据源、数据库清单、项目授权、环境映射/JSON、当前环境或运行配置的写 API，也不触发 Workspace 刷新、数据库同步、运行配置物化或执行。既有 `POST/PUT/PATCH/DELETE` contract 保留给不携带 `Origin` 或 `Sec-Fetch-*` 浏览器请求头的本机 AI/运维调用方，后端继续执行原有业务校验与副作用管理。
+浏览器不调用工作空间、项目、数据源、数据库清单、项目授权、环境映射/JSON、当前环境或运行配置的配置写 API，也不触发数据库同步、运行配置物化或执行；仅额外允许 Workspace 刷新重建可恢复的文档缓存和派生搜索索引。其余 `POST/PUT/PATCH/DELETE` contract 保留给不携带 `Origin` 或 `Sec-Fetch-*` 浏览器请求头的本机 AI/运维调用方，后端继续执行原有业务校验与副作用管理。
 
 ## 后端代码
 
@@ -153,7 +154,7 @@ api/workspaces.py
   -> schemas/workspaces.py / schemas/projects.py
 ```
 
-- `BrowserReadOnlyMiddleware` 根据任意 `Origin` 或浏览器 Fetch Metadata 拦截配置写请求；`frontend/lib/browser-api-policy.ts` 在请求发出前执行同一只读策略。双层限制共享 `GET/HEAD/OPTIONS` 与四类安全 `POST` 边界。
+- `BrowserReadOnlyMiddleware` 根据任意 `Origin` 或浏览器 Fetch Metadata 拦截配置写请求；`frontend/lib/browser-api-policy.ts` 在请求发出前执行同一只读策略。双层限制共享 `GET/HEAD/OPTIONS` 与五类安全 `POST` 边界，Workspace refresh 只重建文档缓存和派生搜索索引。
 - `WorkspaceManagementService` 继续为本机 AI/运维编排受校验的工作空间 CRUD、工作空间内项目 CRUD、刷新和数据源汇总；`workspace_repository.py` 持久化工作空间根目录、类型和总开关。
 - `project_repository.py` 持久化稳定项目 ID、`workspace_id`、`frontend/backend` 的 `project_kind`、工作空间内分别唯一的源码 `relative_path`、文档入口 `document_relative_path` 和兼容字段；`document_projects` 不再有 enabled。后端启动时从独立文档入口重建缓存，路径失效项目保留配置和错误。
 - `ProjectRegistry` 管理可选的 Workspace 根文档缓存和每个 Project 缓存；根 `AGENTS.md` 存在时，导航树严格采用其显式父子关系，未声明的 Project 根不自动挂入树中；根入口不存在时动态构建直接列出 Project 的合成入口。两种情况下 Workspace 聚合缓存都保留全部项目文档，供搜索和按 ID 读取。cwd 先按根目录深度选择最深 Workspace，再按源码根选择最深 Project 作为 `active_project`。

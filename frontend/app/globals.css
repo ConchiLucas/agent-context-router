@@ -4002,6 +4002,11 @@ p {
   font-size: 1.3rem;
 }
 
+.workspace-refresh-button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .workspace-root-path {
   display: block;
   margin: 24px 0 18px;

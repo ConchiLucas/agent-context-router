@@ -9,6 +9,12 @@
 
 ## 记录
 
+### 2026-08-01：工作空间卡片刷新映射
+
+- 工作空间列表卡片右上角新增“刷新映射”按钮，按 Workspace 全量重建可选根文档、全部 Project 文档缓存和派生搜索索引；刷新期间仅禁用对应卡片并展示“刷新中…”。
+- 前端 `browser-api-policy` 与后端 `BrowserReadOnlyMiddleware` 在原四类安全操作之外，精确放行 `POST /api/workspaces/{id}/refresh` 作为第五类安全 `POST`；其他配置写请求及 refresh 子路径仍返回 `405 management_read_only`。
+- 刷新成功后只替换对应 Workspace 卡片摘要；刷新校验失败时保留后端错误提示，同时重新读取该 Workspace 的最新摘要，使异常数反映刚完成的校验结果。多 Workspace 并发刷新分别维护加载态和错误，不互相清除。
+
 ### 2026-07-30：管理界面只读化
 
 - Workspace、数据源、项目数据库授权与环境映射配置不再具有启停状态；界面移除相应标签，后端 contract 和 migration `20260730_0022` 同步删除字段。记录存在即生效，数据库可查询性继续由 `available/system_database/readonly/mcp_alias/Connector` 决定。

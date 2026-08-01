@@ -25,6 +25,10 @@ def _app() -> FastAPI:
     def update_workspace() -> dict[str, bool]:
         return {"written": True}
 
+    @app.post("/api/workspaces/workspace-1/refresh")
+    def refresh_workspace() -> dict[str, bool]:
+        return {"refreshed": True}
+
     @app.post("/api/data-sources/source-1/test")
     def test_connection() -> dict[str, bool]:
         return {"diagnostic": True}
@@ -36,7 +40,7 @@ def _app() -> FastAPI:
     return app
 
 
-def test_browser_origin_can_read_and_run_allowlisted_diagnostics() -> None:
+def test_browser_origin_can_read_and_run_allowlisted_actions() -> None:
     with TestClient(_app()) as client:
         headers = {"Origin": FRONTEND_ORIGIN}
         assert client.get("/api/workspaces", headers=headers).status_code == 200
@@ -54,6 +58,13 @@ def test_browser_origin_can_read_and_run_allowlisted_diagnostics() -> None:
             ).status_code
             == 200
         )
+        assert (
+            client.post(
+                "/api/workspaces/workspace-1/refresh",
+                headers=headers,
+            ).status_code
+            == 200
+        )
 
 
 def test_browser_origin_cannot_call_configuration_commands() -> None:
@@ -64,9 +75,14 @@ def test_browser_origin_cannot_call_configuration_commands() -> None:
             "/api/workspaces/workspace-1",
             headers=headers,
         )
+        refresh_extra_response = client.post(
+            "/api/workspaces/workspace-1/refresh/extra",
+            headers=headers,
+        )
 
     assert create_response.status_code == 405
     assert update_response.status_code == 405
+    assert refresh_extra_response.status_code == 405
     assert create_response.json()["detail"].startswith("management_read_only:")
 
 

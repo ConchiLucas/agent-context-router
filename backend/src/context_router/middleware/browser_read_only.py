@@ -16,6 +16,7 @@ def _safe_browser_post_patterns(api_prefix: str) -> tuple[re.Pattern[str], ...]:
         re.compile(rf"^{prefix}/data-sources/[^/]+/test$"),
         re.compile(rf"^{prefix}/mcp/integration/tests$"),
         re.compile(rf"^{prefix}/workspaces/[^/]+/prepare-preview$"),
+        re.compile(rf"^{prefix}/workspaces/[^/]+/refresh$"),
     )
 
 

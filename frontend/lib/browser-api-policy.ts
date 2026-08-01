@@ -3,6 +3,7 @@ const SAFE_BROWSER_POST_PATHS = [
   /^\/api\/data-sources\/[^/]+\/test$/,
   /^\/api\/mcp\/integration\/tests$/,
   /^\/api\/workspaces\/[^/]+\/prepare-preview(?:\?.*)?$/,
+  /^\/api\/workspaces\/[^/]+\/refresh$/,
 ];
 
 export function isBrowserApiRequestAllowed(

@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { isBrowserApiRequestAllowed } from "./browser-api-policy";
 
-test("allows reads and the explicit diagnostic POST allowlist", () => {
+test("allows reads and the explicit safe browser POST allowlist", () => {
   assert.equal(isBrowserApiRequestAllowed("/api/workspaces"), true);
   assert.equal(
     isBrowserApiRequestAllowed(
@@ -26,6 +26,13 @@ test("allows reads and the explicit diagnostic POST allowlist", () => {
   assert.equal(
     isBrowserApiRequestAllowed(
       "/api/workspaces/workspace-1/prepare-preview?environment=test",
+      "POST",
+    ),
+    true,
+  );
+  assert.equal(
+    isBrowserApiRequestAllowed(
+      "/api/workspaces/workspace-1/refresh",
       "POST",
     ),
     true,
@@ -55,6 +62,13 @@ test("rejects browser configuration and execution commands", () => {
   assert.equal(
     isBrowserApiRequestAllowed(
       "/api/projects/project-1/runtime-config/fast/execute",
+      "POST",
+    ),
+    false,
+  );
+  assert.equal(
+    isBrowserApiRequestAllowed(
+      "/api/workspaces/workspace-1/refresh/extra",
       "POST",
     ),
     false,
