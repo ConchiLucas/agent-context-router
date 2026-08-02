@@ -23,7 +23,7 @@ docker compose exec backend uv run alembic upgrade head
 docker compose exec backend uv run alembic current
 ```
 
-当前 head 为 `20260730_0022`。若要验证 downgrade/upgrade，使用一次性测试数据库，不要在保存真实调用记录的控制面库上直接 downgrade：`0022 -> 0021` 会恢复已废弃的 Workspace、数据源、项目数据库授权和环境映射配置 `enabled` 字段；`0021 -> 0020` 会删除 task 的 `database_environment_selection`，失去显式任务环境与 Workspace 默认环境的持久化区分；`0020 -> 0019` 会删除 TEST/UAT 通用环境 JSON；`0019 -> 0018` 会删除 Workspace TEST/UAT 环境映射和 task 环境 revision；`0018 -> 0017` 会删除 Runtime Runner 异步执行记录；`0017 -> 0016` 会删除项目运行配置文件；`0016 -> 0015` 会删除独立的项目文档入口相对路径并恢复由兼容 `agents_path` 表达入口；更早版本还会依次删除 Workspace 文档派生索引、Project 类型和 Workspace task 快照、工作空间表、Project 文档搜索索引、数据库 payload、统一 MCP 工具链路、数据库调用历史和 MCP alias。
+当前 head 为 `20260802_0023`。若要验证 downgrade/upgrade，使用一次性测试数据库，不要在保存真实调用记录的控制面库上直接 downgrade：`0023 -> 0022` 会删除 Workspace 运行配置、运行策略、父操作、步骤和宿主机 Runner 状态；`0022 -> 0021` 会恢复已废弃的 Workspace、数据源、项目数据库授权和环境映射配置 `enabled` 字段；`0021 -> 0020` 会删除 task 的 `database_environment_selection`，失去显式任务环境与 Workspace 默认环境的持久化区分；`0020 -> 0019` 会删除 TEST/UAT 通用环境 JSON；`0019 -> 0018` 会删除 Workspace TEST/UAT 环境映射和 task 环境 revision；`0018 -> 0017` 会删除旧 Runtime Runner 异步执行记录；`0017 -> 0016` 会删除项目运行配置文件；更早版本还会依次删除项目文档入口、Workspace 文档派生索引、Project 类型和 Workspace task 快照、工作空间表、Project 文档搜索索引、数据库 payload、统一 MCP 工具链路、数据库调用历史和 MCP alias。
 
 ## 当前表
 
