@@ -72,6 +72,7 @@ from context_router.repositories.runtime_config_repository import (
 from context_router.repositories.runtime_operation_repository import (
     InMemoryRuntimeOperationRepository,
     PostgresRuntimeOperationRepository,
+    RuntimeOperationRepositoryError,
     RuntimeOperationStore,
 )
 from context_router.repositories.runtime_run_repository import (
@@ -322,6 +323,7 @@ def create_app(
         database_payload_service=database_payload_service,
         document_search_service=document_search_service,
         runtime_execution_service=runtime_execution_service,
+        workspace_runtime_service=workspace_runtime_orchestration_service,
     )
     mcp_app = mcp_server.streamable_http_app()
 
@@ -340,7 +342,10 @@ def create_app(
         try:
             mcp_trace_service.reconcile_interrupted_calls()
             runtime_execution_service.reconcile_interrupted()
-            resolved_runtime_operation_repository.reconcile_expired()
+            try:
+                resolved_runtime_operation_repository.reconcile_expired()
+            except RuntimeOperationRepositoryError:
+                logger.warning("Unable to reconcile expired runtime operations", exc_info=True)
             database_payload_service.reconcile_startup()
             async with mcp_server.session_manager.run():
                 yield

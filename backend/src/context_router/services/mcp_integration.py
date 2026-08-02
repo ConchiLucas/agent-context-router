@@ -14,8 +14,12 @@ from mcp.types import CallToolResult
 
 from context_router.config import Settings
 from context_router.mcp_server import (
+    APPLY_WORKSPACE_TOOL_DESCRIPTION,
+    APPLY_WORKSPACE_TOOL_NAME,
     EXECUTE_DATABASE_TOOL_DESCRIPTION,
     EXECUTE_DATABASE_TOOL_NAME,
+    GET_WORKSPACE_OPERATION_TOOL_DESCRIPTION,
+    GET_WORKSPACE_OPERATION_TOOL_NAME,
     MCP_SERVER_NAME,
     PREPARE_TOOL_DESCRIPTION,
     PREPARE_TOOL_NAME,
@@ -25,6 +29,8 @@ from context_router.mcp_server import (
     SEARCH_CONTEXT_TOOL_NAME,
     SEARCH_DATABASE_TOOL_DESCRIPTION,
     SEARCH_DATABASE_TOOL_NAME,
+    START_WORKSPACE_TOOL_DESCRIPTION,
+    START_WORKSPACE_TOOL_NAME,
 )
 from context_router.schemas.mcp_integration import (
     McpClientConfig,
@@ -78,6 +84,18 @@ class McpIntegrationService:
                 McpToolInfo(
                     name=EXECUTE_DATABASE_TOOL_NAME,
                     description=EXECUTE_DATABASE_TOOL_DESCRIPTION,
+                ),
+                McpToolInfo(
+                    name=APPLY_WORKSPACE_TOOL_NAME,
+                    description=APPLY_WORKSPACE_TOOL_DESCRIPTION,
+                ),
+                McpToolInfo(
+                    name=START_WORKSPACE_TOOL_NAME,
+                    description=START_WORKSPACE_TOOL_DESCRIPTION,
+                ),
+                McpToolInfo(
+                    name=GET_WORKSPACE_OPERATION_TOOL_NAME,
+                    description=GET_WORKSPACE_OPERATION_TOOL_DESCRIPTION,
                 ),
             ],
             clients=[
@@ -186,6 +204,9 @@ class McpIntegrationService:
                                 READ_TOOL_NAME,
                                 SEARCH_DATABASE_TOOL_NAME,
                                 EXECUTE_DATABASE_TOOL_NAME,
+                                APPLY_WORKSPACE_TOOL_NAME,
+                                START_WORKSPACE_TOOL_NAME,
+                                GET_WORKSPACE_OPERATION_TOOL_NAME,
                             }
                             missing = expected.difference(names)
                             if missing:

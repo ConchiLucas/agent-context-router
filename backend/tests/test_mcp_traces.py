@@ -130,6 +130,34 @@ class FailingQuery:
         raise DatabaseAccessError("connection_failed", "数据库当前无法连接")
 
 
+class RecordingWorkspaceRuntime:
+    def apply_changes(self, **_: object) -> DumpResult:
+        return self._result("operation-1", "apply_changes")
+
+    def start_workspace(self, **_: object) -> DumpResult:
+        return self._result("operation-2", "start_workspace")
+
+    def get_operation(self, operation_id: str, _log_characters: int) -> DumpResult:
+        return self._result(operation_id, "apply_changes")
+
+    def get_task_id(self, operation_id: str) -> int:
+        assert operation_id
+        return 77
+
+    @staticmethod
+    def _result(operation_id: str, kind: str) -> DumpResult:
+        return DumpResult(
+            {
+                "id": operation_id,
+                "task_id": 77,
+                "workspace_id": "workspace-1",
+                "kind": kind,
+                "status": "queued",
+                "steps": [{"owner_id": "project-1", "mode": "fast"}],
+            }
+        )
+
+
 class UnusedStore:
     def get_task(self, task_id: int) -> TaskRecord:
         raise AssertionError(task_id)
@@ -251,6 +279,43 @@ def test_failed_mcp_tool_finishes_error_without_hiding_original_tool_error() -> 
     call = repository.list_calls(77)[0]
     assert call.status == "error"
     assert call.error_code == "connection_failed"
+
+
+def test_workspace_runtime_tools_are_traced_and_operation_query_resolves_task() -> None:
+    repository = InMemoryMcpToolCallRepository()
+    runtime = RecordingWorkspaceRuntime()
+    server = create_context_router_mcp(
+        RecordingPreparation(),  # type: ignore[arg-type]
+        RecordingRead(),  # type: ignore[arg-type]
+        trace_service=_tracking_service(repository),
+        workspace_runtime_service=runtime,  # type: ignore[arg-type]
+    )
+
+    async def invoke_tools() -> None:
+        await server.call_tool(
+            "apply_workspace_changes",
+            {"task_id": 77, "changed_files": ["project/app.py"]},
+        )
+        await server.call_tool("start_workspace", {"task_id": 77})
+        await server.call_tool(
+            "get_workspace_operation",
+            {"operation_id": "operation-1", "log_characters": 2000},
+        )
+
+    asyncio.run(invoke_tools())
+    calls = repository.list_calls(77)
+
+    assert [call.tool_name for call in calls] == [
+        "apply_workspace_changes",
+        "start_workspace",
+        "get_workspace_operation",
+    ]
+    assert calls[0].request_summary == {"changed_file_count": 1}
+    assert calls[2].result_summary == {
+        "operation_id": "operation-1",
+        "status": "queued",
+        "step_count": 1,
+    }
 
 
 def test_prepare_failure_after_task_creation_records_error_call() -> None:

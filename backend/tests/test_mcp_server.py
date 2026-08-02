@@ -66,6 +66,43 @@ class RecordingQueryService:
         return {"rows": [[1]], "returned_rows": 1}
 
 
+class _RuntimeResult:
+    def __init__(self, operation_id: str, task_id: int = 9) -> None:
+        self.operation_id = operation_id
+        self.task_id = task_id
+
+    def model_dump(self, **_: object) -> dict[str, object]:
+        return {
+            "id": self.operation_id,
+            "task_id": self.task_id,
+            "workspace_id": "workspace-1",
+            "kind": "apply_changes",
+            "status": "queued",
+            "steps": [],
+        }
+
+
+class RecordingWorkspaceRuntimeService:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, object]]] = []
+
+    def apply_changes(self, **arguments: object) -> _RuntimeResult:
+        self.calls.append(("apply", arguments))
+        return _RuntimeResult("operation-1")
+
+    def start_workspace(self, **arguments: object) -> _RuntimeResult:
+        self.calls.append(("start", arguments))
+        return _RuntimeResult("operation-2")
+
+    def get_operation(self, operation_id: str, log_characters: int) -> _RuntimeResult:
+        self.calls.append(("get", {"operation_id": operation_id, "log_characters": log_characters}))
+        return _RuntimeResult(operation_id)
+
+    def get_task_id(self, operation_id: str) -> int:
+        assert operation_id
+        return 9
+
+
 def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
     service = UnusedService()
     server = create_context_router_mcp(  # type: ignore[arg-type]
@@ -81,6 +118,9 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "read_context_document",
         "search_database_objects",
         "execute_database_query",
+        "apply_workspace_changes",
+        "start_workspace",
+        "get_workspace_operation",
         "apply_project_changes",
         "get_project_operation",
     ]
@@ -95,14 +135,16 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         assert tool.annotations.destructiveHint is False
         assert tool.annotations.idempotentHint is True
         assert tool.annotations.openWorldHint is False
-    assert tools[5].annotations is not None
-    assert tools[5].annotations.readOnlyHint is False
-    assert tools[5].annotations.destructiveHint is True
-    assert tools[5].annotations.idempotentHint is False
-    assert tools[6].annotations is not None
-    assert tools[6].annotations.readOnlyHint is True
-    assert tools[6].annotations.destructiveHint is False
-    assert tools[6].annotations.idempotentHint is True
+    for tool in (tools[5], tools[6], tools[8]):
+        assert tool.annotations is not None
+        assert tool.annotations.readOnlyHint is False
+        assert tool.annotations.destructiveHint is True
+        assert tool.annotations.idempotentHint is False
+    for tool in (tools[7], tools[9]):
+        assert tool.annotations is not None
+        assert tool.annotations.readOnlyHint is True
+        assert tool.annotations.destructiveHint is False
+        assert tool.annotations.idempotentHint is True
     prepare_schema = tools[0].inputSchema
     assert prepare_schema["required"] == ["task", "cwd"]
     assert set(prepare_schema["properties"]) == {
@@ -133,6 +175,39 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
     }
     assert query_schema["required"] == ["task_id", "database", "sql"]
     assert set(query_schema["properties"]) == {"task_id", "database", "sql"}
+
+
+def test_workspace_runtime_tools_forward_only_task_scoped_arguments() -> None:
+    service = UnusedService()
+    runtime = RecordingWorkspaceRuntimeService()
+    server = create_context_router_mcp(  # type: ignore[arg-type]
+        service,
+        service,
+        workspace_runtime_service=runtime,  # type: ignore[arg-type]
+    )
+
+    _, applied = asyncio.run(
+        server.call_tool(
+            "apply_workspace_changes",
+            {"task_id": 9, "changed_files": ["backend/app.py"]},
+        )
+    )
+    _, started = asyncio.run(server.call_tool("start_workspace", {"task_id": 9}))
+    _, read = asyncio.run(
+        server.call_tool(
+            "get_workspace_operation",
+            {"operation_id": "operation-1", "log_characters": 2000},
+        )
+    )
+
+    assert applied["id"] == "operation-1"
+    assert started["id"] == "operation-2"
+    assert read["id"] == "operation-1"
+    assert runtime.calls == [
+        ("apply", {"task_id": 9, "changed_files": ["backend/app.py"]}),
+        ("start", {"task_id": 9}),
+        ("get", {"operation_id": "operation-1", "log_characters": 2000}),
+    ]
 
 
 def test_prepare_forwards_optional_task_environment() -> None:

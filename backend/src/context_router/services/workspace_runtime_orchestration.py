@@ -215,6 +215,14 @@ class WorkspaceRuntimeOrchestrationService:
             )
         return self._view(operation, log_characters=log_characters)
 
+    def get_task_id(self, operation_id: str) -> int:
+        operation = self._operations.get_operation(operation_id)
+        if operation is None:
+            raise WorkspaceRuntimeOrchestrationError(
+                "runtime_operation_not_found", "运行操作不存在"
+            )
+        return operation.task_id
+
     def apply_project_compat(
         self,
         *,

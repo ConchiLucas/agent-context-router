@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import re
+from collections.abc import Callable
 from datetime import UTC, datetime
 from time import perf_counter_ns
 from typing import Annotated, Any, Literal
@@ -14,10 +15,10 @@ from pydantic import Field
 
 from context_router.database.errors import DatabaseAccessError
 from context_router.mcp_contract import (
-    CONTEXT_ROUTER_TRACE_SERVER_NAME as TRACE_SERVER_NAME,
+    CONTEXT_ROUTER_CORE_TOOL_NAMES,
 )
 from context_router.mcp_contract import (
-    CONTEXT_ROUTER_TRACE_TOOL_NAMES,
+    CONTEXT_ROUTER_TRACE_SERVER_NAME as TRACE_SERVER_NAME,
 )
 from context_router.schemas.context import ContextDocumentReadRequest
 from context_router.services.context_document_read import (
@@ -40,6 +41,10 @@ from context_router.services.runtime_execution import (
     RuntimeExecutionError,
     RuntimeExecutionService,
 )
+from context_router.services.workspace_runtime_orchestration import (
+    WorkspaceRuntimeOrchestrationError,
+    WorkspaceRuntimeOrchestrationService,
+)
 
 MCP_SERVER_NAME = "Context Router"
 MCP_SERVER_INSTRUCTIONS = (
@@ -54,8 +59,10 @@ MCP_SERVER_INSTRUCTIONS = (
     "The returned environment_config may contain connection details and credentials for the "
     "environment selected by this task. Treat it as sensitive local-only context and never "
     "echo it into logs or unrelated output. "
-    "After modifying registered project code, call apply_project_changes with the project ID "
-    "and changed relative paths. Use get_project_operation to follow the returned operation."
+    "When the user asks to start services, call start_workspace: start always means every "
+    "registered project in the task Workspace. After modifying registered Workspace code, "
+    "call apply_workspace_changes once with task_id and actual Workspace-relative changed "
+    "paths. Poll get_workspace_operation until it reaches a terminal state."
 )
 (
     PREPARE_TOOL_NAME,
@@ -63,7 +70,22 @@ MCP_SERVER_INSTRUCTIONS = (
     READ_TOOL_NAME,
     SEARCH_DATABASE_TOOL_NAME,
     EXECUTE_DATABASE_TOOL_NAME,
-) = CONTEXT_ROUTER_TRACE_TOOL_NAMES
+) = CONTEXT_ROUTER_CORE_TOOL_NAMES
+APPLY_WORKSPACE_TOOL_NAME = "apply_workspace_changes"
+START_WORKSPACE_TOOL_NAME = "start_workspace"
+GET_WORKSPACE_OPERATION_TOOL_NAME = "get_workspace_operation"
+APPLY_WORKSPACE_TOOL_DESCRIPTION = (
+    "Route actual Workspace-relative changed files to registered Projects, select fast/full "
+    "profiles centrally, and queue one ordered asynchronous Workspace operation."
+)
+START_WORKSPACE_TOOL_DESCRIPTION = (
+    "Start every registered service in the task Workspace through its single start profile. "
+    "This tool never accepts a project ID, path, script, or command."
+)
+GET_WORKSPACE_OPERATION_TOOL_DESCRIPTION = (
+    "Read one Workspace runtime operation, its ordered steps, and bounded log tails. Poll "
+    "until status is succeeded, failed, cancelled, or interrupted."
+)
 PREPARE_TOOL_DESCRIPTION = (
     "Locate the registered workspace for cwd, create a server-side task number, and "
     "return its explicit workspace document tree or synthetic project-root tree. Project "
@@ -129,10 +151,12 @@ class ContextRouterMCP(FastMCP):
         *args: object,
         trace_service: McpTraceService | None = None,
         database_payload_service: DatabaseToolPayloadService | None = None,
+        operation_task_resolver: Callable[[str], int] | None = None,
         **kwargs: object,
     ):
         self._trace_service = trace_service
         self._database_payload_service = database_payload_service
+        self._operation_task_resolver = operation_task_resolver
         super().__init__(*args, **kwargs)
 
     async def call_tool(
@@ -181,6 +205,13 @@ class ContextRouterMCP(FastMCP):
             return result
 
         task_id = _positive_int(arguments.get("task_id"))
+        if task_id is None and name == GET_WORKSPACE_OPERATION_TOOL_NAME:
+            operation_id = arguments.get("operation_id")
+            if isinstance(operation_id, str) and self._operation_task_resolver is not None:
+                try:
+                    task_id = self._operation_task_resolver(operation_id)
+                except Exception:
+                    task_id = None
         tool_call_id = (
             trace_service.start_call(
                 task_id=task_id,
@@ -296,6 +327,7 @@ def create_context_router_mcp(
     database_payload_service: DatabaseToolPayloadService | None = None,
     document_search_service: ContextDocumentSearchService | None = None,
     runtime_execution_service: RuntimeExecutionService | None = None,
+    workspace_runtime_service: WorkspaceRuntimeOrchestrationService | None = None,
 ) -> FastMCP:
     server = ContextRouterMCP(
         name=MCP_SERVER_NAME,
@@ -305,6 +337,9 @@ def create_context_router_mcp(
         json_response=True,
         trace_service=trace_service,
         database_payload_service=database_payload_service,
+        operation_task_resolver=(
+            workspace_runtime_service.get_task_id if workspace_runtime_service else None
+        ),
     )
 
     @server.tool(
@@ -427,6 +462,62 @@ def create_context_router_mcp(
             return database_query_service.execute(task_id=task_id, database=database, sql=sql)
         except DatabaseAccessError as exc:
             raise ToolError(f"{exc.code}: {exc}") from exc
+
+    @server.tool(
+        name=APPLY_WORKSPACE_TOOL_NAME,
+        description=APPLY_WORKSPACE_TOOL_DESCRIPTION,
+        annotations=RUNTIME_APPLY_TOOL_ANNOTATIONS,
+    )
+    def apply_workspace_changes(
+        task_id: Annotated[int, Field(ge=1, strict=True)],
+        changed_files: Annotated[
+            list[Annotated[str, Field(min_length=1, max_length=1000)]],
+            Field(min_length=1, max_length=500),
+        ],
+    ) -> dict[str, object]:
+        if workspace_runtime_service is None:
+            raise ToolError("workspace_runtime_disabled: Workspace Runtime 当前不可用")
+        try:
+            result = workspace_runtime_service.apply_changes(
+                task_id=task_id,
+                changed_files=changed_files,
+            )
+        except WorkspaceRuntimeOrchestrationError as exc:
+            raise ToolError(f"{exc.code}: {exc}") from exc
+        return result.model_dump(mode="json", exclude_none=True)
+
+    @server.tool(
+        name=START_WORKSPACE_TOOL_NAME,
+        description=START_WORKSPACE_TOOL_DESCRIPTION,
+        annotations=RUNTIME_APPLY_TOOL_ANNOTATIONS,
+    )
+    def start_workspace(
+        task_id: Annotated[int, Field(ge=1, strict=True)],
+    ) -> dict[str, object]:
+        if workspace_runtime_service is None:
+            raise ToolError("workspace_runtime_disabled: Workspace Runtime 当前不可用")
+        try:
+            result = workspace_runtime_service.start_workspace(task_id=task_id)
+        except WorkspaceRuntimeOrchestrationError as exc:
+            raise ToolError(f"{exc.code}: {exc}") from exc
+        return result.model_dump(mode="json", exclude_none=True)
+
+    @server.tool(
+        name=GET_WORKSPACE_OPERATION_TOOL_NAME,
+        description=GET_WORKSPACE_OPERATION_TOOL_DESCRIPTION,
+        annotations=RUNTIME_READ_TOOL_ANNOTATIONS,
+    )
+    def get_workspace_operation(
+        operation_id: Annotated[str, Field(min_length=1, max_length=32)],
+        log_characters: Annotated[int, Field(ge=1, le=50_000)] = 10_000,
+    ) -> dict[str, object]:
+        if workspace_runtime_service is None:
+            raise ToolError("workspace_runtime_disabled: Workspace Runtime 当前不可用")
+        try:
+            result = workspace_runtime_service.get_operation(operation_id, log_characters)
+        except WorkspaceRuntimeOrchestrationError as exc:
+            raise ToolError(f"{exc.code}: {exc}") from exc
+        return result.model_dump(mode="json", exclude_none=True)
 
     @server.tool(
         name="apply_project_changes",
@@ -573,6 +664,16 @@ def _request_summary(name: str, arguments: dict[str, Any]) -> dict[str, object] 
                 else None
             ),
         }
+    if name == APPLY_WORKSPACE_TOOL_NAME:
+        changed_files = arguments.get("changed_files")
+        return {"changed_file_count": len(changed_files) if isinstance(changed_files, list) else 0}
+    if name == START_WORKSPACE_TOOL_NAME:
+        return {"scope": "workspace"}
+    if name == GET_WORKSPACE_OPERATION_TOOL_NAME:
+        return {
+            "operation_id": _safe_string(arguments.get("operation_id"), 32),
+            "log_characters": arguments.get("log_characters", 10_000),
+        }
     return None
 
 
@@ -634,6 +735,17 @@ def _result_summary(name: str, payload: dict[str, Any]) -> dict[str, object] | N
         return _bounded_result_metadata(payload, count_key="returned_count")
     if name == EXECUTE_DATABASE_TOOL_NAME:
         return _bounded_result_metadata(payload, count_key="returned_rows")
+    if name in {
+        APPLY_WORKSPACE_TOOL_NAME,
+        START_WORKSPACE_TOOL_NAME,
+        GET_WORKSPACE_OPERATION_TOOL_NAME,
+    }:
+        steps = payload.get("steps")
+        return {
+            "operation_id": _safe_string(payload.get("id"), 32),
+            "status": _safe_string(payload.get("status"), 16),
+            "step_count": len(steps) if isinstance(steps, list) else 0,
+        }
     return None
 
 

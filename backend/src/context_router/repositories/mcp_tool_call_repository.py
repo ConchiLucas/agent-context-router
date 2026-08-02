@@ -347,7 +347,12 @@ class PostgresMcpToolCallRepository:
                             'search_context_documents',
                             'read_context_document',
                             'search_database_objects',
-                            'execute_database_query'
+                            'execute_database_query',
+                            'apply_workspace_changes',
+                            'start_workspace',
+                            'get_workspace_operation',
+                            'apply_project_changes',
+                            'get_project_operation'
                       )
                       AND source IN ('server', 'legacy')
                     ORDER BY id
@@ -383,7 +388,12 @@ class PostgresMcpToolCallRepository:
                             'search_context_documents',
                             'read_context_document',
                             'search_database_objects',
-                            'execute_database_query'
+                            'execute_database_query',
+                            'apply_workspace_changes',
+                            'start_workspace',
+                            'get_workspace_operation',
+                            'apply_project_changes',
+                            'get_project_operation'
                       )
                       AND source = 'server'
                     """,
@@ -515,7 +525,12 @@ class PostgresMcpToolCallRepository:
                             'search_context_documents',
                             'read_context_document',
                             'search_database_objects',
-                            'execute_database_query'
+                            'execute_database_query',
+                            'apply_workspace_changes',
+                            'start_workspace',
+                            'get_workspace_operation',
+                            'apply_project_changes',
+                            'get_project_operation'
                      )
                      AND tool_call.source IN ('server', 'legacy')
                     WHERE (
@@ -538,7 +553,12 @@ class PostgresMcpToolCallRepository:
                                         'search_context_documents',
                                         'read_context_document',
                                         'search_database_objects',
-                                        'execute_database_query'
+                                        'execute_database_query',
+                                        'apply_workspace_changes',
+                                        'start_workspace',
+                                        'get_workspace_operation',
+                                        'apply_project_changes',
+                                        'get_project_operation'
                                   )
                                   AND lower(filtered_server.server_name) = lower(%s)
                             )
@@ -567,7 +587,12 @@ class PostgresMcpToolCallRepository:
                                         'search_context_documents',
                                         'read_context_document',
                                         'search_database_objects',
-                                        'execute_database_query'
+                                        'execute_database_query',
+                                        'apply_workspace_changes',
+                                        'start_workspace',
+                                        'get_workspace_operation',
+                                        'apply_project_changes',
+                                        'get_project_operation'
                                   )
                                   AND filtered_status.status = %s
                             )

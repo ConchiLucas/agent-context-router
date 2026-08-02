@@ -87,6 +87,9 @@ def test_mcp_integration_returns_client_configs_and_readiness(tmp_path: Path) ->
         "read_context_document",
         "search_database_objects",
         "execute_database_query",
+        "apply_workspace_changes",
+        "start_workspace",
+        "get_workspace_operation",
     ]
     assert payload["readiness"] == {
         "database_configured": True,
