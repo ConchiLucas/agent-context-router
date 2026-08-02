@@ -18,7 +18,7 @@ Context Router PostgreSQL 中保存的三个前端 `fast/compose.yml` 在 YAML l
 
 ## 修复设计
 
-1. 在 `RuntimeConfigModeUpdate` 保存边界对所有 `.yml`、`.yaml` 文件执行 PyYAML `safe_load` 语法校验。空文件允许；解析失败返回 Pydantic 422，不写数据库。只做 YAML 语法校验，不把 Docker Compose 语义耦合进 Schema。
+1. 在 `RuntimeConfigModeUpdate` 保存边界对所有 `.yml`、`.yaml` 文件执行 PyYAML `safe_load` 语法校验。空文件允许；解析失败返回 Pydantic 422，不写数据库。应用级 `RequestValidationError` 处理器统一移除 Pydantic 默认的 `input` 和 `ctx`，避免 YAML 或其他管理请求的完整输入进入错误响应；自定义消息只保留文件、行和列。这里仍只做 YAML 语法校验，不把 Docker Compose 语义耦合进 Schema。
 2. 通过受校验 Project Runtime Config API 修正三个前端 fast 配置的 literal block 缩进，确认六份 YAML 都能通过新的保存校验。
 3. 在目标根 `deploy-compose-full.sh` 增加 `--project <key>`：仍加载并校验根 `.env.local`、预检六份 Compose 和公共依赖，但只执行所选 Project 的既有启动函数与容器检查。无参数保持原有全量启动及 CLI Runner 行为。
 4. 将六个 Project 的 fast 配置统一替换为只含 `deploy.sh` 的无凭据包装器，调用 `"$WORKSPACE_HOST_ROOT/deploy-compose-full.sh" --project <key>`。数据库只保存调度信息，不保存或复制任何机器凭据。
@@ -55,6 +55,7 @@ Context Router PostgreSQL 中保存的三个前端 `fast/compose.yml` 在 YAML l
 ## 安全与失败边界
 
 - 不读取、输出、提交或物化目标 `.env.local`。
+- API 级失败测试使用虚构敏感标记验证 422 不回显输入，并验证非法请求不会覆盖旧运行配置。
 - Project fast 快照不再包含 `.env`、`runtime.env` 或 `.runtime-runner-secrets` 路径；所有机器差异只由根脚本读取 `.env.local`。
 - 不修改业务数据，不删除容器、镜像、Volume 或数据库。
 - 任一增量失败时停止该轮后续判断，保留现场和日志，先定位原因；不把失败掩盖为成功。

@@ -2,8 +2,11 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from context_router.api.data_sources import router as data_sources_router
 from context_router.api.database_environments import router as database_environments_router
@@ -358,6 +361,21 @@ def create_app(
         version="0.1.0",
         lifespan=lifespan,
     )
+
+    @app.exception_handler(RequestValidationError)
+    async def redact_request_validation_input(
+        _: Request,
+        exc: RequestValidationError,
+    ) -> JSONResponse:
+        errors = [
+            {key: value for key, value in error.items() if key not in {"input", "ctx"}}
+            for error in exc.errors()
+        ]
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            content=jsonable_encoder({"detail": errors}),
+        )
+
     app.state.project_registry = registry
     app.state.settings = resolved_settings
     app.state.context_preparation_service = context_service

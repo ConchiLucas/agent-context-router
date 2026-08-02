@@ -104,7 +104,7 @@ Codex / Antigravity
   -> 校验 loopback、Token、Manifest、哈希、Workspace 根、Project 根和软链接边界
   -> 在目标 Workspace 根执行快照 deploy.sh，目标脚本自行读取 .env.local
   -> 按顺序回报步骤；首个失败后其余步骤 skipped；不自动修复或清理
-  -> get_workspace_operation(task_id, operation_id) 轮询 queued / running / succeeded / failed
+  -> get_workspace_operation(operation_id) 轮询 queued / running / succeeded / failed
 ```
 
 `start_workspace` 不接收 Project 参数，任何“启动”语义都执行 Workspace 完整启动。`apply_workspace_changes` 一次接收本轮全部改动路径；跨项目、Workspace 级路径、`.env.local` 或无法唯一归属时选择完整更新。`.env.local` 只存在目标机器磁盘，不进入控制面数据库和快照。Context Router 负责决策与状态，Host Runner 负责宿主机执行，目标仓库脚本负责 Docker 和依赖配置。

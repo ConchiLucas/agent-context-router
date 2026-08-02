@@ -15,6 +15,7 @@
 **Files:**
 - Create: `backend/tests/test_runtime_config_validation.py`
 - Modify: `backend/src/context_router/schemas/runtime_configs.py`
+- Modify: `backend/src/context_router/main.py`
 
 - [x] **Step 1: Write the failing Schema tests**
 
@@ -72,6 +73,8 @@ In `backend/src/context_router/schemas/runtime_configs.py`, import `yaml`, then 
 ```
 
 The error omits YAML content so credentials cannot enter validation responses.
+
+Add an API-level regression using a fictional sensitive marker. The 422 response must not contain the marker and the repository must retain its previous files. Register an application-level `RequestValidationError` handler that removes Pydantic's default `input` and `ctx` fields before returning validation details.
 
 - [x] **Step 4: Run focused and Schema/API regression tests**
 
@@ -218,11 +221,11 @@ Re-run the six-container `docker inspect`. Confirm the target repository contain
 - Modify: `docs/BUSINESS_FEATURES.md`
 - Update: `task_plan.md`, `findings.md`, `progress.md` (working records only)
 
-- [ ] **Step 1: Document YAML save validation**
+- [x] **Step 1: Document YAML save validation**
 
 Document that `.yml/.yaml` files are syntactically parsed before persistence; errors return file, line and column without echoing content, while Docker Compose semantic validation remains an execution/preflight responsibility.
 
-- [ ] **Step 2: Run complete Context Router verification**
+- [x] **Step 2: Run complete Context Router verification**
 
 ```bash
 docker compose restart backend
@@ -237,7 +240,7 @@ docker compose exec backend uv run alembic current
 
 Expected: tests, lint, format and build pass; Alembic reports `20260802_0023 (head)`.
 
-- [ ] **Step 3: Run final boundary checks**
+- [x] **Step 3: Run final boundary checks**
 
 ```bash
 git diff --check
@@ -249,7 +252,7 @@ git -C /Users/conchi/workforce/rob_english_word_workforce status --short
 
 Confirm `.env.local` was never read, staged or printed, and no verification marker remains.
 
-- [ ] **Step 4: Commit final Context Router changes**
+- [x] **Step 4: Commit final Context Router changes**
 
 ```bash
 git add backend/src/context_router/schemas/runtime_configs.py backend/tests/test_runtime_config_validation.py docs/STARTUP_GUIDE.md docs/BUSINESS_FEATURES.md
