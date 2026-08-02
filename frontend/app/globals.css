@@ -4171,6 +4171,68 @@ p {
   flex-wrap: wrap;
 }
 
+.workspace-runtime-sync-modal {
+  width: min(780px, 100%);
+}
+
+.workspace-runtime-sync-content {
+  display: grid;
+  gap: 16px;
+}
+
+.workspace-runtime-sync-source,
+.workspace-runtime-sync-total,
+.workspace-runtime-sync-profiles article {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: var(--surface-soft);
+}
+
+.workspace-runtime-sync-source {
+  display: grid;
+  gap: 8px;
+}
+
+.workspace-runtime-sync-source span,
+.workspace-runtime-sync-total small,
+.workspace-runtime-sync-profiles span,
+.workspace-runtime-sync-profiles small,
+.workspace-runtime-sync-note {
+  color: var(--muted);
+}
+
+.workspace-runtime-sync-source code {
+  overflow-wrap: anywhere;
+}
+
+.workspace-runtime-sync-total,
+.workspace-runtime-sync-profiles article {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.workspace-runtime-sync-profiles {
+  display: grid;
+  gap: 8px;
+}
+
+.workspace-runtime-sync-profiles article > div {
+  display: grid;
+  gap: 4px;
+}
+
+.workspace-runtime-sync-profiles article > div:last-child {
+  text-align: right;
+}
+
+.workspace-runtime-sync-note {
+  margin: 0;
+  line-height: 1.7;
+}
+
 .workspace-detail-tabs button {
   display: inline-flex;
   position: relative;

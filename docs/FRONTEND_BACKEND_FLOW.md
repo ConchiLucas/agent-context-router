@@ -156,12 +156,14 @@ prepare 和文档搜索不建立业务数据库连接。业务数据库离线时
 | 查看项目运行配置 | `project-runtime-config.tsx` | `GET /api/projects/{id}/runtime-config` |
 | 查看运行记录与有界日志 | `project-runtime-config.tsx` | `GET /api/projects/{id}/runtime-runs`、`GET /api/projects/{id}/runtime-runs/{run_id}`、`GET /api/projects/{id}/runtime-runs/{run_id}/log` |
 | 查看 Workspace 运行配置 | 暂无浏览器写入口 | `GET /api/workspaces/{id}/runtime-config` |
+| 预览仓库 deploy 配置 | `workspace-detail.tsx`、`workspace-runtime-sync.tsx` | 安全 `POST /api/workspaces/{id}/runtime-config/sync-preview` |
+| 按预览摘要原子同步 deploy 配置 | `workspace-runtime-sync.tsx` | 安全 `POST /api/workspaces/{id}/runtime-config/sync` |
 | 配置 Workspace 启动文件与策略 | 本机 AI / 运维 | `PUT /api/workspaces/{id}/runtime-config/start`、`PUT /api/workspaces/{id}/runtime-policy` |
 | 查看 Workspace 运行操作 | 暂无独立页面 | `GET /api/workspaces/{id}/runtime-operations`、`GET /api/workspaces/{id}/runtime-operations/{operation_id}` |
 | 打开当前工作空间 MCP 接入面板 | `workspace-detail.tsx`、`mcp-integration-panel.tsx` | `GET /api/mcp/integration` |
 | 对当前工作空间执行 MCP 连接测试 | `mcp-integration-panel.tsx` | 安全 `POST /api/mcp/integration/tests`，请求体使用 `workspace_id` |
 
-浏览器不调用工作空间、项目、数据源、数据库清单、项目授权、环境映射/JSON、当前环境或运行配置的配置写 API，也不触发数据库同步、运行配置物化或执行；仅额外允许 Workspace 刷新重建可恢复的文档缓存和派生搜索索引。其余 `POST/PUT/PATCH/DELETE` contract 保留给不携带 `Origin` 或 `Sec-Fetch-*` 浏览器请求头的本机 AI/运维调用方，后端继续执行原有业务校验与副作用管理。
+浏览器不调用工作空间、项目、数据源、数据库清单、项目授权、环境映射/JSON、当前环境或任意运行配置写 API，也不触发数据库同步、运行配置物化或执行；仅额外允许 Workspace 刷新，以及固定目录 deploy 配置的预览和摘要确认同步。同步请求不能提交扫描路径或文件内容，后端重新读取 Workspace 根并在摘要不变时整包事务替换。其余 `POST/PUT/PATCH/DELETE` contract 保留给不携带 `Origin` 或 `Sec-Fetch-*` 浏览器请求头的本机 AI/运维调用方，后端继续执行原有业务校验与副作用管理。
 
 ## 后端代码
 
@@ -175,7 +177,7 @@ api/workspaces.py
   -> schemas/workspaces.py / schemas/projects.py
 ```
 
-- `BrowserReadOnlyMiddleware` 根据任意 `Origin` 或浏览器 Fetch Metadata 拦截配置写请求；`frontend/lib/browser-api-policy.ts` 在请求发出前执行同一只读策略。双层限制共享 `GET/HEAD/OPTIONS` 与五类安全 `POST` 边界，Workspace refresh 只重建文档缓存和派生搜索索引。
+- `BrowserReadOnlyMiddleware` 根据任意 `Origin` 或浏览器 Fetch Metadata 拦截配置写请求；`frontend/lib/browser-api-policy.ts` 在请求发出前执行同一策略。双层限制共享 `GET/HEAD/OPTIONS` 与七类固定安全 `POST` 边界，其中 deploy 同步只开放精确 preview/commit 路径。
 - `WorkspaceManagementService` 继续为本机 AI/运维编排受校验的工作空间 CRUD、工作空间内项目 CRUD、刷新和数据源汇总；`workspace_repository.py` 持久化工作空间根目录、类型和总开关。
 - `project_repository.py` 持久化稳定项目 ID、`workspace_id`、`frontend/backend` 的 `project_kind`、工作空间内分别唯一的源码 `relative_path`、文档入口 `document_relative_path` 和兼容字段；`document_projects` 不再有 enabled。后端启动时从独立文档入口重建缓存，路径失效项目保留配置和错误。
 - `ProjectRegistry` 管理可选的 Workspace 根文档缓存和每个 Project 缓存；根 `AGENTS.md` 存在时，导航树严格采用其显式父子关系，未声明的 Project 根不自动挂入树中；根入口不存在时动态构建直接列出 Project 的合成入口。两种情况下 Workspace 聚合缓存都保留全部项目文档，供搜索和按 ID 读取。cwd 先按根目录深度选择最深 Workspace，再按源码根选择最深 Project 作为 `active_project`。
@@ -204,6 +206,7 @@ api/workspaces.py
 - `database_call_repository.py` 记录 operation、数据库别名/Engine 快照、对象或语句类型、SQL SHA-256、状态、耗时、数量、字节数、截断和稳定错误码；不保存完整 SQL 或结果。
 - `database_tool_payload.py` 与独立 Repository 只对白名单数据库工具自动保存有界请求和最终 MCP 响应。请求/响应默认各 1 MB、硬上限 4 MB、默认保留 7 天；启动时恢复 pending 并清理过期内容，调用期间按节流周期继续清理。
 - `workspace_runtime_orchestration.py` 以 task 的 Workspace 快照为边界，负责改动归属、fast/full/start 选择、确定性步骤顺序和操作查询；`runtime_materialization.py` 生成不可变执行快照。
+- `workspace_deploy_sync.py` 扫描目标仓库固定目录、解析版本化 manifest、执行路径/文件/YAML/Project 完整性校验并生成规范化摘要；`workspace_deploy_repository.py` 在同一 PostgreSQL 事务中替换 Workspace 与全部 Project 的运行配置。预览后摘要变化会关闭提交，不会出现先删后扫的空窗。
 - `runtime_runner.py` 暴露只允许 Bearer Token 且拒绝浏览器请求的注册、心跳、领取租约和完成回报协议；`scripts/context_router_host_runner.py` 是手动启动的宿主机执行器。
 - `mcp_server.py` 固定注册五个上下文/数据库工具、三个 Workspace 运行工具和两个 Project 兼容工具，并挂载到 `/mcp`。项目或数据源变化不会改变工具名。
 - `mcp_server.py` 使用统一工具分发埋点记录十个固定工具；观测持久化失败只降低链路可见性，不改变 MCP 工具原始成功或失败结果。
@@ -240,6 +243,7 @@ app/page.tsx
               -> components/workspace-environment-mapping.tsx
               -> components/project-runtime-config.tsx
            -> components/workspace-data-source-overview.tsx
+           -> components/workspace-runtime-sync.tsx
      -> components/data-source-dashboard.tsx
      -> lib/api.ts
      -> lib/browser-api-policy.ts

@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+from dataclasses import asdict
+
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from context_router.repositories.project_repository import ProjectRepositoryError
 from context_router.repositories.runtime_operation_repository import (
     RuntimeOperationRepositoryError,
+)
+from context_router.repositories.workspace_deploy_repository import (
+    WorkspaceDeployRepositoryError,
 )
 from context_router.repositories.workspace_repository import WorkspaceRepositoryError
 from context_router.repositories.workspace_runtime_repository import (
@@ -16,12 +21,45 @@ from context_router.repositories.workspace_runtime_repository import (
 from context_router.repositories.workspace_runtime_repository import (
     WorkspaceRuntimeRepositoryError,
 )
+from context_router.schemas.workspace_deploy_sync import (
+    WorkspaceDeploySyncCommitRequest,
+)
 from context_router.schemas.workspace_runtime import (
     WorkspaceRuntimeConfigUpdate,
     WorkspaceRuntimePolicyUpdate,
 )
+from context_router.services.workspace_deploy_sync import WorkspaceDeploySyncError
 
 router = APIRouter(prefix="/workspaces/{workspace_id}", tags=["workspace-runtime"])
+
+
+@router.post("/runtime-config/sync-preview")
+def preview_workspace_deploy_sync(workspace_id: str, request: Request) -> dict[str, object]:
+    _workspace(request, workspace_id)
+    try:
+        return asdict(request.app.state.workspace_deploy_sync_service.preview(workspace_id))
+    except WorkspaceDeploySyncError as exc:
+        raise HTTPException(status_code=422, detail=f"{exc.code}: {exc}") from exc
+
+
+@router.post("/runtime-config/sync")
+def commit_workspace_deploy_sync(
+    workspace_id: str,
+    payload: WorkspaceDeploySyncCommitRequest,
+    request: Request,
+) -> dict[str, object]:
+    _workspace(request, workspace_id)
+    try:
+        result = request.app.state.workspace_deploy_sync_service.commit(
+            workspace_id,
+            payload.expected_digest,
+        )
+    except WorkspaceDeploySyncError as exc:
+        status_code = 409 if exc.code == "deploy_sync_stale_preview" else 422
+        raise HTTPException(status_code=status_code, detail=f"{exc.code}: {exc}") from exc
+    except WorkspaceDeployRepositoryError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return asdict(result)
 
 
 @router.get("/runtime-config")

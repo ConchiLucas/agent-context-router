@@ -8,6 +8,7 @@ import {
 } from "@/components/project-dashboard";
 import { WorkspaceDataSourceOverview } from "@/components/workspace-data-source-overview";
 import { WorkspaceEnvironmentMapping } from "@/components/workspace-environment-mapping";
+import { WorkspaceRuntimeSync } from "@/components/workspace-runtime-sync";
 import {
   getWorkspaceDatabaseEnvironmentMappings,
   getWorkspaceEnvironmentConfig,
@@ -99,6 +100,7 @@ export function WorkspaceDetail({
 
 
       <div className="workspace-context-actions" aria-label="工作空间操作">
+        <WorkspaceRuntimeSync workspaceId={currentWorkspace.id} />
         <button
           type="button"
           className="secondary-button"

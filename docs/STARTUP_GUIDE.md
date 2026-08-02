@@ -167,6 +167,23 @@ docker compose --profile integration stop clickhouse-test
 
 从 backend 容器访问宿主机 ClickHouse 时，数据源 Host 填 `host.docker.internal`；访问 Compose 内的测试 ClickHouse 时使用服务名 `clickhouse-test`。ClickHouse HTTP 默认端口是 8123，启用 secure 且未填端口时 Connector 默认使用 8443。
 
+## 目标 Workspace 的 deploy 配置同步
+
+目标 Workspace 必须把运行入口保存在仓库内，Context Router 数据库只保存同步副本：
+
+```text
+deploy/context-router/manifest.yaml
+deploy/context-router/workspace/start/deploy.sh
+<project-root>/deploy/context-router/fast/deploy.sh
+<project-root>/deploy/context-router/full/deploy.sh
+```
+
+每个入口都应能脱离 Context Router 直接运行；`WORKSPACE_HOST_ROOT` 和 `PROJECT_HOST_ROOT` 只能作为 Runtime Runner 的可选覆盖值。`.env.local`、Token、私钥等本机配置不得进入这些目录。
+
+在 Workspace 详情点击“同步 deploy 配置”，先检查固定目录的预览、摘要和增删改统计，再确认同步。任一项目校验失败或预览后文件发生变化时，Context Router 不会删除或覆盖数据库旧配置。
+
+Context Router 不可用时，其他 AI 应先阅读目标根 `AGENTS.md` 和 `deploy/context-router/README.md`，然后直接运行 Workspace 或 Project 的 `deploy.sh`。
+
 ## 服务管理
 
 ```bash

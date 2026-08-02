@@ -90,6 +90,11 @@ from context_router.repositories.runtime_runner_repository import (
     RuntimeRunnerStore,
 )
 from context_router.repositories.task_repository import PostgresTaskRepository, TaskStore
+from context_router.repositories.workspace_deploy_repository import (
+    InMemoryWorkspaceDeployRepository,
+    PostgresWorkspaceDeployRepository,
+    WorkspaceDeployStore,
+)
 from context_router.repositories.workspace_repository import (
     InMemoryWorkspaceRepository,
     PostgresWorkspaceRepository,
@@ -114,6 +119,7 @@ from context_router.services.mcp_trace import McpTraceService
 from context_router.services.project_registry import ProjectRegistry, ProjectRegistryError
 from context_router.services.runtime_execution import RuntimeExecutionService
 from context_router.services.runtime_materialization import RuntimeMaterializationService
+from context_router.services.workspace_deploy_sync import WorkspaceDeploySyncService
 from context_router.services.workspace_management import WorkspaceManagementService
 from context_router.services.workspace_runtime_orchestration import (
     WorkspaceRuntimeOrchestrationService,
@@ -141,6 +147,7 @@ def create_app(
     workspace_runtime_repository: WorkspaceRuntimeStore | None = None,
     runtime_operation_repository: RuntimeOperationStore | None = None,
     runtime_runner_repository: RuntimeRunnerStore | None = None,
+    workspace_deploy_repository: WorkspaceDeployStore | None = None,
 ) -> FastAPI:
     resolved_settings = settings or Settings()
     if workspace_repository is not None:
@@ -210,6 +217,24 @@ def create_app(
         PostgresWorkspaceRuntimeRepository(resolved_settings.database_url)
         if resolved_settings.database_url
         else InMemoryWorkspaceRuntimeRepository()
+    )
+    resolved_workspace_deploy_repository = workspace_deploy_repository or (
+        PostgresWorkspaceDeployRepository(resolved_settings.database_url)
+        if resolved_settings.database_url
+        else InMemoryWorkspaceDeployRepository(
+            workspace_runtime=resolved_workspace_runtime_repository,
+            project_runtime=resolved_runtime_config_repository,
+        )
+    )
+    workspace_deploy_sync_service = WorkspaceDeploySyncService(
+        workspace_repository=resolved_workspace_repository,
+        project_repository=resolved_project_repository,
+        workspace_runtime_repository=resolved_workspace_runtime_repository,
+        project_runtime_repository=resolved_runtime_config_repository,
+        deploy_repository=resolved_workspace_deploy_repository,
+        workspace_root_resolver=lambda workspace_id: (
+            registry.get_workspace_snapshot(workspace_id).resolved_root_path
+        ),
     )
     resolved_runtime_operation_repository = runtime_operation_repository or (
         PostgresRuntimeOperationRepository(resolved_settings.database_url)
@@ -393,6 +418,7 @@ def create_app(
     app.state.runtime_operation_repository = resolved_runtime_operation_repository
     app.state.runtime_runner_repository = resolved_runtime_runner_repository
     app.state.workspace_runtime_orchestration_service = workspace_runtime_orchestration_service
+    app.state.workspace_deploy_sync_service = workspace_deploy_sync_service
     app.state.workspace_repository = resolved_workspace_repository
     app.state.workspace_management_service = workspace_management_service
     app.state.mcp_integration_service = mcp_integration_service

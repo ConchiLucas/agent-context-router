@@ -4,6 +4,8 @@ const SAFE_BROWSER_POST_PATHS = [
   /^\/api\/mcp\/integration\/tests$/,
   /^\/api\/workspaces\/[^/]+\/prepare-preview(?:\?.*)?$/,
   /^\/api\/workspaces\/[^/]+\/refresh$/,
+  /^\/api\/workspaces\/[^/]+\/runtime-config\/sync-preview$/,
+  /^\/api\/workspaces\/[^/]+\/runtime-config\/sync$/,
 ];
 
 export function isBrowserApiRequestAllowed(
