@@ -13,6 +13,7 @@ from context_router.api.projects import router as projects_router
 from context_router.api.runtime_configs import router as runtime_configs_router
 from context_router.api.runtime_runner import router as runtime_runner_router
 from context_router.api.tasks import router as tasks_router
+from context_router.api.workspace_runtime import router as workspace_runtime_router
 from context_router.api.workspaces import router as workspaces_router
 from context_router.config import Settings
 from context_router.database.connectors import (
@@ -407,6 +408,7 @@ def create_app(
     app.include_router(runtime_configs_router, prefix=resolved_settings.api_prefix)
     app.include_router(runtime_runner_router, prefix=resolved_settings.api_prefix)
     app.include_router(workspaces_router, prefix=resolved_settings.api_prefix)
+    app.include_router(workspace_runtime_router, prefix=resolved_settings.api_prefix)
     app.include_router(database_environments_router, prefix=resolved_settings.api_prefix)
     app.include_router(tasks_router, prefix=resolved_settings.api_prefix)
     app.include_router(mcp_integration_router, prefix=resolved_settings.api_prefix)

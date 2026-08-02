@@ -92,6 +92,9 @@ class RuntimeOperationStore(Protocol):
     def create_operation(self, draft: RuntimeOperationDraft) -> RuntimeOperationRecord: ...
     def get_operation(self, operation_id: str) -> RuntimeOperationRecord | None: ...
     def list_steps(self, operation_id: str) -> list[RuntimeOperationStepRecord]: ...
+    def list_operations(
+        self, workspace_id: str, limit: int = 20
+    ) -> list[RuntimeOperationRecord]: ...
     def lease_next(self, runner_id: str, lease_seconds: int) -> RuntimeOperationLease | None: ...
     def mark_started(self, operation_id: str, lease_token: str) -> RuntimeOperationRecord: ...
     def heartbeat(
@@ -173,6 +176,15 @@ class InMemoryRuntimeOperationRepository:
     def list_steps(self, operation_id: str) -> list[RuntimeOperationStepRecord]:
         with self._lock:
             return list(self._steps.get(operation_id, ()))
+
+    def list_operations(self, workspace_id: str, limit: int = 20) -> list[RuntimeOperationRecord]:
+        with self._lock:
+            records = [
+                item for item in self._operations.values() if item.workspace_id == workspace_id
+            ]
+        return sorted(records, key=lambda item: (item.created_at, item.id), reverse=True)[
+            : min(max(limit, 1), 100)
+        ]
 
     def lease_next(self, runner_id: str, lease_seconds: int) -> RuntimeOperationLease | None:
         with self._lock:
@@ -378,6 +390,19 @@ class PostgresRuntimeOperationRepository:
                     (operation_id,),
                 ).fetchall()
             return [self._step(row) for row in rows]
+        except psycopg.Error as exc:
+            raise RuntimeOperationRepositoryError("运行操作数据库当前不可用") from exc
+
+    def list_operations(self, workspace_id: str, limit: int = 20) -> list[RuntimeOperationRecord]:
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                rows = connection.execute(
+                    f"""SELECT {self._OPERATION_COLUMNS}
+                        FROM runtime_operations WHERE workspace_id = %s
+                        ORDER BY created_at DESC, id DESC LIMIT %s""",
+                    (workspace_id, min(max(limit, 1), 100)),
+                ).fetchall()
+            return [self._operation(row) for row in rows]
         except psycopg.Error as exc:
             raise RuntimeOperationRepositoryError("运行操作数据库当前不可用") from exc
 
