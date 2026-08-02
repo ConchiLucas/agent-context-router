@@ -9,6 +9,7 @@ from pathlib import Path, PurePosixPath
 from uuid import uuid4
 
 from context_router.repositories.runtime_config_repository import RuntimeConfigFileRecord
+from context_router.repositories.workspace_runtime_repository import WorkspaceRuntimeFileRecord
 
 MAX_MATERIALIZED_BYTES = 20_000_000
 MANIFEST_FILE_NAME = ".runtime-manifest.json"
@@ -21,18 +22,32 @@ class RuntimeMaterializationError(RuntimeError):
 @dataclass(frozen=True)
 class MaterializedRuntimeConfig:
     snapshot_id: str
-    project_id: str
-    mode: str
+    owner_type: str
+    owner_id: str
+    profile: str
+    snapshot_relative_path: str
     materialized_path: str
     file_count: int
     total_bytes: int
     manifest_sha256: str
     created_at: datetime
 
+    @property
+    def project_id(self) -> str:
+        return self.owner_id
+
+    @property
+    def mode(self) -> str:
+        return self.profile
+
 
 class RuntimeMaterializationService:
     def __init__(self, runtime_root: Path) -> None:
         self._runtime_root = runtime_root.resolve()
+
+    @property
+    def runtime_root(self) -> Path:
+        return self._runtime_root
 
     def materialize(
         self,
@@ -40,12 +55,40 @@ class RuntimeMaterializationService:
         mode: str,
         files: list[RuntimeConfigFileRecord],
     ) -> MaterializedRuntimeConfig:
-        if mode not in {"fast", "full"}:
-            raise RuntimeMaterializationError("不支持的更新模式")
-        if not project_id.isalnum():
-            raise RuntimeMaterializationError("项目 ID 不合法")
+        return self.materialize_owner(
+            owner_type="project",
+            owner_id=project_id,
+            profile=mode,
+            files=files,
+        )
+
+    def materialize_workspace(
+        self,
+        workspace_id: str,
+        files: list[WorkspaceRuntimeFileRecord],
+    ) -> MaterializedRuntimeConfig:
+        return self.materialize_owner(
+            owner_type="workspace",
+            owner_id=workspace_id,
+            profile="start",
+            files=files,
+        )
+
+    def materialize_owner(
+        self,
+        *,
+        owner_type: str,
+        owner_id: str,
+        profile: str,
+        files: list[RuntimeConfigFileRecord] | list[WorkspaceRuntimeFileRecord],
+    ) -> MaterializedRuntimeConfig:
+        allowed_profiles = {"project": {"fast", "full"}, "workspace": {"start"}}
+        if owner_type not in allowed_profiles or profile not in allowed_profiles[owner_type]:
+            raise RuntimeMaterializationError("不支持的运行配置类型")
+        if not owner_id.isalnum():
+            raise RuntimeMaterializationError("运行配置所有者 ID 不合法")
         if not files:
-            raise RuntimeMaterializationError("当前更新模式还没有部署文件")
+            raise RuntimeMaterializationError("当前运行配置还没有部署文件")
 
         total_bytes = sum(len(item.content.encode("utf-8")) for item in files)
         if total_bytes > MAX_MATERIALIZED_BYTES:
@@ -53,7 +96,8 @@ class RuntimeMaterializationService:
 
         created_at = datetime.now(UTC)
         snapshot_id = created_at.strftime("%Y%m%dT%H%M%S%fZ") + "-" + uuid4().hex[:8]
-        mode_root = self._runtime_root / "projects" / project_id / mode
+        owner_directory = "projects" if owner_type == "project" else "workspaces"
+        mode_root = self._runtime_root / owner_directory / owner_id / profile
         temporary_path = mode_root / f".{snapshot_id}.tmp"
         target_path = mode_root / snapshot_id
 
@@ -80,8 +124,9 @@ class RuntimeMaterializationService:
             manifest = {
                 "schema_version": 1,
                 "snapshot_id": snapshot_id,
-                "project_id": project_id,
-                "mode": mode,
+                "owner_type": owner_type,
+                "owner_id": owner_id,
+                "profile": profile,
                 "created_at": created_at.isoformat(),
                 "file_count": len(files),
                 "total_bytes": total_bytes,
@@ -108,8 +153,10 @@ class RuntimeMaterializationService:
 
         return MaterializedRuntimeConfig(
             snapshot_id=snapshot_id,
-            project_id=project_id,
-            mode=mode,
+            owner_type=owner_type,
+            owner_id=owner_id,
+            profile=profile,
+            snapshot_relative_path=target_path.relative_to(self._runtime_root).as_posix(),
             materialized_path=str(target_path),
             file_count=len(files),
             total_bytes=total_bytes,

@@ -21,33 +21,9 @@ from context_router.services.runtime_materialization import (
     RuntimeMaterializationError,
     RuntimeMaterializationService,
 )
+from context_router.services.workspace_runtime_orchestration import select_runtime_mode
 
 RUNTIME_ENTRY_FILE = "deploy.sh"
-FULL_BUILD_FILE_NAMES = {
-    "pom.xml",
-    "build.gradle",
-    "build.gradle.kts",
-    "settings.gradle",
-    "settings.gradle.kts",
-    "go.mod",
-    "go.sum",
-    "pyproject.toml",
-    "uv.lock",
-    "poetry.lock",
-    "package.json",
-    "package-lock.json",
-    "pnpm-lock.yaml",
-    "yarn.lock",
-    "bun.lock",
-    "bun.lockb",
-    "requirements.txt",
-    "docker-compose.yml",
-    "docker-compose.yaml",
-    "compose.yml",
-    "compose.yaml",
-}
-
-
 class RuntimeExecutionError(RuntimeError):
     def __init__(self, code: str, message: str) -> None:
         self.code = code
@@ -73,18 +49,7 @@ class RuntimeExecutionService:
         self._active_lock = RLock()
 
     def select_mode(self, changed_files: list[str]) -> tuple[str, str]:
-        for raw_path in changed_files:
-            normalized = raw_path.strip().replace("\\", "/")
-            path = PurePosixPath(normalized)
-            lower_name = path.name.lower()
-            if (
-                lower_name in FULL_BUILD_FILE_NAMES
-                or lower_name.startswith("dockerfile")
-                or normalized.startswith(".mvn/")
-                or normalized.startswith("gradle/")
-            ):
-                return "full", f"依赖或构建文件发生变化：{normalized}"
-        return "fast", "仅业务代码或资源文件发生变化"
+        return select_runtime_mode(changed_files)
 
     def start(
         self,
