@@ -11,6 +11,7 @@ from context_router.api.mcp_integration import router as mcp_integration_router
 from context_router.api.mcp_traces import router as mcp_traces_router
 from context_router.api.projects import router as projects_router
 from context_router.api.runtime_configs import router as runtime_configs_router
+from context_router.api.runtime_runner import router as runtime_runner_router
 from context_router.api.tasks import router as tasks_router
 from context_router.api.workspaces import router as workspaces_router
 from context_router.config import Settings
@@ -68,10 +69,20 @@ from context_router.repositories.runtime_config_repository import (
     PostgresRuntimeConfigRepository,
     RuntimeConfigStore,
 )
+from context_router.repositories.runtime_operation_repository import (
+    InMemoryRuntimeOperationRepository,
+    PostgresRuntimeOperationRepository,
+    RuntimeOperationStore,
+)
 from context_router.repositories.runtime_run_repository import (
     InMemoryRuntimeRunRepository,
     PostgresRuntimeRunRepository,
     RuntimeRunStore,
+)
+from context_router.repositories.runtime_runner_repository import (
+    InMemoryRuntimeRunnerRepository,
+    PostgresRuntimeRunnerRepository,
+    RuntimeRunnerStore,
 )
 from context_router.repositories.task_repository import PostgresTaskRepository, TaskStore
 from context_router.repositories.workspace_repository import (
@@ -79,6 +90,11 @@ from context_router.repositories.workspace_repository import (
     PostgresWorkspaceRepository,
     WorkspaceRepositoryError,
     WorkspaceStore,
+)
+from context_router.repositories.workspace_runtime_repository import (
+    InMemoryWorkspaceRuntimeRepository,
+    PostgresWorkspaceRuntimeRepository,
+    WorkspaceRuntimeStore,
 )
 from context_router.services.context_document_read import ContextDocumentReadService
 from context_router.services.context_document_search import ContextDocumentSearchService
@@ -94,6 +110,9 @@ from context_router.services.project_registry import ProjectRegistry, ProjectReg
 from context_router.services.runtime_execution import RuntimeExecutionService
 from context_router.services.runtime_materialization import RuntimeMaterializationService
 from context_router.services.workspace_management import WorkspaceManagementService
+from context_router.services.workspace_runtime_orchestration import (
+    WorkspaceRuntimeOrchestrationService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +133,9 @@ def create_app(
     database_environment_repository: DatabaseEnvironmentStore | None = None,
     runtime_config_repository: RuntimeConfigStore | None = None,
     runtime_run_repository: RuntimeRunStore | None = None,
+    workspace_runtime_repository: WorkspaceRuntimeStore | None = None,
+    runtime_operation_repository: RuntimeOperationStore | None = None,
+    runtime_runner_repository: RuntimeRunnerStore | None = None,
 ) -> FastAPI:
     resolved_settings = settings or Settings()
     if workspace_repository is not None:
@@ -178,6 +200,32 @@ def create_app(
     )
     resolved_task_repository = task_repository or PostgresTaskRepository(
         resolved_settings.database_url
+    )
+    resolved_workspace_runtime_repository = workspace_runtime_repository or (
+        PostgresWorkspaceRuntimeRepository(resolved_settings.database_url)
+        if resolved_settings.database_url
+        else InMemoryWorkspaceRuntimeRepository()
+    )
+    resolved_runtime_operation_repository = runtime_operation_repository or (
+        PostgresRuntimeOperationRepository(resolved_settings.database_url)
+        if resolved_settings.database_url
+        else InMemoryRuntimeOperationRepository()
+    )
+    resolved_runtime_runner_repository = runtime_runner_repository or (
+        PostgresRuntimeRunnerRepository(resolved_settings.database_url)
+        if resolved_settings.database_url
+        else InMemoryRuntimeRunnerRepository()
+    )
+    workspace_runtime_orchestration_service = WorkspaceRuntimeOrchestrationService(
+        task_repository=resolved_task_repository,
+        registry=registry,
+        project_config_repository=resolved_runtime_config_repository,
+        workspace_runtime_repository=resolved_workspace_runtime_repository,
+        operation_repository=resolved_runtime_operation_repository,
+        materialization_service=runtime_materialization_service,
+        runner_available=lambda: resolved_runtime_runner_repository.is_available(
+            resolved_settings.runtime_runner_heartbeat_ttl_seconds
+        ),
     )
     resolved_read_repository = document_read_repository or PostgresDocumentReadRepository(
         resolved_settings.database_url
@@ -292,6 +340,7 @@ def create_app(
         try:
             mcp_trace_service.reconcile_interrupted_calls()
             runtime_execution_service.reconcile_interrupted()
+            resolved_runtime_operation_repository.reconcile_expired()
             database_payload_service.reconcile_startup()
             async with mcp_server.session_manager.run():
                 yield
@@ -304,6 +353,7 @@ def create_app(
         lifespan=lifespan,
     )
     app.state.project_registry = registry
+    app.state.settings = resolved_settings
     app.state.context_preparation_service = context_service
     app.state.context_document_read_service = document_read_service
     app.state.context_document_search_service = document_search_service
@@ -315,6 +365,10 @@ def create_app(
     app.state.runtime_materialization_service = runtime_materialization_service
     app.state.runtime_run_repository = resolved_runtime_run_repository
     app.state.runtime_execution_service = runtime_execution_service
+    app.state.workspace_runtime_repository = resolved_workspace_runtime_repository
+    app.state.runtime_operation_repository = resolved_runtime_operation_repository
+    app.state.runtime_runner_repository = resolved_runtime_runner_repository
+    app.state.workspace_runtime_orchestration_service = workspace_runtime_orchestration_service
     app.state.workspace_repository = resolved_workspace_repository
     app.state.workspace_management_service = workspace_management_service
     app.state.mcp_integration_service = mcp_integration_service
@@ -346,6 +400,7 @@ def create_app(
     )
     app.include_router(projects_router, prefix=resolved_settings.api_prefix)
     app.include_router(runtime_configs_router, prefix=resolved_settings.api_prefix)
+    app.include_router(runtime_runner_router, prefix=resolved_settings.api_prefix)
     app.include_router(workspaces_router, prefix=resolved_settings.api_prefix)
     app.include_router(database_environments_router, prefix=resolved_settings.api_prefix)
     app.include_router(tasks_router, prefix=resolved_settings.api_prefix)

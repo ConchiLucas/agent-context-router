@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     runtime_execution_enabled: bool = False
     runtime_execution_timeout_seconds: int = Field(default=1_800, ge=10, le=7_200)
     runtime_docker_socket: Path = Path("/var/run/docker.sock")
+    runtime_runner_api_enabled: bool = True
+    runtime_runner_token_path: Path = Path("/runtime/runner.token")
+    runtime_runner_heartbeat_ttl_seconds: int = Field(default=30, ge=5, le=300)
+    runtime_runner_lease_seconds: int = Field(default=30, ge=10, le=300)
     model_config = SettingsConfigDict(
         env_prefix="CONTEXT_ROUTER_",
         extra="ignore",
