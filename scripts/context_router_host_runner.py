@@ -521,12 +521,43 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--heartbeat-seconds", type=float, default=10)
     parser.add_argument("--runner-id")
     parser.add_argument("--once", action="store_true")
+    parser.add_argument("--daemonize", action="store_true")
+    parser.add_argument("--pid-path", type=Path)
     return parser.parse_args()
+
+
+def daemonize(pid_path: Path) -> bool:
+    first_pid = os.fork()
+    if first_pid > 0:
+        _, status_code = os.waitpid(first_pid, 0)
+        if status_code != 0:
+            raise RunnerError("Host Runner 后台进程初始化失败")
+        return False
+    try:
+        os.setsid()
+        second_pid = os.fork()
+        if second_pid > 0:
+            os._exit(0)
+        os.chdir("/")
+        os.umask(0o077)
+        pid_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        temporary = pid_path.with_name(f".{pid_path.name}.{os.getpid()}.tmp")
+        temporary.write_text(f"{os.getpid()}\n", encoding="utf-8")
+        temporary.chmod(0o600)
+        temporary.replace(pid_path)
+        return True
+    except BaseException:
+        os._exit(1)
 
 
 def main() -> int:
     args = parse_args()
     try:
+        if args.daemonize:
+            if args.pid_path is None:
+                raise RunnerError("--daemonize 必须同时提供 --pid-path")
+            if not daemonize(args.pid_path):
+                return 0
         token = load_private_token(args.token_path)
         api = RunnerApiClient(args.control_url, token)
         runner = HostRuntimeRunner(
@@ -546,7 +577,20 @@ def main() -> int:
     except RunnerError as exc:
         print(f"[runner] {exc}", file=sys.stderr)
         return 1
+    finally:
+        if args.daemonize and args.pid_path is not None and os.getpid() == _pid_file(args.pid_path):
+            try:
+                args.pid_path.unlink(missing_ok=True)
+            except OSError:
+                pass
     return 0
+
+
+def _pid_file(path: Path) -> int | None:
+    try:
+        return int(path.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return None
 
 
 if __name__ == "__main__":

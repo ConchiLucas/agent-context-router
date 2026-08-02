@@ -63,17 +63,15 @@ if [[ -f "$pid_path" ]]; then
 fi
 
 if [[ ! -f "$pid_path" ]]; then
-  nohup python3 "$runner_script" \
+  python3 "$runner_script" \
     --control-url "$control_url" \
     --workspace-root "$workspace_root" \
     --runtime-root "$runtime_root" \
     --token-path "$token_path" \
+    --daemonize \
+    --pid-path "$pid_path" \
     >> "$runner_log" 2>&1 &
-  runner_pid=$!
-  pid_temp="$runtime_root/.runner.pid.$$"
-  print -r -- "$runner_pid" > "$pid_temp"
-  chmod 600 "$pid_temp"
-  mv "$pid_temp" "$pid_path"
+  wait $!
 fi
 
 runner_ready=false

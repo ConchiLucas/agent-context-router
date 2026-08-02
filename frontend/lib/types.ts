@@ -415,7 +415,12 @@ export type InternalMcpToolName =
   | "search_context_documents"
   | "read_context_document"
   | "search_database_objects"
-  | "execute_database_query";
+  | "execute_database_query"
+  | "apply_workspace_changes"
+  | "start_workspace"
+  | "get_workspace_operation"
+  | "apply_project_changes"
+  | "get_project_operation";
 
 export interface McpTraceDocumentArtifactItem {
   position: number;

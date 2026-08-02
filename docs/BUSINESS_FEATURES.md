@@ -76,7 +76,7 @@ title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 sum
 - Markdown 渲染不执行原始 HTML 或脚本。
 - Workspace 工具栏支持查看 MCP JSON，预览包含 Workspace、全部 Project 的源码路径与文档入口路径、可选 `active_project`、显式根树或合成根树、全工作空间数据库摘要和当前任务环境的 `environment_config`。该本机预览与 MCP 返回都可能包含凭据，只能用于可信本机管理和授权排查，不得进入日志或开发文档。
 - Workspace 工具栏支持查看 MCP 调用记录，并在同一个全屏网格画布中切换“文档树”和“调用列表”：任务选择器列出该工作空间内至少产生过 read call 或数据库调用的 task；历史文档树只保留该任务实际调用过的文档及其从工作空间根开始的完整父级链路，隐藏未调用的旁支和后代，并在可见的已读取节点右上角标记文档读取批次。历史文档已不在当前树中时引导切换调用列表；未进入显式树的项目文档读取也继续保留在调用列表中。调用列表按时间合并文档读取和数据库调用，同一次批量读取的文档横向排在同一行，读取成功的文档仍可打开 Markdown 详情。
-- 左侧主导航提供独立“调用链路”页面，统一按任务查看 Context Router MCP 工具调用。页面支持任务搜索、Agent、五个固定内部工具和状态筛选，只在“调用树 / 调用列表”之间切换；不加载完整项目文档树，也不在这里打开 Markdown。
+- 左侧主导航提供独立“调用链路”页面，统一按任务查看 Context Router MCP 工具调用。页面支持任务搜索、Agent、十个固定内部工具和状态筛选，只在“调用树 / 调用列表”之间切换；不加载完整项目文档树，也不在这里打开 Markdown。
 - 调用树以任务为根节点，按服务端稳定顺序展示 MCP 工具调用。一次 `read_context_document` 仍是一个工具调用节点，其批量读取的多个文档作为同一节点的横向产物；普通连续调用只表达顺序，只有显式父调用时才表达因果关系。任务列表和详情同时展示“完整 / 运行中 / 可能不完整”，prepare 记录缺失、历史恢复、服务重启中断或明细失联会显示明确提示。
 - 调用链路页的文档工具节点只显示状态、耗时和读取规模，不提供完整出入参详情。数据库工具节点可按需打开全屏详情页，在“请求参数 / 响应结果”之间切换并复制当前内容。SQL 单独显示，历史未采集、过期、采集失败和快照截断都有明确状态。
 - 工作空间详情工具栏提供“MCP 接入”面板，集中展示服务地址、工具能力、Codex/Antigravity 配置模板，并针对当前 Workspace 执行连接测试；客户端配置由后端按公开 MCP URL 生成，可直接复制。
@@ -98,9 +98,19 @@ title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 sum
 - task 所选环境的 JSON 作为 `environment_config` 随 prepare 返回给可信本机 MCP 调用方，并由同模型的本机 MCP JSON 预览展示。可按明确业务需要保存地址及密码、Token、AccessKey 等访问凭据，但内容以明文 JSONB 保存在本地；严禁把实际值写入日志、开发文档、链路摘要或示例输出。
 - 浏览器 API 客户端和后端 `BrowserReadOnlyMiddleware` 双重限制配置写操作。携带任意 `Origin` 或浏览器 Fetch Metadata 的请求只允许 `GET/HEAD/OPTIONS`，以及数据源连接测试、密码按需查看、MCP 接入测试、prepare 预览、Workspace 刷新五类安全 `POST`；其他方法返回 `405 management_read_only`。不携带这些浏览器请求头的本机 AI/运维调用方继续使用既有受校验 API。
 
+## Workspace 运行编排
+
+- 运行边界是整个 Workspace。用户说“启动”“启动项目”或“启动服务”时，`start_workspace` 始终排入 Workspace 唯一的完整启动脚本，由脚本决定并启动该目录下的全部项目，不在 MCP 层提供单项目启动分支。
+- 代码修改完成后，Codex 按根 `AGENTS.md` 的约定调用一次 `apply_workspace_changes(task_id, changed_files)`。服务端用 Workspace 相对路径做最长 Project 前缀匹配：项目内文件选择该项目的快速或完整更新；Workspace 级文件、`.env.local`、无法唯一归属的文件或跨项目改动统一选择完整更新。
+- `get_workspace_operation(task_id, operation_id)` 只查询已排队操作，返回操作、步骤、终态和有界日志，不在查询时触发执行。旧的 `apply_project_changes`、`get_project_operation` 仅作为兼容工具保留。
+- Context Router 是控制面：PostgreSQL 保存 Workspace 启动文件、Project 快速/完整更新文件、项目顺序、路径策略和异步操作状态；它不在后端容器内直接执行目标仓库脚本。
+- Host Runtime Runner 是执行面：由用户在宿主机手动启动，使用仅本机可读 Token 向回环控制面注册、心跳和领取操作，逐步物化不可变快照，校验清单、哈希、路径与软链接边界后，只执行快照根固定的 `deploy.sh`。步骤串行运行，首个失败后后续步骤标记 skipped，不自动清理或修复目标环境。
+- 目标 Workspace 根 `.env.local` 是唯一的机器差异入口，保存当前电脑真实的数据库、Redis、MinIO 等连接信息，并由目标仓库脚本自行读取。该文件不进入 Git、不写入 Context Router 数据库、不复制到运行快照，也不得进入日志；换电脑只初始化这一份文件。
+- Context Router 和 Host Runner 不配置 Docker/launchd 开机自启。用户需要编排能力时，在本仓库手动执行本地栈启动脚本；目标 Workspace 的首次启动和后续全量启动使用同一个 `start_workspace` 协议。
+
 ## MCP
 
-- MCP 提供五个上下文与只读数据库工具，以及两个 Runtime Runner 工具：`apply_project_changes` 根据改动文件自动选择快速或完整更新，`get_project_operation` 查询异步任务与有界日志。数据源记录增删不会改变 `tools/list`。
+- MCP 固定提供十个工具：五个上下文与只读数据库工具，三个 Workspace 运行编排工具 `apply_workspace_changes`、`start_workspace`、`get_workspace_operation`，以及两个旧 Project 运行工具 `apply_project_changes`、`get_project_operation` 的兼容入口。数据源记录增删不会改变 `tools/list`。
 - 服务端先在全部工作空间根目录中按 cwd 最长前缀确定 Workspace，再按源码 `relative_path` 计算最深匹配 Project 作为 `active_project` 快照；docs 文档入口目录不参与活动项目归属。活动项目只帮助说明 Codex 当前开发位置，不限制文档、搜索、read 或数据库授权范围。
 - prepare 不搜索、不排名、不截断，也不返回 Markdown 正文；它返回工作空间 ID/名称、全部项目的 ID/名称/类型/源码相对路径/文档入口相对路径、可选活动项目、真实根显式文档树或合成根树，以及所有子项目当前可用于 MCP 的稳定数据库别名、所属项目信息、可选任务环境、Engine、用途和能力摘要。未进入真实根显式树的 Project 文档仍可由 `search_context_documents` 定位并按结果 ID 读取。prepare 只读取本地配置，不连接业务数据库；数据库摘要暂时失败时以 warning 降级，文档上下文仍可返回。
 - `prepare_task_context` 的可选 `environment` 只接受 `test/uat`。显式值是 task 局部选择，不执行 Workspace 切换；省略时读取 Workspace 当前环境。配置选择器时，返回的 `database_environment.selection` 分别为 `task_explicit` 或 `workspace_default`；未配置选择器时只能省略该参数。
@@ -134,5 +144,5 @@ title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 sum
 - 不自动修改 Codex 或 Antigravity 的本地配置，也不负责重启客户端。
 - 当前接入面板不处理远程 HTTPS、鉴权和 Skill 安装。
 - 文档检索不越出 task 绑定的 Workspace（旧 `scope='project'` task 不越出原项目）、不返回完整正文，也不提供向量或混合召回。
-- 调用链路页只记录客户端实际发送到 Context Router `/mcp` 的五个内部工具调用。客户端直连 GitHub、浏览器等其他 MCP Server 的调用不记录；本产品不连接或代理外部 MCP，不提供外部调用上报，也不建设跨 Server Trace。
+- 调用链路页只记录客户端实际发送到 Context Router `/mcp` 的十个内部工具调用。客户端直连 GitHub、浏览器等其他 MCP Server 的调用不记录；本产品不连接或代理外部 MCP，不提供外部调用上报，也不建设跨 Server Trace。
 - 不提供数据库写入、DDL、DBA 运维、跨数据库联邦查询或任意外部表函数。

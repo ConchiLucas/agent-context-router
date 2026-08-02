@@ -80,13 +80,18 @@ test("maps trace completeness and warning codes to concise Chinese messages", ()
   );
 });
 
-test("keeps only the five Context Router server and legacy tools", () => {
+test("keeps only the ten Context Router server and legacy tools", () => {
   assert.deepEqual(INTERNAL_MCP_TOOL_NAMES, [
     "prepare_task_context",
     "search_context_documents",
     "read_context_document",
     "search_database_objects",
     "execute_database_query",
+    "apply_workspace_changes",
+    "start_workspace",
+    "get_workspace_operation",
+    "apply_project_changes",
+    "get_project_operation",
   ]);
 
   const calls = [
@@ -109,22 +114,28 @@ test("keeps only the five Context Router server and legacy tools", () => {
     call({
       tool_call_id: 4,
       sequence: 4,
-      tool_name: "read_context_document",
-      source: "gateway",
+      tool_name: "start_workspace",
     }),
     call({
       tool_call_id: 5,
       sequence: 5,
+      tool_name: "read_context_document",
+      source: "gateway",
+    }),
+    call({
+      tool_call_id: 6,
+      sequence: 6,
       tool_name: "github__search_code",
     }),
   ];
 
   assert.equal(isInternalMcpToolName("search_context_documents"), true);
   assert.equal(isInternalMcpToolName("search_database_objects"), true);
+  assert.equal(isInternalMcpToolName("start_workspace"), true);
   assert.equal(isInternalMcpToolName("github__search_code"), false);
   assert.deepEqual(
     internalTraceCalls(calls).map((item) => item.tool_call_id),
-    [1, 2, 3],
+    [1, 2, 3, 4],
   );
 });
 

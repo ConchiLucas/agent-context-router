@@ -28,6 +28,34 @@ Compose 的前端和后端宿主机端口都显式绑定 `127.0.0.1`，不会默
 
 携带任意 `Origin` 或浏览器 Fetch Metadata（`Sec-Fetch-Mode` / `Sec-Fetch-Site`）的请求由后端只读中间件限制为 `GET/HEAD/OPTIONS`，以及五类不会修改配置的安全 `POST`：数据源连接测试、数据源密码按需查看、MCP 接入测试、Workspace prepare 预览和 Workspace 刷新。刷新只重建文档缓存与派生搜索索引；其他浏览器配置写请求返回 `405 management_read_only`。本机 AI 或运维调用方不携带这些浏览器请求头，仍可使用既有受 Schema、Service 和 Repository 校验的本地 API 维护配置；这只是回环单用户部署下的调用边界，不替代身份认证。
 
+## 手动启动控制面与 Host Runner
+
+需要通过 MCP 启动或增量更新目标 Workspace 时，在本仓库根目录手动执行：
+
+```bash
+./scripts/start-local-stack.sh
+./scripts/status-local-stack.sh
+./scripts/stop-local-stack.sh
+./scripts/stop-local-stack.sh --all
+```
+
+`start-local-stack.sh` 启动当前目录的 Docker Compose，等待后端健康后，再把宿主机 Host Runtime Runner 作为独立后台进程启动并等待心跳。普通 `stop-local-stack.sh` 只停止 Runner；`--all` 还停止本仓库 Compose。这里没有 Docker/launchd 开机自启，电脑重启后需要使用编排能力时再手动启动。
+
+Runner 是“所有项目都在 Docker Compose 内运行”规则的唯一宿主机例外：它不运行本项目业务前后端，只负责从回环控制面领取已校验快照，并调用目标 Workspace 自己的部署脚本。Token 默认生成在 `.runtime-runner/runner.token`，目录权限为 `0700`、文件权限为 `0600`；PID 和 Runner 日志位于同一目录。控制面 URL 必须是 loopback 地址，Token 不得写入 Git、日志或命令参数。
+
+可选配置：
+
+```text
+CONTEXT_ROUTER_RUNTIME_HOST_ROOT=/absolute/path/to/runtime
+CONTEXT_ROUTER_WORKSPACE_HOST_ROOT=/Users/conchi/workforce
+CONTEXT_ROUTER_CONTROL_URL=http://127.0.0.1:49173
+CONTEXT_ROUTER_RUNTIME_RUNNER_HEARTBEAT_TTL_SECONDS=30
+CONTEXT_ROUTER_RUNTIME_RUNNER_LEASE_SECONDS=30
+CONTEXT_ROUTER_RUNTIME_EXECUTION_TIMEOUT_SECONDS=1800
+```
+
+每个目标 Workspace 根目录自行保留一份被 Git 忽略的 `.env.local`，作为这台电脑唯一的数据库、Redis、MinIO 等差异配置入口。Context Router 只保存部署脚本、项目顺序和路径策略，不读取、上传、物化或记录 `.env.local` 的内容；目标仓库的启动脚本负责校验和加载它。
+
 ## 工作区挂载
 
 后端需要读取用户填写的 Workspace 绝对根目录、可选的 Workspace 根 `AGENTS.md`，以及各项目独立配置的 `document_relative_path`。新项目文档入口统一位于 Workspace 的 `docs/` 层级下，源码 `relative_path` 只用于项目定位和 cwd 路由。Compose 将宿主机工作区根目录只读挂载到容器 `/workspace`：
@@ -36,9 +64,9 @@ Compose 的前端和后端宿主机端口都显式绑定 `127.0.0.1`，不会默
 CONTEXT_ROUTER_WORKSPACE_HOST_ROOT=/Users/conchi/workforce
 ```
 
-项目运行配置以 PostgreSQL 为真源，并由本机 AI 或 Runtime Runner 通过受校验 API 物化到独立运行目录；浏览器页面只查看快速/完整更新文件、历史运行状态和有界日志，不提供配置保存、物化或执行按钮。Compose 默认把宿主机 `./.runtime-runner` 挂载到容器 `/runtime`；可以通过 `CONTEXT_ROUTER_RUNTIME_HOST_ROOT` 改为服务器上的其他绝对目录，运行快照不会写入目标项目源码目录。
+Workspace 启动配置、Project 快速/完整更新配置和运行策略以 PostgreSQL 为真源，并由后端物化到独立运行目录；浏览器页面只查看配置和历史运行状态，不提供保存、物化或执行按钮。Compose 默认把宿主机 `./.runtime-runner` 挂载到容器 `/runtime`；可以通过 `CONTEXT_ROUTER_RUNTIME_HOST_ROOT` 改为其他绝对目录，运行快照不会写入目标项目源码目录。
 
-Runtime Runner 只执行快照根目录下固定的 `deploy.sh`，后端镜像提供 Docker CLI，并仅在本机 Compose 中挂载 `/var/run/docker.sock`。该 Socket 等价于宿主机 Docker 管理权限，因此服务必须继续绑定回环地址，不得在缺少 HTTPS 和鉴权时对外暴露。
+Host Runtime Runner 只执行快照根目录下固定的 `deploy.sh`。执行前会校验 Manifest、文件哈希、Workspace/Project 相对路径、软链接边界和固定脚本名；步骤按项目顺序串行执行，首个失败后停止并把后续步骤标记 skipped，不自动清理目标容器。服务必须继续绑定回环地址，不得在缺少 HTTPS 和鉴权时对外暴露。
 
 后端收到宿主机绝对路径后，会将该前缀替换为 `/workspace` 再读取文件。目标文件必须位于挂载的工作区中。
 
@@ -92,7 +120,7 @@ CONTEXT_ROUTER_DATABASE_URL=postgresql://USER:PASSWORD@host.docker.internal:5432
 docker compose exec backend uv run alembic upgrade head
 ```
 
-当前 migration head 为 `20260730_0022`。`0013` 引入 Workspace 与项目相对路径；`0014` 增加 `frontend/backend` 项目类型、移除 Project enabled、把 `mcp_alias` 唯一范围提升到 Workspace，并为新 task 增加 Workspace scope；`0015` 增加工作空间级 Markdown 的独立词法搜索索引；`0016` 将项目源码 `relative_path` 与文档入口 `document_relative_path` 拆分；`0017` 增加按项目和更新模式持久化的运行配置文件；`0018` 增加 Runtime Runner 异步执行记录；`0019` 增加 Workspace TEST/UAT 数据库映射和 task 环境 revision；`0020` 增加 TEST/UAT 通用环境 JSON；`0021` 为 task 增加 `database_environment_selection`；`0022` 移除 Workspace、数据源、项目数据库授权和环境映射配置的启停字段与相关索引。旧 task 保持 `scope='project'` 兼容，迁移同时保留 Workspace/活动项目快照和兼容 `agents_path`。
+当前 migration head 为 `20260802_0023`。`0013` 引入 Workspace 与项目相对路径；`0014` 增加 `frontend/backend` 项目类型、移除 Project enabled、把 `mcp_alias` 唯一范围提升到 Workspace，并为新 task 增加 Workspace scope；`0015` 增加工作空间级 Markdown 的独立词法搜索索引；`0016` 将项目源码 `relative_path` 与文档入口 `document_relative_path` 拆分；`0017` 增加按项目和更新模式持久化的运行配置文件；`0018` 增加 Runtime Runner 异步执行记录；`0019` 增加 Workspace TEST/UAT 数据库映射和 task 环境 revision；`0020` 增加 TEST/UAT 通用环境 JSON；`0021` 为 task 增加 `database_environment_selection`；`0022` 移除 Workspace、数据源、项目数据库授权和环境映射配置的启停字段与相关索引；`0023` 增加 Workspace 启动文件、运行策略、原子操作步骤、租约和 Host Runner 实例。旧 task 保持 `scope='project'` 兼容，迁移同时保留 Workspace/活动项目快照和兼容 `agents_path`。
 
 PostgreSQL 保存 Workspace、Project 类型、源码相对路径、文档入口相对路径、数据源、数据库清单、项目数据库关联及 Workspace 唯一 `mcp_alias`、可选 TEST/UAT 数据库映射与通用 JSON、带 scope/环境/revision/选择模式的 MCP task、read call、文档顺序、数据库调用审计元数据，以及可重建的文档搜索分块与索引状态。文档树和 Markdown 原文仍从磁盘重建，文档工具完整出入参不持久化；`search_database_objects` 和 `execute_database_query` 自动保存有界、可过期的详情快照，供本机链路页面按需查看。后端启动时恢复工作空间和全部项目配置，并从磁盘重建每个项目的内存树与匹配版本词法索引；路径失效的项目仍保留在页面并显示错误。
 

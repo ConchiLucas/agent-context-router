@@ -12,6 +12,7 @@
 | 工作空间/项目持久化和数据库相关判断 | [数据库信息](./DATABASE_INFO.md) | `workspace_repository.py`、`project_repository.py`、`migrations/` |
 | 数据库 MCP 授权和 SQL 安全 | [业务功能说明](./BUSINESS_FEATURES.md)、[前后端链路速查](./FRONTEND_BACKEND_FLOW.md) | `services/database_access.py`、`database/policy.py` |
 | Connector 或 ClickHouse 集成 | [启动与开发规范](./STARTUP_GUIDE.md)、[前后端链路速查](./FRONTEND_BACKEND_FLOW.md) | `database/connectors/`、`tests/test_clickhouse_integration.py` |
+| Workspace 启动、增量更新和 Host Runner | [启动与开发规范](./STARTUP_GUIDE.md)、[前后端链路速查](./FRONTEND_BACKEND_FLOW.md) | `services/workspace_runtime_orchestration.py`、`api/runtime_runner.py`、`scripts/context_router_host_runner.py` |
 
 ## 当前架构约束
 
@@ -30,7 +31,9 @@
 - 刷新以 Workspace 为单位全量重建可选根入口和全部子项目并统一替换；会遍历并记录全部失败项目，任一入口文档构建失败时仍保留上一版工作空间映射。
 - 前端只从 Workspace 树接口获取显式根树或合成根树，从 Workspace 文档详情接口按需获取内存正文；未出现在真实根显式树中的 Project 文档仍保留在 Workspace 搜索和按 ID 读取范围。
 - 文档读取目录通过 Docker 只读挂载。
-- MCP `tools/list` 固定为 prepare、文档搜索、read、数据库对象搜索和数据库只读查询五个工具，不按项目或数据源动态注册工具。
+- MCP `tools/list` 固定为五个上下文/数据库工具、三个 Workspace 运行编排工具和两个 Project 兼容工具，不按项目或数据源动态注册工具。
+- Workspace 是运行编排边界：`start_workspace` 始终执行 Workspace 完整启动，`apply_workspace_changes` 按一次提交的全部改动选择项目 fast/full 或 Workspace full，`get_workspace_operation` 只查询异步状态。目标根 `.env.local` 是机器差异的唯一入口，不进入 Git、控制面数据库、执行快照或日志。
+- Context Router 只做运行控制面和快照物化；手动启动的 Host Runtime Runner 通过回环 Token 协议领取租约并执行固定 `deploy.sh`。禁止配置 Docker/launchd 开机自启，禁止从后端容器直接执行目标 Workspace。
 - 新 task 的文档搜索固定绑定 Workspace，查询工作空间根文档独立索引及各 Project 同版本索引，再聚合去重；索引不可用时显式失败，不回退到进程内全文扫描。
 - cwd 路由先按最长前缀选择最深 Workspace，再按 Project 的源码根而不是文档入口目录选择最深 Project；`active_project` 只作为元数据，不收窄 Workspace 的文档和数据库范围。任一项目缓存不可用时 prepare 明确失败。
 - prepare 返回 Workspace 元数据、全部 Project 的类型/相对路径、显式根树或合成根树和全工作空间数据库摘要，但不连接业务数据库；全部 Project 文档继续通过 Workspace 搜索和按 ID 读取访问。数据库访问统一按 `task_id -> workspace snapshot -> workspace mcp_alias -> 当前项目授权/连接/策略 -> Connector` 路由。
@@ -39,10 +42,10 @@
 - SQL 安全策略必须 fail-closed：只允许单条、可解析、限定当前数据库/Schema 的只读语句；不能把客户端 LIMIT 当作唯一边界，仍需服务端行数、字节数、超时和数据库侧只读限制。
 - Connector 延迟创建且生命周期只归 `ConnectorManager`；数据源配置版本变化或删除时必须失效旧连接，应用退出时统一关闭。
 - `mcp_database_calls` 审计历史只保存客观元数据和 SQL SHA-256；两个数据库 MCP 工具另以独立、可过期的有界 JSON 快照保存实际请求和最终 MCP 响应，主 Trace 接口不内联这些大字段。
-- Context Router 五个 MCP 工具在统一分发入口记录到 `mcp_tool_calls`；任务内顺序由 PostgreSQL 调用 ID 生成，文档/数据库专属明细通过 `tool_call_id` 关联，观测失败不得改变工具业务结果。
-- 调用链路页面只记录 Codex、Antigravity 等客户端实际发送到 Context Router `/mcp` 的五个内部工具调用；不连接、代理、聚合或接收其他 MCP Server 的调用上报，也不建设跨 Server Trace。
+- Context Router 十个 MCP 工具在统一分发入口记录到 `mcp_tool_calls`；任务内顺序由 PostgreSQL 调用 ID 生成，文档/数据库专属明细通过 `tool_call_id` 关联，观测失败不得改变工具业务结果。
+- 调用链路页面只记录 Codex、Antigravity 等客户端实际发送到 Context Router `/mcp` 的十个内部工具调用；不连接、代理、聚合或接收其他 MCP Server 的调用上报，也不建设跨 Server Trace。
 - 顶层页面只读展示 Workspace；进入详情后使用“前端项目 / 后端项目 / 数据源汇总”三页签。环境详情、查看调用记录、查看文档树和查看 MCP JSON 位于 Workspace 工具栏；前端项目不显示数据库授权，后端项目只读展示项目级数据源授权。环境映射/JSON与运行配置同样只读。
 - 完整出入参只对白名单数据库工具 `search_database_objects`、`execute_database_query` 自动采集，并通过 no-store 详情 API 懒加载；prepare/search/read 不建立完整 payload 快照。
 - 新 task 使用 `scope='workspace'` 和无外键的稳定 Workspace/活动项目快照；`scope='project'` 的旧 task 继续按原 project_id/project_key 读取、搜索和解析数据库，避免升级后历史串链。后端启动会收敛遗留 running 调用，Trace API 与页面明确区分完整、运行中和可能不完整。
-- migration head 为 `20260730_0022`；`0013` 把旧 Project 升级为同 ID Workspace 下 `relative_path='.'` 的根项目，`0014` 增加 `project_kind`、删除 Project enabled、提升 alias 唯一范围并增加 Workspace task 快照，`0015` 增加工作空间级文档派生搜索索引，`0016` 拆分源码相对路径和文档入口相对路径，`0017` 增加项目快速/完整更新的运行配置文件，`0018` 增加 Runtime Runner 异步执行记录，`0019` 增加 Workspace TEST/UAT 数据库映射、当前环境和 task 环境 revision，`0020` 增加按环境保存的通用 JSON，`0021` 为 task 增加 `database_environment_selection`，`0022` 删除 Workspace、数据源、项目数据库授权和环境映射配置的 `enabled` 字段。旧项目 ID、数据库授权和调用历史保持不变。
+- migration head 为 `20260802_0023`；`0013` 把旧 Project 升级为同 ID Workspace 下 `relative_path='.'` 的根项目，`0014` 增加 `project_kind`、删除 Project enabled、提升 alias 唯一范围并增加 Workspace task 快照，`0015` 增加工作空间级文档派生搜索索引，`0016` 拆分源码相对路径和文档入口相对路径，`0017` 增加项目快速/完整更新的运行配置文件，`0018` 增加 Runtime Runner 异步执行记录，`0019` 增加 Workspace TEST/UAT 数据库映射、当前环境和 task 环境 revision，`0020` 增加按环境保存的通用 JSON，`0021` 为 task 增加 `database_environment_selection`，`0022` 删除 Workspace、数据源、项目数据库授权和环境映射配置的 `enabled` 字段，`0023` 增加 Workspace 运行文件、策略、操作步骤、租约和 Runner 实例。旧项目 ID、数据库授权和调用历史保持不变。
 - 本地服务默认只绑定回环地址；真实 ClickHouse 测试使用根 Compose 的 `integration` profile 和固定镜像版本。
