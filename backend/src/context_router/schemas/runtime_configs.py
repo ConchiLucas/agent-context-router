@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import PurePosixPath
 from typing import Literal, Self
 
+import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from context_router.schemas.projects import ProjectSummary
@@ -43,6 +44,22 @@ class RuntimeConfigModeUpdate(BaseModel):
         paths = [item.relative_path for item in self.files]
         if len(paths) != len(set(paths)):
             raise ValueError("同一种更新模式下不能保存重复文件路径")
+        for item in self.files:
+            suffix = PurePosixPath(item.relative_path).suffix.lower()
+            if suffix not in {".yml", ".yaml"} or not item.content.strip():
+                continue
+            try:
+                yaml.safe_load(item.content)
+            except yaml.YAMLError as exc:
+                mark = getattr(exc, "problem_mark", None)
+                location = (
+                    f"第 {mark.line + 1} 行，第 {mark.column + 1} 列"
+                    if mark is not None
+                    else "位置未知"
+                )
+                raise ValueError(
+                    f"运行配置 YAML 语法错误：{item.relative_path}（{location}）"
+                ) from exc
         return self
 
 
