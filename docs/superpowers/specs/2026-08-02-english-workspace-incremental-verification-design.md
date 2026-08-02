@@ -8,6 +8,8 @@
 
 Context Router PostgreSQL 中保存的三个前端 `fast/compose.yml` 在 YAML literal block `|-` 下缺少内容缩进。当前 Project 运行配置 API 只校验文件路径与重复项，不校验 `.yml/.yaml` 语法，因此错误直到 Host Runner 调用 Docker Compose 时才暴露。
 
+修正 YAML 后的首个 Go 真实增量又暴露出第二个边界问题：六份旧 fast 脚本各自引用 Project `.env` 或工作空间 `.runtime-runner-secrets/{project_id}.env`，绕开了已经约定的根 `.env.local` 唯一机器差异入口。这不是单台电脑缺文件，而是运行配置仍复制了旧部署体系。
+
 受影响 Project：
 
 - `word_select_dashboard/web-react`
@@ -17,9 +19,11 @@ Context Router PostgreSQL 中保存的三个前端 `fast/compose.yml` 在 YAML l
 ## 修复设计
 
 1. 在 `RuntimeConfigModeUpdate` 保存边界对所有 `.yml`、`.yaml` 文件执行 PyYAML `safe_load` 语法校验。空文件允许；解析失败返回 Pydantic 422，不写数据库。只做 YAML 语法校验，不把 Docker Compose 语义耦合进 Schema。
-2. 通过受校验 Project Runtime Config API 更新三个前端 fast 配置，仅修正 literal block 内 shell 行的缩进，其他文件和内容保持不变。
-3. 优化英语 Workspace 根 `AGENTS.md`：
-   - `get_workspace_operation` 明确同时传 `task_id` 与 `operation_id`；
+2. 通过受校验 Project Runtime Config API 修正三个前端 fast 配置的 literal block 缩进，确认六份 YAML 都能通过新的保存校验。
+3. 在目标根 `deploy-compose-full.sh` 增加 `--project <key>`：仍加载并校验根 `.env.local`、预检六份 Compose 和公共依赖，但只执行所选 Project 的既有启动函数与容器检查。无参数保持原有全量启动及 CLI Runner 行为。
+4. 将六个 Project 的 fast 配置统一替换为只含 `deploy.sh` 的无凭据包装器，调用 `"$WORKSPACE_HOST_ROOT/deploy-compose-full.sh" --project <key>`。数据库只保存调度信息，不保存或复制任何机器凭据。
+5. 优化英语 Workspace 根 `AGENTS.md`：
+   - `get_workspace_operation` 明确只传返回的 `operation_id`，由服务端从操作记录解析任务归属；
    - 修改完成后一次提交本轮全部真实 Workspace 相对路径；
    - 单项目改动预期只产生一个 fast 步骤；
    - 启动仍统一使用 `start_workspace` 启动全部项目；
@@ -51,6 +55,7 @@ Context Router PostgreSQL 中保存的三个前端 `fast/compose.yml` 在 YAML l
 ## 安全与失败边界
 
 - 不读取、输出、提交或物化目标 `.env.local`。
+- Project fast 快照不再包含 `.env`、`runtime.env` 或 `.runtime-runner-secrets` 路径；所有机器差异只由根脚本读取 `.env.local`。
 - 不修改业务数据，不删除容器、镜像、Volume 或数据库。
 - 任一增量失败时停止该轮后续判断，保留现场和日志，先定位原因；不把失败掩盖为成功。
 - 回滚只删除本次写入的唯一测试注释，不覆盖用户已有改动。

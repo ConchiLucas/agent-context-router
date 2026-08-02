@@ -66,6 +66,8 @@ CONTEXT_ROUTER_WORKSPACE_HOST_ROOT=/Users/conchi/workforce
 
 Workspace 启动配置、Project 快速/完整更新配置和运行策略以 PostgreSQL 为真源，并由后端物化到独立运行目录；浏览器页面只查看配置和历史运行状态，不提供保存、物化或执行按钮。Compose 默认把宿主机 `./.runtime-runner` 挂载到容器 `/runtime`；可以通过 `CONTEXT_ROUTER_RUNTIME_HOST_ROOT` 改为其他绝对目录，运行快照不会写入目标项目源码目录。
 
+本机 AI 或运维保存 Project 运行配置时，后端会先用 PyYAML 解析非空的 `.yml/.yaml` 文件；语法错误响应只包含文件名、行号和列号，不回显文件内容，也不会覆盖数据库旧配置。Docker Compose 插值、服务定义和运行时依赖等语义仍由目标 Workspace 预检或实际执行负责。对于使用根 `.env.local` 作为唯一机器差异入口的 Workspace，推荐六个 Project 的 `fast/deploy.sh` 都保持为无凭据薄包装器，只调用目标仓库统一部署入口的单项目模式；Workspace `start/deploy.sh` 则调用同一入口的全量模式。
+
 Host Runtime Runner 只执行快照根目录下固定的 `deploy.sh`。执行前会校验 Manifest、文件哈希、Workspace/Project 相对路径、软链接边界和固定脚本名；步骤按项目顺序串行执行，首个失败后停止并把后续步骤标记 skipped，不自动清理目标容器。服务必须继续绑定回环地址，不得在缺少 HTTPS 和鉴权时对外暴露。
 
 后端收到宿主机绝对路径后，会将该前缀替换为 `/workspace` 再读取文件。目标文件必须位于挂载的工作区中。

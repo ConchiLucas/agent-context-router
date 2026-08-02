@@ -12,11 +12,7 @@ def test_runtime_config_rejects_invalid_yaml_with_file_and_line() -> None:
                     {
                         "relative_path": "compose.yml",
                         "content": (
-                            "services:\n"
-                            "  app:\n"
-                            "    command: |-\n"
-                            "    echo broken\n"
-                            "next: value\n"
+                            "services:\n  app:\n    command: |-\n    echo broken\nnext: value\n"
                         ),
                     }
                 ]
@@ -30,9 +26,7 @@ def test_runtime_config_accepts_valid_yaml_literal_block_and_non_yaml() -> None:
             "files": [
                 {
                     "relative_path": "compose.yml",
-                    "content": (
-                        "services:\n  app:\n    command: |-\n      echo valid\n"
-                    ),
+                    "content": ("services:\n  app:\n    command: |-\n      echo valid\n"),
                 },
                 {
                     "relative_path": "deploy.sh",

@@ -102,8 +102,9 @@ title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 sum
 
 - 运行边界是整个 Workspace。用户说“启动”“启动项目”或“启动服务”时，`start_workspace` 始终排入 Workspace 唯一的完整启动脚本，由脚本决定并启动该目录下的全部项目，不在 MCP 层提供单项目启动分支。
 - 代码修改完成后，Codex 按根 `AGENTS.md` 的约定调用一次 `apply_workspace_changes(task_id, changed_files)`。服务端用 Workspace 相对路径做最长 Project 前缀匹配：项目内文件选择该项目的快速或完整更新；Workspace 级文件、`.env.local`、无法唯一归属的文件或跨项目改动统一选择完整更新。
-- `get_workspace_operation(task_id, operation_id)` 只查询已排队操作，返回操作、步骤、终态和有界日志，不在查询时触发执行。旧的 `apply_project_changes`、`get_project_operation` 仅作为兼容工具保留。
+- `get_workspace_operation(operation_id)` 只查询已排队操作，服务端从操作记录解析并校验任务归属，返回操作、步骤、终态和有界日志，不在查询时触发执行。旧的 `apply_project_changes`、`get_project_operation` 仅作为兼容工具保留。
 - Context Router 是控制面：PostgreSQL 保存 Workspace 启动文件、Project 快速/完整更新文件、项目顺序、路径策略和异步操作状态；它不在后端容器内直接执行目标仓库脚本。
+- Project 运行配置保存边界会对非空 `.yml/.yaml` 文件做 YAML 语法解析；失败只返回文件、行和列，不回显内容或覆盖旧记录。Compose 语义继续由目标脚本预检。采用统一机器配置的 Workspace 应让各 Project 的 `fast/deploy.sh` 成为无凭据包装器，由目标仓库同一个根部署入口加载 `.env.local` 并仅调度命中的 Project；这不改变 `start_workspace` 始终全量启动的 MCP 边界。
 - Host Runtime Runner 是执行面：由用户在宿主机手动启动，使用仅本机可读 Token 向回环控制面注册、心跳和领取操作，逐步物化不可变快照，校验清单、哈希、路径与软链接边界后，只执行快照根固定的 `deploy.sh`。步骤串行运行，首个失败后后续步骤标记 skipped，不自动清理或修复目标环境。
 - 目标 Workspace 根 `.env.local` 是唯一的机器差异入口，保存当前电脑真实的数据库、Redis、MinIO 等连接信息，并由目标仓库脚本自行读取。该文件不进入 Git、不写入 Context Router 数据库、不复制到运行快照，也不得进入日志；换电脑只初始化这一份文件。
 - Context Router 和 Host Runner 不配置 Docker/launchd 开机自启。用户需要编排能力时，在本仓库手动执行本地栈启动脚本；目标 Workspace 的首次启动和后续全量启动使用同一个 `start_workspace` 协议。
