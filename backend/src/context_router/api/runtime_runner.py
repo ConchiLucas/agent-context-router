@@ -23,6 +23,19 @@ from context_router.schemas.workspace_runtime import (
 router = APIRouter(prefix="/runtime-runner", tags=["runtime-runner"])
 
 
+@router.get("/status")
+def runner_status(request: Request) -> dict[str, object]:
+    _authorize(request)
+    settings = request.app.state.settings
+    try:
+        available = request.app.state.runtime_runner_repository.is_available(
+            settings.runtime_runner_heartbeat_ttl_seconds
+        )
+    except RuntimeRunnerRepositoryError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"available": available}
+
+
 @router.post("/register")
 def register_runner(payload: RunnerRegistration, request: Request) -> dict[str, object]:
     _authorize(request)
