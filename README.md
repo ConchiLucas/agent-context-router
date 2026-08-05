@@ -28,7 +28,7 @@
 docker compose up -d --force-recreate backend frontend
 ```
 
-- Web：<http://127.0.0.1:49174>
+- Web：<http://127.0.0.1:49175>
 - API：<http://127.0.0.1:49173>
 - API 文档：<http://127.0.0.1:49173/docs>
 - MCP：<http://127.0.0.1:49173/mcp>

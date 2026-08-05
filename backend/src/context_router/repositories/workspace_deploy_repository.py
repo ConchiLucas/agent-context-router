@@ -87,7 +87,7 @@ class PostgresWorkspaceDeployRepository:
         try:
             with psycopg.connect(self._database_url) as connection:
                 project_rows = connection.execute(
-                    "SELECT id FROM projects WHERE workspace_id = %s ORDER BY id",
+                    "SELECT id FROM document_projects WHERE workspace_id = %s ORDER BY id",
                     (workspace_id,),
                 ).fetchall()
                 registered_ids = {str(row[0]) for row in project_rows}

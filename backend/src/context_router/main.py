@@ -435,8 +435,8 @@ def create_app(
     app.state.database_payload_service = database_payload_service
     app.state.mcp_trace_service = mcp_trace_service
     frontend_origins = [
-        "http://127.0.0.1:49174",
-        "http://localhost:49174",
+        "http://127.0.0.1:49175",
+        "http://localhost:49175",
     ]
     app.add_middleware(
         BrowserReadOnlyMiddleware,

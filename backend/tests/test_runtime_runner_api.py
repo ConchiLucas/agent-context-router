@@ -57,7 +57,7 @@ def test_runner_api_requires_bearer_token_and_rejects_browser(tmp_path: Path) ->
             ).status_code
             == 401
         )
-        headers = {**authorize(token), "Origin": "http://127.0.0.1:49174"}
+        headers = {**authorize(token), "Origin": "http://127.0.0.1:49175"}
         assert (
             client.post("/api/runtime-runner/register", json=payload, headers=headers).status_code
             == 403

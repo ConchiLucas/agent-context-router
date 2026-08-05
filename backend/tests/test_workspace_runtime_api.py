@@ -148,7 +148,7 @@ def test_browser_cannot_write_workspace_runtime_configuration(tmp_path: Path) ->
     with TestClient(app) as client:
         response = client.put(
             f"/api/workspaces/{workspace_id}/runtime-config/start",
-            headers={"Origin": "http://127.0.0.1:49174"},
+            headers={"Origin": "http://127.0.0.1:49175"},
             json={
                 "files": [
                     {
@@ -166,7 +166,7 @@ def test_browser_cannot_write_workspace_runtime_configuration(tmp_path: Path) ->
 def test_browser_can_preview_and_commit_fixed_workspace_deploy_config(tmp_path: Path) -> None:
     app, workspace_id = build_app(tmp_path)
     _canonical_tree(tmp_path)
-    headers = {"Origin": "http://127.0.0.1:49174"}
+    headers = {"Origin": "http://127.0.0.1:49175"}
 
     with TestClient(app) as client:
         preview = client.post(

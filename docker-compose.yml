@@ -44,7 +44,7 @@ services:
       CONTEXT_ROUTER_INTERNAL_API_URL: http://backend:8000
       NEXT_PUBLIC_CONTEXT_ROUTER_API_URL: http://127.0.0.1:49173
     ports:
-      - "127.0.0.1:49174:3000"
+      - "127.0.0.1:49175:3000"
     volumes:
       - .:/app
       - frontend_node_modules:/app/frontend/node_modules

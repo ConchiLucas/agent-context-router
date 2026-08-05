@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 
 from context_router.middleware.browser_read_only import BrowserReadOnlyMiddleware
 
-FRONTEND_ORIGIN = "http://127.0.0.1:49174"
+FRONTEND_ORIGIN = "http://127.0.0.1:49175"
 
 
 def _app() -> FastAPI:
@@ -90,7 +90,7 @@ def test_any_browser_origin_cannot_call_configuration_commands() -> None:
     with TestClient(_app()) as client:
         for origin in (
             "http://127.0.0.1:49173",
-            "http://192.168.8.10:49174",
+            "http://192.168.8.10:49175",
             "https://example.invalid",
         ):
             response = client.post(
