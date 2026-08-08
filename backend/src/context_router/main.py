@@ -10,11 +10,13 @@ from fastapi.responses import JSONResponse
 
 from context_router.api.data_sources import router as data_sources_router
 from context_router.api.database_environments import router as database_environments_router
+from context_router.api.document_read_stats import router as document_read_stats_router
 from context_router.api.mcp_integration import router as mcp_integration_router
 from context_router.api.mcp_traces import router as mcp_traces_router
 from context_router.api.projects import router as projects_router
 from context_router.api.runtime_configs import router as runtime_configs_router
 from context_router.api.runtime_runner import router as runtime_runner_router
+from context_router.api.system_guides import router as system_guides_router
 from context_router.api.tasks import router as tasks_router
 from context_router.api.workspace_runtime import router as workspace_runtime_router
 from context_router.api.workspaces import router as workspaces_router
@@ -54,6 +56,10 @@ from context_router.repositories.document_read_repository import (
     DocumentReadStore,
     PostgresDocumentReadRepository,
 )
+from context_router.repositories.document_read_stats_repository import (
+    DocumentReadStatsStore,
+    PostgresDocumentReadStatsRepository,
+)
 from context_router.repositories.document_search_repository import (
     DocumentSearchStore,
     PostgresDocumentSearchRepository,
@@ -89,6 +95,11 @@ from context_router.repositories.runtime_runner_repository import (
     PostgresRuntimeRunnerRepository,
     RuntimeRunnerStore,
 )
+from context_router.repositories.system_guide_repository import (
+    InMemorySystemGuideRepository,
+    PostgresSystemGuideRepository,
+    SystemGuideStore,
+)
 from context_router.repositories.task_repository import PostgresTaskRepository, TaskStore
 from context_router.repositories.workspace_deploy_repository import (
     InMemoryWorkspaceDeployRepository,
@@ -118,6 +129,7 @@ from context_router.services.database_access import DatabaseAccessService
 from context_router.services.database_catalog import DatabaseCatalogService
 from context_router.services.database_query import DatabaseQueryService
 from context_router.services.database_tool_payload import DatabaseToolPayloadService
+from context_router.services.document_read_stats import DocumentReadStatsService
 from context_router.services.document_search_index import DocumentSearchIndexer
 from context_router.services.local_workspace_mapping import LocalWorkspaceMappingService
 from context_router.services.mcp_integration import McpIntegrationService
@@ -125,6 +137,7 @@ from context_router.services.mcp_trace import McpTraceService
 from context_router.services.project_registry import ProjectRegistry, ProjectRegistryError
 from context_router.services.runtime_execution import RuntimeExecutionService
 from context_router.services.runtime_materialization import RuntimeMaterializationService
+from context_router.services.system_guides import SystemGuideService
 from context_router.services.workspace_deploy_sync import WorkspaceDeploySyncService
 from context_router.services.workspace_management import WorkspaceManagementService
 from context_router.services.workspace_runtime_orchestration import (
@@ -156,6 +169,8 @@ def create_app(
     runtime_runner_repository: RuntimeRunnerStore | None = None,
     workspace_deploy_repository: WorkspaceDeployStore | None = None,
     workspace_shared_file_repository: WorkspaceSharedFileStore | None = None,
+    document_read_stats_repository: DocumentReadStatsStore | None = None,
+    system_guide_repository: SystemGuideStore | None = None,
 ) -> FastAPI:
     resolved_settings = settings or Settings()
     if workspace_repository is not None:
@@ -223,6 +238,12 @@ def create_app(
     resolved_task_repository = task_repository or PostgresTaskRepository(
         resolved_settings.database_url
     )
+    resolved_system_guide_repository = system_guide_repository or (
+        PostgresSystemGuideRepository(resolved_settings.database_url)
+        if resolved_settings.database_url
+        else InMemorySystemGuideRepository()
+    )
+    system_guide_service = SystemGuideService(resolved_system_guide_repository)
     resolved_workspace_runtime_repository = workspace_runtime_repository or (
         PostgresWorkspaceRuntimeRepository(resolved_settings.database_url)
         if resolved_settings.database_url
@@ -284,6 +305,9 @@ def create_app(
     resolved_read_repository = document_read_repository or PostgresDocumentReadRepository(
         resolved_settings.database_url
     )
+    resolved_document_read_stats_repository = document_read_stats_repository or PostgresDocumentReadStatsRepository(
+        resolved_settings.database_url
+    )
     resolved_database_call_repository = database_call_repository or (
         PostgresDatabaseCallRepository(resolved_settings.database_url)
         if resolved_settings.database_url
@@ -341,11 +365,13 @@ def create_app(
         registry,
         resolved_task_repository,
         database_access_service,
+        system_guide_service,
     )
     document_read_service = ContextDocumentReadService(
         registry,
         resolved_task_repository,
         resolved_read_repository,
+        system_guide_service,
     )
     document_search_service = ContextDocumentSearchService(
         registry,
@@ -369,6 +395,9 @@ def create_app(
         database_payload_service=database_payload_service,
     )
     mcp_integration_service = McpIntegrationService(resolved_settings, registry)
+    document_read_stats_service = DocumentReadStatsService(
+        repository=resolved_document_read_stats_repository,
+    )
     mcp_server = create_context_router_mcp(
         context_service,
         document_read_service,
@@ -465,6 +494,10 @@ def create_app(
     app.state.database_payload_repository = resolved_database_payload_repository
     app.state.database_payload_service = database_payload_service
     app.state.mcp_trace_service = mcp_trace_service
+    app.state.system_guide_repository = resolved_system_guide_repository
+    app.state.system_guide_service = system_guide_service
+    app.state.document_read_stats_repository = resolved_document_read_stats_repository
+    app.state.document_read_stats_service = document_read_stats_service
     frontend_origins = [
         "http://127.0.0.1:49175",
         "http://localhost:49175",
@@ -476,7 +509,7 @@ def create_app(
     app.add_middleware(
         CORSMiddleware,
         allow_origins=frontend_origins,
-        allow_methods=["GET", "HEAD", "OPTIONS", "POST"],
+        allow_methods=["GET", "HEAD", "OPTIONS", "POST", "PUT", "DELETE"],
         allow_headers=["*"],
     )
     app.include_router(projects_router, prefix=resolved_settings.api_prefix)
@@ -489,6 +522,8 @@ def create_app(
     app.include_router(mcp_integration_router, prefix=resolved_settings.api_prefix)
     app.include_router(data_sources_router, prefix=resolved_settings.api_prefix)
     app.include_router(mcp_traces_router, prefix=resolved_settings.api_prefix)
+    app.include_router(document_read_stats_router, prefix=resolved_settings.api_prefix)
+    app.include_router(system_guides_router, prefix=resolved_settings.api_prefix)
 
     @app.get("/health")
     def health() -> dict[str, str]:

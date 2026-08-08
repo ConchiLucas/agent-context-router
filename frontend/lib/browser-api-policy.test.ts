@@ -37,6 +37,19 @@ test("allows reads and the explicit safe browser POST allowlist", () => {
     ),
     true,
   );
+  assert.equal(isBrowserApiRequestAllowed("/api/system-guides", "POST"), false);
+  assert.equal(
+    isBrowserApiRequestAllowed("/api/system-guides/guide-1/content", "PUT"),
+    true,
+  );
+  assert.equal(
+    isBrowserApiRequestAllowed("/api/system-guides/guide-1", "PUT"),
+    false,
+  );
+  assert.equal(
+    isBrowserApiRequestAllowed("/api/system-guides/guide-1", "DELETE"),
+    false,
+  );
 });
 
 test("rejects browser configuration and execution commands", () => {

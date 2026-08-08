@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from context_router.repositories.document_read_repository import (
@@ -21,6 +22,11 @@ from context_router.services.markdown_section import (
 )
 from context_router.services.mcp_trace import current_tool_call_id
 from context_router.services.project_registry import ProjectRegistry, ProjectRegistryError
+from context_router.services.system_guides import (
+    GUIDE_DOCUMENT_PREFIX,
+    SystemGuideError,
+    SystemGuideService,
+)
 
 MAX_READ_REQUESTS = 10
 MAX_DOCUMENT_CHARACTERS = 200_000
@@ -37,10 +43,12 @@ class ContextDocumentReadService:
         registry: ProjectRegistry,
         task_repository: TaskReader,
         read_repository: DocumentReadStore,
+        system_guide_service: SystemGuideService | None = None,
     ) -> None:
         self._registry = registry
         self._task_repository = task_repository
         self._read_repository = read_repository
+        self._system_guide_service = system_guide_service
 
     def read(
         self,
@@ -120,6 +128,12 @@ class ContextDocumentReadService:
         cache: DocumentCache,
         response_characters: int,
     ) -> tuple[ContextDocumentReadItem, DocumentReadItemWrite]:
+        if request.document_id.startswith(GUIDE_DOCUMENT_PREFIX):
+            return self._resolve_system_guide(
+                position=position,
+                request=request,
+                response_characters=response_characters,
+            )
         document = cache.documents.get(request.document_id)
         if document is None:
             return self._error_item(
@@ -197,6 +211,63 @@ class ContextDocumentReadService:
             status="ok",
         )
         return result, write
+
+    def _resolve_system_guide(
+        self,
+        *,
+        position: int,
+        request: ContextDocumentReadRequest,
+        response_characters: int,
+    ) -> tuple[ContextDocumentReadItem, DocumentReadItemWrite]:
+        if self._system_guide_service is None:
+            return self._error_item(
+                position=position,
+                request=request,
+                code="document_not_found",
+                message="系统文档当前不可用",
+            )
+        if request.section is not None:
+            return self._error_item(
+                position=position,
+                request=request,
+                code="section_not_supported",
+                message="系统 JSON 文档不支持按 Markdown section 读取",
+            )
+        try:
+            guide = self._system_guide_service.get_by_document_id(request.document_id)
+        except SystemGuideError:
+            return self._error_item(
+                position=position,
+                request=request,
+                code="document_not_found",
+                message="系统文档不存在",
+            )
+        content = json.dumps(guide.document, ensure_ascii=False, indent=2)
+        path = f"system-guides/{guide.guide_key}.json"
+        if response_characters + len(content) > MAX_RESPONSE_CHARACTERS:
+            return self._error_item(
+                position=position,
+                request=request,
+                code="response_too_large",
+                message="本次返回内容过大，请拆分调用",
+                path=path,
+            )
+        return (
+            ContextDocumentReadItem(
+                position=position,
+                document_id=request.document_id,
+                path=path,
+                title=guide.title,
+                content=content,
+            ),
+            DocumentReadItemWrite(
+                position=position,
+                document_id=request.document_id,
+                document_path=path,
+                requested_section=None,
+                status="ok",
+            ),
+        )
 
     @staticmethod
     def _error_item(

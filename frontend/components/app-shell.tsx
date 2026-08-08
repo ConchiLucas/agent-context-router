@@ -3,10 +3,12 @@
 import { useState } from "react";
 
 import { DataSourceDashboard } from "@/components/data-source-dashboard";
+import { DocumentReadStats } from "@/components/document-read-stats";
 import { TraceExplorer } from "@/components/trace-explorer";
+import { SystemGuideManager } from "@/components/system-guide-manager";
 import { WorkspaceDashboard } from "@/components/workspace-dashboard";
 
-type Section = "workspaces" | "data-sources" | "traces";
+type Section = "workspaces" | "data-sources" | "traces" | "system-guides" | "doc-stats";
 
 function NavIcon({ kind }: { kind: Section }) {
   if (kind === "workspaces") {
@@ -23,6 +25,21 @@ function NavIcon({ kind }: { kind: Section }) {
         <ellipse cx="12" cy="5.5" rx="7.5" ry="3" />
         <path d="M4.5 5.5v6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-6" />
         <path d="M4.5 11.5v6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-6" />
+      </svg>
+    );
+  }
+  if (kind === "system-guides") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M6 3.5h9l3 3V20.5H6z" />
+        <path d="M15 3.5v3h3M9 10h6M9 14h6M9 18h4" />
+      </svg>
+    );
+  }
+  if (kind === "doc-stats") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 19.5h16M6 16v-4M10 16V9M14 16v-7M18 16V5" />
       </svg>
     );
   }
@@ -74,17 +91,37 @@ export function AppShell() {
             <NavIcon kind="traces" />
             <span>调用链路</span>
           </button>
+          <button
+            type="button"
+            data-active={section === "system-guides"}
+            onClick={() => setSection("system-guides")}
+          >
+            <NavIcon kind="system-guides" />
+            <span>系统文档</span>
+          </button>
+          <button
+            type="button"
+            data-active={section === "doc-stats"}
+            onClick={() => setSection("doc-stats")}
+          >
+            <NavIcon kind="doc-stats" />
+            <span>文档统计</span>
+          </button>
         </nav>
-        <p className="app-sidebar-note">只读查看 · 配置由本机 AI 维护</p>
+        <p className="app-sidebar-note">工作空间只读 · 系统文档可维护</p>
       </aside>
       <main
         className={
-          section === "traces" ? "app-content app-content--traces" : "app-content"
+          section === "traces" || section === "system-guides" || section === "doc-stats"
+            ? "app-content app-content--traces"
+            : "app-content"
         }
       >
         {section === "workspaces" ? <WorkspaceDashboard /> : null}
         {section === "data-sources" ? <DataSourceDashboard /> : null}
         {section === "traces" ? <TraceExplorer /> : null}
+        {section === "system-guides" ? <SystemGuideManager /> : null}
+        {section === "doc-stats" ? <DocumentReadStats /> : null}
       </main>
     </div>
   );

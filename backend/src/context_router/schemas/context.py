@@ -54,6 +54,27 @@ class PreparedDatabase(BaseModel):
     environment: DatabaseEnvironment | None = None
 
 
+class PreparedWorkspaceAccess(BaseModel):
+    mode: Literal["full", "documents_only"]
+    message: str
+
+
+class PreparedSystemGuideCatalogItem(BaseModel):
+    document_id: str
+    key: str
+    title: str
+    summary: str
+
+
+class PreparedSystemGuide(PreparedSystemGuideCatalogItem):
+    content: dict[str, Any]
+
+
+class PreparedSystemGuides(BaseModel):
+    required: list[PreparedSystemGuide] = Field(default_factory=list)
+    catalog: list[PreparedSystemGuideCatalogItem] = Field(default_factory=list)
+
+
 class PrepareTaskContextResult(BaseModel):
     task_id: int
     workspace: PreparedWorkspace
@@ -64,11 +85,18 @@ class PrepareTaskContextResult(BaseModel):
     databases: list[PreparedDatabase] = Field(default_factory=list)
     database_environment: PreparedDatabaseEnvironment | None = None
     environment_config: dict[str, Any] | None = None
+    workspace_access: PreparedWorkspaceAccess = Field(
+        default_factory=lambda: PreparedWorkspaceAccess(
+            mode="full",
+            message="当前目录是工作空间主目录。",
+        )
+    )
+    system_guides: PreparedSystemGuides = Field(default_factory=PreparedSystemGuides)
     warnings: list[str] | None = None
 
 
 class ContextDocumentReadRequest(BaseModel):
-    document_id: str = Field(min_length=1, max_length=64)
+    document_id: str = Field(min_length=1, max_length=96)
     section: str | None = Field(default=None, max_length=500)
 
 

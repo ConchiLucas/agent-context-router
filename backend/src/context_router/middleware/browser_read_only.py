@@ -31,18 +31,22 @@ def browser_request_allowed(
     normalized_method = method.upper()
     if normalized_method in _READ_METHODS:
         return True
-    if normalized_method != "POST":
-        return False
-    return any(pattern.fullmatch(path) for pattern in _safe_browser_post_patterns(api_prefix))
+    if normalized_method == "POST":
+        return any(pattern.fullmatch(path) for pattern in _safe_browser_post_patterns(api_prefix))
+    if normalized_method == "PUT":
+        prefix = re.escape(api_prefix.rstrip("/"))
+        return re.fullmatch(rf"{prefix}/system-guides/[^/]+/content", path) is not None
+    return False
 
 
 class BrowserReadOnlyMiddleware:
-    """Keep the browser management surface read-only.
+    """Keep browser writes limited to explicitly managed surfaces.
 
     Browsers identify themselves through Origin or Fetch Metadata headers.
     Local AI and operations clients without those browser headers can continue
     to use the validated command endpoints. Browser requests are limited to
-    reads plus an explicit diagnostic/read-sensitive POST allowlist.
+    reads, an explicit diagnostic/read-sensitive POST allowlist, and validated
+    updates to existing system-guide content.
     """
 
     def __init__(

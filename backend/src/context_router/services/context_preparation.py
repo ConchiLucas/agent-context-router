@@ -13,7 +13,11 @@ from context_router.schemas.context import (
     DatabaseEnvironmentSelection,
     PreparedDatabaseEnvironment,
     PreparedProject,
+    PreparedSystemGuide,
+    PreparedSystemGuideCatalogItem,
+    PreparedSystemGuides,
     PreparedWorkspace,
+    PreparedWorkspaceAccess,
     PrepareTaskContextResult,
 )
 from context_router.services.database_access import (
@@ -27,6 +31,7 @@ from context_router.services.project_registry import (
     ProjectSnapshot,
     WorkspaceSnapshot,
 )
+from context_router.services.system_guides import SystemGuideError, SystemGuideService
 
 
 class ContextPreparationError(ValueError):
@@ -48,10 +53,12 @@ class ContextPreparationService:
         registry: ProjectRegistry,
         task_repository: TaskWriter,
         database_access_service: DatabaseAccessService | None = None,
+        system_guide_service: SystemGuideService | None = None,
     ) -> None:
         self._registry = registry
         self._task_repository = task_repository
         self._database_access_service = database_access_service
+        self._system_guide_service = system_guide_service
 
     def prepare(
         self,
@@ -308,6 +315,7 @@ class ContextPreparationService:
                 if workspace.active_project is not None
                 else None
             )
+            system_guides = self._prepared_system_guides(warning_items)
 
             return PrepareTaskContextResult(
                 task_id=task_id,
@@ -333,6 +341,19 @@ class ContextPreparationService:
                     else None
                 ),
                 environment_config=environment_config,
+                workspace_access=PreparedWorkspaceAccess(
+                    mode=workspace.access_mode,
+                    message=(
+                        "当前目录是文档阅读目录，可以读取主目录共享文档；"
+                        "不能使用数据库、部署或共享文件覆盖功能。"
+                        if documents_only
+                        else (
+                            "当前目录是工作空间主目录，可以使用文档、数据库、"
+                            "部署和共享文件覆盖功能。"
+                        )
+                    ),
+                ),
+                system_guides=system_guides,
                 warnings=warning_items or None,
             )
         except Exception as exc:
@@ -342,6 +363,36 @@ class ContextPreparationService:
                 "任务上下文准备失败",
                 task_id=task_id,
             ) from exc
+
+    def _prepared_system_guides(self, warning_items: list[str]) -> PreparedSystemGuides:
+        if self._system_guide_service is None:
+            return PreparedSystemGuides()
+        try:
+            guides = self._system_guide_service.list_guides()
+        except SystemGuideError:
+            warning_items.append("系统使用说明暂时不可用；工作空间上下文不受影响")
+            return PreparedSystemGuides()
+        catalog = [
+            PreparedSystemGuideCatalogItem(
+                document_id=item.document_id,
+                key=item.guide_key,
+                title=item.title,
+                summary=item.summary,
+            )
+            for item in guides
+        ]
+        required = [
+            PreparedSystemGuide(
+                document_id=item.document_id,
+                key=item.guide_key,
+                title=item.title,
+                summary=item.summary,
+                content=item.document,
+            )
+            for item in guides
+            if item.include_in_prepare
+        ]
+        return PreparedSystemGuides(required=required, catalog=catalog)
 
     @staticmethod
     def _prepared_project(project: ProjectSnapshot) -> PreparedProject:

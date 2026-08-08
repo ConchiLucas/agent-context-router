@@ -16,8 +16,13 @@ export function isBrowserApiRequestAllowed(
   if (["GET", "HEAD", "OPTIONS"].includes(normalizedMethod)) {
     return true;
   }
-  if (normalizedMethod !== "POST") return false;
-  return SAFE_BROWSER_POST_PATHS.some((pattern) => pattern.test(path));
+  if (normalizedMethod === "POST") {
+    return SAFE_BROWSER_POST_PATHS.some((pattern) => pattern.test(path));
+  }
+  if (normalizedMethod === "PUT") {
+    return /^\/api\/system-guides\/[^/]+\/content$/.test(path);
+  }
+  return false;
 }
 
 export function assertBrowserApiRequestAllowed(
@@ -26,6 +31,6 @@ export function assertBrowserApiRequestAllowed(
 ): void {
   if (isBrowserApiRequestAllowed(path, method)) return;
   throw new Error(
-    "管理界面只提供查看；配置变更请由本机 AI 或运维命令执行",
+    "这个配置不能从管理界面修改；请由本机 AI 或运维命令执行",
   );
 }

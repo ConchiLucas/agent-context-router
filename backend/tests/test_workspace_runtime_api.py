@@ -163,7 +163,7 @@ def test_browser_cannot_write_workspace_runtime_configuration(tmp_path: Path) ->
     assert response.status_code == 405
 
 
-def test_browser_can_preview_and_commit_fixed_workspace_deploy_config(tmp_path: Path) -> None:
+def test_browser_cannot_call_legacy_workspace_deploy_sync(tmp_path: Path) -> None:
     app, workspace_id = build_app(tmp_path)
     _canonical_tree(tmp_path)
     headers = {"Origin": "http://127.0.0.1:49175"}
@@ -176,16 +176,11 @@ def test_browser_can_preview_and_commit_fixed_workspace_deploy_config(tmp_path: 
         committed = client.post(
             f"/api/workspaces/{workspace_id}/runtime-config/sync",
             headers=headers,
-            json={"expected_digest": preview.json()["digest"]},
+            json={"expected_digest": "ignored"},
         )
-        fetched = client.get(f"/api/workspaces/{workspace_id}/runtime-config")
 
-    assert preview.status_code == 200
-    assert preview.json()["valid"] is True
-    assert preview.json()["total"] == {"additions": 3, "updates": 0, "deletions": 0}
-    assert committed.status_code == 200
-    assert committed.json()["synchronized"] is True
-    assert fetched.json()["policy"]["project_order"] == ["backend1"]
+    assert preview.status_code == 405
+    assert committed.status_code == 405
 
 
 def test_workspace_deploy_sync_rejects_stale_preview_with_conflict(tmp_path: Path) -> None:

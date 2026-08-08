@@ -52,7 +52,8 @@ MCP_SERVER_INSTRUCTIONS = (
     "returned task_id and pass it to every document or database call for that task. "
     "When the document tree is large or the target is uncertain, call "
     "search_context_documents and then read the selected document or section with "
-    "read_context_document. "
+    "read_context_document. Follow required system_guides returned by prepare; catalog guide "
+    "IDs can also be passed to read_context_document. "
     "Use only database aliases returned by prepare. Search database objects before querying "
     "when the schema is uncertain. Database queries are always bounded and read-only. Call "
     "prepare again for a new conversation when no task_id is available. "
@@ -93,12 +94,15 @@ PREPARE_TOOL_DESCRIPTION = (
     "Omit environment to use the workspace default, or pass test/uat for this task only "
     "without changing the workspace active environment. The returned environment_config may "
     "contain connection details and credentials for that environment; never echo it into "
-    "logs. Summaries are only returned when explicitly declared in Markdown Front Matter."
+    "logs. workspace_access states the current directory permission, and system_guides returns "
+    "central usage instructions and a readable guide catalog. Summaries are only returned when "
+    "explicitly declared in Markdown Front Matter."
 )
 READ_TOOL_DESCRIPTION = (
-    "Read one or more Markdown documents or exact ATX-heading sections from the workspace "
-    "selected by prepare_task_context. task_id must be the value returned for the current "
-    "task. Results preserve request order and every call is recorded server-side."
+    "Read one or more mapped Markdown documents, exact ATX-heading sections, or JSON system "
+    "guides returned in prepare_task_context.system_guides.catalog. task_id must be the value "
+    "returned for the current task. Results preserve request order and every call is recorded "
+    "server-side."
 )
 SEARCH_CONTEXT_TOOL_DESCRIPTION = (
     "Search every mapped Markdown document in the workspace selected by prepare_task_context. "

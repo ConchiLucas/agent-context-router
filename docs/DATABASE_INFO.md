@@ -4,7 +4,7 @@
 
 PostgreSQL 控制面数据库与 MCP 查询的业务数据库是两个概念。业务数据库目前可执行的 Connector 为 ClickHouse、PostgreSQL、MySQL 和 MariaDB；SQL Server、SQLite、Oracle 的配置仍可由本机 AI/运维 API 维护，但能力接口会明确标记为不可搜索、不可查询。
 
-浏览器页面以读取控制面数据为主。携带任意 `Origin` 或浏览器 Fetch Metadata 的请求只允许 `GET/HEAD/OPTIONS`，以及连接测试、密码按需查看、MCP 接入测试、prepare 预览和 Workspace 刷新五类安全 `POST`；刷新只重建文档缓存与派生搜索索引，其他配置写请求由后端返回 `405 management_read_only`。不携带这些浏览器请求头的本机 AI/运维调用方仍可使用既有受 Schema、Service 和 Repository 校验的 API，避免直接写表而绕过环境 revision、文档缓存或 Connector 失效处理。
+浏览器页面以读取控制面数据为主，只允许通过专用接口保存已有 `system_guides` 的 JSON 正文，不能新建、删除或修改记录元数据。Workspace、Project、数据源、授权、环境和运行配置仍保持浏览器只读；其他配置写请求由后端返回 `405 management_read_only`。不携带浏览器识别头的本机 AI/运维调用方仍可使用既有受 Schema、Service 和 Repository 校验的 API，避免直接写表而绕过环境 revision、文档缓存或 Connector 失效处理。
 
 ## 连接配置
 
@@ -23,7 +23,9 @@ docker compose exec backend uv run alembic upgrade head
 docker compose exec backend uv run alembic current
 ```
 
-当前 head 为 `20260808_0024`。`0024 -> 0023` 会删除数据库中的 Workspace 文档与部署源文件副本，不影响目标目录现有文件。若要验证更早 downgrade/upgrade，使用一次性测试数据库，不要在保存真实调用记录的控制面库上直接 downgrade。
+当前 head 为 `20260808_0025`。`0025 -> 0024` 会删除全部统一系统 JSON 文档；`0024 -> 0023` 会删除数据库中的 Workspace 文档与部署源文件副本，不影响目标目录现有文件。若要验证 downgrade/upgrade，使用一次性测试数据库，不要在保存真实数据的控制面库上直接 downgrade。
+
+`system_guides` 只保存 `guide_key`、JSONB 正文、是否随 prepare 直接返回全文、菜单顺序和时间戳，没有 `enabled` 字段。记录存在即进入系统文档菜单和 prepare 目录。
 
 ## 当前表
 

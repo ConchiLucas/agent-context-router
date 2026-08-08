@@ -3,6 +3,8 @@ import type {
   ContextTaskSummary,
   DatabaseEnvironment,
   DocumentDetail,
+  DocumentReadStatItem,
+  DocumentReadTaskItem,
   DocumentTreeNode,
   McpIntegrationInfo,
   McpIntegrationTestResult,
@@ -23,6 +25,8 @@ import type {
   WorkspaceEnvironmentConfig,
   WorkspaceSummary,
   WorkspaceSharedFilesResult,
+  SystemGuideDetail,
+  SystemGuideWrite,
 } from "@/lib/types";
 import {
   buildMcpTraceListPath,
@@ -57,6 +61,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function listWorkspaces(): Promise<WorkspaceSummary[]> {
   return request<WorkspaceSummary[]>("/api/workspaces");
+}
+
+export function listSystemGuides(): Promise<SystemGuideDetail[]> {
+  return request<SystemGuideDetail[]>("/api/system-guides", { cache: "no-store" });
+}
+
+export function updateSystemGuideContent(
+  guideId: string,
+  document: SystemGuideWrite["document"],
+): Promise<SystemGuideDetail> {
+  return request<SystemGuideDetail>(`/api/system-guides/${guideId}/content`, {
+    method: "PUT",
+    body: JSON.stringify({ document }),
+  });
 }
 
 export function reloadLocalWorkspaceMapping(): Promise<WorkspaceSummary[]> {
@@ -186,6 +204,38 @@ export function getMcpTrace(taskId: number): Promise<McpTraceDetail> {
   return request<McpTraceDetail>(`/api/mcp-traces/${taskId}`, {
     cache: "no-store",
   });
+}
+
+export function listDocumentReadStats(params?: {
+  workspace_id?: string;
+  limit?: number;
+}): Promise<DocumentReadStatItem[]> {
+  const searchParams = new URLSearchParams();
+  if (params?.workspace_id) {
+    searchParams.set("workspace_id", params.workspace_id);
+  }
+  if (params?.limit) {
+    searchParams.set("limit", params.limit.toString());
+  }
+  const queryStr = searchParams.toString();
+  const path = `/api/document-read-stats${queryStr ? `?${queryStr}` : ""}`;
+  return request<DocumentReadStatItem[]>(path, { cache: "no-store" });
+}
+
+export function getDocumentReadStatTasks(
+  documentId: string,
+  params?: { limit?: number },
+): Promise<DocumentReadTaskItem[]> {
+  const searchParams = new URLSearchParams();
+  if (params?.limit) {
+    searchParams.set("limit", params.limit.toString());
+  }
+  const queryStr = searchParams.toString();
+  const encodedDocId = encodeURIComponent(documentId);
+  const path = `/api/document-read-stats/${encodedDocId}/tasks${
+    queryStr ? `?${queryStr}` : ""
+  }`;
+  return request<DocumentReadTaskItem[]>(path, { cache: "no-store" });
 }
 
 export function getMcpDatabaseToolPayload(

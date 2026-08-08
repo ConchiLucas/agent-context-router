@@ -26,7 +26,7 @@ docker compose up -d --force-recreate backend frontend
 
 Compose 的前端和后端宿主机端口都显式绑定 `127.0.0.1`，不会默认监听局域网网卡。后端 CORS 只允许 `http://127.0.0.1:49175` 和 `http://localhost:49175`；本项目当前定位为本机工具，不提供应用层鉴权。若未来需要远程访问，应先补 HTTPS、鉴权和新的 Origin 配置，而不是直接改成公网绑定。
 
-携带任意 `Origin` 或浏览器 Fetch Metadata（`Sec-Fetch-Mode` / `Sec-Fetch-Site`）的请求由后端只读中间件限制为 `GET/HEAD/OPTIONS`，以及五类不会修改配置的安全 `POST`：数据源连接测试、数据源密码按需查看、MCP 接入测试、Workspace prepare 预览和 Workspace 刷新。刷新只重建文档缓存与派生搜索索引；其他浏览器配置写请求返回 `405 management_read_only`。本机 AI 或运维调用方不携带这些浏览器请求头，仍可使用既有受 Schema、Service 和 Repository 校验的本地 API 维护配置；这只是回环单用户部署下的调用边界，不替代身份认证。
+携带任意 `Origin` 或浏览器 Fetch Metadata（`Sec-Fetch-Mode` / `Sec-Fetch-Site`）的请求由后端中间件限制为读取、既有安全操作，以及系统文档 JSON 正文的受校验保存。浏览器不能新建或删除系统文档，也不能修改 key、顺序或 prepare 策略；其他控制面配置写请求返回 `405 management_read_only`。本机 AI 或运维调用方不携带这些浏览器请求头，仍可使用既有受 Schema、Service 和 Repository 校验的本地 API 维护配置；这只是回环单用户部署下的调用边界，不替代身份认证。
 
 ## 手动启动控制面与 Host Runner
 
@@ -122,7 +122,7 @@ CONTEXT_ROUTER_DATABASE_URL=postgresql://USER:PASSWORD@host.docker.internal:5432
 docker compose exec backend uv run alembic upgrade head
 ```
 
-当前 migration head 为 `20260808_0024`。`0024` 增加 Workspace 文档与部署源文件的数据库副本；更早 migration 保持原兼容语义。
+当前 migration head 为 `20260808_0025`。`0024` 增加 Workspace 文档与部署源文件的数据库副本，`0025` 增加统一系统 JSON 文档；更早 migration 保持原兼容语义。
 
 PostgreSQL 保存 Workspace、Project 类型、源码相对路径、文档入口相对路径、数据源、数据库清单、项目数据库关联及 Workspace 唯一 `mcp_alias`、可选 TEST/UAT 数据库映射与通用 JSON、带 scope/环境/revision/选择模式的 MCP task、read call、文档顺序、数据库调用审计元数据，以及可重建的文档搜索分块与索引状态。文档树和 Markdown 原文仍从磁盘重建，文档工具完整出入参不持久化；`search_database_objects` 和 `execute_database_query` 自动保存有界、可过期的详情快照，供本机链路页面按需查看。后端启动时恢复工作空间和全部项目配置，并从磁盘重建每个项目的内存树与匹配版本词法索引；路径失效的项目仍保留在页面并显示错误。
 
@@ -182,6 +182,8 @@ workspaces:
 ```
 
 编辑后在工作空间页点击“重载本机映射”。`visible: false` 的卡片不显示；reader 目录只共享主目录文档，不能使用数据库或部署工具。复制数据库不会覆盖这份本机文件。
+
+Context Router 的通用使用规则不写入目标工作空间。统一 JSON 文档的格式、页面和 prepare 返回方式见[系统文档维护说明](./SYSTEM_GUIDES.md)。
 
 ## 目标 Workspace 的文档与 deploy 文件同步
 

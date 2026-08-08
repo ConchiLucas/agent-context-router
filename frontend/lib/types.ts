@@ -11,6 +11,27 @@ export type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue };
 export type EnvironmentJsonObject = Record<string, JsonValue>;
+export type SystemGuideDocument = Record<string, JsonValue>;
+
+export interface SystemGuideDetail {
+  id: string;
+  document_id: string;
+  guide_key: string;
+  title: string;
+  summary: string;
+  document: SystemGuideDocument;
+  include_in_prepare: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SystemGuideWrite {
+  guide_key: string;
+  document: SystemGuideDocument;
+  include_in_prepare: boolean;
+  sort_order: number;
+}
 
 export interface ProjectSummary {
   id: string;
@@ -332,6 +353,25 @@ export interface PrepareTaskContextResult {
   databases: PreparedDatabase[];
   database_environment?: PreparedDatabaseEnvironment | null;
   environment_config?: EnvironmentJsonObject | null;
+  workspace_access: {
+    mode: "full" | "documents_only";
+    message: string;
+  };
+  system_guides: {
+    required: Array<{
+      document_id: string;
+      key: string;
+      title: string;
+      summary: string;
+      content: SystemGuideDocument;
+    }>;
+    catalog: Array<{
+      document_id: string;
+      key: string;
+      title: string;
+      summary: string;
+    }>;
+  };
   warnings?: string[];
 }
 
@@ -601,3 +641,24 @@ export interface McpIntegrationTestResult {
   finished_at: string;
   stages: McpIntegrationTestStage[];
 }
+
+export interface DocumentReadStatItem {
+  document_id: string;
+  document_path?: string | null;
+  read_count: number;
+  task_count: number;
+  last_read_at: string;
+}
+
+export interface DocumentReadTaskItem {
+  task_id: number;
+  task: string;
+  agent_name?: string | null;
+  cwd: string;
+  workspace_name?: string | null;
+  active_project_name?: string | null;
+  created_at: string;
+  read_count: number;
+  sections: string[];
+}
+

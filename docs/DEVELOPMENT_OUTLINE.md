@@ -9,6 +9,7 @@
 | 产品目标、文档格式和全文检索 | [业务功能说明](./BUSINESS_FEATURES.md) | `services/document_tree.py`、`services/document_search.py` |
 | 工作空间/项目只读页面、AI/运维 API 和缓存链路 | [业务功能说明](./BUSINESS_FEATURES.md)、[前后端链路速查](./FRONTEND_BACKEND_FLOW.md) | `workspace-dashboard.tsx`、`workspace-detail.tsx`、`middleware/browser_read_only.py`、`api/workspaces.py`、`services/project_registry.py` |
 | 工作空间本机路径、卡片显示和共享文档目录 | [业务功能说明](./BUSINESS_FEATURES.md)、[启动与开发规范](./STARTUP_GUIDE.md) | `.context-router/workspaces.local.yaml`、`services/local_workspace_mapping.py` |
+| 系统 JSON 文档、prepare 使用说明和系统文档菜单 | [系统文档维护说明](./SYSTEM_GUIDES.md)、[前后端链路速查](./FRONTEND_BACKEND_FLOW.md) | `system-guide-manager.tsx`、`api/system_guides.py`、`services/system_guides.py` |
 | 启动、测试、lint、build | [启动与开发规范](./STARTUP_GUIDE.md) | `docker-compose.yml` |
 | 工作空间/项目持久化和数据库相关判断 | [数据库信息](./DATABASE_INFO.md) | `workspace_repository.py`、`project_repository.py`、`migrations/` |
 | 数据库 MCP 授权和 SQL 安全 | [业务功能说明](./BUSINESS_FEATURES.md)、[前后端链路速查](./FRONTEND_BACKEND_FLOW.md) | `services/database_access.py`、`database/policy.py` |
@@ -25,7 +26,8 @@
 - 工作空间业务 ID、项目和数据源配置保存在 PostgreSQL；卡片显示、主目录和共享文档目录由当前项目 `.context-router/workspaces.local.yaml` 控制。启用本机文件后，不使用数据库 `root_path` 覆盖本机路径。
 - 主目录是文档和部署文件的唯一维护目录。`document_reader_paths` 中相同代码的其他分支目录可 prepare/search/read 主目录文档，但数据库和部署工具必须拒绝。
 - `workspace_shared_files` 保存主目录文档和部署文件的数据库副本。页面只提供双向全量覆盖，不维护版本、差异或冲突状态。
-- 浏览器管理面以只读查看为主，并允许重建可恢复运行时状态的 Workspace 刷新。前端请求策略与后端 `BrowserReadOnlyMiddleware` 都只允许 `GET/HEAD/OPTIONS` 及连接测试、密码 reveal、MCP integration test、prepare preview、Workspace refresh 五类安全 `POST`；刷新只重建文档缓存和派生搜索索引，不修改 Workspace 或 Project 配置。
+- Context Router 自身的使用规则保存在 `system_guides`，不写入业务工作空间。系统文档没有启用状态；全部进入 prepare 目录，只有是否直接返回全文的区别。
+- 浏览器管理面以只读查看为主，并允许既有安全操作以及已有系统文档 JSON 正文的受校验保存。系统文档的新建、删除和元数据调整只供本机 AI/运维；页面只有“保存内容”。
 - 工作空间、项目、数据源、数据库清单、项目授权、环境映射/JSON、默认环境和运行配置仍由本机 AI/运维使用既有受校验 API 维护；此类调用不携带 `Origin` 或 `Sec-Fetch-*` 浏览器请求头。不要为了绕过页面限制直接写 PostgreSQL，否则会跳过路径、事务、环境 revision、缓存与 Connector 失效处理。
 - 物理数据源配置全局共享，数据库授权继续由 `project_databases` 绑定具体 Project；Workspace task 汇总使用所有子项目当前有效的授权，`mcp_alias` 在整个 Workspace 内大小写无关唯一。
 - 可选的 Workspace 数据库环境映射把同一逻辑别名分别绑定到 TEST/UAT 的项目数据库关联。`prepare_task_context` 可选传 `environment='test'|'uat'`：显式值只固定本 task 的 `task_explicit` 环境，不修改 Workspace 当前环境；省略时固化当前环境并记录为 `workspace_default`。两种模式都保存共享 revision，revision 变化后旧 task 必须重新 prepare，禁止静默换库。
@@ -50,5 +52,5 @@
 - 顶层页面只读展示 Workspace；进入详情后使用“前端项目 / 后端项目 / 数据源汇总”三页签。环境详情、查看调用记录、查看文档树和查看 MCP JSON 位于 Workspace 工具栏；前端项目不显示数据库授权，后端项目只读展示项目级数据源授权。环境映射/JSON与运行配置同样只读。
 - 完整出入参只对白名单数据库工具 `search_database_objects`、`execute_database_query` 自动采集，并通过 no-store 详情 API 懒加载；prepare/search/read 不建立完整 payload 快照。
 - 新 task 使用 `scope='workspace'` 和无外键的稳定 Workspace/活动项目快照；`scope='project'` 的旧 task 继续按原 project_id/project_key 读取、搜索和解析数据库，避免升级后历史串链。后端启动会收敛遗留 running 调用，Trace API 与页面明确区分完整、运行中和可能不完整。
-- migration head 为 `20260808_0024`；`0024` 增加可全量覆盖的 Workspace 文档与部署源文件副本。旧项目 ID、数据库授权和调用历史保持不变。
+- migration head 为 `20260808_0025`；`0024` 增加可全量覆盖的 Workspace 文档与部署源文件副本，`0025` 增加统一系统 JSON 文档。旧项目 ID、数据库授权和调用历史保持不变。
 - 本地服务默认只绑定回环地址；真实 ClickHouse 测试使用根 Compose 的 `integration` profile 和固定镜像版本。

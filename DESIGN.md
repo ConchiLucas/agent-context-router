@@ -178,6 +178,7 @@ At 200% zoom the interface must collapse without hiding the primary or cancel ac
 | Shared-file dialog | `WorkspaceSharedFiles` | Show primary root and the two fixed directories. Offer database-to-local and local-to-database full replacement with a single explicit confirmation step. |
 | Confirmation dialog | existing management modal primitives | State which side is replaced and list `docs/` and `deploy/context-router/`; cancel is first, replacement is last. |
 | Error banner | `.error-banner` | Use `role=alert`, preserve the error until the user retries or closes the containing dialog. |
+| System guide manager | `.system-guide-*` | Use the existing sidebar and a list/editor split. JSON source is editable; tree mode is a formatted read-only preview. The browser exposes one “保存内容” action only—no create, delete, key, ordering, prepare policy, enabled, or publishing controls. |
 
 Buttons cover default, hover, focus, disabled, and loading. Critical replacement results use an inline persistent success or error message, not a transient toast. Dialogs trap focus, close on Escape only while idle, and restore focus to the trigger.
 
@@ -188,6 +189,7 @@ Buttons cover default, hover, focus, disabled, and loading. Critical replacement
 - The primary workspace directory owns `docs/` and `deploy/context-router/`.
 - Additional reader paths can prepare and read the primary directory's documents but cannot use database or runtime tools.
 - File synchronization is full replacement in either direction. No revisions, conflicts, automatic merge, or diff UI are introduced.
+- System guides are central Context Router JSON documents. The browser only updates the selected document's JSON body; document creation, deletion and metadata remain outside the browser management surface.
 
 ## Accessibility and localization
 
@@ -195,7 +197,7 @@ Buttons cover default, hover, focus, disabled, and loading. Critical replacement
 - Normal text must meet WCAG AA contrast; color must be paired with literal success/error wording.
 - Respect `prefers-reduced-motion`; this flow does not require animation.
 - Test long Chinese workspace names, long unbroken paths, and mixed Chinese/Latin labels.
-- No text inputs are introduced by this change, so IME behavior is unaffected.
+- System guide title content is edited as JSON source. Search and JSON text input must preserve Chinese IME composition; validation occurs after input changes or explicit save, never on individual composition keystrokes.
 
 ## Known gaps and decisions
 

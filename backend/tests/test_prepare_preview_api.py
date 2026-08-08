@@ -99,7 +99,8 @@ summary: 项目导航。
     project_root = payload["documents"]
     assert project_root["summary"] == "项目导航。"
     assert "summary" not in project_root["children"][0]
-    assert "content" not in response.text
+    assert "content" not in str(payload["documents"])
+    assert payload["system_guides"]["required"][0]["content"]["schema_version"] == 1
     assert payload["database_environment"] == {
         "key": "test",
         "name": "TEST",

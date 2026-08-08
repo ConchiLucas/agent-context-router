@@ -25,7 +25,7 @@ Browser with Origin or Fetch Metadata
   -> frontend browser-api-policy
   -> BrowserReadOnlyMiddleware
   -> 允许 GET / HEAD / OPTIONS
-  -> 仅额外允许连接测试、密码 reveal、MCP integration test、prepare preview、Workspace refresh 五类 POST
+  -> 额外允许既有安全 POST 与系统文档正文专用 PUT
   -> 其他配置写请求返回 405 management_read_only
 
 Local AI / operations without browser headers
@@ -46,7 +46,7 @@ Codex / Antigravity
   -> 检查 Workspace 开关和全部项目缓存
   -> PostgreSQL mcp_tasks 生成 scope=workspace 的 task_id
   -> 保存稳定 workspace 与可选 active_project 快照
-  -> 返回 workspace + projects + active_project + 显式根树或合成根树 JSON
+  -> 返回 workspace_access + system_guides + workspace + projects + active_project + 文档树
   -> read_context_document(task_id, requests[])
   -> ContextDocumentReadService 按稳定 workspace_id/workspace_key 校验任务
   -> Workspace DocumentCache 按请求顺序返回完整 Markdown 或章节
@@ -152,6 +152,7 @@ prepare 和文档搜索不建立业务数据库连接。业务数据库离线时
 | 加载 Engine 能力矩阵 | `data-source-dashboard.tsx` | `GET /api/data-source-engines` |
 | 测试当前连接 | `data-source-dashboard.tsx` | 安全 `POST /api/data-sources/{id}/test`，返回状态、耗时和短错误码 |
 | 查看全局 MCP 链路 | `trace-explorer.tsx`、`mcp-traces.ts` | `GET /api/mcp-traces`、`GET /api/mcp-traces/{task_id}` |
+| 编辑系统 JSON 文档正文 | `system-guide-manager.tsx` | `GET /api/system-guides`、`PUT /api/system-guides/{id}/content` |
 | 查看后端项目数据源授权 | `project-dashboard.tsx` | `GET /api/projects/{id}/data-source-options` |
 | 查看项目运行配置 | `project-runtime-config.tsx` | `GET /api/projects/{id}/runtime-config` |
 | 查看运行记录与有界日志 | `project-runtime-config.tsx` | `GET /api/projects/{id}/runtime-runs`、`GET /api/projects/{id}/runtime-runs/{run_id}`、`GET /api/projects/{id}/runtime-runs/{run_id}/log` |
@@ -177,7 +178,7 @@ api/workspaces.py
   -> schemas/workspaces.py / schemas/projects.py
 ```
 
-- `BrowserReadOnlyMiddleware` 根据任意 `Origin` 或浏览器 Fetch Metadata 拦截配置写请求；`frontend/lib/browser-api-policy.ts` 在请求发出前执行同一策略。双层限制共享 `GET/HEAD/OPTIONS` 与七类固定安全 `POST` 边界，其中 deploy 同步只开放精确 preview/commit 路径。
+- `BrowserReadOnlyMiddleware` 根据任意 `Origin` 或浏览器 Fetch Metadata 拦截配置写请求；`frontend/lib/browser-api-policy.ts` 在请求发出前执行同一策略。双层限制只额外开放 `PUT /api/system-guides/{id}/content`，后端保留 key、顺序和 prepare 策略；其他系统文档完整 CRUD 只供本机 AI/运维。
 - `WorkspaceManagementService` 继续为本机 AI/运维编排受校验的工作空间 CRUD、工作空间内项目 CRUD、刷新和数据源汇总；`workspace_repository.py` 持久化工作空间根目录、类型和总开关。
 - `project_repository.py` 持久化稳定项目 ID、`workspace_id`、`frontend/backend` 的 `project_kind`、工作空间内分别唯一的源码 `relative_path`、文档入口 `document_relative_path` 和兼容字段；`document_projects` 不再有 enabled。后端启动时从独立文档入口重建缓存，路径失效项目保留配置和错误。
 - `ProjectRegistry` 管理可选的 Workspace 根文档缓存和每个 Project 缓存；根 `AGENTS.md` 存在时，导航树严格采用其显式父子关系，未声明的 Project 根不自动挂入树中；根入口不存在时动态构建直接列出 Project 的合成入口。两种情况下 Workspace 聚合缓存都保留全部项目文档，供搜索和按 ID 读取。cwd 先按根目录深度选择最深 Workspace，再按源码根选择最深 Project 作为 `active_project`。
