@@ -44,6 +44,7 @@ summary: 项目导航。
         Settings(
             workspace_host_root=tmp_path,
             workspace_container_root=tmp_path,
+            workspace_mapping_file=None,
             default_project_name=None,
             default_agents_path=None,
         ),

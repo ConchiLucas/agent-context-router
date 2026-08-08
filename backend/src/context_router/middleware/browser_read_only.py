@@ -17,8 +17,8 @@ def _safe_browser_post_patterns(api_prefix: str) -> tuple[re.Pattern[str], ...]:
         re.compile(rf"^{prefix}/mcp/integration/tests$"),
         re.compile(rf"^{prefix}/workspaces/[^/]+/prepare-preview$"),
         re.compile(rf"^{prefix}/workspaces/[^/]+/refresh$"),
-        re.compile(rf"^{prefix}/workspaces/[^/]+/runtime-config/sync-preview$"),
-        re.compile(rf"^{prefix}/workspaces/[^/]+/runtime-config/sync$"),
+        re.compile(rf"^{prefix}/workspaces/reload-local-mapping$"),
+        re.compile(rf"^{prefix}/workspaces/[^/]+/shared-files/(restore|publish)$"),
     )
 
 

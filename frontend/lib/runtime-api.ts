@@ -57,28 +57,6 @@ export interface RuntimeRunLog {
   truncated: boolean;
 }
 
-export interface WorkspaceDeployChangeSummary {
-  additions: number;
-  updates: number;
-  deletions: number;
-}
-
-export interface WorkspaceDeployProfilePreview {
-  owner: string;
-  mode: "start" | RuntimeMode;
-  file_count: number;
-  changes: WorkspaceDeployChangeSummary;
-}
-
-export interface WorkspaceDeploySyncPreview {
-  valid: boolean;
-  source_root: string;
-  digest: string;
-  profiles: WorkspaceDeployProfilePreview[];
-  total: WorkspaceDeployChangeSummary;
-  synchronized: boolean;
-}
-
 const configuredBase =
   process.env.NEXT_PUBLIC_CONTEXT_ROUTER_API_URL ??
   "http://127.0.0.1:49173";
@@ -140,27 +118,5 @@ export function getProjectRuntimeRunLog(
 ): Promise<RuntimeRunLog> {
   return runtimeRequest<RuntimeRunLog>(
     `/projects/${encodeURIComponent(projectId)}/runtime-runs/${encodeURIComponent(runId)}/log`,
-  );
-}
-
-export function previewWorkspaceDeploySync(
-  workspaceId: string,
-): Promise<WorkspaceDeploySyncPreview> {
-  return runtimeRequest<WorkspaceDeploySyncPreview>(
-    `/workspaces/${encodeURIComponent(workspaceId)}/runtime-config/sync-preview`,
-    { method: "POST" },
-  );
-}
-
-export function commitWorkspaceDeploySync(
-  workspaceId: string,
-  expectedDigest: string,
-): Promise<WorkspaceDeploySyncPreview> {
-  return runtimeRequest<WorkspaceDeploySyncPreview>(
-    `/workspaces/${encodeURIComponent(workspaceId)}/runtime-config/sync`,
-    {
-      method: "POST",
-      body: JSON.stringify({ expected_digest: expectedDigest }),
-    },
   );
 }

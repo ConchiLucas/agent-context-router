@@ -40,6 +40,7 @@ def test_mcp_integration_returns_client_configs_and_readiness(tmp_path: Path) ->
             public_mcp_url="https://context.example.com/mcp/",
             workspace_host_root=tmp_path,
             workspace_container_root=tmp_path,
+            workspace_mapping_file=None,
         ),
         task_repository=FakeTaskRepository(),
         project_repository=project_repository,

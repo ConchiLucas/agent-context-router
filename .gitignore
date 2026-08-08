@@ -27,3 +27,4 @@ document-sources/*
 
 # IDEs
 .idea/
+.context-router/workspaces.local.yaml

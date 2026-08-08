@@ -32,6 +32,7 @@ def _app(tmp_path: Path, *, with_tasks: bool = False):
             database_url=None,
             workspace_host_root=tmp_path,
             workspace_container_root=tmp_path,
+            workspace_mapping_file=None,
             default_project_name=None,
             default_agents_path=None,
         ),

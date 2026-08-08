@@ -37,20 +37,6 @@ test("allows reads and the explicit safe browser POST allowlist", () => {
     ),
     true,
   );
-  assert.equal(
-    isBrowserApiRequestAllowed(
-      "/api/workspaces/workspace-1/runtime-config/sync-preview",
-      "POST",
-    ),
-    true,
-  );
-  assert.equal(
-    isBrowserApiRequestAllowed(
-      "/api/workspaces/workspace-1/runtime-config/sync",
-      "POST",
-    ),
-    true,
-  );
 });
 
 test("rejects browser configuration and execution commands", () => {
@@ -89,7 +75,7 @@ test("rejects browser configuration and execution commands", () => {
   );
   assert.equal(
     isBrowserApiRequestAllowed(
-      "/api/workspaces/workspace-1/runtime-config/sync/extra",
+      "/api/workspaces/workspace-1/runtime-config/sync",
       "POST",
     ),
     false,

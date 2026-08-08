@@ -152,7 +152,15 @@ class ContextPreparationService:
         database_environment_warning: str | None = None
         environment_config = None
         environment_config_warning: str | None = None
-        if self._database_access_service is None:
+        documents_only = workspace.access_mode == "documents_only"
+        if documents_only:
+            if environment is not None:
+                raise ContextPreparationError(
+                    "共享文档目录不能选择数据库环境",
+                    code="documents_only",
+                )
+            database_environment_warning = "当前目录共享主工作空间文档；数据库和部署工具不可用"
+        elif self._database_access_service is None:
             if environment is not None:
                 raise ContextPreparationError(
                     "工作空间尚未配置环境选择器，不能显式选择环境",
@@ -266,7 +274,11 @@ class ContextPreparationService:
                 )
                 if warning
             ]
-            if self._database_access_service is not None and database_environment_warning is None:
+            if (
+                not documents_only
+                and self._database_access_service is not None
+                and database_environment_warning is None
+            ):
                 try:
                     databases = self._database_access_service.list_prepared_workspace_databases(
                         workspace.id,

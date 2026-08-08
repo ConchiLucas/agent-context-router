@@ -30,6 +30,10 @@ from context_router.repositories.database_environment_repository import (
 )
 from context_router.repositories.task_repository import TaskReader, TaskRepositoryError
 from context_router.schemas.context import PreparedDatabase
+from context_router.services.local_workspace_mapping import (
+    LocalWorkspaceMappingError,
+    LocalWorkspaceMappingService,
+)
 from context_router.services.project_registry import ProjectRegistry, ProjectRegistryError
 
 DatabaseEnvironmentSelection = Literal["workspace_default", "task_explicit"]
@@ -53,6 +57,7 @@ class DatabaseAccessService:
         data_source_repository: DataSourceStore,
         connector_registry: ConnectorRegistry,
         database_environment_repository: DatabaseEnvironmentStore | None = None,
+        local_mapping: LocalWorkspaceMappingService | None = None,
     ) -> None:
         self._settings = settings
         self._registry = registry
@@ -60,6 +65,7 @@ class DatabaseAccessService:
         self._data_source_repository = data_source_repository
         self._connector_registry = connector_registry
         self._database_environment_repository = database_environment_repository
+        self._local_mapping = local_mapping
         self._hard_limits = QueryPolicyHardLimits(
             max_rows=settings.database_max_rows,
             max_result_bytes=settings.database_max_result_bytes,
@@ -94,6 +100,14 @@ class DatabaseAccessService:
                     "workspace_unavailable",
                     "任务缺少工作空间快照，请重新 prepare",
                 )
+            if self._local_mapping is not None:
+                try:
+                    self._local_mapping.require_full_access(
+                        cwd=task.cwd,
+                        workspace_id=workspace_id,
+                    )
+                except LocalWorkspaceMappingError as exc:
+                    raise DatabaseAccessError("documents_only", str(exc)) from exc
             try:
                 self._registry.get_workspace_snapshot_for_task(
                     workspace_id=workspace_id,

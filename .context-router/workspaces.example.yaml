@@ -1,0 +1,9 @@
+version: 1
+
+# key 必须使用数据库 workspaces.id。所有路径都相对 CONTEXT_ROUTER_WORKSPACE_HOST_ROOT。
+workspaces:
+  workspace-id-from-database:
+    visible: true
+    main_path: company_workforce/example-main
+    document_reader_paths:
+      - company_workforce/example-feature-branch

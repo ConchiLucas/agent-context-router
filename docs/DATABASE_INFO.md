@@ -23,13 +23,14 @@ docker compose exec backend uv run alembic upgrade head
 docker compose exec backend uv run alembic current
 ```
 
-当前 head 为 `20260802_0023`。若要验证 downgrade/upgrade，使用一次性测试数据库，不要在保存真实调用记录的控制面库上直接 downgrade：`0023 -> 0022` 会删除 Workspace 运行配置、运行策略、父操作、步骤和宿主机 Runner 状态；`0022 -> 0021` 会恢复已废弃的 Workspace、数据源、项目数据库授权和环境映射配置 `enabled` 字段；`0021 -> 0020` 会删除 task 的 `database_environment_selection`，失去显式任务环境与 Workspace 默认环境的持久化区分；`0020 -> 0019` 会删除 TEST/UAT 通用环境 JSON；`0019 -> 0018` 会删除 Workspace TEST/UAT 环境映射和 task 环境 revision；`0018 -> 0017` 会删除旧 Runtime Runner 异步执行记录；`0017 -> 0016` 会删除项目运行配置文件；更早版本还会依次删除项目文档入口、Workspace 文档派生索引、Project 类型和 Workspace task 快照、工作空间表、Project 文档搜索索引、数据库 payload、统一 MCP 工具链路、数据库调用历史和 MCP alias。
+当前 head 为 `20260808_0024`。`0024 -> 0023` 会删除数据库中的 Workspace 文档与部署源文件副本，不影响目标目录现有文件。若要验证更早 downgrade/upgrade，使用一次性测试数据库，不要在保存真实调用记录的控制面库上直接 downgrade。
 
 ## 当前表
 
 | 表 | 用途 |
 | --- | --- |
 | `workspaces` | 保存顶层工作空间 ID、名称、类型、唯一绝对根目录和创建/更新时间；记录存在即参与 cwd 匹配 |
+| `workspace_shared_files` | 保存主映射目录 `docs/` 与各 `deploy/context-router/` 的 UTF-8 源文件副本；按 Workspace、类型和相对路径唯一，用于双向全量覆盖 |
 | `document_projects` | 保存稳定项目 ID、名称、`frontend/backend` 的 `project_kind`、所属 `workspace_id`、工作空间内分别唯一的源码 `relative_path` 与文档入口 `document_relative_path`、兼容 `project_type`/`agents_path` 和创建/更新时间；没有 Project enabled |
 | `data_sources` | 保存物理数据库连接、独立数据源分类、数据库类型和连接参数；密码不进入列表 API，仅可由本机页面通过独立 no-store 接口按需读取 |
 | `data_source_databases` | 保存每个物理连接下可供项目选择的实际库、schema 或 SQLite 文件清单 |

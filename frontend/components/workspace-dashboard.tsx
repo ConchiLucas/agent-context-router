@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { WorkspaceDetail } from "@/components/workspace-detail";
-import { getWorkspace, listWorkspaces, refreshWorkspace } from "@/lib/api";
+import {
+  getWorkspace,
+  listWorkspaces,
+  refreshWorkspace,
+  reloadLocalWorkspaceMapping,
+} from "@/lib/api";
 import {
   clearWorkspaceRefreshError,
   finishWorkspaceRefresh,
@@ -31,6 +36,7 @@ export function WorkspaceDashboard() {
   const [selectedType, setSelectedType] = useState(ALL_WORKSPACE_TYPES);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadingMapping, setReloadingMapping] = useState(false);
   const [refreshingWorkspaceIds, setRefreshingWorkspaceIds] = useState<
     Set<string>
   >(() => new Set());
@@ -83,6 +89,18 @@ export function WorkspaceDashboard() {
     );
   }, []);
 
+  const handleReloadMapping = useCallback(async () => {
+    setReloadingMapping(true);
+    try {
+      setWorkspaces(await reloadLocalWorkspaceMapping());
+      setError(null);
+    } catch (requestError) {
+      setError((requestError as Error).message);
+    } finally {
+      setReloadingMapping(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (
       selectedType !== ALL_WORKSPACE_TYPES &&
@@ -120,6 +138,17 @@ export function WorkspaceDashboard() {
 
   return (
     <>
+      <div className="workspace-mapping-toolbar">
+        <p>卡片显示和目录来自当前项目的本机映射文件。</p>
+        <button
+          type="button"
+          className="secondary-button"
+          disabled={reloadingMapping}
+          onClick={() => void handleReloadMapping()}
+        >
+          {reloadingMapping ? "正在重载…" : "重载本机映射"}
+        </button>
+      </div>
       <nav
         className="project-type-tabs"
         role="tablist"
@@ -209,6 +238,11 @@ export function WorkspaceDashboard() {
               </button>
             </header>
             <code className="workspace-root-path">{workspace.root_path}</code>
+            {workspace.document_reader_count > 0 ? (
+              <p className="workspace-document-readers">
+                共享文档目录 {workspace.document_reader_count} 个
+              </p>
+            ) : null}
             <div className="workspace-card-stats">
               <div>
                 <strong>{workspace.project_count ?? 0}</strong>

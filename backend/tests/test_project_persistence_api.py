@@ -16,6 +16,7 @@ def test_project_configuration_crud_api(tmp_path: Path) -> None:
         Settings(
             workspace_host_root=tmp_path,
             workspace_container_root=tmp_path,
+            workspace_mapping_file=None,
             default_project_name=None,
             default_agents_path=None,
         ),

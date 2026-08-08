@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 from context_router.schemas.context import PrepareTaskContextResult
 from context_router.schemas.data_sources import WorkspaceDataSourceSummary
 from context_router.schemas.projects import DocumentDetail, DocumentTreeNode
+from context_router.schemas.workspace_shared_files import WorkspaceSharedFilesResult
 from context_router.schemas.workspaces import (
     WorkspaceCreate,
     WorkspaceProjectCreate,
@@ -21,6 +22,10 @@ from context_router.services.workspace_management import (
     WorkspaceManagementError,
     WorkspaceManagementService,
 )
+from context_router.services.workspace_shared_files import (
+    WorkspaceSharedFilesError,
+    WorkspaceSharedFilesService,
+)
 
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
 
@@ -33,6 +38,10 @@ def _context_service(request: Request) -> ContextPreparationService:
     return request.app.state.context_preparation_service
 
 
+def _shared_files_service(request: Request) -> WorkspaceSharedFilesService:
+    return request.app.state.workspace_shared_files_service
+
+
 def _http_error(exc: WorkspaceManagementError) -> HTTPException:
     return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
@@ -41,6 +50,14 @@ def _http_error(exc: WorkspaceManagementError) -> HTTPException:
 def list_workspaces(request: Request) -> list[WorkspaceSummary]:
     try:
         return _service(request).list_workspaces()
+    except WorkspaceManagementError as exc:
+        raise _http_error(exc) from exc
+
+
+@router.post("/reload-local-mapping", response_model=list[WorkspaceSummary])
+def reload_local_mapping(request: Request) -> list[WorkspaceSummary]:
+    try:
+        return _service(request).reload_local_mapping()
     except WorkspaceManagementError as exc:
         raise _http_error(exc) from exc
 
@@ -162,6 +179,34 @@ def refresh_workspace(
         return _service(request).refresh_workspace(workspace_id)
     except WorkspaceManagementError as exc:
         raise _http_error(exc) from exc
+
+
+@router.post(
+    "/{workspace_id}/shared-files/restore",
+    response_model=WorkspaceSharedFilesResult,
+)
+def restore_workspace_shared_files(
+    workspace_id: str,
+    request: Request,
+) -> WorkspaceSharedFilesResult:
+    try:
+        return _shared_files_service(request).restore(workspace_id)
+    except WorkspaceSharedFilesError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post(
+    "/{workspace_id}/shared-files/publish",
+    response_model=WorkspaceSharedFilesResult,
+)
+def publish_workspace_shared_files(
+    workspace_id: str,
+    request: Request,
+) -> WorkspaceSharedFilesResult:
+    try:
+        return _shared_files_service(request).publish(workspace_id)
+    except WorkspaceSharedFilesError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.get(

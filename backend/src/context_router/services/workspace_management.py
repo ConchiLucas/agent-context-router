@@ -20,6 +20,10 @@ from context_router.schemas.workspaces import (
     WorkspaceProjectSummary,
     WorkspaceSummary,
 )
+from context_router.services.local_workspace_mapping import (
+    LocalWorkspaceMappingError,
+    LocalWorkspaceMappingService,
+)
 from context_router.services.project_registry import ProjectRegistry, ProjectRegistryError
 from context_router.services.workspace_paths import (
     WorkspacePathError,
@@ -40,21 +44,36 @@ class WorkspaceManagementService:
         project_repository: ProjectStore,
         project_registry: ProjectRegistry,
         data_source_repository: DataSourceStore,
+        local_mapping: LocalWorkspaceMappingService | None = None,
     ) -> None:
         self._settings = settings
         self._workspace_repository = workspace_repository
         self._project_repository = project_repository
         self._project_registry = project_registry
         self._data_source_repository = data_source_repository
+        self._local_mapping = local_mapping
 
     def list_workspaces(self) -> list[WorkspaceSummary]:
         try:
             records = self._workspace_repository.list_workspaces()
         except WorkspaceRepositoryError as exc:
             raise WorkspaceManagementError(str(exc)) from exc
+        records = [
+            mapped for record in records if (mapped := self._mapped_record(record)) is not None
+        ]
         for record in records:
             self._project_registry.register_workspace(record)
         return [self._workspace_summary(record) for record in records]
+
+    def reload_local_mapping(self) -> list[WorkspaceSummary]:
+        if self._local_mapping is None or not self._local_mapping.is_configured:
+            return self.list_workspaces()
+        try:
+            self._local_mapping.reload()
+            self._project_registry.load_persisted_projects()
+        except (LocalWorkspaceMappingError, ProjectRegistryError) as exc:
+            raise WorkspaceManagementError(str(exc)) from exc
+        return self.list_workspaces()
 
     def get_workspace(self, workspace_id: str) -> WorkspaceSummary:
         return self._workspace_summary(self._workspace_record(workspace_id))
@@ -66,6 +85,10 @@ class WorkspaceManagementService:
         workspace_type: str,
         root_path: str,
     ) -> WorkspaceSummary:
+        if self._local_mapping is not None and self._local_mapping.is_configured:
+            raise WorkspaceManagementError(
+                "启用本机映射文件后，请先创建数据库工作空间，再在映射文件中启用卡片"
+            )
         normalized_name = name.strip()
         normalized_type = workspace_type.strip()
         if not normalized_name:
@@ -236,8 +259,19 @@ class WorkspaceManagementService:
             record = self._workspace_repository.get_workspace(workspace_id)
         except WorkspaceRepositoryError as exc:
             raise WorkspaceManagementError(str(exc)) from exc
-        self._project_registry.register_workspace(record)
-        return record
+        mapped = self._mapped_record(record)
+        if mapped is None:
+            raise WorkspaceManagementError("工作空间未在本机映射文件中启用")
+        self._project_registry.register_workspace(mapped)
+        return mapped
+
+    def _mapped_record(self, record: WorkspaceRecord) -> WorkspaceRecord | None:
+        if self._local_mapping is None:
+            return record
+        try:
+            return self._local_mapping.map_record(record)
+        except LocalWorkspaceMappingError as exc:
+            raise WorkspaceManagementError(str(exc)) from exc
 
     def _workspace_summary(self, record: WorkspaceRecord) -> WorkspaceSummary:
         projects = self._project_registry.list_workspace_projects(record.id)
@@ -265,6 +299,11 @@ class WorkspaceManagementService:
             data_source_count=source_count,
             database_count=database_count,
             database_authorization_count=assignment_count,
+            document_reader_count=(
+                self._local_mapping.reader_count(record.id)
+                if self._local_mapping is not None
+                else 0
+            ),
             created_at=record.created_at,
             updated_at=record.updated_at,
         )

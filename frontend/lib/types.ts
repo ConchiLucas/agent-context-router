@@ -41,8 +41,17 @@ export interface WorkspaceSummary {
   data_source_count: number;
   database_count: number;
   database_authorization_count: number;
+  document_reader_count: number;
   created_at?: string;
   updated_at: string;
+}
+
+export interface WorkspaceSharedFilesResult {
+  workspace_id: string;
+  source_root: string;
+  document_count: number;
+  deploy_count: number;
+  action: "restore" | "publish";
 }
 
 export interface WorkspaceDataSourceAssignment {

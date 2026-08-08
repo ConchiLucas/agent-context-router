@@ -22,6 +22,7 @@ import type {
   WorkspaceDataSourceSummary,
   WorkspaceEnvironmentConfig,
   WorkspaceSummary,
+  WorkspaceSharedFilesResult,
 } from "@/lib/types";
 import {
   buildMcpTraceListPath,
@@ -56,6 +57,30 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function listWorkspaces(): Promise<WorkspaceSummary[]> {
   return request<WorkspaceSummary[]>("/api/workspaces");
+}
+
+export function reloadLocalWorkspaceMapping(): Promise<WorkspaceSummary[]> {
+  return request<WorkspaceSummary[]>("/api/workspaces/reload-local-mapping", {
+    method: "POST",
+  });
+}
+
+export function restoreWorkspaceSharedFiles(
+  workspaceId: string,
+): Promise<WorkspaceSharedFilesResult> {
+  return request<WorkspaceSharedFilesResult>(
+    `/api/workspaces/${workspaceId}/shared-files/restore`,
+    { method: "POST" },
+  );
+}
+
+export function publishWorkspaceSharedFiles(
+  workspaceId: string,
+): Promise<WorkspaceSharedFilesResult> {
+  return request<WorkspaceSharedFilesResult>(
+    `/api/workspaces/${workspaceId}/shared-files/publish`,
+    { method: "POST" },
+  );
 }
 
 export function getWorkspace(workspaceId: string): Promise<WorkspaceSummary> {

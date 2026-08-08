@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import RLock
+from typing import Literal
 from uuid import uuid4
 
 from context_router.config import Settings
@@ -31,6 +32,10 @@ from context_router.services.document_tree import (
     DocumentTreeError,
     build_document_cache,
     build_workspace_document_cache,
+)
+from context_router.services.local_workspace_mapping import (
+    LocalWorkspaceMappingError,
+    LocalWorkspaceMappingService,
 )
 from context_router.services.workspace_paths import (
     WorkspacePathError,
@@ -109,6 +114,7 @@ class WorkspaceSnapshot:
     document_cache: DocumentCache | None
     projects: tuple[ProjectSnapshot, ...]
     active_project: ProjectSnapshot | None = None
+    access_mode: Literal["full", "documents_only"] = "full"
 
 
 class ProjectRegistry:
@@ -117,10 +123,12 @@ class ProjectRegistry:
         settings: Settings,
         project_repository: ProjectStore | None = None,
         document_search_indexer: DocumentSearchIndexer | None = None,
+        local_mapping: LocalWorkspaceMappingService | None = None,
     ) -> None:
         self._settings = settings
         self._project_repository = project_repository
         self._document_search_indexer = document_search_indexer
+        self._local_mapping = local_mapping
         self._projects: dict[str, ProjectState] = {}
         self._workspaces: dict[str, WorkspaceState] = {}
         self._lock = RLock()
@@ -306,6 +314,7 @@ class ProjectRegistry:
         workspace: WorkspaceState,
         *,
         active_project: ProjectState | None = None,
+        access_mode: Literal["full", "documents_only"] = "full",
     ) -> WorkspaceSnapshot:
         if workspace.document_error:
             raise ProjectRegistryError(
@@ -342,7 +351,7 @@ class ProjectRegistry:
         )
         return WorkspaceSnapshot(
             id=workspace.id,
-            workspace_key=self._workspace_key(workspace.root_path),
+            workspace_key=workspace.id,
             name=workspace.name,
             workspace_type=workspace.workspace_type,
             root_path=workspace.root_path,
@@ -351,6 +360,7 @@ class ProjectRegistry:
             document_cache=workspace.document_cache,
             projects=project_snapshots,
             active_project=active_snapshot,
+            access_mode=access_mode,
         )
 
     @staticmethod
@@ -581,7 +591,7 @@ class ProjectRegistry:
             workspace = self._workspaces.get(workspace_id)
             if workspace is None:
                 raise ProjectRegistryError("工作空间不存在")
-            return self._workspace_key(workspace.root_path)
+            return workspace.id
 
     def _resolve_workspace_project(
         self,
@@ -933,12 +943,28 @@ class ProjectRegistry:
         restored: dict[str, ProjectState] = {}
         restored_workspaces: dict[str, WorkspaceState] = {}
         for record in records:
+            workspace_id = getattr(record, "workspace_id", None)
+            database_workspace_root = getattr(record, "workspace_root_path", None)
+            if (
+                self._local_mapping is not None
+                and self._local_mapping.is_configured
+                and workspace_id is not None
+            ):
+                try:
+                    workspace_root_path = str(self._local_mapping.main_host_path(workspace_id))
+                except LocalWorkspaceMappingError:
+                    continue
+            else:
+                workspace_root_path = database_workspace_root or str(
+                    Path(record.agents_path).expanduser().parent
+                )
             cache: DocumentCache | None = None
             refreshed_at: datetime | None = None
             error: str | None = None
             resolved_path = Path(record.agents_path).expanduser()
-            workspace_root_path = record.workspace_root_path or str(
-                Path(record.agents_path).expanduser().parent
+            agents_path = derive_agents_path(
+                workspace_root_path,
+                record.document_relative_path,
             )
             resolved_workspace_root = self._resolve_cwd(workspace_root_path)
             resolved_project_root = (
@@ -959,9 +985,9 @@ class ProjectRegistry:
                     raise ProjectRegistryError(
                         f"找不到项目目录：{workspace_root_path.rstrip('/')}/{record.relative_path}"
                     )
-                resolved_path = self._map_agents_path(record.agents_path)
+                resolved_path = self._map_agents_path(agents_path)
                 if not resolved_path.is_file():
-                    raise ProjectRegistryError(f"找不到入口文件：{record.agents_path}")
+                    raise ProjectRegistryError(f"找不到入口文件：{agents_path}")
                 try:
                     resolved_path.relative_to(resolved_workspace_root)
                 except ValueError as exc:
@@ -977,12 +1003,12 @@ class ProjectRegistry:
                 id=record.id,
                 name=record.name,
                 project_type=record.project_type,
-                agents_path=record.agents_path,
+                agents_path=agents_path,
                 resolved_agents_path=resolved_path,
                 resolved_project_root=resolved_project_root,
                 workspace_id=getattr(record, "workspace_id", None),
                 workspace_name=getattr(record, "workspace_name", None),
-                workspace_root_path=getattr(record, "workspace_root_path", None),
+                workspace_root_path=workspace_root_path,
                 relative_path=getattr(record, "relative_path", "."),
                 document_relative_path=normalized_document_relative,
                 project_kind=getattr(record, "project_kind", "backend"),
@@ -990,8 +1016,6 @@ class ProjectRegistry:
                 refreshed_at=refreshed_at,
                 error=error,
             )
-            workspace_id = getattr(record, "workspace_id", None)
-            workspace_root_path = getattr(record, "workspace_root_path", None)
             if workspace_id is not None and workspace_root_path:
                 restored_workspaces.setdefault(
                     workspace_id,
@@ -1011,7 +1035,7 @@ class ProjectRegistry:
 
         with self._lock:
             self._projects = restored
-            self._workspaces.update(restored_workspaces)
+            self._workspaces = restored_workspaces
             return [self._summary(project) for project in self._projects.values()]
 
     def has_agents_path(self, agents_path: str) -> bool:
@@ -1470,6 +1494,22 @@ class ProjectRegistry:
             return self._snapshot(project)
 
     def find_workspace_for_cwd(self, cwd: str) -> WorkspaceSnapshot:
+        if self._local_mapping is not None and self._local_mapping.is_configured:
+            try:
+                local_match = self._local_mapping.match_cwd(cwd)
+            except LocalWorkspaceMappingError as exc:
+                raise ProjectRegistryError(str(exc)) from exc
+            if local_match is None:
+                raise ProjectRegistryError("cwd 没有匹配本机启用的工作空间")
+            with self._lock:
+                workspace = self._workspaces.get(local_match.workspace_id)
+                if workspace is None:
+                    raise ProjectRegistryError("cwd 对应的工作空间当前不可用")
+                if local_match.access_mode == "documents_only":
+                    return self._workspace_snapshot(
+                        workspace,
+                        access_mode="documents_only",
+                    )
         resolved_cwd = self._resolve_cwd(cwd)
         with self._lock:
             candidates = [
@@ -1541,7 +1581,10 @@ class ProjectRegistry:
         if workspace_key:
             with self._lock:
                 for workspace in self._workspaces.values():
-                    if self._workspace_key(workspace.root_path) == workspace_key:
+                    if (
+                        workspace.id == workspace_key
+                        or self._workspace_key(workspace.root_path) == workspace_key
+                    ):
                         return self._workspace_snapshot(workspace)
         raise ProjectRegistryError("任务绑定的工作空间不存在")
 

@@ -106,6 +106,11 @@ from context_router.repositories.workspace_runtime_repository import (
     PostgresWorkspaceRuntimeRepository,
     WorkspaceRuntimeStore,
 )
+from context_router.repositories.workspace_shared_file_repository import (
+    InMemoryWorkspaceSharedFileRepository,
+    PostgresWorkspaceSharedFileRepository,
+    WorkspaceSharedFileStore,
+)
 from context_router.services.context_document_read import ContextDocumentReadService
 from context_router.services.context_document_search import ContextDocumentSearchService
 from context_router.services.context_preparation import ContextPreparationService
@@ -114,6 +119,7 @@ from context_router.services.database_catalog import DatabaseCatalogService
 from context_router.services.database_query import DatabaseQueryService
 from context_router.services.database_tool_payload import DatabaseToolPayloadService
 from context_router.services.document_search_index import DocumentSearchIndexer
+from context_router.services.local_workspace_mapping import LocalWorkspaceMappingService
 from context_router.services.mcp_integration import McpIntegrationService
 from context_router.services.mcp_trace import McpTraceService
 from context_router.services.project_registry import ProjectRegistry, ProjectRegistryError
@@ -124,6 +130,7 @@ from context_router.services.workspace_management import WorkspaceManagementServ
 from context_router.services.workspace_runtime_orchestration import (
     WorkspaceRuntimeOrchestrationService,
 )
+from context_router.services.workspace_shared_files import WorkspaceSharedFilesService
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +155,7 @@ def create_app(
     runtime_operation_repository: RuntimeOperationStore | None = None,
     runtime_runner_repository: RuntimeRunnerStore | None = None,
     workspace_deploy_repository: WorkspaceDeployStore | None = None,
+    workspace_shared_file_repository: WorkspaceSharedFileStore | None = None,
 ) -> FastAPI:
     resolved_settings = settings or Settings()
     if workspace_repository is not None:
@@ -175,10 +183,12 @@ def create_app(
     document_search_indexer = DocumentSearchIndexer(
         resolved_document_search_repository,
     )
+    local_workspace_mapping = LocalWorkspaceMappingService(resolved_settings)
     registry = ProjectRegistry(
         resolved_settings,
         resolved_project_repository,
         document_search_indexer,
+        local_workspace_mapping,
     )
     resolved_data_source_repository = data_source_repository or (
         PostgresDataSourceRepository(resolved_settings.database_url)
@@ -236,6 +246,19 @@ def create_app(
             registry.get_workspace_snapshot(workspace_id).resolved_root_path
         ),
     )
+    resolved_workspace_shared_file_repository = workspace_shared_file_repository or (
+        PostgresWorkspaceSharedFileRepository(resolved_settings.database_url)
+        if resolved_settings.database_url
+        else InMemoryWorkspaceSharedFileRepository(resolved_workspace_deploy_repository)
+    )
+    workspace_shared_files_service = WorkspaceSharedFilesService(
+        settings=resolved_settings,
+        local_mapping=local_workspace_mapping,
+        workspace_repository=resolved_workspace_repository,
+        project_repository=resolved_project_repository,
+        shared_file_repository=resolved_workspace_shared_file_repository,
+        registry=registry,
+    )
     resolved_runtime_operation_repository = runtime_operation_repository or (
         PostgresRuntimeOperationRepository(resolved_settings.database_url)
         if resolved_settings.database_url
@@ -256,6 +279,7 @@ def create_app(
         runner_available=lambda: resolved_runtime_runner_repository.is_available(
             resolved_settings.runtime_runner_heartbeat_ttl_seconds
         ),
+        local_mapping=local_workspace_mapping,
     )
     resolved_read_repository = document_read_repository or PostgresDocumentReadRepository(
         resolved_settings.database_url
@@ -287,6 +311,7 @@ def create_app(
         project_repository=resolved_project_repository,
         project_registry=registry,
         data_source_repository=resolved_data_source_repository,
+        local_mapping=local_workspace_mapping,
     )
     database_access_service = DatabaseAccessService(
         settings=resolved_settings,
@@ -295,6 +320,7 @@ def create_app(
         data_source_repository=resolved_data_source_repository,
         connector_registry=resolved_connector_registry,
         database_environment_repository=resolved_database_environment_repository,
+        local_mapping=local_workspace_mapping,
     )
     result_formatter = DatabaseResultFormatter()
     database_catalog_service = DatabaseCatalogService(
@@ -362,7 +388,9 @@ def create_app(
         logger.warning("Unable to restore persisted document projects: %s", exc)
     try:
         for workspace in resolved_workspace_repository.list_workspaces():
-            registry.register_workspace(workspace)
+            mapped_workspace = local_workspace_mapping.map_record(workspace)
+            if mapped_workspace is not None:
+                registry.register_workspace(mapped_workspace)
     except (WorkspaceRepositoryError, ProjectRegistryError) as exc:
         logger.warning("Unable to restore persisted workspaces: %s", exc)
 
@@ -419,8 +447,11 @@ def create_app(
     app.state.runtime_runner_repository = resolved_runtime_runner_repository
     app.state.workspace_runtime_orchestration_service = workspace_runtime_orchestration_service
     app.state.workspace_deploy_sync_service = workspace_deploy_sync_service
+    app.state.workspace_shared_files_service = workspace_shared_files_service
+    app.state.workspace_shared_file_repository = resolved_workspace_shared_file_repository
     app.state.workspace_repository = resolved_workspace_repository
     app.state.workspace_management_service = workspace_management_service
+    app.state.local_workspace_mapping = local_workspace_mapping
     app.state.mcp_integration_service = mcp_integration_service
     app.state.data_source_repository = resolved_data_source_repository
     app.state.database_environment_repository = resolved_database_environment_repository

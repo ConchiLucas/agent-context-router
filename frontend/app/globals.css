@@ -3977,6 +3977,26 @@ p {
   gap: 20px;
 }
 
+.workspace-mapping-toolbar {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 14px 12px 16px;
+  background: var(--surface-soft);
+}
+
+.workspace-mapping-toolbar p,
+.workspace-document-readers {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.55;
+}
+
 .workspace-card {
   display: flex;
   min-height: 330px;
@@ -4014,6 +4034,11 @@ p {
   overflow-wrap: anywhere;
   font-size: 0.78rem;
   line-height: 1.55;
+}
+
+.workspace-document-readers {
+  margin: -10px 0 16px;
+  color: var(--accent);
 }
 
 .workspace-card-stats {
@@ -4200,6 +4225,55 @@ p {
 .workspace-runtime-sync-profiles small,
 .workspace-runtime-sync-note {
   color: var(--muted);
+}
+
+.workspace-shared-files-content {
+  display: grid;
+  gap: 16px;
+}
+
+.workspace-shared-files-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.workspace-shared-files-actions > button {
+  display: grid;
+  gap: 8px;
+  min-height: 122px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px;
+  color: var(--text);
+  background: var(--surface-soft);
+  text-align: left;
+  cursor: pointer;
+}
+
+.workspace-shared-files-actions > button:hover,
+.workspace-shared-files-actions > button:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.workspace-shared-files-actions span,
+.workspace-shared-files-confirm p {
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.6;
+}
+
+.workspace-shared-files-confirm {
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border));
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: color-mix(in srgb, var(--danger) 7%, var(--surface));
+}
+
+.workspace-shared-files-confirm p {
+  margin: 6px 0 0;
 }
 
 .workspace-runtime-sync-source code {
@@ -4480,6 +4554,15 @@ p {
   }
 
   .workspace-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-mapping-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .workspace-shared-files-actions {
     grid-template-columns: 1fr;
   }
 

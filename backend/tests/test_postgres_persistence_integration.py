@@ -46,6 +46,7 @@ _REVISION_0016 = "20260727_0016"
 _REVISION_0020 = "20260730_0020"
 _REVISION_0022 = "20260730_0022"
 _REVISION_0023 = "20260802_0023"
+_REVISION_0024 = "20260808_0024"
 
 _PROJECT_A = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 _PROJECT_B = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -200,7 +201,7 @@ def test_migration_and_postgres_repositories_preserve_legacy_data(
         )
 
     command.upgrade(alembic_config, "head")
-    assert _current_revision(database_url) == _REVISION_0023
+    assert _current_revision(database_url) == _REVISION_0024
     assert _aliases(database_url) == aliases
     _assert_legacy_rows_survive(database_url)
     _assert_legacy_projects_migrated_to_workspaces(database_url)
@@ -845,7 +846,7 @@ def test_task_environment_selection_migration_backfills_existing_environment_tas
         ).fetchall()
 
     command.upgrade(alembic_config, "head")
-    assert _current_revision(database_url) == _REVISION_0023
+    assert _current_revision(database_url) == _REVISION_0024
     tasks = PostgresTaskRepository(database_url)
     environment_task = tasks.get_task(int(rows[0][0]))
     environmentless_task = tasks.get_task(int(rows[1][0]))

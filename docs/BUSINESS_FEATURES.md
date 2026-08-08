@@ -6,13 +6,14 @@
 
 ## 工作空间与项目
 
-- 工作空间是顶层管理和聚合边界，包含名称、工作空间类型、唯一的绝对根目录 `root_path` 和启停状态；未显式指定类型时默认归入“公司项目”。
+- 工作空间是顶层管理和聚合边界。数据库保存稳定 ID、名称、类型和兼容 `root_path`；当前电脑的主目录和卡片显示由项目内 `.context-router/workspaces.local.yaml` 决定。
 - 一个工作空间可以没有项目，也可以配置根项目和多个嵌套项目。项目属于且只属于一个工作空间，保存项目名称、`frontend/backend` 类型、源码 `relative_path` 和文档入口 `document_relative_path`；源码根项目使用 `.`，Workspace 和 Project 都没有启停状态。
 - 源码根由 `workspace.root_path / project.relative_path` 定位，项目入口由 `workspace.root_path / project.document_relative_path` 定位；兼容 `agents_path` 只保存后者的绝对路径镜像。两类相对路径都不能是绝对路径，不能使用 `~`、反斜杠或 `..`，解析后也不能通过软链接越出工作空间；同一工作空间内两类路径分别唯一。
 - 项目源码路径和文档入口路径由本机 AI 或运维通过受校验 API 显式配置，不自动扫描目录或猜测哪些子目录是项目。新项目文档入口必须位于 `docs/` 下并以 `AGENTS.md` 结尾，推荐使用 `docs/{frontend|backend}/{项目目录名}/AGENTS.md`。
 - Workspace 根目录存在 `AGENTS.md` 时自动作为工作空间级文档入口；没有该文件时保留合成工作空间根。这个约定不新增配置字段，也不把工作空间文档伪装成 frontend/backend Project。
 - 工作空间配置以及项目 ID、归属、类型、源码路径、文档入口路径和推导后的兼容 `agents_path` 持久化到 PostgreSQL，后端重启后自动恢复。
-- 浏览器工作台展示工作空间、项目、数据源、环境、文档和调用历史，不提供新增、编辑、启停、删除或保存授权入口；工作空间卡片允许触发只重建文档缓存与派生搜索索引的全量刷新。既有本地管理 API 继续供 AI/运维使用，并保留完整参数、路径、事务和唯一性校验；不建议绕过这些校验直接写控制面数据库。
+- 本机映射项包含 `visible`、`main_path` 和 `document_reader_paths`。隐藏项不显示卡片也不参与本机 cwd 路由；共享目录只可读取主目录文档，不能使用数据库和部署工具。
+- 浏览器工作台允许重载本机映射、刷新文档缓存，以及在明确确认后全量覆盖文档与部署文件；其他配置继续由受校验的本机 AI/运维 API 维护。
 - AI/运维新增或编辑项目时先验证并重建完整文档树，成功后才更新数据库和当前内存状态；工作空间记录存在即参与目录匹配，不提供总启停开关。
 - 持久化路径失效时项目卡片仍保留并显示错误；路径修复由 AI/运维完成，修复后可从 Workspace 卡片触发全量刷新。
 - migration `20260726_0013` 会为每个旧项目建立一个同 ID 工作空间，工作空间根目录取旧 `AGENTS.md` 的父目录，旧项目作为 `relative_path='.'` 的根项目；`20260726_0014` 为项目增加 `project_kind`（旧记录默认 `backend`）并删除 Project enabled；`20260726_0015` 增加 Workspace 根文档派生搜索索引；`20260727_0016` 增加 `document_relative_path` 并从旧 `agents_path` 回填，迁移本身不移动磁盘文档。原项目 ID、数据库授权和调用历史不变。
@@ -67,9 +68,9 @@ title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 sum
 
 - 首页左侧主导航为“工作空间 / 数据源 / 调用链路”。工作空间页顶部使用“全部工作空间 / 动态工作空间类型”Tab 筛选工作空间卡片。
 - 页面能力收敛为查看、筛选和复制，以及不会修改配置的连接测试、密码按需查看、Workspace 刷新、MCP 接入/测试、文档树、调用历史和运行记录查看。
-- 工作空间卡片展示根目录、项目数量、数据源/数据库授权汇总、状态和更新时间；右上角“刷新映射”按钮全量重建该 Workspace 文档缓存与派生搜索索引，底部按钮进入详情。空状态引导使用 AI 或运维入口配置。
+- 工作空间卡片展示本机主目录、共享文档目录数量、项目数量、数据源/数据库授权汇总和更新时间；页面顶部可在编辑 YAML 后“重载本机映射”。右上角“刷新映射”只重建文档缓存与派生搜索索引。
 - 工作空间详情提供“前端项目 / 后端项目 / 数据源汇总”三个 Tab；前两个 Tab 按 `project_kind` 展示根项目和嵌套项目卡片，以及项目名称、类型、源码相对路径和文档入口相对路径。
-- 工作空间详情工具栏提供“同步 deploy 配置 / MCP 接入 / 环境详情 / 查看调用记录 / 查看文档树 / 查看 MCP JSON”。同步按钮只扫描 Workspace 固定的仓库目录，先展示摘要和全 profile 增删改统计，再用预览摘要确认原子替换数据库运行配置；其他详情能力都以整个 Workspace 为对象，页面不提供添加项目。
+- 工作空间详情工具栏提供“文档与部署文件 / MCP 接入 / 环境详情 / 查看调用记录 / 查看文档树 / 查看 MCP JSON”。“文档与部署文件”只有“从数据库恢复到主目录”和“用主目录覆盖数据库”两种全量操作，每次只做一次删除确认，不展示版本、差异或冲突流转。
 - 项目卡片只展示项目元数据并提供必要的查看入口：后端项目可查看当前数据库授权，前端和后端项目都可查看运行配置。运行配置全屏页按快速/完整更新读取部署文件，并展示 Runtime Runner 历史运行、状态和有界日志，不提供文件增删改、保存、物化或执行操作。
 - 文档树使用全屏可拖动画布和矩形节点，从上到下展示层级。每个总览或子树详情视图都以单个文档为第一层，其全部直接子文档作为第二层横向平铺；从第三层开始按父文档独立判断，直接子文档不超过 4 个时继续递归，超过 4 个时每行最多显示 4 个并停止该分支继续内联后代。被停止分支中仍有下级文档的卡片显示下级数量入口，叶子卡片不显示；点击卡片主体查看 Markdown，点击下级入口以该卡片为新根进入子树详情，并通过面包屑逐级返回。不同分支独立判断，一条分支换行不会阻止其他未超限分支继续向下展示。
 - 点击节点后，通过独立详情抽屉展示 Markdown 标题、表格、列表、代码块和引用。
@@ -96,7 +97,7 @@ title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 sum
 - 保存映射、保存通用 JSON 或切换 Workspace 当前环境都会递增共享 revision；两种选择模式的旧 task 都会在数据库工具调用时返回 `environment_changed` 并要求重新 prepare。未配置环境选择器的单环境 Workspace 在省略参数时保持原有数据库授权行为，显式传参返回 `environment_not_configured`。
 - “环境详情”面板另有通用 JSON 页签，以只读格式分别展示 TEST/UAT JSON 对象，不为 MQ、Redis、MinIO、ES 或未来组件预设字段。JSON 可以在没有数据库映射时独立建立环境选择器，首次由 AI/运维保存时默认当前环境为 UAT。两份 JSON 合计最多 256 KiB、最多嵌套 20 层，超出 JavaScript 安全整数范围的值应改用字符串。
 - task 所选环境的 JSON 作为 `environment_config` 随 prepare 返回给可信本机 MCP 调用方，并由同模型的本机 MCP JSON 预览展示。可按明确业务需要保存地址及密码、Token、AccessKey 等访问凭据，但内容以明文 JSONB 保存在本地；严禁把实际值写入日志、开发文档、链路摘要或示例输出。
-- 浏览器 API 客户端和后端 `BrowserReadOnlyMiddleware` 双重限制配置写操作。携带任意 `Origin` 或浏览器 Fetch Metadata 的请求只允许 `GET/HEAD/OPTIONS`，以及数据源连接测试、密码按需查看、MCP 接入测试、prepare 预览、Workspace 刷新、deploy 同步预览和摘要确认同步七类固定 `POST`；其他方法返回 `405 management_read_only`。deploy 同步接口不接受任意扫描路径或文件内容。不携带这些浏览器请求头的本机 AI/运维调用方继续使用既有受校验 API。
+- 浏览器 API 客户端和后端 `BrowserReadOnlyMiddleware` 双重限制配置写操作。除既有诊断/预览外，工作空间页面只额外允许重载本机映射和双向共享文件全量覆盖；旧 deploy 预览/摘要接口不再允许浏览器调用。其他方法返回 `405 management_read_only`。
 
 ## Workspace 运行编排
 
@@ -105,7 +106,7 @@ title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 sum
 - `get_workspace_operation(operation_id)` 只查询已排队操作，服务端从操作记录解析并校验任务归属，返回操作、步骤、终态和有界日志，不在查询时触发执行。旧的 `apply_project_changes`、`get_project_operation` 仅作为兼容工具保留。
 - Context Router 是控制面：PostgreSQL 保存 Workspace 启动文件、Project 快速/完整更新文件、项目顺序、路径策略和异步操作状态；它不在后端容器内直接执行目标仓库脚本。
 - 目标仓库 `deploy/context-router/` 是运行配置唯一事实源：根 `manifest.yaml` 和 `workspace/start/` 描述 Workspace，Project 根 `deploy/context-router/fast|full/` 描述两种更新模式。同步器只读取固定目录，拒绝软链接、越界路径、非 UTF-8、敏感文件、缺失或不可执行的 `deploy.sh`、非法 YAML 和不完整 Project 集合。
-- `POST /api/workspaces/{id}/runtime-config/sync-preview` 返回规范化 SHA-256 摘要及增删改统计；`POST /api/workspaces/{id}/runtime-config/sync` 只接收预览摘要并重新扫描。摘要过期返回 409；有效配置在单个 PostgreSQL 事务中替换 Workspace start、policy 与全部 Project fast/full，任一步失败都保留旧配置。
+- 页面使用 `POST /api/workspaces/{id}/shared-files/publish|restore` 完成主目录与数据库间的全量覆盖；publish 在一个 PostgreSQL 事务中同时替换源文件副本及 Workspace/Project 运行配置。旧 deploy 预览接口只保留给本机 AI/运维兼容调用，不进入浏览器交互。
 - Project 运行配置保存边界会对非空 `.yml/.yaml` 文件做 YAML 语法解析；失败只返回文件、行和列，不回显内容或覆盖旧记录。Compose 语义继续由目标脚本预检。采用统一机器配置的 Workspace 应让各 Project 的 `fast/deploy.sh` 成为无凭据包装器，由目标仓库同一个根部署入口加载 `.env.local` 并仅调度命中的 Project；这不改变 `start_workspace` 始终全量启动的 MCP 边界。
 - Host Runtime Runner 是执行面：由用户在宿主机手动启动，使用仅本机可读 Token 向回环控制面注册、心跳和领取操作，逐步物化不可变快照，校验清单、哈希、路径与软链接边界后，只执行快照根固定的 `deploy.sh`。步骤串行运行，首个失败后后续步骤标记 skipped，不自动清理或修复目标环境。
 - 目标 Workspace 根 `.env.local` 是唯一的机器差异入口，保存当前电脑真实的数据库、Redis、MinIO 等连接信息，并由目标仓库脚本自行读取。该文件不进入 Git、不写入 Context Router 数据库、不复制到运行快照，也不得进入日志；换电脑只初始化这一份文件。

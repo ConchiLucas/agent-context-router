@@ -26,6 +26,10 @@ from context_router.schemas.workspace_runtime import (
     RuntimeOperationStepView,
     RuntimeOperationView,
 )
+from context_router.services.local_workspace_mapping import (
+    LocalWorkspaceMappingError,
+    LocalWorkspaceMappingService,
+)
 from context_router.services.project_registry import ProjectRegistry, ProjectRegistryError
 from context_router.services.runtime_materialization import (
     MaterializedRuntimeConfig,
@@ -75,6 +79,7 @@ class WorkspaceRuntimeOrchestrationService:
         operation_repository: RuntimeOperationStore,
         materialization_service: RuntimeMaterializationService,
         runner_available: Callable[[], bool] | None = None,
+        local_mapping: LocalWorkspaceMappingService | None = None,
     ) -> None:
         self._task_repository = task_repository
         self._registry = registry
@@ -83,6 +88,7 @@ class WorkspaceRuntimeOrchestrationService:
         self._operations = operation_repository
         self._materialization = materialization_service
         self._runner_available = runner_available
+        self._local_mapping = local_mapping
 
     def apply_changes(
         self,
@@ -249,6 +255,14 @@ class WorkspaceRuntimeOrchestrationService:
                 raise WorkspaceRuntimeOrchestrationError(
                     "workspace_task_required", "运行操作需要 Workspace task"
                 )
+            if self._local_mapping is not None and task.workspace_id is not None:
+                try:
+                    self._local_mapping.require_full_access(
+                        cwd=task.cwd,
+                        workspace_id=task.workspace_id,
+                    )
+                except LocalWorkspaceMappingError as exc:
+                    raise WorkspaceRuntimeOrchestrationError("documents_only", str(exc)) from exc
             return self._registry.get_workspace_snapshot_for_task(
                 workspace_id=task.workspace_id,
                 workspace_key=task.workspace_key,

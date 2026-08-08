@@ -86,77 +86,83 @@ class PostgresWorkspaceDeployRepository:
         _validate_bundle(bundle)
         try:
             with psycopg.connect(self._database_url) as connection:
-                project_rows = connection.execute(
-                    "SELECT id FROM document_projects WHERE workspace_id = %s ORDER BY id",
-                    (workspace_id,),
-                ).fetchall()
-                registered_ids = {str(row[0]) for row in project_rows}
-                if registered_ids != set(bundle.project_order):
-                    raise WorkspaceDeployRepositoryError(
-                        "同步期间 Workspace 项目集合发生变化，请重新预览"
-                    )
+                _replace_workspace_bundle(connection, workspace_id, bundle)
+        except WorkspaceDeployRepositoryError:
+            raise
+        except psycopg.Error as exc:
+            raise WorkspaceDeployRepositoryError("Workspace deploy 配置数据库同步失败") from exc
 
-                connection.execute(
-                    "DELETE FROM workspace_runtime_files WHERE workspace_id = %s AND profile = %s",
-                    (workspace_id, "start"),
-                )
-                for index, item in enumerate(bundle.start.files):
-                    connection.execute(
-                        """INSERT INTO workspace_runtime_files
+
+def _replace_workspace_bundle(
+    connection: psycopg.Connection,
+    workspace_id: str,
+    bundle: WorkspaceDeployBundle,
+) -> None:
+    project_rows = connection.execute(
+        "SELECT id FROM document_projects WHERE workspace_id = %s ORDER BY id",
+        (workspace_id,),
+    ).fetchall()
+    registered_ids = {str(row[0]) for row in project_rows}
+    if registered_ids != set(bundle.project_order):
+        raise WorkspaceDeployRepositoryError("同步期间 Workspace 项目集合发生变化")
+
+    connection.execute(
+        "DELETE FROM workspace_runtime_files WHERE workspace_id = %s AND profile = %s",
+        (workspace_id, "start"),
+    )
+    for index, item in enumerate(bundle.start.files):
+        connection.execute(
+            """INSERT INTO workspace_runtime_files
                            (id, workspace_id, profile, relative_path, content,
                             executable, sort_order)
                            VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-                        (
-                            uuid4().hex,
-                            workspace_id,
-                            "start",
-                            item.relative_path,
-                            item.content,
-                            item.executable,
-                            index,
-                        ),
-                    )
-                connection.execute(
-                    """INSERT INTO workspace_runtime_policies
+            (
+                uuid4().hex,
+                workspace_id,
+                "start",
+                item.relative_path,
+                item.content,
+                item.executable,
+                index,
+            ),
+        )
+    connection.execute(
+        """INSERT INTO workspace_runtime_policies
                        (workspace_id, project_order, workspace_paths)
                        VALUES (%s, %s, %s)
                        ON CONFLICT (workspace_id) DO UPDATE SET
                          project_order = EXCLUDED.project_order,
                          workspace_paths = EXCLUDED.workspace_paths,
                          updated_at = CURRENT_TIMESTAMP""",
-                    (
-                        workspace_id,
-                        Jsonb(list(bundle.project_order)),
-                        Jsonb(list(bundle.workspace_paths)),
-                    ),
-                )
+        (
+            workspace_id,
+            Jsonb(list(bundle.project_order)),
+            Jsonb(list(bundle.workspace_paths)),
+        ),
+    )
 
+    connection.execute(
+        "DELETE FROM project_runtime_files WHERE project_id = ANY(%s)",
+        (list(registered_ids),),
+    )
+    for project in bundle.projects:
+        for mode, profile in (("fast", project.fast), ("full", project.full)):
+            for index, item in enumerate(profile.files):
                 connection.execute(
-                    "DELETE FROM project_runtime_files WHERE project_id = ANY(%s)",
-                    (list(registered_ids),),
-                )
-                for project in bundle.projects:
-                    for mode, profile in (("fast", project.fast), ("full", project.full)):
-                        for index, item in enumerate(profile.files):
-                            connection.execute(
-                                """INSERT INTO project_runtime_files
+                    """INSERT INTO project_runtime_files
                                    (id, project_id, mode, relative_path, content,
                                     executable, sort_order)
                                    VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-                                (
-                                    uuid4().hex,
-                                    project.project_id,
-                                    mode,
-                                    item.relative_path,
-                                    item.content,
-                                    item.executable,
-                                    index,
-                                ),
-                            )
-        except WorkspaceDeployRepositoryError:
-            raise
-        except psycopg.Error as exc:
-            raise WorkspaceDeployRepositoryError("Workspace deploy 配置数据库同步失败") from exc
+                    (
+                        uuid4().hex,
+                        project.project_id,
+                        mode,
+                        item.relative_path,
+                        item.content,
+                        item.executable,
+                        index,
+                    ),
+                )
 
 
 def _validate_bundle(bundle: WorkspaceDeployBundle) -> None:

@@ -122,7 +122,7 @@ CONTEXT_ROUTER_DATABASE_URL=postgresql://USER:PASSWORD@host.docker.internal:5432
 docker compose exec backend uv run alembic upgrade head
 ```
 
-当前 migration head 为 `20260802_0023`。`0013` 引入 Workspace 与项目相对路径；`0014` 增加 `frontend/backend` 项目类型、移除 Project enabled、把 `mcp_alias` 唯一范围提升到 Workspace，并为新 task 增加 Workspace scope；`0015` 增加工作空间级 Markdown 的独立词法搜索索引；`0016` 将项目源码 `relative_path` 与文档入口 `document_relative_path` 拆分；`0017` 增加按项目和更新模式持久化的运行配置文件；`0018` 增加 Runtime Runner 异步执行记录；`0019` 增加 Workspace TEST/UAT 数据库映射和 task 环境 revision；`0020` 增加 TEST/UAT 通用环境 JSON；`0021` 为 task 增加 `database_environment_selection`；`0022` 移除 Workspace、数据源、项目数据库授权和环境映射配置的启停字段与相关索引；`0023` 增加 Workspace 启动文件、运行策略、原子操作步骤、租约和 Host Runner 实例。旧 task 保持 `scope='project'` 兼容，迁移同时保留 Workspace/活动项目快照和兼容 `agents_path`。
+当前 migration head 为 `20260808_0024`。`0024` 增加 Workspace 文档与部署源文件的数据库副本；更早 migration 保持原兼容语义。
 
 PostgreSQL 保存 Workspace、Project 类型、源码相对路径、文档入口相对路径、数据源、数据库清单、项目数据库关联及 Workspace 唯一 `mcp_alias`、可选 TEST/UAT 数据库映射与通用 JSON、带 scope/环境/revision/选择模式的 MCP task、read call、文档顺序、数据库调用审计元数据，以及可重建的文档搜索分块与索引状态。文档树和 Markdown 原文仍从磁盘重建，文档工具完整出入参不持久化；`search_database_objects` 和 `execute_database_query` 自动保存有界、可过期的详情快照，供本机链路页面按需查看。后端启动时恢复工作空间和全部项目配置，并从磁盘重建每个项目的内存树与匹配版本词法索引；路径失效的项目仍保留在页面并显示错误。
 
@@ -167,7 +167,23 @@ docker compose --profile integration stop clickhouse-test
 
 从 backend 容器访问宿主机 ClickHouse 时，数据源 Host 填 `host.docker.internal`；访问 Compose 内的测试 ClickHouse 时使用服务名 `clickhouse-test`。ClickHouse HTTP 默认端口是 8123，启用 secure 且未填端口时 Connector 默认使用 8443。
 
-## 目标 Workspace 的 deploy 配置同步
+## 本机工作空间映射
+
+复制 `.context-router/workspaces.example.yaml` 为被 Git 忽略的 `.context-router/workspaces.local.yaml`。key 使用数据库 `workspaces.id`，路径相对 `CONTEXT_ROUTER_WORKSPACE_HOST_ROOT`：
+
+```yaml
+version: 1
+workspaces:
+  workspace-id:
+    visible: true
+    main_path: company_workforce/example-main
+    document_reader_paths:
+      - company_workforce/example-other-branch
+```
+
+编辑后在工作空间页点击“重载本机映射”。`visible: false` 的卡片不显示；reader 目录只共享主目录文档，不能使用数据库或部署工具。复制数据库不会覆盖这份本机文件。
+
+## 目标 Workspace 的文档与 deploy 文件同步
 
 目标 Workspace 必须把运行入口保存在仓库内，Context Router 数据库只保存同步副本：
 
@@ -180,7 +196,7 @@ deploy/context-router/workspace/start/deploy.sh
 
 每个入口都应能脱离 Context Router 直接运行；`WORKSPACE_HOST_ROOT` 和 `PROJECT_HOST_ROOT` 只能作为 Runtime Runner 的可选覆盖值。`.env.local`、Token、私钥等本机配置不得进入这些目录。
 
-在 Workspace 详情点击“同步 deploy 配置”，先检查固定目录的预览、摘要和增删改统计，再确认同步。任一项目校验失败或预览后文件发生变化时，Context Router 不会删除或覆盖数据库旧配置。
+Workspace 详情的“文档与部署文件”只提供两种操作：从数据库全量覆盖主目录，或用主目录全量覆盖数据库。两者都会先确认删除原内容，不做差异、版本和冲突处理。数据库到本地只写主映射目录的 `docs/` 和固定 `deploy/context-router/` 目录；reader 目录不会写入，也不能执行部署。
 
 Context Router 不可用时，其他 AI 应先阅读目标根 `AGENTS.md` 和 `deploy/context-router/README.md`，然后直接运行 Workspace 或 Project 的 `deploy.sh`。
 

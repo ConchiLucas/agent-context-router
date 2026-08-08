@@ -170,6 +170,7 @@ def test_lists_workspace_tasks_and_ordered_read_history(tmp_path: Path) -> None:
         Settings(
             workspace_host_root=tmp_path,
             workspace_container_root=tmp_path,
+            workspace_mapping_file=None,
             default_project_name=None,
             default_agents_path=None,
         ),

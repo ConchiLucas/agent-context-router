@@ -206,7 +206,8 @@ api/workspaces.py
 - `database_call_repository.py` 记录 operation、数据库别名/Engine 快照、对象或语句类型、SQL SHA-256、状态、耗时、数量、字节数、截断和稳定错误码；不保存完整 SQL 或结果。
 - `database_tool_payload.py` 与独立 Repository 只对白名单数据库工具自动保存有界请求和最终 MCP 响应。请求/响应默认各 1 MB、硬上限 4 MB、默认保留 7 天；启动时恢复 pending 并清理过期内容，调用期间按节流周期继续清理。
 - `workspace_runtime_orchestration.py` 以 task 的 Workspace 快照为边界，负责改动归属、fast/full/start 选择、确定性步骤顺序和操作查询；`runtime_materialization.py` 生成不可变执行快照。
-- `workspace_deploy_sync.py` 扫描目标仓库固定目录、解析版本化 manifest、执行路径/文件/YAML/Project 完整性校验并生成规范化摘要；`workspace_deploy_repository.py` 在同一 PostgreSQL 事务中替换 Workspace 与全部 Project 的运行配置。预览后摘要变化会关闭提交，不会出现先删后扫的空窗。
+- `local_workspace_mapping.py` 读取项目本机 YAML，按 Workspace ID 决定卡片显示、主目录和 reader 目录。`project_registry.py` 以主目录构建唯一文档缓存；reader cwd 返回 `documents_only` 快照，数据库与运行服务按 task.cwd 再次拒绝越权。
+- `workspace_shared_files.py` 扫描主目录 `docs/` 和固定 deploy 目录；`workspace_shared_file_repository.py` 在同一 PostgreSQL 事务中替换源文件副本及 Workspace/Project 运行配置。恢复操作只删除并重建主目录对应的 docs/deploy 目录。
 - `runtime_runner.py` 暴露只允许 Bearer Token 且拒绝浏览器请求的注册、心跳、领取租约和完成回报协议；`scripts/context_router_host_runner.py` 是手动启动的宿主机执行器。
 - `mcp_server.py` 固定注册五个上下文/数据库工具、三个 Workspace 运行工具和两个 Project 兼容工具，并挂载到 `/mcp`。项目或数据源变化不会改变工具名。
 - `mcp_server.py` 使用统一工具分发埋点记录十个固定工具；观测持久化失败只降低链路可见性，不改变 MCP 工具原始成功或失败结果。
@@ -252,7 +253,7 @@ app/page.tsx
 
 Markdown 解析器只生成 React 元素，不使用 `dangerouslySetInnerHTML`，也不执行文档里的原始 HTML。
 
-工作空间列表只负责分类筛选、摘要展示和进入详情。详情页按“前端项目 / 后端项目 / 数据源汇总”三页签组织只读内容，项目卡片分开展示 `project_kind`、源码 `relative_path` 和 docs 文档入口 `document_relative_path`。“环境详情 / 查看调用记录 / 查看文档树 / 查看 MCP JSON”位于 Workspace 工具栏；环境详情以页签只读展示数据库稳定别名及 TEST/UAT 物理目标、两份无固定字段的 JSON 和默认环境，不提供匹配、保存或切换。“数据源汇总”只做聚合展示。
+工作空间列表负责分类筛选、本机映射重载、摘要展示和进入详情。卡片路径及显示状态只来自本机 YAML。详情页按“前端项目 / 后端项目 / 数据源汇总”三页签组织只读内容；“文档与部署文件”弹窗只提供数据库到主目录、主目录到数据库两个全量覆盖按钮和一次确认。“环境详情 / 查看调用记录 / 查看文档树 / 查看 MCP JSON”仍位于 Workspace 工具栏。
 
 数据源卡片进入“查看连接”详情，保留分类筛选、连接参数和数据库清单查看、密码按需 reveal 与连接测试；工作空间的后端项目只读展示当前数据库授权。运行配置页只读展示快速/完整部署文件、历史运行状态和日志，不调用配置保存、物化或执行 API。
 

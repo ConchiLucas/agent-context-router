@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     database_payload_cleanup_interval_seconds: int = Field(default=3_600, ge=60)
     workspace_host_root: Path = Path("/Users/conchi/workforce")
     workspace_container_root: Path = Path("/workspace")
+    workspace_mapping_file: Path | None = None
     runtime_root: Path = Path("/runtime")
     runtime_execution_enabled: bool = False
     runtime_execution_timeout_seconds: int = Field(default=1_800, ge=10, le=7_200)
