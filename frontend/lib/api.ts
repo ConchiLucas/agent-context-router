@@ -1,4 +1,5 @@
 import type {
+  ChainAnalyticsOverview,
   ContextTaskReadHistory,
   ContextTaskSummary,
   DatabaseEnvironment,
@@ -220,6 +221,22 @@ export function listDocumentReadStats(params?: {
   const queryStr = searchParams.toString();
   const path = `/api/document-read-stats${queryStr ? `?${queryStr}` : ""}`;
   return request<DocumentReadStatItem[]>(path, { cache: "no-store" });
+}
+
+export function fetchChainAnalyticsOverview(params?: {
+  workspace_id?: string;
+  hours?: number;
+}): Promise<ChainAnalyticsOverview> {
+  const searchParams = new URLSearchParams();
+  if (params?.workspace_id) {
+    searchParams.set("workspace_id", params.workspace_id);
+  }
+  if (params?.hours) {
+    searchParams.set("hours", params.hours.toString());
+  }
+  const queryStr = searchParams.toString();
+  const path = `/api/document-chain-analytics${queryStr ? `?${queryStr}` : ""}`;
+  return request<ChainAnalyticsOverview>(path, { cache: "no-store" });
 }
 
 export function getDocumentReadStatTasks(

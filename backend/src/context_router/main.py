@@ -10,6 +10,9 @@ from fastapi.responses import JSONResponse
 
 from context_router.api.data_sources import router as data_sources_router
 from context_router.api.database_environments import router as database_environments_router
+from context_router.api.document_chain_analytics import (
+    router as document_chain_analytics_router,
+)
 from context_router.api.document_read_stats import router as document_read_stats_router
 from context_router.api.mcp_integration import router as mcp_integration_router
 from context_router.api.mcp_traces import router as mcp_traces_router
@@ -51,6 +54,10 @@ from context_router.repositories.database_tool_payload_repository import (
     DatabaseToolPayloadStore,
     InMemoryDatabaseToolPayloadRepository,
     PostgresDatabaseToolPayloadRepository,
+)
+from context_router.repositories.document_chain_analytics_repository import (
+    DocumentChainAnalyticsStore,
+    PostgresDocumentChainAnalyticsRepository,
 )
 from context_router.repositories.document_read_repository import (
     DocumentReadStore,
@@ -129,6 +136,7 @@ from context_router.services.database_access import DatabaseAccessService
 from context_router.services.database_catalog import DatabaseCatalogService
 from context_router.services.database_query import DatabaseQueryService
 from context_router.services.database_tool_payload import DatabaseToolPayloadService
+from context_router.services.document_chain_analytics import DocumentChainAnalyticsService
 from context_router.services.document_read_stats import DocumentReadStatsService
 from context_router.services.document_search_index import DocumentSearchIndexer
 from context_router.services.local_workspace_mapping import LocalWorkspaceMappingService
@@ -170,6 +178,7 @@ def create_app(
     workspace_deploy_repository: WorkspaceDeployStore | None = None,
     workspace_shared_file_repository: WorkspaceSharedFileStore | None = None,
     document_read_stats_repository: DocumentReadStatsStore | None = None,
+    document_chain_analytics_repository: DocumentChainAnalyticsStore | None = None,
     system_guide_repository: SystemGuideStore | None = None,
 ) -> FastAPI:
     resolved_settings = settings or Settings()
@@ -308,6 +317,10 @@ def create_app(
     resolved_document_read_stats_repository = document_read_stats_repository or PostgresDocumentReadStatsRepository(
         resolved_settings.database_url
     )
+    resolved_document_chain_analytics_repository = (
+        document_chain_analytics_repository
+        or PostgresDocumentChainAnalyticsRepository(resolved_settings.database_url)
+    )
     resolved_database_call_repository = database_call_repository or (
         PostgresDatabaseCallRepository(resolved_settings.database_url)
         if resolved_settings.database_url
@@ -397,6 +410,9 @@ def create_app(
     mcp_integration_service = McpIntegrationService(resolved_settings, registry)
     document_read_stats_service = DocumentReadStatsService(
         repository=resolved_document_read_stats_repository,
+    )
+    document_chain_analytics_service = DocumentChainAnalyticsService(
+        repository=resolved_document_chain_analytics_repository,
     )
     mcp_server = create_context_router_mcp(
         context_service,
@@ -498,6 +514,8 @@ def create_app(
     app.state.system_guide_service = system_guide_service
     app.state.document_read_stats_repository = resolved_document_read_stats_repository
     app.state.document_read_stats_service = document_read_stats_service
+    app.state.document_chain_analytics_repository = resolved_document_chain_analytics_repository
+    app.state.document_chain_analytics_service = document_chain_analytics_service
     frontend_origins = [
         "http://127.0.0.1:49175",
         "http://localhost:49175",
@@ -523,6 +541,7 @@ def create_app(
     app.include_router(data_sources_router, prefix=resolved_settings.api_prefix)
     app.include_router(mcp_traces_router, prefix=resolved_settings.api_prefix)
     app.include_router(document_read_stats_router, prefix=resolved_settings.api_prefix)
+    app.include_router(document_chain_analytics_router, prefix=resolved_settings.api_prefix)
     app.include_router(system_guides_router, prefix=resolved_settings.api_prefix)
 
     @app.get("/health")

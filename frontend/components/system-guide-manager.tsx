@@ -11,6 +11,12 @@ import type {
 
 type EditorMode = "tree" | "source";
 
+function formatBytes(source: string): string {
+  const bytes = new TextEncoder().encode(source).length;
+  if (bytes < 1024) return `${bytes} B`;
+  return `${(bytes / 1024).toFixed(1)} KB`;
+}
+
 function stringifyDocument(document: SystemGuideDocument): string {
   return JSON.stringify(document, null, 2);
 }
@@ -31,6 +37,97 @@ function parseDocument(source: string): {
       error: error instanceof Error ? error.message : "JSON 格式不正确",
     };
   }
+}
+
+function renderJsonPrimitive(value: JsonValue) {
+  if (value === null) {
+    return <span className="json-token json-token--null">null</span>;
+  }
+  if (typeof value === "boolean") {
+    return <span className="json-token json-token--boolean">{String(value)}</span>;
+  }
+  if (typeof value === "number") {
+    return <span className="json-token json-token--number">{value}</span>;
+  }
+  if (typeof value === "string") {
+    const visible = value.length > 120 ? `${value.slice(0, 120)}...` : value;
+    return <span className="json-token json-token--string">{`"${visible}"`}</span>;
+  }
+  return null;
+}
+
+function JsonTreeNode({
+  keyName,
+  value,
+  depth = 0,
+}: {
+  keyName?: string;
+  value: JsonValue;
+  depth?: number;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+  const isContainer = value !== null && typeof value === "object";
+  const isArray = Array.isArray(value);
+
+  if (!isContainer) {
+    return (
+      <div className="json-tree-row" style={{ paddingLeft: depth * 20 + 4 }}>
+        {keyName !== undefined ? (
+          <>
+            <span className="json-token json-token--key">{`"${keyName}"`}</span>
+            <span className="json-token json-token--punctuation">:</span>
+          </>
+        ) : null}
+        {renderJsonPrimitive(value)}
+      </div>
+    );
+  }
+
+  const entries = Array.isArray(value) ? value.map((item, index) => [String(index), item] as const) : Object.entries(value);
+  const bracketOpen = isArray ? "[" : "{";
+  const bracketClose = isArray ? "]" : "}";
+
+  return (
+    <div className="json-tree-node" style={{ paddingLeft: depth * 20 }}>
+      <button
+        type="button"
+        className="json-tree-row json-tree-row--toggle"
+        onClick={() => setCollapsed((current) => !current)}
+        aria-expanded={!collapsed}
+      >
+        {keyName !== undefined ? (
+          <>
+            <span className="json-token json-token--key">{`"${keyName}"`}</span>
+            <span className="json-token json-token--punctuation">:</span>
+          </>
+        ) : null}
+        <span className="json-token json-token--bracket">{bracketOpen}</span>
+        {collapsed ? (
+          <>
+            <span className="json-tree-summary">
+              {entries.length} {isArray ? "items" : "keys"}
+            </span>
+            <span className="json-token json-token--bracket">{bracketClose}</span>
+          </>
+        ) : null}
+      </button>
+      {!collapsed ? (
+        <>
+          {entries.map(([entryKey, entryValue], index) => (
+            <JsonTreeNode
+              key={`${entryKey}-${index}`}
+              keyName={isArray ? undefined : entryKey}
+              value={entryValue}
+              depth={depth + 1}
+            />
+          ))}
+          <div className="json-tree-row json-tree-row--close" style={{ paddingLeft: 24 }}>
+            <span className="json-token json-token--bracket">{bracketClose}</span>
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
 }
 
 export function SystemGuideManager() {
@@ -108,20 +205,7 @@ export function SystemGuideManager() {
   }
 
   return (
-    <section className="system-guide-page" aria-labelledby="system-guide-title">
-      <header className="system-guide-header">
-        <div>
-          <span className="section-eyebrow">Context Router</span>
-          <h1 id="system-guide-title">系统文档</h1>
-          <p>选择已有文档，编辑 JSON 内容并保存。</p>
-        </div>
-        <div className="system-guide-header-actions">
-          <span className={parsed.error ? "json-validity is-error" : "json-validity"}>
-            {parsed.error ? "JSON 有误" : "JSON 有效"}
-          </span>
-        </div>
-      </header>
-
+    <section className="system-guide-page" aria-label="系统文档">
       <div className="system-guide-workspace">
         <aside className="system-guide-list" aria-label="系统文档菜单">
           <label className="system-guide-search">
@@ -158,43 +242,56 @@ export function SystemGuideManager() {
             <div>
               <strong>{selected?.title ?? "请选择系统文档"}</strong>
               {selected ? <code>{selected.guide_key}</code> : null}
-              <span>{new TextEncoder().encode(source).length} bytes</span>
+              <span>{formatBytes(source)}</span>
             </div>
-            <div className="system-guide-view-tabs" role="tablist" aria-label="JSON 查看方式">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={mode === "tree"}
-                data-active={mode === "tree"}
-                onClick={() => setMode("tree")}
-              >
-                树形
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={mode === "source"}
-                data-active={mode === "source"}
-                onClick={() => setMode("source")}
-              >
-                源码
-              </button>
+            <div className="system-guide-toolbar-actions">
+              <span className={parsed.error ? "json-validity is-error" : "json-validity"}>
+                {parsed.error ? "Invalid" : "Valid JSON"}
+              </span>
+              <div className="system-guide-view-tabs" role="tablist" aria-label="JSON 查看方式">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === "tree"}
+                  data-active={mode === "tree"}
+                  onClick={() => setMode("tree")}
+                >
+                  树形
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === "source"}
+                  data-active={mode === "source"}
+                  onClick={() => setMode("source")}
+                >
+                  源码
+                </button>
+              </div>
             </div>
           </div>
 
           <div className="system-guide-editor-body">
             {mode === "source" ? (
-              <textarea
-                aria-label="系统文档 JSON 源码"
-                value={source}
-                onChange={(event) => setSource(event.target.value)}
-                disabled={!selected}
-                spellCheck={false}
-              />
+              <div className="system-guide-source-pane">
+                <textarea
+                  aria-label="系统文档 JSON 源码"
+                  value={source}
+                  onChange={(event) => setSource(event.target.value)}
+                  disabled={!selected}
+                  spellCheck={false}
+                />
+                {parsed.error ? (
+                  <div className="system-guide-inline-error" role="alert">
+                    <span aria-hidden="true">!</span>
+                    <p>{parsed.error}</p>
+                  </div>
+                ) : null}
+              </div>
             ) : parsed.document ? (
-              <pre aria-label="系统文档 JSON 树形预览">
-                {stringifyDocument(parsed.document)}
-              </pre>
+              <div className="json-tree-view" aria-label="系统文档 JSON 树形预览">
+                <JsonTreeNode value={parsed.document} />
+              </div>
             ) : (
               <div className="system-guide-json-error" role="alert">
                 <strong>JSON 无法预览</strong>

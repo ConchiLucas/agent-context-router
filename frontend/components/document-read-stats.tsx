@@ -7,13 +7,14 @@ import {
   listDocumentReadStats,
   listWorkspaces,
 } from "@/lib/api";
+import { DocumentChainAnalyticsPanel } from "@/components/document-chain-analytics";
 import type {
   DocumentReadStatItem,
   DocumentReadTaskItem,
   InternalMcpToolName,
   McpTraceDetail,
   McpTraceToolCall,
-  WorkspaceDetail,
+  WorkspaceSummary,
 } from "@/lib/types";
 
 type TraceView = "graph" | "list";
@@ -42,8 +43,8 @@ function internalTraceCalls(calls: McpTraceToolCall[]): McpTraceToolCall[] {
 
 function sortTraceCalls(calls: McpTraceToolCall[]): McpTraceToolCall[] {
   return [...calls].sort((left, right) => {
-    const leftTime = Date.parse(left.created_at);
-    const rightTime = Date.parse(right.created_at);
+    const leftTime = Date.parse(left.started_at);
+    const rightTime = Date.parse(right.started_at);
     if (!Number.isNaN(leftTime) && !Number.isNaN(rightTime) && leftTime !== rightTime) {
       return leftTime - rightTime;
     }
@@ -65,7 +66,7 @@ function buildTraceGraphRows(calls: McpTraceToolCall[]): TraceGraphRow[] {
   const childrenMap = new Map<number | null, McpTraceToolCall[]>();
   for (const call of calls) {
     const parentId =
-      call.parent_tool_call_id !== null && callMap.has(call.parent_tool_call_id)
+      call.parent_tool_call_id !== undefined && call.parent_tool_call_id !== null && callMap.has(call.parent_tool_call_id)
         ? call.parent_tool_call_id
         : null;
     const group = childrenMap.get(parentId) ?? [];
@@ -113,7 +114,7 @@ export function DocumentReadStats() {
   const [activeDocId, setActiveDocId] = useState<string | null>(null);
   const [activeTask, setActiveTask] = useState<DocumentReadTaskItem | null>(null);
 
-  const [workspaces, setWorkspaces] = useState<WorkspaceDetail[]>([]);
+  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>("");
   const [stats, setStats] = useState<DocumentReadStatItem[]>([]);
   const [tasks, setTasks] = useState<DocumentReadTaskItem[]>([]);
@@ -126,6 +127,7 @@ export function DocumentReadStats() {
 
   const [traceView, setTraceView] = useState<TraceView>("graph");
   const [selectedCallId, setSelectedCallId] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState<"ranking" | "analytics">("ranking");
 
   useEffect(() => {
     void listWorkspaces()
@@ -229,10 +231,7 @@ export function DocumentReadStats() {
         <section className="doc-stats-card">
           <div className="doc-stats-header">
             <div>
-              <h2 className="doc-stats-title">文档阅读统计</h2>
-              <p className="doc-stats-subtitle">
-                统计各文档被 MCP 工具调用的阅读次数与关联任务明细（已过滤 AGENTS.md）
-              </p>
+              <h2 className="doc-stats-title">文档阅读与链路效能</h2>
             </div>
             <div className="doc-stats-filters">
               <label htmlFor="workspace-filter" className="doc-stats-filter-label">
@@ -254,7 +253,32 @@ export function DocumentReadStats() {
             </div>
           </div>
 
-          {loadingList ? (
+          <div className="doc-stats-tabs" role="tablist" aria-label="文档统计视图">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "ranking"}
+              data-active={activeTab === "ranking"}
+              onClick={() => setActiveTab("ranking")}
+            >
+              文档阅读排行榜
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "analytics"}
+              data-active={activeTab === "analytics"}
+              onClick={() => setActiveTab("analytics")}
+            >
+              Agent 检索效能诊断
+            </button>
+          </div>
+
+          {activeTab === "analytics" ? (
+            <div className="p-2">
+              <DocumentChainAnalyticsPanel workspaceId={selectedWorkspaceId || undefined} />
+            </div>
+          ) : loadingList ? (
             <div className="doc-stats-loading">正在加载统计数据…</div>
           ) : stats.length === 0 ? (
             <div className="doc-stats-empty">暂无文档阅读数据</div>
@@ -497,13 +521,13 @@ export function DocumentReadStats() {
                       <div className="trace-detail-section">
                         <div className="trace-detail-label">输入参数</div>
                         <pre className="trace-json-box font-mono">
-                          {JSON.stringify(selectedCall.arguments, null, 2)}
+                          {JSON.stringify(selectedCall.request_summary, null, 2)}
                         </pre>
                       </div>
                       <div className="trace-detail-section">
                         <div className="trace-detail-label">返回结果摘要</div>
                         <pre className="trace-json-box font-mono">
-                          {JSON.stringify(selectedCall.result, null, 2)}
+                          {JSON.stringify(selectedCall.result_summary, null, 2)}
                         </pre>
                       </div>
                     </div>

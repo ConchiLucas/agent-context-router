@@ -558,6 +558,51 @@ export interface McpTraceDetail extends McpTraceSummary {
   calls: McpTraceToolCall[];
 }
 
+export interface ChainFunnelMetrics {
+  total_tasks: number;
+  direct_hit_tasks: number;
+  search_then_read_tasks: number;
+  deep_search_tasks: number;
+  direct_hit_rate: number;
+  search_rate: number;
+  avg_reads_per_task: number;
+  avg_searches_per_task: number;
+}
+
+export interface DocumentHealthMatrixItem {
+  document_id: string;
+  document_path?: string | null;
+  read_count: number;
+  task_count: number;
+  search_after_read_count: number;
+  search_after_read_rate: number;
+  health_category: "high_freq_effective" | "high_freq_ineffective" | "low_freq_effective" | "low_freq_ineffective" | string;
+}
+
+export interface BrokenLinkAlertItem {
+  alert_type: "search_no_results" | "read_error" | "loop_search" | "deep_traversal" | string;
+  task_id?: number | string;
+  task_prompt?: string | null;
+  agent_name?: string | null;
+  message: string;
+  created_at?: string;
+}
+
+export interface AgentComparisonItem {
+  agent_name: string;
+  total_tasks: number;
+  avg_searches: number;
+  avg_reads: number;
+  direct_hit_rate: number;
+}
+
+export interface ChainAnalyticsOverview {
+  funnel: ChainFunnelMetrics;
+  health_matrix: DocumentHealthMatrixItem[];
+  alerts: BrokenLinkAlertItem[];
+  agent_comparison: AgentComparisonItem[];
+}
+
 export type McpDatabasePayloadStatus =
   | "pending"
   | "ok"
