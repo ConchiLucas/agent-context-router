@@ -1,37 +1,33 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from pathlib import Path
 
 from context_router.repositories.task_repository import (
+    TaskRecord,
     TaskRepositoryError,
-    TaskWriter,
+    TaskStore,
 )
 from context_router.schemas.context import (
     ContextDocumentNode,
     DatabaseEnvironment,
     DatabaseEnvironmentSelection,
     PreparedDatabaseEnvironment,
-    PreparedProject,
-    PreparedSystemGuide,
-    PreparedSystemGuideCatalogItem,
-    PreparedSystemGuides,
-    PreparedWorkspace,
-    PreparedWorkspaceAccess,
     PrepareTaskContextResult,
+    ReadTaskContextResult,
+    TaskEnvironmentContext,
 )
 from context_router.services.database_access import (
     DatabaseAccessError,
     DatabaseAccessService,
 )
-from context_router.services.document_tree import CachedTreeNode, DocumentCache
+from context_router.services.document_tree import CachedTreeNode
 from context_router.services.project_registry import (
     ProjectRegistry,
     ProjectRegistryError,
-    ProjectSnapshot,
     WorkspaceSnapshot,
 )
-from context_router.services.system_guides import SystemGuideError, SystemGuideService
+
+PREPARE_DOCUMENT_TREE_LEVELS = 3
 
 
 class ContextPreparationError(ValueError):
@@ -47,18 +43,151 @@ class ContextPreparationError(ValueError):
         self.code = code
 
 
+class TaskContextReadError(ValueError):
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
 class ContextPreparationService:
     def __init__(
         self,
         registry: ProjectRegistry,
-        task_repository: TaskWriter,
+        task_repository: TaskStore,
         database_access_service: DatabaseAccessService | None = None,
-        system_guide_service: SystemGuideService | None = None,
     ) -> None:
         self._registry = registry
         self._task_repository = task_repository
         self._database_access_service = database_access_service
-        self._system_guide_service = system_guide_service
+
+    def read_task_context(
+        self,
+        *,
+        task_id: int,
+        sections: list[str],
+    ) -> ReadTaskContextResult:
+        normalized_sections = list(dict.fromkeys(sections))
+        if not normalized_sections or any(
+            section not in {"databases", "environment"} for section in normalized_sections
+        ):
+            raise TaskContextReadError(
+                "invalid_context_section",
+                "sections 只能包含 databases 或 environment",
+            )
+        try:
+            task = self._task_repository.get_task(task_id)
+        except TaskRepositoryError as exc:
+            raise TaskContextReadError("task_not_found", "任务不存在，请重新 prepare") from exc
+
+        workspace = self._workspace_for_task(task)
+        if workspace is not None:
+            try:
+                routed_workspace = self._registry.find_workspace_for_cwd(task.cwd)
+            except ProjectRegistryError as exc:
+                raise TaskContextReadError(
+                    "workspace_unavailable",
+                    "任务绑定的工作空间当前不可用，请重新 prepare",
+                ) from exc
+            if routed_workspace.id != workspace.id:
+                raise TaskContextReadError(
+                    "workspace_unavailable",
+                    "任务绑定的工作空间已发生变化，请重新 prepare",
+                )
+            if routed_workspace.access_mode == "documents_only":
+                raise TaskContextReadError(
+                    "documents_only",
+                    "当前目录只能读取文档，不能读取数据库或环境配置",
+                )
+
+        if self._database_access_service is None:
+            raise TaskContextReadError(
+                "database_tools_disabled",
+                "数据库和环境上下文当前不可用",
+            )
+
+        databases = None
+        environment_context = None
+        try:
+            if "databases" in normalized_sections:
+                if workspace is not None:
+                    databases = self._database_access_service.list_prepared_workspace_databases(
+                        workspace.id,
+                        database_environment=task.database_environment,
+                        database_environment_revision=task.database_environment_revision,
+                        database_environment_selection=task.database_environment_selection,
+                    )
+                else:
+                    if task.project_id is None:
+                        raise TaskContextReadError(
+                            "project_unavailable",
+                            "任务缺少项目快照，请重新 prepare",
+                        )
+                    databases = self._database_access_service.list_prepared_databases(
+                        task.project_id
+                    )
+
+            if "environment" in normalized_sections:
+                environment_context = self._environment_context(
+                    task,
+                    workspace.id if workspace else None,
+                )
+        except DatabaseAccessError as exc:
+            raise TaskContextReadError(exc.code, str(exc)) from exc
+
+        return ReadTaskContextResult(
+            task_id=task_id,
+            databases=databases,
+            environment=environment_context,
+        )
+
+    def _workspace_for_task(self, task: TaskRecord) -> WorkspaceSnapshot | None:
+        if task.scope != "workspace":
+            return None
+        try:
+            return self._registry.get_workspace_snapshot_for_task(
+                workspace_id=task.workspace_id,
+                workspace_key=task.workspace_key,
+            )
+        except ProjectRegistryError as exc:
+            raise TaskContextReadError(
+                "workspace_unavailable",
+                "任务绑定的工作空间当前不可用，请重新 prepare",
+            ) from exc
+
+    def _environment_context(
+        self,
+        task: TaskRecord,
+        workspace_id: str | None,
+    ) -> TaskEnvironmentContext:
+        if (
+            workspace_id is None
+            or task.database_environment not in {"test", "uat"}
+            or task.database_environment_revision is None
+        ):
+            return TaskEnvironmentContext(configured=False)
+        selection = task.database_environment_selection or "workspace_default"
+        selected = PreparedDatabaseEnvironment(
+            key=task.database_environment,
+            name=task.database_environment.upper(),
+            revision=task.database_environment_revision,
+            selection=selection,
+        )
+        try:
+            config = self._database_access_service.get_active_environment_payload(
+                workspace_id,
+                environment=task.database_environment,
+                revision=task.database_environment_revision,
+                database_environment_selection=selection,
+            )
+        except DatabaseAccessError as exc:
+            if exc.code == "environment_config_not_configured":
+                return TaskEnvironmentContext(configured=False, selected=selected)
+            raise
+        return TaskEnvironmentContext(
+            configured=True,
+            selected=selected,
+            config=config,
+        )
 
     def prepare(
         self,
@@ -157,8 +286,6 @@ class ContextPreparationService:
         selected_database_environment: DatabaseEnvironment | None = None
         database_environment_selection: DatabaseEnvironmentSelection | None = None
         database_environment_warning: str | None = None
-        environment_config = None
-        environment_config_warning: str | None = None
         documents_only = workspace.access_mode == "documents_only"
         if documents_only:
             if environment is not None:
@@ -197,27 +324,6 @@ class ContextPreparationService:
                 database_environment_selection = (
                     "task_explicit" if environment is not None else "workspace_default"
                 )
-                try:
-                    # This exact user-maintained payload may contain connection details
-                    # and credentials. Return it to the local MCP caller, but never log it.
-                    environment_config = (
-                        self._database_access_service.get_active_environment_payload(
-                            workspace.id,
-                            environment=selected_database_environment,
-                            revision=database_environment.revision,
-                            database_environment_selection=(database_environment_selection),
-                        )
-                    )
-                except DatabaseAccessError as exc:
-                    if exc.code == "environment_changed":
-                        raise ContextPreparationError(
-                            str(exc),
-                            code="environment_changed",
-                        ) from exc
-                    if exc.code != "environment_config_not_configured":
-                        environment_config_warning = (
-                            "工作空间环境 JSON 暂时不可用；文档上下文不受影响"
-                        )
 
         try:
             active_project = workspace.active_project
@@ -272,88 +378,22 @@ class ContextPreparationService:
             raise ContextPreparationError(str(exc)) from exc
 
         try:
-            databases = []
-            warning_items = [
-                warning
-                for warning in (
-                    database_environment_warning,
-                    environment_config_warning,
-                )
-                if warning
-            ]
-            if (
-                not documents_only
-                and self._database_access_service is not None
-                and database_environment_warning is None
-            ):
-                try:
-                    databases = self._database_access_service.list_prepared_workspace_databases(
-                        workspace.id,
-                        database_environment=selected_database_environment,
-                        database_environment_revision=(
-                            database_environment.revision
-                            if database_environment is not None
-                            else None
-                        ),
-                        database_environment_selection=(database_environment_selection),
-                    )
-                except DatabaseAccessError as exc:
-                    if exc.code in {
-                        "environment_changed",
-                        "environment_not_configured",
-                    }:
-                        raise ContextPreparationError(
-                            str(exc),
-                            task_id=task_id,
-                            code=exc.code,
-                        ) from exc
-                    warning_items.append("工作空间数据库摘要暂时不可用；文档上下文不受影响")
-
-            projects = [self._prepared_project(project) for project in workspace.projects]
-            prepared_active_project = (
-                self._prepared_project(workspace.active_project)
-                if workspace.active_project is not None
-                else None
+            warning_items = [warning for warning in (database_environment_warning,) if warning]
+            document_root = self._registry.get_prepare_document_root(workspace)
+            documents = self._context_node(
+                document_root,
+                levels_remaining=PREPARE_DOCUMENT_TREE_LEVELS,
+                warning_items=warning_items,
             )
-            system_guides = self._prepared_system_guides(warning_items)
 
             return PrepareTaskContextResult(
                 task_id=task_id,
-                workspace=PreparedWorkspace(
-                    workspace_id=workspace.id,
-                    name=workspace.name,
+                documents=documents,
+                access=(
+                    ["documents"]
+                    if documents_only
+                    else ["documents", "database", "environment", "middleware", "runtime"]
                 ),
-                projects=projects,
-                active_project=prepared_active_project,
-                project=prepared_active_project,
-                documents=self._context_node(workspace.cache.root, workspace.cache),
-                databases=databases,
-                database_environment=(
-                    PreparedDatabaseEnvironment(
-                        key=selected_database_environment,
-                        name=selected_database_environment.upper(),
-                        revision=database_environment.revision,
-                        selection=database_environment_selection,
-                    )
-                    if database_environment is not None
-                    and selected_database_environment is not None
-                    and database_environment_selection is not None
-                    else None
-                ),
-                environment_config=environment_config,
-                workspace_access=PreparedWorkspaceAccess(
-                    mode=workspace.access_mode,
-                    message=(
-                        "当前目录是文档阅读目录，可以读取主目录共享文档；"
-                        "不能使用数据库、部署或共享文件覆盖功能。"
-                        if documents_only
-                        else (
-                            "当前目录是工作空间主目录，可以使用文档、数据库、"
-                            "部署和共享文件覆盖功能。"
-                        )
-                    ),
-                ),
-                system_guides=system_guides,
                 warnings=warning_items or None,
             )
         except Exception as exc:
@@ -364,66 +404,28 @@ class ContextPreparationService:
                 task_id=task_id,
             ) from exc
 
-    def _prepared_system_guides(self, warning_items: list[str]) -> PreparedSystemGuides:
-        if self._system_guide_service is None:
-            return PreparedSystemGuides()
-        try:
-            guides = self._system_guide_service.list_guides()
-        except SystemGuideError:
-            warning_items.append("系统使用说明暂时不可用；工作空间上下文不受影响")
-            return PreparedSystemGuides()
-        catalog = [
-            PreparedSystemGuideCatalogItem(
-                document_id=item.document_id,
-                key=item.guide_key,
-                title=item.title,
-                summary=item.summary,
-            )
-            for item in guides
-        ]
-        required = [
-            PreparedSystemGuide(
-                document_id=item.document_id,
-                key=item.guide_key,
-                title=item.title,
-                summary=item.summary,
-                content=item.document,
-            )
-            for item in guides
-            if item.include_in_prepare
-        ]
-        return PreparedSystemGuides(required=required, catalog=catalog)
-
-    @staticmethod
-    def _prepared_project(project: ProjectSnapshot) -> PreparedProject:
-        return PreparedProject(
-            project_id=project.id,
-            name=project.name,
-            node_count=len(project.cache.documents),
-            relative_path=project.relative_path,
-            document_relative_path=project.document_relative_path,
-            project_kind=project.project_kind,
-        )
-
     def _context_node(
         self,
         node: CachedTreeNode,
-        cache: DocumentCache,
+        *,
+        levels_remaining: int,
+        warning_items: list[str],
     ) -> ContextDocumentNode:
+        if node.error:
+            warning_items.append(f"文档“{node.description}”不可用：{node.error}")
         return ContextDocumentNode(
             document_id=node.id,
-            path=self._relative_path(node, cache),
-            title=node.title,
-            summary=node.summary,
-            error=node.error,
-            children=[self._context_node(child, cache) for child in node.children],
+            summary=(node.summary or node.description).strip(),
+            children=(
+                [
+                    self._context_node(
+                        child,
+                        levels_remaining=levels_remaining - 1,
+                        warning_items=warning_items,
+                    )
+                    for child in node.children
+                ]
+                if levels_remaining > 1
+                else []
+            ),
         )
-
-    @staticmethod
-    def _relative_path(node: CachedTreeNode, cache: DocumentCache) -> str:
-        try:
-            return Path(node.path).resolve().relative_to(cache.project_root).as_posix()
-        except ValueError:
-            if node.relative_path:
-                return node.relative_path.removeprefix("./")
-            return "AGENTS.md"

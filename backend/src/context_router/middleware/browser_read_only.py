@@ -19,6 +19,8 @@ def _safe_browser_post_patterns(api_prefix: str) -> tuple[re.Pattern[str], ...]:
         re.compile(rf"^{prefix}/workspaces/[^/]+/refresh$"),
         re.compile(rf"^{prefix}/workspaces/reload-local-mapping$"),
         re.compile(rf"^{prefix}/workspaces/[^/]+/shared-files/(restore|publish)$"),
+        re.compile(rf"^{prefix}/workspaces/[^/]+/containers/bulk-action$"),
+        re.compile(rf"^{prefix}/projects/[^/]+/runtime-config/(fast|full)/execute$"),
     )
 
 

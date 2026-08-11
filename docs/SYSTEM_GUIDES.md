@@ -9,8 +9,13 @@
 ## 状态规则
 
 - 系统文档没有启用、停用或发布状态。
-- 文档创建成功后立即进入“系统文档”菜单和后续 prepare 的 `catalog`。
-- `include_in_prepare` 只控制 prepare 是否直接携带完整 JSON，不影响文档是否存在或能否读取。
+- 文档创建成功后立即进入“系统文档”菜单。
+- 历史 `include_in_prepare` 字段不再改变 MCP prepare 结果。
+
+当前 migration 内置两篇必读文档：
+
+- `workspace-directory-access`：主目录与文档阅读目录的权限边界。
+- `context-router-mcp-usage`：MCP 接入以及 prepare、文档、数据库和运行工具的标准调用顺序。
 
 ## JSON 格式
 
@@ -45,41 +50,18 @@
 
 左侧主菜单进入“系统文档”：
 
-1. 左侧列表按菜单顺序展示已有文档，可按标题、摘要或 key 搜索。
-2. 右侧可在“源码”和“树形”间切换；源码用于编辑，树形用于格式化检查。
-3. 页面只提供“保存内容”，不能新建、删除或修改 key、菜单顺序和 prepare 返回策略。
-4. 保存前同时执行浏览器 JSON 解析和后端 Schema/大小校验。
-5. 新文档及元数据调整由本机 AI、运维 API 或 migration 完成。
+1. 左侧按当前 FastMCP `tools/list` 固定展示每个工具的独立菜单项；选择后只显示该工具的名称、中文介绍、输入/输出 Schema 和 annotations。工具项只读且不保存到 `system_guides`；中文介绍仅用于页面，AI 客户端收到的原始英文 `description` 不变。
+2. 其余列表按菜单顺序展示已有文档，可同时按工具名称、描述、文档标题、摘要或 key 搜索。
+3. 右侧可在“源码”和“树形”间切换；`tools/list` 两种视图均只读，系统文档源码可编辑，树形用于格式化检查。
+4. 选中持久化系统文档时页面只提供“保存内容”，不能新建、删除或修改 key 和菜单顺序。
+5. 保存前同时执行浏览器 JSON 解析和后端 Schema/大小校验。
+6. 新文档及元数据调整由本机 AI、运维 API 或 migration 完成。
 
-## prepare 和读取
+## MCP 边界
 
-prepare 增加两个稳定字段：
-
-```json
-{
-  "workspace_access": {
-    "mode": "documents_only",
-    "message": "当前目录是文档阅读目录，可以读取主目录共享文档；不能使用数据库、部署或共享文件覆盖功能。"
-  },
-  "system_guides": {
-    "required": [],
-    "catalog": [
-      {
-        "document_id": "system-guide:workspace-directory-access",
-        "key": "workspace-directory-access",
-        "title": "工作空间目录使用规则",
-        "summary": "说明主目录与文档阅读目录的权限、同步和切换规则。"
-      }
-    ]
-  }
-}
-```
-
-- `workspace_access` 是本机映射服务动态计算的当前权限，不能由系统文档覆盖。
-- `required` 包含标记为 prepare 直接返回全文的文档。
-- `catalog` 始终包含全部系统文档的 ID、标题和摘要。
-- `system-guide:*` ID 可直接传给现有 `read_context_document`；系统 JSON 文档不支持 Markdown `section` 参数。
-- 系统文档只负责告知，数据库和部署权限继续由后端强制校验。
+- prepare 只返回精简工作空间文档树和任务能力，不返回系统文档目录或正文。
+- AI 通过 MCP `tools/list` 获取英文工具定义；页面的中文介绍只面向用户。
+- 系统文档只负责页面告知，数据库和部署权限继续由后端强制校验。
 
 ## API
 
@@ -90,4 +72,4 @@ prepare 增加两个稳定字段：
 | 浏览器保存内容 | `PUT /api/system-guides/{id}/content` |
 | 本机 AI/运维完整维护 | `POST /api/system-guides`、`PUT/DELETE /api/system-guides/{id}` |
 
-系统文档正文是浏览器唯一允许直接保存的控制面内容；后端会保留原 key、菜单顺序和 prepare 策略。其他工作空间、项目、数据源和运行配置仍保持原有只读页面边界。
+系统文档正文是浏览器唯一允许直接保存的控制面内容；后端会保留原 key 和菜单顺序。其他工作空间、项目、数据源和运行配置仍保持原有只读页面边界。

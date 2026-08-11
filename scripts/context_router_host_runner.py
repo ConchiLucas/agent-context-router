@@ -124,7 +124,12 @@ class RunnerApiClient:
         try:
             with urllib.request.urlopen(request, timeout=15) as response:
                 body = response.read()
-        except (urllib.error.URLError, http.client.HTTPException, TimeoutError) as exc:
+        except (
+            urllib.error.URLError,
+            http.client.HTTPException,
+            TimeoutError,
+            OSError,
+        ) as exc:
             raise RunnerError(f"控制面请求失败：{path}") from exc
         try:
             value = json.loads(body)
@@ -152,6 +157,8 @@ class HostRuntimeRunner:
     def execute_lease(self, lease: dict[str, object]) -> None:
         operation = _required_dict(lease, "operation")
         operation_id = _required_string(operation, "id")
+        workspace_id = _required_string(operation, "workspace_id")
+        project_ids_by_relative_path = _required_string_map(lease, "project_ids_by_relative_path")
         lease_token = _required_string(lease, "lease_token")
         steps = lease.get("steps")
         if not isinstance(steps, list) or not steps:
@@ -180,6 +187,8 @@ class HostRuntimeRunner:
                 started = True
             exit_code, error_code, error_message = self._execute_step(
                 operation_id=operation_id,
+                workspace_id=workspace_id,
+                project_ids_by_relative_path=project_ids_by_relative_path,
                 lease_token=lease_token,
                 step=raw_step,
                 **execution,
@@ -313,6 +322,8 @@ class HostRuntimeRunner:
         self,
         *,
         operation_id: str,
+        workspace_id: str,
+        project_ids_by_relative_path: dict[str, str],
         lease_token: str,
         step: dict[str, object],
         workspace_root: Path,
@@ -329,6 +340,11 @@ class HostRuntimeRunner:
                 "RUNTIME_OPERATION_ID": operation_id,
                 "RUNTIME_STEP_ID": _required_string(step, "id"),
                 "RUNTIME_DEPLOY_MODE": _required_string(step, "mode"),
+                "RUNTIME_WORKSPACE_ID": workspace_id,
+                "RUNTIME_PROJECT_IDS": "\n".join(
+                    f"{relative_path}\t{project_id}"
+                    for relative_path, project_id in sorted(project_ids_by_relative_path.items())
+                ),
                 "RUNTIME_SNAPSHOT_DIR": str(snapshot_root),
                 "WORKSPACE_ROOT": str(workspace_root),
                 "WORKSPACE_HOST_ROOT": str(workspace_root),
@@ -337,6 +353,7 @@ class HostRuntimeRunner:
         if project_root is not None:
             environment["PROJECT_ROOT"] = str(project_root)
             environment["PROJECT_HOST_ROOT"] = str(project_root)
+            environment["RUNTIME_PROJECT_ID"] = _required_string(step, "owner_id")
 
         stop_heartbeat = threading.Event()
         heartbeat = threading.Thread(
@@ -509,6 +526,20 @@ def _required_string(payload: dict[str, object], key: str) -> str:
     if not isinstance(value, str) or not value:
         raise RunnerError(f"缺少 {key}")
     return value
+
+
+def _required_string_map(payload: dict[str, object], key: str) -> dict[str, str]:
+    value = payload.get(key)
+    if not isinstance(value, dict):
+        raise RunnerError(f"缺少 {key}")
+    result: dict[str, str] = {}
+    for raw_path, raw_id in value.items():
+        if not isinstance(raw_path, str) or not isinstance(raw_id, str) or not raw_id:
+            raise RunnerError(f"{key} 格式无效")
+        if any(character in raw_path or character in raw_id for character in ("\t", "\n", "\r")):
+            raise RunnerError(f"{key} 包含非法字符")
+        result[_safe_relative(raw_path, "项目路径").as_posix()] = raw_id
+    return result
 
 
 def parse_args() -> argparse.Namespace:

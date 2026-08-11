@@ -190,19 +190,8 @@ def test_workspace_projects_and_data_source_summary(tmp_path: Path) -> None:
     assert tree.status_code == 200
     assert tree.json()["children"] == []
     assert preview.status_code == 200
-    assert preview.json()["workspace"]["workspace_id"] == workspace["id"]
-    assert {item["relative_path"] for item in preview.json()["projects"]} == {
-        ".",
-        "services/order",
-    }
-    assert {item["document_relative_path"] for item in preview.json()["projects"]} == {
-        "docs/frontend/root/AGENTS.md",
-        "docs/backend/order/AGENTS.md",
-    }
-    assert {item["database"] for item in preview.json()["databases"]} == {
-        "frontend_orders",
-        "backend_orders",
-    }
+    assert set(preview.json()) == {"task_id", "documents", "access"}
+    assert set(preview.json()["documents"]) == {"document_id", "summary", "children"}
     assert removed_project_preview.status_code == 404
     assert removed_project_tree.status_code == 404
     assert document.status_code == 200

@@ -32,14 +32,15 @@ from context_router.services.context_document_search import (
 from context_router.services.context_preparation import (
     ContextPreparationError,
     ContextPreparationService,
+    TaskContextReadError,
 )
 from context_router.services.database_catalog import DatabaseCatalogService
 from context_router.services.database_query import DatabaseQueryService
 from context_router.services.database_tool_payload import DatabaseToolPayloadService
 from context_router.services.mcp_trace import McpTraceService
-from context_router.services.runtime_execution import (
-    RuntimeExecutionError,
-    RuntimeExecutionService,
+from context_router.services.nacos_middleware import (
+    MiddlewareContextError,
+    MiddlewareContextService,
 )
 from context_router.services.workspace_runtime_orchestration import (
     WorkspaceRuntimeOrchestrationError,
@@ -50,16 +51,29 @@ MCP_SERVER_NAME = "Context Router"
 MCP_SERVER_INSTRUCTIONS = (
     "Call prepare_task_context once at the start of a new workspace task. Preserve the "
     "returned task_id and pass it to every document or database call for that task. "
+    "Prepare returns the real workspace entry when present, otherwise the active project or "
+    "synthetic workspace entry, plus at most two explicit descendant levels and access "
+    "capabilities. This navigation projection is not the full searchable scope. Call "
+    "read_task_context only when database aliases or generic environment configuration "
+    "are needed; it is not the authoritative source for live Nacos middleware details. "
     "When the document tree is large or the target is uncertain, call "
     "search_context_documents and then read the selected document or section with "
-    "read_context_document. Follow required system_guides returned by prepare; catalog guide "
-    "IDs can also be passed to read_context_document. "
-    "Use only database aliases returned by prepare. Search database objects before querying "
+    "read_context_document. "
+    "Use only database aliases returned by read_task_context. Search database objects before "
+    "querying "
     "when the schema is uncertain. Database queries are always bounded and read-only. Call "
     "prepare again for a new conversation when no task_id is available. "
-    "The returned environment_config may contain connection details and credentials for the "
+    "Environment config returned by read_task_context may contain connection details and "
+    "credentials for the "
     "environment selected by this task. Treat it as sensitive local-only context and never "
     "echo it into logs or unrelated output. "
+    "For Redis, MQ, Elasticsearch, MinIO, job scheduler, object storage, or other live "
+    "middleware connection or diagnosis tasks, call read_middleware_context with "
+    "the current task_id. A prepare call without environment reads the default/local Nacos "
+    "profile; an explicit test or uat environment reads the matching profile. This local-only "
+    "tool returns plaintext by default. Set reveal_secrets=false only when a redacted view is "
+    "preferred. Returning and using connection values in the current authorized task is allowed; "
+    "never persist them in logs, source code, documentation, unrelated tool arguments, or commits. "
     "When the user asks to start services, call start_workspace: start always means every "
     "registered project in the task Workspace. After modifying registered Workspace code, "
     "call apply_workspace_changes once with task_id and actual Workspace-relative changed "
@@ -67,6 +81,8 @@ MCP_SERVER_INSTRUCTIONS = (
 )
 (
     PREPARE_TOOL_NAME,
+    READ_TASK_CONTEXT_TOOL_NAME,
+    READ_MIDDLEWARE_CONTEXT_TOOL_NAME,
     SEARCH_CONTEXT_TOOL_NAME,
     READ_TOOL_NAME,
     SEARCH_DATABASE_TOOL_NAME,
@@ -89,18 +105,40 @@ GET_WORKSPACE_OPERATION_TOOL_DESCRIPTION = (
 )
 PREPARE_TOOL_DESCRIPTION = (
     "Locate the registered workspace for cwd, create a server-side task number, and "
-    "return its explicit workspace document tree or synthetic project-root tree. Project "
-    "documents outside an explicit root remain available through search_context_documents. "
+    "return a task-local document projection. A real workspace AGENTS.md is always level 1; "
+    "without one, the active project or synthetic workspace entry is level 1. The result has "
+    "at most two explicit descendant levels. Nodes contain only document_id, summary, and "
+    "children. Unrelated documents and deeper descendants are omitted from prepare but remain "
+    "available through workspace-wide search_context_documents and read_context_document. "
     "Omit environment to use the workspace default, or pass test/uat for this task only "
-    "without changing the workspace active environment. The returned environment_config may "
-    "contain connection details and credentials for that environment; never echo it into "
-    "logs. workspace_access states the current directory permission, and system_guides returns "
-    "central usage instructions and a readable guide catalog. Summaries are only returned when "
-    "explicitly declared in Markdown Front Matter."
+    "without changing the workspace active environment. access states which task capabilities "
+    "are available. Database aliases and environment config are intentionally omitted; request "
+    "them only when needed with read_task_context. access includes middleware when live Nacos "
+    "middleware context may be requested with read_middleware_context."
+)
+READ_TASK_CONTEXT_TOOL_DESCRIPTION = (
+    "Read database aliases and/or generic saved environment JSON for an existing task. "
+    "This is not the authoritative or live source for Redis, MQ, Elasticsearch, MinIO, or "
+    "other Nacos-managed middleware; use read_middleware_context for those details. Request "
+    "only the sections needed. Environment config is sensitive local-only context and must "
+    "never be copied into logs or unrelated output."
+)
+READ_MIDDLEWARE_CONTEXT_TOOL_DESCRIPTION = (
+    "Authoritative live source for Redis, MQ, Elasticsearch, MinIO, job scheduler, object "
+    "storage, and other Nacos-managed middleware connection or diagnosis tasks. Call this after "
+    "prepare_task_context with the current task_id instead of inferring runtime values from "
+    "application files or generic environment JSON. If prepare omitted environment, this reads "
+    "the default/local profile; an explicit test or uat selection reads the matching profile. "
+    "Omit components to read every configured component, or pass configured component IDs. The "
+    "server derives Workspace, environment, Nacos address, namespace, dataIds, and extraction "
+    "paths; callers cannot supply them. This local-only tool returns plaintext fields by default; "
+    "pass reveal_secrets=false only when a redacted view is preferred. Returning and using "
+    "connection values in the current authorized task is allowed. Never persist their values in "
+    "logs, source code, documentation, unrelated tool arguments, or commits."
 )
 READ_TOOL_DESCRIPTION = (
-    "Read one or more mapped Markdown documents, exact ATX-heading sections, or JSON system "
-    "guides returned in prepare_task_context.system_guides.catalog. task_id must be the value "
+    "Read one or more mapped Markdown documents or exact ATX-heading sections. task_id must "
+    "be the value "
     "returned for the current task. Results preserve request order and every call is recorded "
     "server-side."
 )
@@ -115,7 +153,7 @@ SEARCH_DATABASE_TOOL_DESCRIPTION = (
 )
 EXECUTE_DATABASE_TOOL_DESCRIPTION = (
     "Execute exactly one bounded read-only SQL statement against a database alias returned "
-    "by prepare_task_context. Connection details and query limits are enforced server-side."
+    "by read_task_context. Connection details and query limits are enforced server-side."
 )
 PREPARE_TOOL_ANNOTATIONS = ToolAnnotations(
     readOnlyHint=True,
@@ -330,8 +368,8 @@ def create_context_router_mcp(
     trace_service: McpTraceService | None = None,
     database_payload_service: DatabaseToolPayloadService | None = None,
     document_search_service: ContextDocumentSearchService | None = None,
-    runtime_execution_service: RuntimeExecutionService | None = None,
     workspace_runtime_service: WorkspaceRuntimeOrchestrationService | None = None,
+    middleware_context_service: MiddlewareContextService | None = None,
 ) -> FastMCP:
     server = ContextRouterMCP(
         name=MCP_SERVER_NAME,
@@ -372,6 +410,62 @@ def create_context_router_mcp(
         except ContextPreparationError as exc:
             raise ToolError(f"{exc.code}: {exc}") from exc
         return result.model_dump(exclude_none=True)
+
+    @server.tool(
+        name=READ_TASK_CONTEXT_TOOL_NAME,
+        description=READ_TASK_CONTEXT_TOOL_DESCRIPTION,
+        annotations=READ_TOOL_ANNOTATIONS,
+    )
+    def read_task_context(
+        task_id: Annotated[int, Field(ge=1, strict=True)],
+        sections: Annotated[
+            list[Literal["databases", "environment"]],
+            Field(min_length=1, max_length=2),
+        ],
+    ) -> dict[str, Any]:
+        try:
+            result = preparation_service.read_task_context(
+                task_id=task_id,
+                sections=sections,
+            )
+        except TaskContextReadError as exc:
+            raise ToolError(f"{exc.code}: {exc}") from exc
+        return result.model_dump(exclude_none=True)
+
+    @server.tool(
+        name=READ_MIDDLEWARE_CONTEXT_TOOL_NAME,
+        description=READ_MIDDLEWARE_CONTEXT_TOOL_DESCRIPTION,
+        annotations=READ_TOOL_ANNOTATIONS,
+    )
+    def read_middleware_context(
+        task_id: Annotated[int, Field(ge=1, strict=True)],
+        components: Annotated[
+            list[
+                Annotated[
+                    str,
+                    Field(
+                        min_length=1,
+                        max_length=64,
+                        pattern=r"^[a-z][a-z0-9_-]{0,63}$",
+                    ),
+                ]
+            ]
+            | None,
+            Field(default=None, min_length=1, max_length=20),
+        ] = None,
+        reveal_secrets: Annotated[bool, Field(strict=True)] = True,
+    ) -> dict[str, Any]:
+        if middleware_context_service is None:
+            raise ToolError("middleware_context_disabled: 中间件上下文工具当前不可用")
+        try:
+            result = middleware_context_service.read(
+                task_id=task_id,
+                components=components,
+                reveal_secrets=reveal_secrets,
+            )
+        except MiddlewareContextError as exc:
+            raise ToolError(f"{exc.code}: {exc}") from exc
+        return result.model_dump(mode="json", exclude_none=True)
 
     @server.tool(
         name=SEARCH_CONTEXT_TOOL_NAME,
@@ -523,81 +617,7 @@ def create_context_router_mcp(
             raise ToolError(f"{exc.code}: {exc}") from exc
         return result.model_dump(mode="json", exclude_none=True)
 
-    @server.tool(
-        name="apply_project_changes",
-        description=(
-            "Apply changed project files through Runtime Runner. Dependency and build file "
-            "changes select the full profile; other changes select the fast profile. Returns "
-            "an asynchronous operation ID for get_project_operation."
-        ),
-        annotations=RUNTIME_APPLY_TOOL_ANNOTATIONS,
-    )
-    def apply_project_changes(
-        project_id: Annotated[str, Field(min_length=1, max_length=32)],
-        changed_files: Annotated[
-            list[Annotated[str, Field(min_length=1, max_length=1000)]],
-            Field(min_length=1, max_length=500),
-        ],
-    ) -> dict[str, object]:
-        if runtime_execution_service is None:
-            raise ToolError("runtime_execution_disabled: Runtime Runner 当前不可用")
-        mode, reason = runtime_execution_service.select_mode(changed_files)
-        try:
-            run = runtime_execution_service.start(
-                project_id=project_id,
-                mode=mode,
-                trigger="mcp",
-                changed_files=changed_files,
-                decision_reason=reason,
-            )
-        except RuntimeExecutionError as exc:
-            raise ToolError(f"{exc.code}: {exc}") from exc
-        return _runtime_run_payload(run)
-
-    @server.tool(
-        name="get_project_operation",
-        description="Read one Runtime Runner operation and a bounded tail of its execution log.",
-        annotations=RUNTIME_READ_TOOL_ANNOTATIONS,
-    )
-    def get_project_operation(
-        operation_id: Annotated[str, Field(min_length=1, max_length=32)],
-        log_characters: Annotated[int, Field(ge=1000, le=50_000)] = 10_000,
-    ) -> dict[str, object]:
-        if runtime_execution_service is None:
-            raise ToolError("runtime_execution_disabled: Runtime Runner 当前不可用")
-        try:
-            run = runtime_execution_service.get_run(operation_id)
-            log_content, log_truncated = runtime_execution_service.read_log(
-                operation_id,
-                log_characters,
-            )
-        except RuntimeExecutionError as exc:
-            raise ToolError(f"{exc.code}: {exc}") from exc
-        payload = _runtime_run_payload(run)
-        payload["log"] = {
-            "content": log_content,
-            "truncated": log_truncated,
-        }
-        return payload
-
     return server
-
-
-def _runtime_run_payload(run: object) -> dict[str, object]:
-    return {
-        "operation_id": str(run.id),
-        "project_id": str(run.project_id),
-        "mode": str(run.mode),
-        "status": str(run.status),
-        "snapshot_id": str(run.snapshot_id),
-        "decision_reason": str(run.decision_reason),
-        "changed_files": list(run.changed_files),
-        "exit_code": run.exit_code,
-        "error_message": run.error_message,
-        "created_at": run.created_at.isoformat(),
-        "started_at": (run.started_at.isoformat() if run.started_at is not None else None),
-        "finished_at": (run.finished_at.isoformat() if run.finished_at is not None else None),
-    }
 
 
 def _elapsed_ms(started_ns: int) -> int:
@@ -627,6 +647,20 @@ def _request_summary(name: str, arguments: dict[str, Any]) -> dict[str, object] 
         return {
             "task_characters": len(task) if isinstance(task, str) else 0,
             "agent_name": agent_name if isinstance(agent_name, str) else None,
+        }
+    if name == READ_TASK_CONTEXT_TOOL_NAME:
+        sections = arguments.get("sections")
+        return {
+            "sections": [item for item in sections if isinstance(item, str)]
+            if isinstance(sections, list)
+            else [],
+        }
+    if name == READ_MIDDLEWARE_CONTEXT_TOOL_NAME:
+        components = arguments.get("components")
+        return {
+            "component_count": len(components) if isinstance(components, list) else None,
+            "all_components": components is None,
+            "reveal_secrets": arguments.get("reveal_secrets", True) is True,
         }
     if name == READ_TOOL_NAME:
         requests = arguments.get("requests")
@@ -683,15 +717,38 @@ def _request_summary(name: str, arguments: dict[str, Any]) -> dict[str, object] 
 
 def _result_summary(name: str, payload: dict[str, Any]) -> dict[str, object] | None:
     if name == PREPARE_TOOL_NAME:
-        project = payload.get("project")
         return {
-            "document_count": (project.get("node_count") if isinstance(project, dict) else None),
-            "database_count": len(payload.get("databases", []))
-            if isinstance(payload.get("databases"), list)
-            else 0,
+            "document_count": _document_tree_count(payload.get("documents")),
             "warning_count": len(payload.get("warnings", []))
             if isinstance(payload.get("warnings"), list)
             else 0,
+        }
+    if name == READ_TASK_CONTEXT_TOOL_NAME:
+        databases = payload.get("databases")
+        environment = payload.get("environment")
+        return {
+            "database_count": len(databases) if isinstance(databases, list) else None,
+            "environment_requested": isinstance(environment, dict),
+            "environment_configured": (
+                bool(environment.get("configured")) if isinstance(environment, dict) else None
+            ),
+        }
+    if name == READ_MIDDLEWARE_CONTEXT_TOOL_NAME:
+        components = payload.get("components")
+        warnings = payload.get("warnings")
+        return {
+            "component_count": len(components) if isinstance(components, list) else 0,
+            "source_count": (
+                sum(
+                    len(component.get("sources", []))
+                    for component in components
+                    if isinstance(component, dict) and isinstance(component.get("sources"), list)
+                )
+                if isinstance(components, list)
+                else 0
+            ),
+            "warning_count": len(warnings) if isinstance(warnings, list) else 0,
+            "secrets_revealed": payload.get("secrets_revealed") is True,
         }
     if name == READ_TOOL_NAME:
         documents = payload.get("documents")
@@ -751,6 +808,17 @@ def _result_summary(name: str, payload: dict[str, Any]) -> dict[str, object] | N
             "step_count": len(steps) if isinstance(steps, list) else 0,
         }
     return None
+
+
+def _document_tree_count(value: object) -> int:
+    if not isinstance(value, dict):
+        return 0
+    children = value.get("children")
+    return (
+        1 + sum(_document_tree_count(child) for child in children)
+        if isinstance(children, list)
+        else 1
+    )
 
 
 def _bounded_result_metadata(

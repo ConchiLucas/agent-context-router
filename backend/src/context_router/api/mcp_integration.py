@@ -19,6 +19,16 @@ def get_mcp_integration(request: Request) -> McpIntegrationInfo:
     return _service(request).get_info()
 
 
+@router.get("/tools")
+async def list_mcp_tools(request: Request) -> dict[str, object]:
+    tools = await request.app.state.mcp_server.list_tools()
+    return {
+        "tools": [
+            tool.model_dump(mode="json", by_alias=True, exclude_none=True) for tool in tools
+        ]
+    }
+
+
 @router.post("/tests", response_model=McpIntegrationTestResult)
 async def test_mcp_integration(
     payload: McpIntegrationTestRequest,

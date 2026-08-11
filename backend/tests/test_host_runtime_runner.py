@@ -93,6 +93,10 @@ def lease(runtime_root: Path, workspace_root: Path) -> dict[str, object]:
                 "project_relative_path": None,
             }
         ],
+        "project_ids_by_relative_path": {
+            ".": "project-root",
+            "web-react": "project-web",
+        },
         "lease_token": "l" * 48,
     }
 
@@ -102,7 +106,12 @@ def test_runner_executes_verified_fixed_entry_and_reports_success(tmp_path: Path
     runtime_root = tmp_path / "runtime"
     workspace_root = tmp_path / "workspaces" / "workspace1"
     workspace_root.mkdir(parents=True)
-    create_snapshot(runtime_root, "#!/bin/sh\nprintf 'runner-ok\\n'\n")
+    create_snapshot(
+        runtime_root,
+        "#!/bin/sh\n"
+        "printf 'runner-ok:%s\\n' \"$RUNTIME_WORKSPACE_ID\"\n"
+        "printf '%s\\n' \"$RUNTIME_PROJECT_IDS\"\n",
+    )
     api = FakeApi()
     runner = module.HostRuntimeRunner(
         api=api,
@@ -115,7 +124,10 @@ def test_runner_executes_verified_fixed_entry_and_reports_success(tmp_path: Path
 
     assert api.started == [("operation1", "l" * 48)]
     assert api.completed == [("operation1", "step1", 0)]
-    assert "runner-ok" in (runtime_root / "runs/snapshot1/execution.log").read_text()
+    log = (runtime_root / "runs/snapshot1/execution.log").read_text()
+    assert "runner-ok:workspace1" in log
+    assert ".\tproject-root" in log
+    assert "web-react\tproject-web" in log
 
 
 def test_runner_rejects_manifest_mismatch_without_executing(tmp_path: Path) -> None:
@@ -171,3 +183,16 @@ def test_runner_token_requires_private_regular_file(tmp_path: Path) -> None:
 
     with pytest.raises(module.RunnerSecurityError, match="0600"):
         module.load_private_token(token)
+
+
+def test_runner_api_treats_connection_reset_as_recoverable(monkeypatch) -> None:
+    module = load_runner_module()
+    client = module.RunnerApiClient("http://127.0.0.1:49173", "x" * 48)
+
+    def reset_connection(*_args, **_kwargs):
+        raise ConnectionResetError("connection reset by peer")
+
+    monkeypatch.setattr(module.urllib.request, "urlopen", reset_connection)
+
+    with pytest.raises(module.RunnerError, match="控制面请求失败"):
+        client.heartbeat_runner("runner-1")

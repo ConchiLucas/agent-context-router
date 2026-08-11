@@ -80,9 +80,11 @@ test("maps trace completeness and warning codes to concise Chinese messages", ()
   );
 });
 
-test("keeps only the ten Context Router server and legacy tools", () => {
+test("keeps the ten current and two historical Context Router tools", () => {
   assert.deepEqual(INTERNAL_MCP_TOOL_NAMES, [
     "prepare_task_context",
+    "read_task_context",
+    "read_middleware_context",
     "search_context_documents",
     "read_context_document",
     "search_database_objects",

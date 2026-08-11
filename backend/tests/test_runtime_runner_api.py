@@ -110,6 +110,7 @@ def test_runner_can_register_lease_and_complete_operation(tmp_path: Path) -> Non
         assert lease.status_code == 200
         body = lease.json()
         assert body["operation"]["id"] == operation.id
+        assert body["project_ids_by_relative_path"] == {}
         assert body["steps"][0]["snapshot_relative_path"].startswith("workspaces/")
         assert "content" not in str(body)
         lease_token = body["lease_token"]

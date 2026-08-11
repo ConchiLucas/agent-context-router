@@ -37,6 +37,22 @@ test("allows reads and the explicit safe browser POST allowlist", () => {
     ),
     true,
   );
+  assert.equal(
+    isBrowserApiRequestAllowed(
+      "/api/workspaces/workspace-1/containers/bulk-action",
+      "POST",
+    ),
+    true,
+  );
+  for (const mode of ["fast", "full"]) {
+    assert.equal(
+      isBrowserApiRequestAllowed(
+        `/api/projects/project-1/runtime-config/${mode}/execute`,
+        "POST",
+      ),
+      true,
+    );
+  }
   assert.equal(isBrowserApiRequestAllowed("/api/system-guides", "POST"), false);
   assert.equal(
     isBrowserApiRequestAllowed("/api/system-guides/guide-1/content", "PUT"),
@@ -74,7 +90,7 @@ test("rejects browser configuration and execution commands", () => {
   );
   assert.equal(
     isBrowserApiRequestAllowed(
-      "/api/projects/project-1/runtime-config/fast/execute",
+      "/api/projects/project-1/runtime-config/turbo/execute",
       "POST",
     ),
     false,

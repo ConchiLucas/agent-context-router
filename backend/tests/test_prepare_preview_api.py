@@ -95,18 +95,10 @@ summary: 项目导航。
     assert response.status_code == 200
     payload = response.json()
     assert payload["task_id"] == 77
-    assert payload["workspace"]["workspace_id"] == workspace.json()["id"]
+    assert set(payload) == {"task_id", "documents", "access"}
     project_root = payload["documents"]
     assert project_root["summary"] == "项目导航。"
-    assert "summary" not in project_root["children"][0]
+    assert project_root["children"][0]["summary"] == "子文档"
     assert "content" not in str(payload["documents"])
-    assert payload["system_guides"]["required"][0]["content"]["schema_version"] == 1
-    assert payload["database_environment"] == {
-        "key": "test",
-        "name": "TEST",
-        "revision": 1,
-        "selection": "task_explicit",
-    }
-    assert payload["environment_config"] == {"service": {"endpoint": "test.internal"}}
     assert environment_after_preview.json()["active_environment"] == "uat"
     assert removed_project_preview.status_code == 404

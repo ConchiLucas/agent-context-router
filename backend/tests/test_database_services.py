@@ -228,7 +228,7 @@ def build_services(tmp_path: Path):
     )
 
 
-def test_prepare_lists_database_without_opening_remote_connection(tmp_path: Path) -> None:
+def test_task_context_lists_database_without_opening_remote_connection(tmp_path: Path) -> None:
     (
         _,
         registry,
@@ -244,9 +244,14 @@ def test_prepare_lists_database_without_opening_remote_connection(tmp_path: Path
     service = ContextPreparationService(registry, tasks, access)
 
     result = service.prepare_for_project(project.id)
+    context = service.read_task_context(
+        task_id=result.task_id,
+        sections=["databases"],
+    )
 
-    assert result.databases[0].database == "analytics"
-    assert result.databases[0].capabilities == ["search_objects", "execute_query"]
+    assert context.databases is not None
+    assert context.databases[0].database == "analytics"
+    assert context.databases[0].capabilities == ["search_objects", "execute_query"]
     assert created == []
     assert manager.cached_connector_count == 0
 

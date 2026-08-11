@@ -30,7 +30,7 @@
 - 顶层管理实体和 Codex 运行时上下文边界统一为 Workspace。Workspace 保存唯一绝对根目录和总启停状态；Project 必须归属一个 Workspace，只保存名称、`frontend/backend` 类型和工作空间内唯一的 `relative_path`，没有独立 enabled。根项目用 `.`，`AGENTS.md` 入口由两者确定性推导；当前不自动扫描目录注册项目。
 - cwd 路由在全部 Workspace 根目录中选择最长前缀，工作空间内最深 Project 只记录为 `active_project` 元数据。prepare、search、read、调用记录、文档树、刷新和 MCP JSON 都以 Workspace 为边界；活动项目不收窄文档或数据库范围。
 - Workspace 根目录固定自动探测可选 `AGENTS.md`，不新增路径配置字段；缺失时继续使用合成入口。ProjectRegistry 分别保留工作空间级及各 Project 的 DocumentCache 和搜索索引，再构建 Workspace 聚合缓存。Workspace 刷新先构建根入口和全部子项目，任一文档构建失败时保留整份旧映射；重复文档由 Workspace 入口优先，Project 之间按最深所有者去重。
-- 物理数据源和数据库清单继续全局维护，授权记录仍由 `project_databases` 绑定具体 Project；Workspace task 汇总使用所有子项目当前有效的授权。`mcp_alias` 唯一约束提升到 Workspace，prepare 的数据库摘要携带所属项目 ID、名称和类型，数据源汇总视图不复制授权或策略。
+- 物理数据源和数据库清单继续全局维护，授权记录仍由 `project_databases` 绑定具体 Project；Workspace task 汇总使用所有子项目当前有效的授权。`mcp_alias` 唯一约束提升到 Workspace，`read_task_context` 的数据库摘要携带所属项目 ID、名称和类型，数据源汇总视图不复制授权或策略。
 - 新 prepare 写入 `scope='workspace'`、稳定 Workspace 快照和可选活动项目快照；read/search/database 每次按 Workspace 当前状态重新校验。migration 前的 task 保持 `scope='project'` 和原 project_id/project_key 权限范围，同时回填 Workspace/活动项目字段供工作空间调用记录查询。
 - migration `20260726_0013` 先采用兼容式一对一回填：每个旧 Project 生成同 ID Workspace，旧入口父目录成为 `root_path`，Project 设为 `relative_path='.'`；`20260726_0014` 再新增 `project_kind`、删除 Project enabled、把数据库 alias 提升到 Workspace 唯一，并增加 Workspace task 快照；`20260726_0015` 为 Workspace 根文档新增独立派生搜索索引。旧 `agents_path/project_type` 暂时双写兼容，当前 migration head 为 `20260726_0015`。
 

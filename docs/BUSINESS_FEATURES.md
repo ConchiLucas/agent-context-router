@@ -14,7 +14,7 @@
 - 工作空间配置以及项目 ID、归属、类型、源码路径、文档入口路径和推导后的兼容 `agents_path` 持久化到 PostgreSQL，后端重启后自动恢复。
 - 本机映射项包含 `visible`、`main_path` 和 `document_reader_paths`。隐藏项不显示卡片也不参与本机 cwd 路由；共享目录只可读取主目录文档，不能使用数据库和部署工具。
 - 浏览器工作台允许重载本机映射、刷新文档缓存，以及在明确确认后全量覆盖文档与部署文件；其他配置继续由受校验的本机 AI/运维 API 维护。
-- Context Router 自身的使用说明由“系统文档”菜单统一维护为 JSON，不进入任何业务工作空间的 `AGENTS.md`。系统文档保存即生效且没有启停状态；prepare 返回全部目录，并可为指定文档直接返回全文。
+- Context Router 自身的使用说明由“系统文档”菜单统一展示，包括当前 MCP `tools/list` 的中文说明，不进入业务工作空间的 `AGENTS.md`，也不随 prepare 返回。
 - AI/运维新增或编辑项目时先验证并重建完整文档树，成功后才更新数据库和当前内存状态；工作空间记录存在即参与目录匹配，不提供总启停开关。
 - 持久化路径失效时项目卡片仍保留并显示错误；路径修复由 AI/运维完成，修复后可从 Workspace 卡片触发全量刷新。
 - migration `20260726_0013` 会为每个旧项目建立一个同 ID 工作空间，工作空间根目录取旧 `AGENTS.md` 的父目录，旧项目作为 `relative_path='.'` 的根项目；`20260726_0014` 为项目增加 `project_kind`（旧记录默认 `backend`）并删除 Project enabled；`20260726_0015` 增加 Workspace 根文档派生搜索索引；`20260727_0016` 增加 `document_relative_path` 并从旧 `agents_path` 回填，迁移本身不移动磁盘文档。原项目 ID、数据库授权和调用历史不变。
@@ -68,7 +68,7 @@ title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 sum
 ## 页面
 
 - 首页左侧主导航为“工作空间 / 数据源 / 调用链路 / 系统文档”。工作空间页顶部使用“全部工作空间 / 动态工作空间类型”Tab 筛选工作空间卡片。
-- 左侧“系统文档”允许搜索已有统一 JSON 使用说明、切换树形/源码并保存正文；不提供新建、删除、key、顺序、prepare 策略、启用、版本或发布状态。
+- 左侧“系统文档”按当前 MCP `tools/list` 为每个工具提供独立的只读源码/树形视图，页面使用简洁中文介绍但不修改 AI 客户端收到的原始英文工具描述；页面同时允许搜索已有统一 JSON 使用说明、切换树形/源码和保存正文，不提供新建、删除、key、顺序、prepare 策略、启用、版本或发布状态。
 - 页面能力收敛为查看、筛选和复制，以及不会修改配置的连接测试、密码按需查看、Workspace 刷新、MCP 接入/测试、文档树、调用历史和运行记录查看。
 - 工作空间卡片展示本机主目录、共享文档目录数量、项目数量、数据源/数据库授权汇总和更新时间；页面顶部可在编辑 YAML 后“重载本机映射”。右上角“刷新映射”只重建文档缓存与派生搜索索引。
 - 工作空间详情提供“前端项目 / 后端项目 / 数据源汇总”三个 Tab；前两个 Tab 按 `project_kind` 展示根项目和嵌套项目卡片，以及项目名称、类型、源码相对路径和文档入口相对路径。
@@ -77,9 +77,9 @@ title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 sum
 - 文档树使用全屏可拖动画布和矩形节点，从上到下展示层级。每个总览或子树详情视图都以单个文档为第一层，其全部直接子文档作为第二层横向平铺；从第三层开始按父文档独立判断，直接子文档不超过 4 个时继续递归，超过 4 个时每行最多显示 4 个并停止该分支继续内联后代。被停止分支中仍有下级文档的卡片显示下级数量入口，叶子卡片不显示；点击卡片主体查看 Markdown，点击下级入口以该卡片为新根进入子树详情，并通过面包屑逐级返回。不同分支独立判断，一条分支换行不会阻止其他未超限分支继续向下展示。
 - 点击节点后，通过独立详情抽屉展示 Markdown 标题、表格、列表、代码块和引用。
 - Markdown 渲染不执行原始 HTML 或脚本。
-- Workspace 工具栏支持查看 MCP JSON，预览包含 Workspace、全部 Project 的源码路径与文档入口路径、可选 `active_project`、显式根树或合成根树、全工作空间数据库摘要和当前任务环境的 `environment_config`。该本机预览与 MCP 返回都可能包含凭据，只能用于可信本机管理和授权排查，不得进入日志或开发文档。
+- Workspace 工具栏支持查看 MCP JSON；预览与 MCP prepare 使用同一精简返回模型，只包含 task_id、access、必要 warning 和三层文档投影，不内联数据库别名、环境 JSON 或凭据。
 - Workspace 工具栏支持查看 MCP 调用记录，并在同一个全屏网格画布中切换“文档树”和“调用列表”：任务选择器列出该工作空间内至少产生过 read call 或数据库调用的 task；历史文档树只保留该任务实际调用过的文档及其从工作空间根开始的完整父级链路，隐藏未调用的旁支和后代，并在可见的已读取节点右上角标记文档读取批次。历史文档已不在当前树中时引导切换调用列表；未进入显式树的项目文档读取也继续保留在调用列表中。调用列表按时间合并文档读取和数据库调用，同一次批量读取的文档横向排在同一行，读取成功的文档仍可打开 Markdown 详情。
-- 左侧主导航提供独立“调用链路”页面，统一按任务查看 Context Router MCP 工具调用。页面支持任务搜索、Agent、十个固定内部工具和状态筛选，只在“调用树 / 调用列表”之间切换；不加载完整项目文档树，也不在这里打开 Markdown。
+- 左侧主导航提供独立“调用链路”页面，统一按任务查看 Context Router MCP 工具调用。页面支持任务搜索、Agent、十个当前工具、两个已下线 Project 工具的历史记录和状态筛选，只在“调用树 / 调用列表”之间切换；不加载完整项目文档树，也不在这里打开 Markdown。
 - 调用树以任务为根节点，按服务端稳定顺序展示 MCP 工具调用。一次 `read_context_document` 仍是一个工具调用节点，其批量读取的多个文档作为同一节点的横向产物；普通连续调用只表达顺序，只有显式父调用时才表达因果关系。任务列表和详情同时展示“完整 / 运行中 / 可能不完整”，prepare 记录缺失、历史恢复、服务重启中断或明细失联会显示明确提示。
 - 调用链路页的文档工具节点只显示状态、耗时和读取规模，不提供完整出入参详情。数据库工具节点可按需打开全屏详情页，在“请求参数 / 响应结果”之间切换并复制当前内容。SQL 单独显示，历史未采集、过期、采集失败和快照截断都有明确状态。
 - 工作空间详情工具栏提供“MCP 接入”面板，集中展示服务地址、工具能力、Codex/Antigravity 配置模板，并针对当前 Workspace 执行连接测试；客户端配置由后端按公开 MCP URL 生成，可直接复制。
@@ -90,22 +90,24 @@ title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 sum
 - 数据源页面从后端能力接口读取真实能力。MySQL、MariaDB、PostgreSQL 和 ClickHouse 当前支持连接测试、数据库同步、对象搜索和只读查询；SQL Server、SQLite、Oracle 只保留可查看、可由 AI/运维维护的连接配置，不会被标记为 MCP 可查询。
 - ClickHouse 连接可配置 HTTP/HTTPS、证书校验、启动数据库、连接超时和读写超时。后端运行在 Docker 中时，访问宿主机服务使用 `host.docker.internal`；连接测试只返回状态、耗时和短错误码，不返回密码、DSN 或驱动堆栈。
 - 后端项目的“数据源详情”只展示当前数据库授权、稳定别名和查询策略，不提供选择或保存。AI/运维通过既有批量 API 维护时，仍在一次事务内整批替换该项目的数据库关联，未改动的既有关联继续保留原查询策略。
-- 每个项目数据库关联拥有稳定的 `mcp_alias`，格式为 `^[a-z][a-z0-9_-]{0,63}$`；唯一性在整个 Workspace 内大小写无关校验，两个不同项目不能使用同一别名。Agent 只使用 prepare 返回的别名；数据源 ID、远端库名、Host、账号和密码不会进入 MCP 参数。
+- 每个项目数据库关联拥有稳定的 `mcp_alias`，格式为 `^[a-z][a-z0-9_-]{0,63}$`；唯一性在整个 Workspace 内大小写无关校验，两个不同项目不能使用同一别名。Agent 只使用 `read_task_context` 返回的别名；数据源 ID、远端库名、Host、账号和密码不会进入 MCP 参数。
 - AI/运维批量维护项目数据库时，把数据库选择和全部 `mcp_alias` 作为一次事务保存；别名 A/B 互换不会经过冲突的中间状态，请求失败也不会留下部分更新，Repository 和数据库唯一索引都会校验其他子项目已经占用的别名。
-- 项目数据库关联默认只读、最多返回 1000 行、结果上限 2 MB、查询超时 15 秒；这些策略持久化后由服务端和全局硬上限共同收紧。数据库不可用、系统库、非只读关联、缺少 MCP 别名以及没有 Connector 的 Engine 都不会出现在 prepare 的数据库清单中。
-- 数据库授权归属仍是项目：物理连接和库清单作为全局数据源配置保存，`project_databases` 只关联具体项目。新 Workspace task 会汇总并使用所有子项目的有效授权，prepare 的每条数据库摘要同时返回所属项目 ID、名称和 `project_kind`；“数据源汇总”只聚合展示，不复制授权或查询策略。
+- 项目数据库关联默认只读、最多返回 1000 行、结果上限 2 MB、查询超时 15 秒；这些策略持久化后由服务端和全局硬上限共同收紧。数据库不可用、系统库、非只读关联、缺少 MCP 别名以及没有 Connector 的 Engine 都不会出现在 `read_task_context` 的数据库清单中。
+- 数据库授权归属仍是项目：物理连接和库清单作为全局数据源配置保存，`project_databases` 只关联具体项目。新 Workspace task 会汇总并使用所有子项目的有效授权，`read_task_context` 的每条数据库摘要同时返回所属项目 ID、名称和 `project_kind`；“数据源汇总”只聚合展示，不复制授权或查询策略。
 - Workspace 可选配置 TEST/UAT 环境映射。环境详情按项目和稳定逻辑别名并列展示两个环境的物理数据库及问题状态，但不提供自动匹配、手工修正、保存或全局环境切换；这些配置变更由 AI/运维通过受校验 API 完成。显式 prepare 的任务级环境选择不修改 Workspace 当前环境。
-- 环境映射复用已有 `project_databases` 的只读策略，不复制连接口令。`prepare_task_context(environment='test'|'uat')` 可为单个 task 显式固化环境并记录 `task_explicit`；省略参数则使用 Workspace 当前环境并记录 `workspace_default`。数据库摘要和后续工具都按 task 环境解析。
+- 环境映射复用已有 `project_databases` 的只读策略，不复制连接口令。`prepare_task_context(environment='test'|'uat')` 可为单个 task 显式固化环境并记录 `task_explicit`；省略参数则使用 Workspace 当前环境并记录 `workspace_default`。`read_task_context` 返回的数据库摘要和后续工具都按 task 环境解析。
 - 保存映射、保存通用 JSON 或切换 Workspace 当前环境都会递增共享 revision；两种选择模式的旧 task 都会在数据库工具调用时返回 `environment_changed` 并要求重新 prepare。未配置环境选择器的单环境 Workspace 在省略参数时保持原有数据库授权行为，显式传参返回 `environment_not_configured`。
 - “环境详情”面板另有通用 JSON 页签，以只读格式分别展示 TEST/UAT JSON 对象，不为 MQ、Redis、MinIO、ES 或未来组件预设字段。JSON 可以在没有数据库映射时独立建立环境选择器，首次由 AI/运维保存时默认当前环境为 UAT。两份 JSON 合计最多 256 KiB、最多嵌套 20 层，超出 JavaScript 安全整数范围的值应改用字符串。
-- task 所选环境的 JSON 作为 `environment_config` 随 prepare 返回给可信本机 MCP 调用方，并由同模型的本机 MCP JSON 预览展示。可按明确业务需要保存地址及密码、Token、AccessKey 等访问凭据，但内容以明文 JSONB 保存在本地；严禁把实际值写入日志、开发文档、链路摘要或示例输出。
+- task 所选环境的 JSON 只在显式调用 `read_task_context` 请求 `environment` 时返回给可信本机 MCP 调用方。可按明确业务需要保存地址及密码、Token、AccessKey 等访问凭据，但内容以明文 JSONB 保存在本地；严禁把实际值写入日志、开发文档、链路摘要或示例输出。
+- Workspace 可另行配置 `default/test/uat` Nacos 连接和组件抽取规则。prepare 不传环境时中间件固定使用 `default/local`，显式传 `test/uat` 时使用同名配置档；这项选择不受 Workspace 当前默认环境影响，也不改变数据库环境映射语义。本机 `read_middleware_context` 默认返回密码、Token、SecretKey 等明文字段，调用方可显式传 `reveal_secrets=false` 获取脱敏视图；Nacos 地址、命名空间、dataId 和字段路径均由服务端配置决定，MCP 调用方不能临时改写。
+- prepare 的 `access` 对完整 Workspace task 显式包含 `middleware`。涉及 Nacos 管理的中间件实时连接或诊断时，`read_middleware_context` 是权威入口；`read_task_context` 的通用环境 JSON 只作为兼容配置，不替代实时 Nacos。本机授权任务可在当前回答中返回并使用明文凭据建立诊断连接，但不得把实际值写入源码、Markdown、持久化日志、无关工具参数或提交记录。
 - 浏览器 API 客户端和后端 `BrowserReadOnlyMiddleware` 双重限制配置写操作。除既有诊断/预览外，工作空间页面只额外允许重载本机映射和双向共享文件全量覆盖；旧 deploy 预览/摘要接口不再允许浏览器调用。其他方法返回 `405 management_read_only`。
 
 ## Workspace 运行编排
 
 - 运行边界是整个 Workspace。用户说“启动”“启动项目”或“启动服务”时，`start_workspace` 始终排入 Workspace 唯一的完整启动脚本，由脚本决定并启动该目录下的全部项目，不在 MCP 层提供单项目启动分支。
 - 代码修改完成后，Codex 按根 `AGENTS.md` 的约定调用一次 `apply_workspace_changes(task_id, changed_files)`。服务端用 Workspace 相对路径做最长 Project 前缀匹配：项目内文件选择该项目的快速或完整更新；Workspace 级文件、`.env.local`、无法唯一归属的文件或跨项目改动统一选择完整更新。
-- `get_workspace_operation(operation_id)` 只查询已排队操作，服务端从操作记录解析并校验任务归属，返回操作、步骤、终态和有界日志，不在查询时触发执行。旧的 `apply_project_changes`、`get_project_operation` 仅作为兼容工具保留。
+- `get_workspace_operation(operation_id)` 只查询已排队操作，服务端从操作记录解析并校验任务归属，返回操作、步骤、终态和有界日志，不在查询时触发执行。Project 级兼容工具已经下线，单项目更新也统一由 `apply_workspace_changes` 按变更路径路由。
 - Context Router 是控制面：PostgreSQL 保存 Workspace 启动文件、Project 快速/完整更新文件、项目顺序、路径策略和异步操作状态；它不在后端容器内直接执行目标仓库脚本。
 - 目标仓库 `deploy/context-router/` 是运行配置唯一事实源：根 `manifest.yaml` 和 `workspace/start/` 描述 Workspace，Project 根 `deploy/context-router/fast|full/` 描述两种更新模式。同步器只读取固定目录，拒绝软链接、越界路径、非 UTF-8、敏感文件、缺失或不可执行的 `deploy.sh`、非法 YAML 和不完整 Project 集合。
 - 页面使用 `POST /api/workspaces/{id}/shared-files/publish|restore` 完成主目录与数据库间的全量覆盖；publish 在一个 PostgreSQL 事务中同时替换源文件副本及 Workspace/Project 运行配置。旧 deploy 预览接口只保留给本机 AI/运维兼容调用，不进入浏览器交互。
@@ -116,9 +118,9 @@ title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 sum
 
 ## MCP
 
-- MCP 固定提供十个工具：五个上下文与只读数据库工具，三个 Workspace 运行编排工具 `apply_workspace_changes`、`start_workspace`、`get_workspace_operation`，以及两个旧 Project 运行工具 `apply_project_changes`、`get_project_operation` 的兼容入口。数据源记录增删不会改变 `tools/list`。
+- MCP 固定提供十个工具：七个上下文、只读数据库与中间件工具，以及三个 Workspace 运行编排工具 `apply_workspace_changes`、`start_workspace`、`get_workspace_operation`。数据源或中间件记录增删不会改变 `tools/list`。
 - 服务端先在全部工作空间根目录中按 cwd 最长前缀确定 Workspace，再按源码 `relative_path` 计算最深匹配 Project 作为 `active_project` 快照；docs 文档入口目录不参与活动项目归属。活动项目只帮助说明 Codex 当前开发位置，不限制文档、搜索、read 或数据库授权范围。
-- prepare 不搜索、不排名、不截断，也不返回 Markdown 正文；它返回工作空间 ID/名称、全部项目的 ID/名称/类型/源码相对路径/文档入口相对路径、可选活动项目、真实根显式文档树或合成根树，以及所有子项目当前可用于 MCP 的稳定数据库别名、所属项目信息、可选任务环境、Engine、用途和能力摘要。未进入真实根显式树的 Project 文档仍可由 `search_context_documents` 定位并按结果 ID 读取。prepare 只读取本地配置，不连接业务数据库；数据库摘要暂时失败时以 warning 降级，文档上下文仍可返回。
+- prepare 不按 task 内容搜索或排名，也不返回 Markdown 正文；它只返回 task_id、可用能力、必要 warning，以及节点仅含 `document_id`、`summary`、`children` 的确定性三层投影。存在真实 Workspace 根 `AGENTS.md` 时固定从它开始；缺少真实根时，才从 cwd 命中的 Project 入口或合成根开始。未返回的深层文档和其他 Project 文档仍可由 Workspace 范围的 `search_context_documents` 定位并按结果 ID 读取。数据库别名和环境 JSON 由 `read_task_context` 按需返回。
 - `prepare_task_context` 的可选 `environment` 只接受 `test/uat`。显式值是 task 局部选择，不执行 Workspace 切换；省略时读取 Workspace 当前环境。配置选择器时，返回的 `database_environment.selection` 分别为 `task_explicit` 或 `workspace_default`；未配置选择器时只能省略该参数。
 - 每次成功调用 prepare 都由 PostgreSQL 生成独立 task_id。
 - 新 task 保存 `scope='workspace'`、稳定的 workspace_id/workspace_key/name、可选 active_project 快照，以及可选 `database_environment`、共享 revision 和 `database_environment_selection`。活动项目删除或同路径重建不会改变 task 的历史展示身份，但后续工具授权始终重新校验 task 绑定 Workspace 的当前状态。
@@ -130,7 +132,7 @@ title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 sum
 - 每次 read 由 PostgreSQL 生成 read_call_id；客户端不传 sequence，服务端不使用任务锁。
 - `mcp_document_read_calls` 和 `mcp_database_calls` 继续保存工具专属客观明细，并通过 `tool_call_id` 关联统一调用；旧历史在 migration 中恢复为 `legacy` 调用，不伪造历史 prepare 节点或缺失耗时。
 - 后端启动时把上次进程遗留的内部 `running` 调用标记为 `error/server_restarted`；链路 API 会按 prepare 是否存在、运行中、历史、重启中断和失联明细计算完整性。普通无内部调用 task 仍可作为“可能不完整”记录查看，管理端预览和接入测试任务不进入链路列表。
-- 新 task 的数据库调用固定经过 `task_id -> task 绑定 Workspace -> Workspace 唯一 mcp_alias -> 所属项目当前授权与连接策略 -> Connector`，因此可以使用任一子项目在 prepare 中返回的别名；旧 `scope='project'` task 继续走原项目 alias 兼容链路。客户端不能直接提交项目、连接或数据库内部参数。
+- 新 task 的数据库调用固定经过 `task_id -> task 绑定 Workspace -> Workspace 唯一 mcp_alias -> 所属项目当前授权与连接策略 -> Connector`，因此可以使用任一子项目在 `read_task_context` 中返回的别名；旧 `scope='project'` task 继续走原项目 alias 兼容链路。客户端不能直接提交项目、连接或数据库内部参数。
 - `search_database_objects` 支持 schema、table、view、column、index，并以 `names -> summary -> full` 渐进增加细节。客户端可传 glob pattern、schema、table 和 limit；服务端还会按细节级别、结果字节数和项目策略截断。
 - `execute_database_query` 只接受一条可安全解析的只读 SQL。服务端拒绝写操作、多语句、跨库访问、外部表函数以及文件/网络访问函数，并同时施加行数、结果字节数、超时和数据库侧只读约束。返回值明确携带截断状态，不把截断结果伪装成完整结果。
 - Connector 按当前数据源配置和数据库版本延迟创建并有界缓存；prepare、文档 read 和 `/health` 不依赖业务数据库在线。
@@ -150,5 +152,5 @@ title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 sum
 - 不自动修改 Codex 或 Antigravity 的本地配置，也不负责重启客户端。
 - 当前接入面板不处理远程 HTTPS、鉴权和 Skill 安装。
 - 文档检索不越出 task 绑定的 Workspace（旧 `scope='project'` task 不越出原项目）、不返回完整正文，也不提供向量或混合召回。
-- 调用链路页只记录客户端实际发送到 Context Router `/mcp` 的十个内部工具调用。客户端直连 GitHub、浏览器等其他 MCP Server 的调用不记录；本产品不连接或代理外部 MCP，不提供外部调用上报，也不建设跨 Server Trace。
+- 调用链路页只记录客户端实际发送到 Context Router `/mcp` 的十个当前工具调用，并保留两个已下线 Project 工具的历史记录。中间件读取只保存组件数量、明文开关和警告数量，不保存 Nacos 响应或连接凭据。客户端直连 GitHub、浏览器等其他 MCP Server 的调用不记录；本产品不连接或代理外部 MCP，不提供外部调用上报，也不建设跨 Server Trace。
 - 不提供数据库写入、DDL、DBA 运维、跨数据库联邦查询或任意外部表函数。

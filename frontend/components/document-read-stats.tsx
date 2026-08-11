@@ -30,6 +30,8 @@ function formattedTime(value: string | null | undefined): string {
 function isInternalCall(call: McpTraceToolCall): boolean {
   return (
     call.tool_name === "prepare_task_context" ||
+    call.tool_name === "read_task_context" ||
+    call.tool_name === "read_middleware_context" ||
     call.tool_name === "search_context_documents" ||
     call.tool_name === "read_context_document" ||
     call.tool_name === "search_database_objects" ||

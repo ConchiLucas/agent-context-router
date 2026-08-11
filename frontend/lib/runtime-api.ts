@@ -31,6 +31,51 @@ export type RuntimeRunStatus =
   | "failed"
   | "cancelled";
 
+export type RuntimeOperationStatus =
+  | "queued"
+  | "leased"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "cancelled"
+  | "interrupted";
+
+export interface RuntimeOperationStep {
+  id: string;
+  sequence: number;
+  owner_type: "workspace" | "project";
+  owner_id: string;
+  mode: RuntimeMode | "start";
+  status: "queued" | "running" | "succeeded" | "failed" | "skipped" | "cancelled";
+  changed_files: string[];
+  decision_reason: string;
+  exit_code: number | null;
+  error_code: string | null;
+  error_message: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  log: string;
+  log_truncated: boolean;
+}
+
+export interface RuntimeOperationSummary {
+  id: string;
+  task_id: number | null;
+  workspace_id: string;
+  kind: "apply_changes" | "start_workspace" | "project_update";
+  trigger: "mcp" | "api" | "ui";
+  status: RuntimeOperationStatus;
+  changed_files: string[];
+  current_step: number;
+  runner_id: string | null;
+  error_code: string | null;
+  error_message: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  steps: RuntimeOperationStep[];
+}
+
 export interface RuntimeRunSummary {
   id: string;
   project_id: string;
@@ -100,6 +145,33 @@ export function listProjectRuntimeRuns(
 ): Promise<RuntimeRunSummary[]> {
   return runtimeRequest<RuntimeRunSummary[]>(
     `/projects/${encodeURIComponent(projectId)}/runtime-runs`,
+  );
+}
+
+export function executeProjectRuntimeConfig(
+  projectId: string,
+  mode: RuntimeMode,
+): Promise<RuntimeOperationSummary> {
+  return runtimeRequest<RuntimeOperationSummary>(
+    `/projects/${encodeURIComponent(projectId)}/runtime-config/${mode}/execute`,
+    { method: "POST" },
+  );
+}
+
+export function getWorkspaceRuntimeOperation(
+  workspaceId: string,
+  operationId: string,
+): Promise<RuntimeOperationSummary> {
+  return runtimeRequest<RuntimeOperationSummary>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/runtime-operations/${encodeURIComponent(operationId)}?log_characters=12000`,
+  );
+}
+
+export function getWorkspaceRuntimeRunnerStatus(
+  workspaceId: string,
+): Promise<{ available: boolean }> {
+  return runtimeRequest<{ available: boolean }>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/runtime-runner-status`,
   );
 }
 

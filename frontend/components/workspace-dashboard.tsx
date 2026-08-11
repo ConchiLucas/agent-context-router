@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { WorkspaceDetail } from "@/components/workspace-detail";
+import { WorkspaceContainersModal } from "@/components/workspace-containers-modal";
 import {
   getWorkspace,
   listWorkspaces,
@@ -271,6 +272,7 @@ export function WorkspaceDashboard() {
               最近更新：{formattedTime(workspace.updated_at)}
             </p>
             <div className="workspace-card-actions">
+              <WorkspaceContainersModal workspace={workspace} />
               <button
                 type="button"
                 className="primary-button"

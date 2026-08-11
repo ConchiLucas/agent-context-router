@@ -283,6 +283,29 @@ class DatabaseAccessService:
             )
         return snapshot.payloads.environments[selected_environment]
 
+    def validate_task_environment(
+        self,
+        workspace_id: str,
+        *,
+        task_environment: str | None,
+        task_environment_revision: int | None,
+        database_environment_selection: DatabaseEnvironmentSelection | None,
+    ) -> DatabaseEnvironment | None:
+        """Validate a task environment snapshot without reading any environment payload."""
+        selector = self.get_active_workspace_environment(workspace_id)
+        selected = self._validated_task_environment(
+            selector,
+            task_environment=task_environment,
+            task_environment_revision=task_environment_revision,
+            database_environment_selection=database_environment_selection,
+        )
+        if selector is not None and selected is None:
+            raise DatabaseAccessError(
+                "environment_changed",
+                "工作空间已配置环境，请重新 prepare",
+            )
+        return selected
+
     def list_prepared_workspace_databases(
         self,
         workspace_id: str,

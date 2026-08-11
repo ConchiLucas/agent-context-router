@@ -31,7 +31,7 @@ class RuntimeOperationStepDraft:
 
 @dataclass(frozen=True, slots=True)
 class RuntimeOperationDraft:
-    task_id: int
+    task_id: int | None
     workspace_id: str
     kind: str
     trigger: str
@@ -49,7 +49,7 @@ class RuntimeStepResult:
 @dataclass(frozen=True, slots=True)
 class RuntimeOperationRecord:
     id: str
-    task_id: int
+    task_id: int | None
     workspace_id: str
     kind: str
     trigger: str
@@ -596,7 +596,7 @@ class PostgresRuntimeOperationRepository:
     def _operation(row: tuple[object, ...]) -> RuntimeOperationRecord:
         return RuntimeOperationRecord(
             id=str(row[0]),
-            task_id=int(row[1]),
+            task_id=int(row[1]) if row[1] is not None else None,
             workspace_id=str(row[2]),
             kind=str(row[3]),
             trigger=str(row[4]),

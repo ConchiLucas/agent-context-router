@@ -41,13 +41,26 @@ class RecordingPreparation:
         return DumpResult(
             {
                 "task_id": 77,
-                "project": {"project_id": "project", "name": "测试项目", "node_count": 3},
                 "documents": {
                     "document_id": "root",
-                    "path": "AGENTS.md",
-                    "children": [],
+                    "summary": "入口",
+                    "children": [
+                        {"document_id": "one", "summary": "一", "children": []},
+                        {"document_id": "two", "summary": "二", "children": []},
+                    ],
                 },
-                "databases": [],
+            }
+        )
+
+    def read_task_context(self, **_: object) -> DumpResult:
+        return DumpResult(
+            {
+                "task_id": 77,
+                "databases": [{"database": "analytics"}],
+                "environment": {
+                    "configured": True,
+                    "config": {"password": "must-not-enter-trace"},
+                },
             }
         )
 
@@ -125,6 +138,38 @@ class RecordingQuery:
         }
 
 
+class RecordingMiddleware:
+    def read(self, **_: object) -> DumpResult:
+        return DumpResult(
+            {
+                "task_id": 77,
+                "profile_key": "test",
+                "environment": "test",
+                "provider": "nacos",
+                "fetched_at": "2026-08-11T10:00:00Z",
+                "secrets_revealed": True,
+                "components": [
+                    {
+                        "id": "redis-main",
+                        "type": "redis",
+                        "properties": {
+                            "host": "redis.test.local",
+                            "password": "middleware-secret-must-not-enter-trace",
+                        },
+                        "sources": [
+                            {
+                                "data_id": "c12-common.yaml",
+                                "group": "DEFAULT_GROUP",
+                                "md5": "abc123",
+                            }
+                        ],
+                    }
+                ],
+                "warnings": [],
+            }
+        )
+
+
 class FailingQuery:
     def execute(self, **_: object) -> dict[str, object]:
         raise DatabaseAccessError("connection_failed", "数据库当前无法连接")
@@ -182,7 +227,7 @@ def _tracking_service(
     )
 
 
-def test_all_five_mcp_tools_are_traced_in_server_order_without_sensitive_payloads() -> None:
+def test_all_seven_context_and_database_tools_are_traced_without_sensitive_payloads() -> None:
     repository = InMemoryMcpToolCallRepository()
     server = create_context_router_mcp(
         RecordingPreparation(),  # type: ignore[arg-type]
@@ -191,12 +236,24 @@ def test_all_five_mcp_tools_are_traced_in_server_order_without_sensitive_payload
         RecordingQuery(),  # type: ignore[arg-type]
         _tracking_service(repository),
         document_search_service=RecordingSearch(),
+        middleware_context_service=RecordingMiddleware(),  # type: ignore[arg-type]
     )
 
     async def invoke_tools() -> None:
         await server.call_tool(
             "prepare_task_context",
             {"task": "排查问题", "cwd": "/workspace/project", "agent_name": "codex"},
+        )
+        await server.call_tool(
+            "read_task_context",
+            {"task_id": 77, "sections": ["databases", "environment"]},
+        )
+        await server.call_tool(
+            "read_middleware_context",
+            {
+                "task_id": 77,
+                "components": ["redis-main"],
+            },
         )
         await server.call_tool(
             "search_context_documents",
@@ -224,23 +281,41 @@ def test_all_five_mcp_tools_are_traced_in_server_order_without_sensitive_payload
 
     assert [call.tool_name for call in calls] == [
         "prepare_task_context",
+        "read_task_context",
+        "read_middleware_context",
         "search_context_documents",
         "read_context_document",
         "search_database_objects",
         "execute_database_query",
     ]
-    assert [call.status for call in calls] == ["ok", "ok", "ok", "ok", "ok"]
+    assert [call.status for call in calls] == ["ok", "ok", "ok", "ok", "ok", "ok", "ok"]
     assert calls[0].result_summary == {
         "document_count": 3,
-        "database_count": 0,
         "warning_count": 0,
     }
+    assert calls[1].request_summary == {"sections": ["databases", "environment"]}
     assert calls[1].result_summary == {
+        "database_count": 1,
+        "environment_requested": True,
+        "environment_configured": True,
+    }
+    assert calls[2].request_summary == {
+        "component_count": 1,
+        "all_components": False,
+        "reveal_secrets": True,
+    }
+    assert calls[2].result_summary == {
+        "component_count": 1,
+        "source_count": 1,
+        "warning_count": 0,
+        "secrets_revealed": True,
+    }
+    assert calls[3].result_summary == {
         "returned_count": 1,
         "truncated": False,
         "max_relevance": 0.75,
     }
-    assert calls[2].result_summary == {
+    assert calls[4].result_summary == {
         "document_count": 1,
         "ok_count": 1,
         "error_count": 0,
@@ -251,8 +326,10 @@ def test_all_five_mcp_tools_are_traced_in_server_order_without_sensitive_payload
     assert "secret-result" not in serialized
     assert "正文不能进入调用摘要" not in serialized
     assert "结果正文不能进入调用摘要" not in serialized
+    assert "must-not-enter-trace" not in serialized
+    assert "middleware-secret-must-not-enter-trace" not in serialized
     assert "登录" not in serialized
-    assert calls[4].request_summary == {
+    assert calls[6].request_summary == {
         "database": "analytics",
         "sql_sha256": "70295e581aff4b4ae56d4cfae234338844965793adc6f178c5e5f44abf05c838",
     }

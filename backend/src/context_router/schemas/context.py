@@ -13,25 +13,8 @@ DatabaseEnvironmentSelection = Literal["workspace_default", "task_explicit"]
 
 class ContextDocumentNode(BaseModel):
     document_id: str
-    path: str
-    title: str | None = None
-    summary: str | None = None
-    error: str | None = None
+    summary: str
     children: list[ContextDocumentNode] = Field(default_factory=list)
-
-
-class PreparedProject(BaseModel):
-    project_id: str
-    name: str
-    node_count: int
-    relative_path: str = "."
-    document_relative_path: str = "AGENTS.md"
-    project_kind: ProjectKind = "backend"
-
-
-class PreparedWorkspace(BaseModel):
-    workspace_id: str
-    name: str
 
 
 class PreparedDatabaseEnvironment(BaseModel):
@@ -54,45 +37,31 @@ class PreparedDatabase(BaseModel):
     environment: DatabaseEnvironment | None = None
 
 
-class PreparedWorkspaceAccess(BaseModel):
-    mode: Literal["full", "documents_only"]
-    message: str
-
-
-class PreparedSystemGuideCatalogItem(BaseModel):
-    document_id: str
-    key: str
-    title: str
-    summary: str
-
-
-class PreparedSystemGuide(PreparedSystemGuideCatalogItem):
-    content: dict[str, Any]
-
-
-class PreparedSystemGuides(BaseModel):
-    required: list[PreparedSystemGuide] = Field(default_factory=list)
-    catalog: list[PreparedSystemGuideCatalogItem] = Field(default_factory=list)
-
-
 class PrepareTaskContextResult(BaseModel):
     task_id: int
-    workspace: PreparedWorkspace
     documents: ContextDocumentNode
-    projects: list[PreparedProject] = Field(default_factory=list)
-    active_project: PreparedProject | None = None
-    project: PreparedProject | None = None
-    databases: list[PreparedDatabase] = Field(default_factory=list)
-    database_environment: PreparedDatabaseEnvironment | None = None
-    environment_config: dict[str, Any] | None = None
-    workspace_access: PreparedWorkspaceAccess = Field(
-        default_factory=lambda: PreparedWorkspaceAccess(
-            mode="full",
-            message="当前目录是工作空间主目录。",
-        )
+    access: list[Literal["documents", "database", "environment", "middleware", "runtime"]] = Field(
+        default_factory=lambda: [
+            "documents",
+            "database",
+            "environment",
+            "middleware",
+            "runtime",
+        ]
     )
-    system_guides: PreparedSystemGuides = Field(default_factory=PreparedSystemGuides)
     warnings: list[str] | None = None
+
+
+class TaskEnvironmentContext(BaseModel):
+    configured: bool
+    selected: PreparedDatabaseEnvironment | None = None
+    config: dict[str, Any] | None = None
+
+
+class ReadTaskContextResult(BaseModel):
+    task_id: int
+    databases: list[PreparedDatabase] | None = None
+    environment: TaskEnvironmentContext | None = None
 
 
 class ContextDocumentReadRequest(BaseModel):

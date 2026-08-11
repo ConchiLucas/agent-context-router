@@ -17,9 +17,13 @@ from context_router.schemas.runtime_configs import (
     RuntimeRunLog,
     RuntimeRunSummary,
 )
+from context_router.schemas.workspace_runtime import RuntimeOperationView
 from context_router.services.project_registry import ProjectRegistryError
 from context_router.services.runtime_execution import RuntimeExecutionError
 from context_router.services.runtime_materialization import RuntimeMaterializationError
+from context_router.services.workspace_runtime_orchestration import (
+    WorkspaceRuntimeOrchestrationError,
+)
 
 router = APIRouter(prefix="/projects", tags=["project-runtime-config"])
 
@@ -168,28 +172,31 @@ def materialize_project_runtime_config(
 
 @router.post(
     "/{project_id}/runtime-config/{mode}/execute",
-    response_model=RuntimeRunSummary,
+    response_model=RuntimeOperationView,
     status_code=status.HTTP_202_ACCEPTED,
 )
 def execute_project_runtime_config(
     project_id: str,
     mode: RuntimeMode,
     request: Request,
-) -> RuntimeRunSummary:
+) -> RuntimeOperationView:
     _project(request, project_id)
     try:
-        run = request.app.state.runtime_execution_service.start(
+        return request.app.state.workspace_runtime_orchestration_service.update_project(
             project_id=project_id,
             mode=mode,
             trigger="ui",
-            decision_reason="用户在运行配置页面选择更新模式",
         )
-    except RuntimeExecutionError as exc:
+    except WorkspaceRuntimeOrchestrationError as exc:
+        response_status = (
+            status.HTTP_404_NOT_FOUND
+            if exc.code in {"project_not_found", "workspace_not_found"}
+            else status.HTTP_409_CONFLICT
+        )
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+            status_code=response_status,
             detail=str(exc),
         ) from exc
-    return _run(run)
 
 
 @router.get(

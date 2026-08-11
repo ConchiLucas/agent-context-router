@@ -156,12 +156,16 @@ def test_prepare_returns_guide_catalog_and_read_supports_system_document(
     prepared = ContextPreparationService(
         registry,
         tasks,  # type: ignore[arg-type]
-        system_guide_service=guides,
     ).prepare(task="检查使用规则", cwd=str(root.parent))
 
-    assert prepared.workspace_access.mode == "full"
-    assert prepared.system_guides.catalog[0].document_id == guide.document_id
-    assert prepared.system_guides.required[0].content["schema_version"] == 1
+    assert prepared.access == [
+        "documents",
+        "database",
+        "environment",
+        "middleware",
+        "runtime",
+    ]
+    assert "system_guides" not in prepared.model_dump(exclude_none=True)
 
     read_store = ReadStore()
     result = ContextDocumentReadService(

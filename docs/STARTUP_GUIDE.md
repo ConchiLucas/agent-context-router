@@ -26,7 +26,7 @@ docker compose up -d --force-recreate backend frontend
 
 Compose 的前端和后端宿主机端口都显式绑定 `127.0.0.1`，不会默认监听局域网网卡。后端 CORS 只允许 `http://127.0.0.1:49175` 和 `http://localhost:49175`；本项目当前定位为本机工具，不提供应用层鉴权。若未来需要远程访问，应先补 HTTPS、鉴权和新的 Origin 配置，而不是直接改成公网绑定。
 
-携带任意 `Origin` 或浏览器 Fetch Metadata（`Sec-Fetch-Mode` / `Sec-Fetch-Site`）的请求由后端中间件限制为读取、既有安全操作，以及系统文档 JSON 正文的受校验保存。浏览器不能新建或删除系统文档，也不能修改 key、顺序或 prepare 策略；其他控制面配置写请求返回 `405 management_read_only`。本机 AI 或运维调用方不携带这些浏览器请求头，仍可使用既有受 Schema、Service 和 Repository 校验的本地 API 维护配置；这只是回环单用户部署下的调用边界，不替代身份认证。
+携带任意 `Origin` 或浏览器 Fetch Metadata（`Sec-Fetch-Mode` / `Sec-Fetch-Site`）的请求由后端中间件限制为读取、既有安全操作、按 Workspace/项目类型受限的容器批量重启或停止，以及系统文档 JSON 正文的受校验保存。浏览器不能新建或删除系统文档，也不能修改 key、顺序或 prepare 策略；其他控制面配置写请求返回 `405 management_read_only`。本机 AI 或运维调用方不携带这些浏览器请求头，仍可使用既有受 Schema、Service 和 Repository 校验的本地 API 维护配置；这只是回环单用户部署下的调用边界，不替代身份认证。
 
 ## 手动启动控制面与 Host Runner
 
@@ -40,6 +40,8 @@ Compose 的前端和后端宿主机端口都显式绑定 `127.0.0.1`，不会默
 ```
 
 `start-local-stack.sh` 启动当前目录的 Docker Compose，等待后端健康后，再把宿主机 Host Runtime Runner 作为独立后台进程启动并等待心跳。普通 `stop-local-stack.sh` 只停止 Runner；`--all` 还停止本仓库 Compose。这里没有 Docker/launchd 开机自启，电脑重启后需要使用编排能力时再手动启动。
+
+Runner 会把后端重启期间的连接拒绝、连接重置和请求超时视为可重试错误，控制面恢复后继续心跳和领取任务，不应因一次短暂断连退出。如果 `status-local-stack.sh` 仍显示 Runner 未运行，需要重新执行 `start-local-stack.sh`；当前脚本不提供进程守护或崩溃后的自动拉起。
 
 Runner 是“所有项目都在 Docker Compose 内运行”规则的唯一宿主机例外：它不运行本项目业务前后端，只负责从回环控制面领取已校验快照，并调用目标 Workspace 自己的部署脚本。Token 默认生成在 `.runtime-runner/runner.token`，目录权限为 `0700`、文件权限为 `0600`；PID 和 Runner 日志位于同一目录。控制面 URL 必须是 loopback 地址，Token 不得写入 Git、日志或命令参数。
 
@@ -68,7 +70,11 @@ Workspace 启动配置、Project 快速/完整更新配置和运行策略以 Pos
 
 本机 AI 或运维保存 Project 运行配置时，后端会先用 PyYAML 解析非空的 `.yml/.yaml` 文件；语法错误响应只包含文件名、行号和列号，不回显文件内容，也不会覆盖数据库旧配置。Docker Compose 插值、服务定义和运行时依赖等语义仍由目标 Workspace 预检或实际执行负责。对于使用根 `.env.local` 作为唯一机器差异入口的 Workspace，推荐六个 Project 的 `fast/deploy.sh` 都保持为无凭据薄包装器，只调用目标仓库统一部署入口的单项目模式；Workspace `start/deploy.sh` 则调用同一入口的全量模式。
 
-Host Runtime Runner 只执行快照根目录下固定的 `deploy.sh`。执行前会校验 Manifest、文件哈希、Workspace/Project 相对路径、软链接边界和固定脚本名；步骤按项目顺序串行执行，首个失败后停止并把后续步骤标记 skipped，不自动清理目标容器。服务必须继续绑定回环地址，不得在缺少 HTTPS 和鉴权时对外暴露。
+Host Runtime Runner 只执行快照根目录下固定的 `deploy.sh`。执行前会校验 Manifest、文件哈希、Workspace/Project 相对路径、软链接边界和固定脚本名；步骤按项目顺序串行执行，首个失败后停止并把后续步骤标记 skipped，不自动清理目标容器。Workspace 容器列表可按容器携带的稳定 `project_id` 直接触发该 Project 的 Fast 或 Full profile，不按容器名额外映射。服务必须继续绑定回环地址，不得在缺少 HTTPS 和鉴权时对外暴露。
+
+容器列表中的 Fast/Full 按钮只在 Host Runtime Runner 在线时可用。浏览器提交单项目任务后，后端只校验并物化已登记的运行快照，再把 `project_update` 操作写入队列；后端容器不直接执行 Docker、Maven、JDK 或 Node 命令。宿主机 Runner 领取任务后，在项目当前本地工作树执行固定 `deploy.sh`，因此当前分支中的已提交、未提交和标准源码目录内未跟踪代码都会进入构建。
+
+Runner 会向部署脚本注入 `RUNTIME_WORKSPACE_ID`、Project 步骤的 `RUNTIME_PROJECT_ID`、`RUNTIME_PROJECT_IDS`（Workspace 相对路径与 Project ID 的制表符分隔清单）、`RUNTIME_OPERATION_ID` 和 `RUNTIME_DEPLOY_MODE`。目标 Compose 服务统一写入同名 `runtime-runner.*` 标签；容器归属直接按 Workspace/Project ID 查询，不维护容器名或端口映射表。Workspace 启动脚本从 `RUNTIME_PROJECT_IDS` 解析各子项目 ID 后再调用项目部署入口。
 
 后端收到宿主机绝对路径后，会将该前缀替换为 `/workspace` 再读取文件。目标文件必须位于挂载的工作区中。
 
@@ -102,11 +108,13 @@ CONTEXT_ROUTER_DATABASE_PAYLOAD_CLEANUP_INTERVAL_SECONDS=3600
 
 项目数据库关联自己的行数、字节数和超时限制会与查询全局值取更严格者。数据库 MCP 出入参详情默认自动采集，`DATABASE_PAYLOAD_*` 控制两个数据库 MCP 工具的本地详情快照：请求和最终 MCP 响应默认分别最多保存 1 MB，任何配置都不能超过 4 MB，默认保留 7 天，并在后端启动及调用期间按节流周期清理。授权记录归属 Project，但 `mcp_alias` 在 Workspace 内唯一，新 Workspace task 可以使用所有子项目在 prepare 中返回的 alias。修改这些值后重启 backend。
 
-配置了 Workspace 环境选择器后，`prepare_task_context` 可选传入 `environment='test'` 或 `environment='uat'`。显式传入只为本次 task 固化所选环境并记录 `task_explicit`，不会修改 Workspace 当前环境；省略参数时使用 Workspace 当前环境并记录 `workspace_default`。数据库摘要、`environment_config` 和后续数据库工具都按 task 固化的环境解析。
+配置了 Workspace 环境选择器后，`prepare_task_context` 可选传入 `environment='test'` 或 `environment='uat'`。显式传入只为本次 task 固化所选环境并记录 `task_explicit`，不会修改 Workspace 当前环境；省略参数时使用 Workspace 当前环境并记录 `workspace_default`。后续 `read_task_context` 和数据库工具都按 task 固化的环境解析。
 
 本机 AI 或运维通过受校验 API 保存环境映射、保存 TEST/UAT 通用 JSON 或切换 Workspace 当前环境时，都会递增同一个 revision；无论 task 使用 `workspace_default` 还是 `task_explicit`，revision 不一致时数据库调用都会返回 `environment_changed`，需要重新 prepare。浏览器环境详情只读取映射、JSON 和默认环境，不修改它们。没有配置环境选择器的单环境 Workspace 在省略 `environment` 时保持原有数据库授权行为；显式传参不会隐式创建选择器，而是返回 `environment_not_configured`。
 
 Workspace 可以独立保存 TEST/UAT 两份 JSON 对象；首次保存默认选择 UAT，不要求先配置数据库映射，数据库会继续沿用原有 Workspace alias。两份 JSON 合计最多 256 KiB、最多嵌套 20 层，超出 JavaScript 安全整数范围的值请改用字符串。task 所选环境的 JSON 会作为 `environment_config` 只返回给可信本机 MCP 调用方。该字段可按明确业务需要保存 MQ、Redis、MinIO、ES 等组件的地址和访问凭据，内容以明文 JSONB 保存在本地；严禁把实际值写入日志、开发文档、链路摘要或示例输出。
+
+需要从 Nacos 实时定位中间件时，由本机 AI/运维通过 `/api/workspaces/{workspace_id}/nacos-profiles/{default|test|uat}` 配置连接和声明式组件抽取规则。prepare 不传环境时，`read_middleware_context` 固定读取 `default/local`；显式传 TEST/UAT 时必须存在同名配置档。由于 MCP 只绑定本机回环地址，工具默认返回账号、密码或 Token 等明文；只有明确传入 `reveal_secrets=false` 才脱敏。调用记录仍只保存组件数量、开关和警告数量，不保存响应值。后端运行在 Docker 中而 Nacos 运行在宿主机时，配置地址使用 `http://host.docker.internal:<port>`。
 
 ## PostgreSQL 与 migration
 
@@ -122,7 +130,7 @@ CONTEXT_ROUTER_DATABASE_URL=postgresql://USER:PASSWORD@host.docker.internal:5432
 docker compose exec backend uv run alembic upgrade head
 ```
 
-当前 migration head 为 `20260808_0025`。`0024` 增加 Workspace 文档与部署源文件的数据库副本，`0025` 增加统一系统 JSON 文档；更早 migration 保持原兼容语义。
+当前 migration head 为 `20260811_0028`。`0026` 增加 Context Router MCP 使用指南，`0027` 增加 UI Project 运行操作，`0028` 增加 Workspace Nacos 中间件配置档；更早 migration 保持原兼容语义。
 
 PostgreSQL 保存 Workspace、Project 类型、源码相对路径、文档入口相对路径、数据源、数据库清单、项目数据库关联及 Workspace 唯一 `mcp_alias`、可选 TEST/UAT 数据库映射与通用 JSON、带 scope/环境/revision/选择模式的 MCP task、read call、文档顺序、数据库调用审计元数据，以及可重建的文档搜索分块与索引状态。文档树和 Markdown 原文仍从磁盘重建，文档工具完整出入参不持久化；`search_database_objects` 和 `execute_database_query` 自动保存有界、可过期的详情快照，供本机链路页面按需查看。后端启动时恢复工作空间和全部项目配置，并从磁盘重建每个项目的内存树与匹配版本词法索引；路径失效的项目仍保留在页面并显示错误。
 
@@ -183,7 +191,7 @@ workspaces:
 
 编辑后在工作空间页点击“重载本机映射”。`visible: false` 的卡片不显示；reader 目录只共享主目录文档，不能使用数据库或部署工具。复制数据库不会覆盖这份本机文件。
 
-Context Router 的通用使用规则不写入目标工作空间。统一 JSON 文档的格式、页面和 prepare 返回方式见[系统文档维护说明](./SYSTEM_GUIDES.md)。
+Context Router 的通用使用规则不写入目标工作空间。统一 JSON 文档和 MCP `tools/list` 菜单的展示方式见[系统文档维护说明](./SYSTEM_GUIDES.md)；prepare 不返回这些系统文档。
 
 ## 目标 Workspace 的文档与 deploy 文件同步
 

@@ -78,22 +78,16 @@ export function WorkspaceDetail({
       <header className="workspace-detail-header">
         <button
           type="button"
-          className="workspace-back-button"
+          className="close-button workspace-detail-close-button"
+          aria-label="关闭工作空间详情"
           onClick={onBack}
         >
-          <span aria-hidden="true">←</span>
-          返回工作空间
+          ×
         </button>
         <div className="workspace-detail-title">
           <div>
-            <span className="section-eyebrow">Workspace</span>
             <h1>{currentWorkspace.name}</h1>
             <code>{currentWorkspace.root_path}</code>
-          </div>
-          <div className="workspace-detail-badges">
-            <span className="project-type-chip">
-              {currentWorkspace.workspace_type}
-            </span>
           </div>
         </div>
       </header>

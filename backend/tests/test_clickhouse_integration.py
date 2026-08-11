@@ -634,6 +634,7 @@ def test_real_clickhouse_through_fastmcp_client_session(
         dict[str, Any],
         dict[str, Any],
         dict[str, Any],
+        dict[str, Any],
     ]:
         async with create_connected_server_and_client_session(
             server,
@@ -643,6 +644,7 @@ def test_real_clickhouse_through_fastmcp_client_session(
             tools = await session.list_tools()
             assert [tool.name for tool in tools.tools] == [
                 "prepare_task_context",
+                "read_task_context",
                 "read_context_document",
                 "search_database_objects",
                 "execute_database_query",
@@ -660,6 +662,15 @@ def test_real_clickhouse_through_fastmcp_client_session(
             )
             task_id = prepared["task_id"]
             root_document_id = prepared["documents"]["document_id"]
+            task_context = _tool_payload(
+                await session.call_tool(
+                    "read_task_context",
+                    arguments={
+                        "task_id": task_id,
+                        "sections": ["databases"],
+                    },
+                )
+            )
             searched = _tool_payload(
                 await session.call_tool(
                     "search_database_objects",
@@ -691,15 +702,16 @@ def test_real_clickhouse_through_fastmcp_client_session(
                     },
                 )
             )
-            return prepared, searched, queried, read
+            return prepared, task_context, searched, queried, read
 
     try:
-        prepared, searched, queried, read = asyncio.run(exercise_protocol())
+        prepared, task_context, searched, queried, read = asyncio.run(exercise_protocol())
     finally:
         harness.manager.close_all()
 
     task_id = prepared["task_id"]
-    assert prepared["databases"] == [
+    assert "databases" not in prepared
+    assert task_context["databases"] == [
         {
             "database": "analytics",
             "engine": "clickhouse",
@@ -718,7 +730,7 @@ def test_real_clickhouse_through_fastmcp_client_session(
         "execute_query",
     ]
     serialized_payloads = json.dumps(
-        [prepared, searched, queried, read],
+        [prepared, task_context, searched, queried, read],
         ensure_ascii=False,
     )
     assert _ADMIN_PASSWORD not in serialized_payloads
@@ -808,6 +820,7 @@ def test_unreachable_clickhouse_does_not_block_document_mcp_or_health(
     async def exercise_protocol() -> tuple[
         dict[str, Any],
         dict[str, Any],
+        dict[str, Any],
         int,
         CallToolResult,
     ]:
@@ -835,6 +848,15 @@ def test_unreachable_clickhouse_does_not_block_document_mcp_or_health(
                     },
                 )
             )
+            task_context = _tool_payload(
+                await session.call_tool(
+                    "read_task_context",
+                    arguments={
+                        "task_id": prepared["task_id"],
+                        "sections": ["databases"],
+                    },
+                )
+            )
             cached_after_document_calls = harness.manager.cached_connector_count
             failed_query = await session.call_tool(
                 "execute_database_query",
@@ -844,7 +866,7 @@ def test_unreachable_clickhouse_does_not_block_document_mcp_or_health(
                     "sql": "SELECT 1",
                 },
             )
-            return prepared, read, cached_after_document_calls, failed_query
+            return prepared, read, task_context, cached_after_document_calls, failed_query
 
     health_manager = ConnectorManager(harness.connector_registry)
     health_app = create_app(
@@ -859,14 +881,17 @@ def test_unreachable_clickhouse_does_not_block_document_mcp_or_health(
     )
 
     try:
-        prepared, read, cached_after_document_calls, failed_query = asyncio.run(exercise_protocol())
+        prepared, read, task_context, cached_after_document_calls, failed_query = asyncio.run(
+            exercise_protocol()
+        )
         with TestClient(health_app) as client:
             health_response = client.get("/health")
     finally:
         harness.manager.close_all()
         health_manager.close_all()
 
-    assert prepared["databases"][0]["database"] == "analytics"
+    assert "databases" not in prepared
+    assert task_context["databases"][0]["database"] == "analytics"
     assert read["documents"][0]["content"].endswith("真实协议文档读取内容。\n")
     assert cached_after_document_calls == 0
     assert failed_query.isError is True

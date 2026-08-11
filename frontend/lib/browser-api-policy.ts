@@ -6,6 +6,8 @@ const SAFE_BROWSER_POST_PATHS = [
   /^\/api\/workspaces\/[^/]+\/refresh$/,
   /^\/api\/workspaces\/reload-local-mapping$/,
   /^\/api\/workspaces\/[^/]+\/shared-files\/(restore|publish)$/,
+  /^\/api\/workspaces\/[^/]+\/containers\/bulk-action$/,
+  /^\/api\/projects\/[^/]+\/runtime-config\/(fast|full)\/execute$/,
 ];
 
 export function isBrowserApiRequestAllowed(

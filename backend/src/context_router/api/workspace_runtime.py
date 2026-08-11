@@ -8,6 +8,9 @@ from context_router.repositories.project_repository import ProjectRepositoryErro
 from context_router.repositories.runtime_operation_repository import (
     RuntimeOperationRepositoryError,
 )
+from context_router.repositories.runtime_runner_repository import (
+    RuntimeRunnerRepositoryError,
+)
 from context_router.repositories.workspace_deploy_repository import (
     WorkspaceDeployRepositoryError,
 )
@@ -156,6 +159,21 @@ def list_workspace_runtime_operations(
     except RuntimeOperationRepositoryError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     return [_operation(item) for item in records]
+
+
+@router.get("/runtime-runner-status")
+def get_workspace_runtime_runner_status(
+    workspace_id: str,
+    request: Request,
+) -> dict[str, bool]:
+    _workspace(request, workspace_id)
+    try:
+        available = request.app.state.runtime_runner_repository.is_available(
+            request.app.state.settings.runtime_runner_heartbeat_ttl_seconds
+        )
+    except RuntimeRunnerRepositoryError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"available": available}
 
 
 @router.get("/runtime-operations/{operation_id}")

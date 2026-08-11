@@ -11,6 +11,14 @@
 
 ## 记录
 
+### 2026-08-11
+
+- `prepare_task_context` 的文档导航改为确定性的任务局部三层投影：真实 Workspace 根 `AGENTS.md` 存在时固定作为第一层；缺少真实根时，才从活动 Project 入口或合成根开始。投影裁剪不改变 Workspace 范围的 `search_context_documents` 和 `read_context_document`。
+- 新增 migration `20260811_0028`、`workspace_nacos_profiles` 和固定 MCP 工具 `read_middleware_context`。配置档按 Workspace 与 `default/test/uat` 保存 Nacos 连接和声明式组件抽取规则；工具根据 prepare 是否显式选择环境读取，本机默认明文且可显式关闭 reveal 获取脱敏视图，Trace 仅保存数量与开关且不建立 payload 快照。
+- `read_middleware_context` 的环境选择改为显式优先：prepare 未传环境时固定读取 `default/local`，显式传 `test/uat` 时读取同名配置档。数据库继续保留省略环境时使用 Workspace 当前环境的既有语义。
+- prepare 的完整 Workspace 能力增加 `middleware`；MCP Server 与工具描述改为“授权任务允许读取并临时使用、禁止展示或持久化”，并明确 `read_task_context` 的通用环境 JSON 不是 Nacos 中间件实时信息的权威来源。
+- 本机 `read_middleware_context` 的 `reveal_secrets` 默认值改为 `true`，未传参时返回明文，显式传 `false` 时脱敏；Trace 只记录 reveal 状态和数量，仍不保存响应值。
+
 ### 2026-07-30
 
 - 新增 migration `20260730_0022`，删除 `workspaces`、`data_sources`、`project_databases` 和 `workspace_database_environment_configs` 的 `enabled` 列，并重建不含启停字段的查询索引。后端实体、仓库、Schema、API 与前端类型同步移除启停逻辑和状态展示。

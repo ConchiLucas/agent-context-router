@@ -5,7 +5,7 @@
 ## Context Router 使用规则
 
 - 任务依赖业务规则、启动、数据库或跨层链路时，调用 MCP `prepare_task_context(task, cwd, agent_name)`。
-- prepare 返回当前映射项目的完整文档树，通过显式 title、summary 和 path 建立全局认知。
+- prepare 返回当前映射 Workspace 的精简文档树，每个节点只有 `document_id`、`summary` 和 `children`。
 - 根据完整树选择文档后调用 `read_context_document(task_id, requests)`；task_id 必须使用当前 prepare 返回值，不跨任务复用。
 - 明确文件或纯源码定位可以直接检索仓库，不强制调用 MCP。
 - 不要因为 prepare 返回完整树就一次读取全部正文。

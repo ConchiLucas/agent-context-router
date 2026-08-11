@@ -26,6 +26,10 @@ from context_router.repositories.database_environment_repository import (
     PostgresDatabaseEnvironmentRepository,
 )
 from context_router.repositories.mcp_tool_call_repository import PostgresMcpToolCallRepository
+from context_router.repositories.nacos_profile_repository import (
+    NacosProfileWrite,
+    PostgresNacosProfileRepository,
+)
 from context_router.repositories.project_repository import PostgresProjectRepository
 from context_router.repositories.task_repository import PostgresTaskRepository
 from context_router.repositories.workspace_repository import PostgresWorkspaceRepository
@@ -47,7 +51,7 @@ _REVISION_0020 = "20260730_0020"
 _REVISION_0022 = "20260730_0022"
 _REVISION_0023 = "20260802_0023"
 _REVISION_0024 = "20260808_0024"
-_REVISION_0025 = "20260808_0025"
+_REVISION_0028 = "20260811_0028"
 
 _PROJECT_A = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 _PROJECT_B = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -202,12 +206,42 @@ def test_migration_and_postgres_repositories_preserve_legacy_data(
         )
 
     command.upgrade(alembic_config, "head")
-    assert _current_revision(database_url) == _REVISION_0025
+    assert _current_revision(database_url) == _REVISION_0028
     assert _aliases(database_url) == aliases
     _assert_legacy_rows_survive(database_url)
     _assert_legacy_projects_migrated_to_workspaces(database_url)
     _assert_workspace_alias_unique_index(database_url, aliases[_LINK_A])
     _assert_business_enabled_columns_removed(database_url)
+
+    nacos_profiles = PostgresNacosProfileRepository(database_url)
+    saved_profile = nacos_profiles.upsert_profile(
+        NacosProfileWrite(
+            workspace_id=_PROJECT_A,
+            profile_key="default",
+            base_url="http://nacos.internal:8848",
+            namespace_id="public",
+            username="nacos",
+            password="private",
+            request_timeout_ms=5000,
+            components=[
+                {
+                    "id": "redis-main",
+                    "type": "redis",
+                    "sources": [
+                        {"data_id": "application.yaml", "group": "DEFAULT_GROUP"}
+                    ],
+                    "fields": {
+                        "password": {
+                            "paths": ["spring.data.redis.password"],
+                            "secret": True,
+                        }
+                    },
+                }
+            ],
+        )
+    )
+    assert saved_profile.password == "private"
+    assert nacos_profiles.get_profile(_PROJECT_A, "default") == saved_profile
 
     data_sources = PostgresDataSourceRepository(database_url)
     resolved = data_sources.get_workspace_database_by_alias(
@@ -847,7 +881,7 @@ def test_task_environment_selection_migration_backfills_existing_environment_tas
         ).fetchall()
 
     command.upgrade(alembic_config, "head")
-    assert _current_revision(database_url) == _REVISION_0025
+    assert _current_revision(database_url) == _REVISION_0028
     tasks = PostgresTaskRepository(database_url)
     environment_task = tasks.get_task(int(rows[0][0]))
     environmentless_task = tasks.get_task(int(rows[1][0]))

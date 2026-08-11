@@ -37,6 +37,14 @@ def _app() -> FastAPI:
     def restore_shared_files() -> dict[str, bool]:
         return {"restored": True}
 
+    @app.post("/api/workspaces/workspace-1/containers/bulk-action")
+    def control_containers() -> dict[str, bool]:
+        return {"controlled": True}
+
+    @app.post("/api/projects/project-1/runtime-config/{mode}/execute")
+    def execute_project_update(mode: str) -> dict[str, str]:
+        return {"mode": mode}
+
     @app.post("/api/data-sources/source-1/test")
     def test_connection() -> dict[str, bool]:
         return {"diagnostic": True}
@@ -75,6 +83,21 @@ def test_browser_origin_can_read_and_run_allowlisted_actions() -> None:
         )
         assert (
             client.post(
+                "/api/workspaces/workspace-1/containers/bulk-action",
+                headers=headers,
+            ).status_code
+            == 200
+        )
+        for mode in ("fast", "full"):
+            assert (
+                client.post(
+                    f"/api/projects/project-1/runtime-config/{mode}/execute",
+                    headers=headers,
+                ).status_code
+                == 200
+            )
+        assert (
+            client.post(
                 "/api/data-sources/source-1/reveal-password",
                 headers=headers,
             ).status_code
@@ -101,10 +124,15 @@ def test_browser_origin_cannot_call_configuration_commands() -> None:
             "/api/workspaces/workspace-1/refresh/extra",
             headers=headers,
         )
+        unsupported_mode_response = client.post(
+            "/api/projects/project-1/runtime-config/turbo/execute",
+            headers=headers,
+        )
 
     assert create_response.status_code == 405
     assert update_response.status_code == 405
     assert refresh_extra_response.status_code == 405
+    assert unsupported_mode_response.status_code == 405
     assert create_response.json()["detail"].startswith("management_read_only:")
 
 

@@ -211,6 +211,66 @@ class WorkspaceRuntimeOrchestrationService:
             )
         )
 
+    def update_project(
+        self,
+        *,
+        project_id: str,
+        mode: str,
+        trigger: str = "ui",
+    ) -> RuntimeOperationView:
+        if mode not in {"fast", "full"}:
+            raise WorkspaceRuntimeOrchestrationError("invalid_runtime_mode", "不支持的更新模式")
+        try:
+            project = self._registry.get_project_summary(project_id)
+        except ProjectRegistryError as exc:
+            raise WorkspaceRuntimeOrchestrationError("project_not_found", "项目不存在") from exc
+        if project.workspace_id is None:
+            raise WorkspaceRuntimeOrchestrationError(
+                "project_workspace_missing", "项目没有关联工作空间"
+            )
+        try:
+            workspace = self._registry.get_workspace_snapshot(project.workspace_id)
+        except ProjectRegistryError as exc:
+            raise WorkspaceRuntimeOrchestrationError(
+                "workspace_not_found", "项目所属工作空间不可用"
+            ) from exc
+        if workspace.access_mode != "full":
+            raise WorkspaceRuntimeOrchestrationError(
+                "documents_only", "文档只读映射不能执行项目更新"
+            )
+
+        self._require_runner_available()
+        try:
+            files = self._project_configs.list_files(project_id, mode)
+        except RuntimeConfigRepositoryError as exc:
+            raise WorkspaceRuntimeOrchestrationError(
+                "runtime_config_unavailable", str(exc)
+            ) from exc
+        self._require_entry(files, mode)
+        try:
+            snapshot = self._materialization.materialize(project_id, mode, files)
+        except RuntimeMaterializationError as exc:
+            raise WorkspaceRuntimeOrchestrationError("materialization_failed", str(exc)) from exc
+
+        return self._create_view(
+            RuntimeOperationDraft(
+                task_id=None,
+                workspace_id=project.workspace_id,
+                kind="project_update",
+                trigger=trigger,
+                changed_files=(),
+                steps=(
+                    self._step_draft(
+                        snapshot,
+                        changed_files=(),
+                        decision_reason=(
+                            f"用户在容器管理界面选择 {'Fast' if mode == 'fast' else 'Full'} 更新"
+                        ),
+                    ),
+                ),
+            )
+        )
+
     def get_operation(
         self, operation_id: str, log_characters: int = 10_000
     ) -> RuntimeOperationView:
@@ -226,6 +286,10 @@ class WorkspaceRuntimeOrchestrationService:
         if operation is None:
             raise WorkspaceRuntimeOrchestrationError(
                 "runtime_operation_not_found", "运行操作不存在"
+            )
+        if operation.task_id is None:
+            raise WorkspaceRuntimeOrchestrationError(
+                "runtime_operation_not_bound_to_task", "运行操作不属于 MCP 任务"
             )
         return operation.task_id
 
@@ -284,10 +348,7 @@ class WorkspaceRuntimeOrchestrationService:
             raise WorkspaceRuntimeOrchestrationError("materialization_failed", str(exc)) from exc
 
     def _create_view(self, draft: RuntimeOperationDraft) -> RuntimeOperationView:
-        if self._runner_available is not None and not self._runner_available():
-            raise WorkspaceRuntimeOrchestrationError(
-                "host_runner_unavailable", "宿主机 Runtime Runner 当前不可用"
-            )
+        self._require_runner_available()
         try:
             operation = self._operations.create_operation(draft)
         except RuntimeOperationRepositoryError as exc:
@@ -295,6 +356,12 @@ class WorkspaceRuntimeOrchestrationService:
                 "runtime_operation_conflict", str(exc)
             ) from exc
         return self._view(operation)
+
+    def _require_runner_available(self) -> None:
+        if self._runner_available is not None and not self._runner_available():
+            raise WorkspaceRuntimeOrchestrationError(
+                "host_runner_unavailable", "宿主机 Runtime Runner 当前不可用"
+            )
 
     def _view(
         self,

@@ -344,6 +344,8 @@ class PostgresMcpToolCallRepository:
                       AND server_name = 'context-router'
                       AND tool_name IN (
                             'prepare_task_context',
+                            'read_task_context',
+                            'read_middleware_context',
                             'search_context_documents',
                             'read_context_document',
                             'search_database_objects',
@@ -385,6 +387,8 @@ class PostgresMcpToolCallRepository:
                       AND server_name = 'context-router'
                       AND tool_name IN (
                             'prepare_task_context',
+                            'read_task_context',
+                            'read_middleware_context',
                             'search_context_documents',
                             'read_context_document',
                             'search_database_objects',
@@ -522,6 +526,8 @@ class PostgresMcpToolCallRepository:
                      AND tool_call.server_name = 'context-router'
                      AND tool_call.tool_name IN (
                             'prepare_task_context',
+                            'read_task_context',
+                            'read_middleware_context',
                             'search_context_documents',
                             'read_context_document',
                             'search_database_objects',
@@ -550,6 +556,8 @@ class PostgresMcpToolCallRepository:
                                   AND filtered_server.source IN ('server', 'legacy')
                                   AND filtered_server.tool_name IN (
                                         'prepare_task_context',
+                                        'read_task_context',
+                                        'read_middleware_context',
                                         'search_context_documents',
                                         'read_context_document',
                                         'search_database_objects',
@@ -584,6 +592,8 @@ class PostgresMcpToolCallRepository:
                                   AND filtered_status.source IN ('server', 'legacy')
                                   AND filtered_status.tool_name IN (
                                         'prepare_task_context',
+                                        'read_task_context',
+                                        'read_middleware_context',
                                         'search_context_documents',
                                         'read_context_document',
                                         'search_database_objects',

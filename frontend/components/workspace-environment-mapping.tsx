@@ -626,7 +626,7 @@ export function WorkspaceEnvironmentMapping({
 
               <div className="environment-json-privacy-note">
                 <span>
-                  环境 JSON 可能包含服务地址和访问凭据，仅会随 prepare
+                  环境 JSON 可能包含服务地址和访问凭据，仅会随 read_task_context
                   返回给可信本机 MCP 调用方；页面不会修改这些内容。
                 </span>
                 <strong>Revision {revision ?? "—"}</strong>

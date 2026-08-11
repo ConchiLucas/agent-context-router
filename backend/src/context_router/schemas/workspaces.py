@@ -75,6 +75,36 @@ class WorkspaceSummary(BaseModel):
     updated_at: datetime
 
 
+class WorkspaceContainerSummary(BaseModel):
+    id: str
+    name: str
+    image: str
+    state: str
+    status: str
+    health: str | None = None
+    project_id: str | None = None
+    project_name: str | None = None
+    project_kind: ProjectKind | None = None
+    mode: str | None = None
+    operation_id: str | None = None
+    ports: list[str] = Field(default_factory=list)
+
+
+class WorkspaceContainerBulkAction(BaseModel):
+    action: Literal["restart", "stop"]
+    project_kind: ProjectKind
+
+
+class WorkspaceContainerBulkActionResult(BaseModel):
+    workspace_id: str
+    action: Literal["restart", "stop"]
+    project_kind: ProjectKind
+    target_count: int
+    succeeded_count: int
+    failed_count: int
+    failed_containers: list[str] = Field(default_factory=list)
+
+
 class WorkspaceProjectCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     project_kind: ProjectKind = "backend"

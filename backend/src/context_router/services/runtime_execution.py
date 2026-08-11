@@ -105,6 +105,7 @@ class RuntimeExecutionService:
             workspace_root,
             workspace_host_root,
         ) = self._resolve_project_paths(project)
+        workspace_id = str(getattr(project, "workspace_id", "") or "")
         log_directory = self._settings.runtime_root / "runs" / snapshot.snapshot_id
         log_directory.mkdir(parents=True, exist_ok=True, mode=0o750)
         log_path = log_directory / "execution.log"
@@ -137,6 +138,7 @@ class RuntimeExecutionService:
                 "project_host_root": project_host_root,
                 "workspace_root": workspace_root,
                 "workspace_host_root": workspace_host_root,
+                "workspace_id": workspace_id,
             },
             name=f"runtime-run-{run.id[:8]}",
             daemon=True,
@@ -192,6 +194,7 @@ class RuntimeExecutionService:
         project_host_root: str,
         workspace_root: Path,
         workspace_host_root: str,
+        workspace_id: str,
     ) -> None:
         process: subprocess.Popen[bytes] | None = None
         try:
@@ -202,6 +205,7 @@ class RuntimeExecutionService:
             environment.update(
                 {
                     "RUNTIME_RUN_ID": run.id,
+                    "RUNTIME_WORKSPACE_ID": workspace_id,
                     "RUNTIME_PROJECT_ID": run.project_id,
                     "RUNTIME_DEPLOY_MODE": run.mode,
                     "RUNTIME_SNAPSHOT_DIR": str(snapshot_path),

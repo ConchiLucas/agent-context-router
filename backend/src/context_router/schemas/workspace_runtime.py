@@ -89,10 +89,10 @@ class RuntimeOperationStepView(BaseModel):
 
 class RuntimeOperationView(BaseModel):
     id: str
-    task_id: int
+    task_id: int | None
     workspace_id: str
-    kind: Literal["apply_changes", "start_workspace"]
-    trigger: Literal["mcp", "api"]
+    kind: Literal["apply_changes", "start_workspace", "project_update"]
+    trigger: Literal["mcp", "api", "ui"]
     status: RuntimeOperationStatus
     changed_files: list[str]
     current_step: int

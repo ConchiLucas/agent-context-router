@@ -74,6 +74,7 @@ def test_mcp_integration_returns_client_configs_and_readiness(tmp_path: Path) ->
         )
         assert project_response.status_code == 201
         response = client.get("/api/mcp/integration")
+        tools_response = client.get("/api/mcp/integration/tools")
 
     assert response.status_code == 200
     payload = response.json()
@@ -84,6 +85,8 @@ def test_mcp_integration_returns_client_configs_and_readiness(tmp_path: Path) ->
     }
     assert [tool["name"] for tool in payload["tools"]] == [
         "prepare_task_context",
+        "read_task_context",
+        "read_middleware_context",
         "search_context_documents",
         "read_context_document",
         "search_database_objects",
@@ -100,3 +103,24 @@ def test_mcp_integration_returns_client_configs_and_readiness(tmp_path: Path) ->
     configs = {item["client"]: item["config"] for item in payload["clients"]}
     assert 'url = "https://context.example.com/mcp"' in configs["codex"]
     assert '"serverUrl": "https://context.example.com/mcp"' in configs["antigravity"]
+    assert tools_response.status_code == 200
+    listed_tools = tools_response.json()["tools"]
+    assert [tool["name"] for tool in listed_tools] == [
+        "prepare_task_context",
+        "read_task_context",
+        "read_middleware_context",
+        "search_context_documents",
+        "read_context_document",
+        "search_database_objects",
+        "execute_database_query",
+        "apply_workspace_changes",
+        "start_workspace",
+        "get_workspace_operation",
+    ]
+    assert listed_tools[0]["inputSchema"]["required"] == ["task", "cwd"]
+    assert listed_tools[0]["annotations"] == {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": False,
+        "openWorldHint": False,
+    }

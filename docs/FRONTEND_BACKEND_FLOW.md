@@ -42,22 +42,31 @@ Codex / Antigravity
   -> prepare_task_context
   -> ContextPreparationService
   -> ProjectRegistry 按 cwd 最长前缀选择最深 Workspace
-  -> 在 Workspace 内按源码根选择最深 Project 作为 active_project 元数据
+  -> 在 Workspace 内按源码根选择最深 Project 作为 active_project
   -> 检查 Workspace 开关和全部项目缓存
   -> PostgreSQL mcp_tasks 生成 scope=workspace 的 task_id
   -> 保存稳定 workspace 与可选 active_project 快照
-  -> 返回 workspace_access + system_guides + workspace + projects + active_project + 文档树
+  -> 真实 Workspace 根存在时固定以它为第一层
+  -> 缺少真实根时才从 active_project 入口或合成根开始
+  -> 只投影入口及显式下两级（总高度三层）
+  -> 返回 task_id + access + 三层文档投影 + 必要 warnings
+  -> read_task_context(task_id, sections[])
+  -> 按需返回 Workspace 数据库别名或 task 所选环境 JSON
+  -> read_middleware_context(task_id, components?, reveal_secrets?)
+  -> prepare 未显式传环境时选择 default/local；显式 test/uat 时选择同名配置档
+  -> 拉取规则声明的 dataId/group，解析并抽取组件字段
+  -> 本机默认明文；显式 reveal=false 时脱敏，Trace 不保存响应值
   -> read_context_document(task_id, requests[])
   -> ContextDocumentReadService 按稳定 workspace_id/workspace_key 校验任务
   -> Workspace DocumentCache 按请求顺序返回完整 Markdown 或章节
   -> PostgreSQL 生成 read_call_id 并保存 position/status
 ```
 
-cwd 匹配先决定 Workspace 边界，再按 Project 源码 `relative_path` 选择最深活动项目；docs 文档入口目录不参与源码归属。最深 Project 仅作为“当前主要开发位置”的快照返回，不会把文档和数据库范围收窄到该项目。Workspace 和 Project 都没有启停状态；任一子项目映射不可用时，新的 Workspace prepare 会明确失败。
+cwd 匹配先决定 Workspace 边界，再按 Project 源码 `relative_path` 选择最深活动项目；docs 文档入口目录不参与源码归属。真实 Workspace 根存在时，活动 Project 只保存为任务快照，不改变 prepare 根入口；缺少真实根时才用于选择 Project 入口。两种情况都不会把 search、read 和数据库权限范围收窄到该项目。Workspace 和 Project 都没有启停状态；任一子项目映射不可用时，新的 Workspace prepare 会明确失败。
 
 ```text
 Codex / Antigravity
-  -> prepare_task_context 返回 task_id、文档导航树和全部 Project 元数据
+  -> prepare_task_context 返回 task_id 和根入口三层文档投影
   -> search_context_documents(task_id, query, limit)
   -> ContextDocumentSearchService 按 task 的稳定 Workspace 快照解析全部项目
   -> 校验 Workspace 根索引及各 Project index_version == DocumentCache.version
@@ -67,7 +76,7 @@ Codex / Antigravity
   -> read_context_document(task_id, 命中的 document_id/section)
 ```
 
-搜索只在 task 绑定 Workspace 内执行，不返回完整正文。真实根未显式挂载的 Project 文档不会出现在导航树中，但仍由 Project 索引命中并可按搜索结果 ID 读取。`workspace_document_search_chunks` 保存可选 Workspace 根文档的派生分块，`document_search_chunks` 继续按 Project 保存；磁盘 Markdown 是唯一原文真源。任一参与入口的索引缺失、构建失败或版本不一致时显式返回 index-not-ready，不回退到内存全文扫描。旧 `scope=project` task 继续只搜索原项目。
+搜索只在 task 绑定 Workspace 内执行，不返回完整正文。未进入三层投影的深层文档、其他 Project 文档以及真实根未显式挂载的 Project 文档，仍由 Project 索引命中并可按搜索结果 ID 读取。`workspace_document_search_chunks` 保存可选 Workspace 根文档的派生分块，`document_search_chunks` 继续按 Project 保存；磁盘 Markdown 是唯一原文真源。任一参与入口的索引缺失、构建失败或版本不一致时显式返回 index-not-ready，不回退到内存全文扫描。旧 `scope=project` task 继续只搜索原项目。
 
 ```text
 Codex / Antigravity
@@ -124,7 +133,7 @@ Codex / Antigravity
 
 `mcp_tool_calls.id` 由 PostgreSQL Identity 生成，任务内展示顺序由后端按该 ID 计算，不依赖客户端 sequence、前端时间戳拼接或任务锁。旧文档/数据库调用由 migration 恢复为 `legacy` 节点，因此升级后仍可查看历史记录。后端启动时会把上次进程遗留的内部 `running` 调用收敛为 `error/server_restarted`，避免页面永久显示运行中。
 
-这条链路的边界固定在 Context Router 自身：只有进入 `/mcp` 并由 `ContextRouterMCP` 分发的十个内部工具会被记录。客户端对 GitHub、浏览器或其他 MCP Server 的直连请求不会经过本服务，也不会通过客户端上报补录；链路页面不尝试呈现跨 Server 调用。
+这条链路的边界固定在 Context Router 自身：只有进入 `/mcp` 并由 `ContextRouterMCP` 分发的十个当前工具会被记录，两个已下线 Project 工具的既有历史继续保留。客户端对 GitHub、浏览器或其他 MCP Server 的直连请求不会经过本服务，也不会通过客户端上报补录；链路页面不尝试呈现跨 Server 调用。
 
 prepare 和文档搜索不建立业务数据库连接。业务数据库离线时，`/health`、文档 prepare/search/read 仍可工作；MCP 链路只有实际对象搜索或查询会尝试连接，浏览器连接测试以及 AI/运维触发的数据库同步才会显式连接。
 
@@ -181,7 +190,7 @@ api/workspaces.py
 - `BrowserReadOnlyMiddleware` 根据任意 `Origin` 或浏览器 Fetch Metadata 拦截配置写请求；`frontend/lib/browser-api-policy.ts` 在请求发出前执行同一策略。双层限制只额外开放 `PUT /api/system-guides/{id}/content`，后端保留 key、顺序和 prepare 策略；其他系统文档完整 CRUD 只供本机 AI/运维。
 - `WorkspaceManagementService` 继续为本机 AI/运维编排受校验的工作空间 CRUD、工作空间内项目 CRUD、刷新和数据源汇总；`workspace_repository.py` 持久化工作空间根目录、类型和总开关。
 - `project_repository.py` 持久化稳定项目 ID、`workspace_id`、`frontend/backend` 的 `project_kind`、工作空间内分别唯一的源码 `relative_path`、文档入口 `document_relative_path` 和兼容字段；`document_projects` 不再有 enabled。后端启动时从独立文档入口重建缓存，路径失效项目保留配置和错误。
-- `ProjectRegistry` 管理可选的 Workspace 根文档缓存和每个 Project 缓存；根 `AGENTS.md` 存在时，导航树严格采用其显式父子关系，未声明的 Project 根不自动挂入树中；根入口不存在时动态构建直接列出 Project 的合成入口。两种情况下 Workspace 聚合缓存都保留全部项目文档，供搜索和按 ID 读取。cwd 先按根目录深度选择最深 Workspace，再按源码根选择最深 Project 作为 `active_project`。
+- `ProjectRegistry` 管理可选的 Workspace 根文档缓存和每个 Project 缓存；根 `AGENTS.md` 存在时，完整 Workspace 树严格采用其显式父子关系，未声明的 Project 根不自动挂入树中；根入口不存在时动态构建直接列出 Project 的合成入口。两种情况下 Workspace 聚合缓存都保留全部项目文档，供搜索和按 ID 读取。cwd 先按根目录深度选择最深 Workspace，再按源码根选择最深 Project 作为 `active_project`；prepare 优先从真实 Workspace 根构建三层任务投影，缺少真实根时才回退活动 Project 或合成根。
 - 工作空间类型用于管理页面分类，并作为所属项目的兼容 `project_type`；Project 的业务类型只允许 `frontend/backend`。数据源分类由 `data_sources.category` 独立持久化，不复用工作空间类型。
 - 数据源列表始终过滤口令；只有只读连接详情的眼睛按钮调用独立接口读取明文密码。连接测试使用临时 Connector，完成后关闭，不进入长期缓存，也不向响应暴露连接配置。
 - MySQL/MariaDB/PostgreSQL/ClickHouse 自动同步由 `database_discovery.py` 使用对应驱动读取远端数据库清单，保留已有记录 ID 和项目关联，新增可见库并把本次未发现的旧库标记为不可用。同步只由 AI/运维 API 触发，失败不会替换现有数据库清单。
@@ -195,7 +204,8 @@ api/workspaces.py
 - `markdown_search_parser.py` 剥离 Front Matter、按 fenced-code-aware ATX 章节解析并生成有界、带重叠的规范化分块。
 - `document_search_repository.py` 使用 PostgreSQL `simple` FTS、`pg_trgm` 和短词精确子串查询 Workspace 或 Project 的当前索引版本；两类索引分别持久化，避免使用伪 Project。
 - `ContextDocumentSearchService` 按 task scope 选择 Workspace 或旧 Project 兼容链路，校验 Workspace 根入口和各项目 index_version，将分块命中聚合为文档结果；只返回定位信息，不返回 Markdown 正文。
-- `ContextPreparationService` 为 MCP 和本机 Workspace MCP JSON 预览生成包含显式根树或合成根树、全部项目、活动项目、可选任务数据库环境和全 Workspace 可用数据库摘要的同一返回模型，不 ping 远端数据库。调用方可选传 `environment='test'|'uat'`；显式选择不会调用 Workspace 切换接口。通用 JSON 是用户显式维护内容，不自动读取 Nacos 或数据源连接配置；task 所选环境的 `environment_config` 会返回给可信本机 MCP 调用方和本机预览，但不进入日志、开发文档或链路摘要。
+- `ContextPreparationService` 为 MCP 和本机 Workspace MCP JSON 预览生成同一精简返回模型：task_id、access、必要 warning 和根入口三层文档投影，不 ping 远端数据库，也不内联数据库别名或环境 JSON。完整 Workspace task 的 `access` 显式包含 `middleware`。调用方可选传 `environment='test'|'uat'`；显式选择不会调用 Workspace 切换接口。通用 JSON 是用户显式维护的兼容内容，不自动读取 Nacos，也不是实时中间件信息的权威来源；数据库别名与通用 JSON 由 `read_task_context` 按需获取，Nacos 中间件由 `read_middleware_context` 实时获取。
+- `NacosMiddlewareService` 复用 task 的 Workspace 边界；`task_explicit` 的 TEST/UAT 选择继续校验环境与 revision，prepare 未显式传环境的 task 则固定使用 `default/local`，不跟随 Workspace 当前默认环境。服务通过声明式 JSON 规则读取指定 dataId/group 并抽取组件字段。MCP 参数不能覆盖 Nacos 地址、命名空间或字段路径；本机工具默认返回明文，显式 `reveal_secrets=false` 时脱敏，任何响应都不进入 Trace 摘要或 payload 表。
 - `task_repository.py` 为新 prepare 写入 `scope='workspace'`、Workspace 快照、可选活动项目快照、环境、共享 revision 和 `database_environment_selection`。`20260730_0021` 把已有非空环境 task 回填为 `workspace_default`；显式新任务写 `task_explicit`。migration 前的记录保留 `scope='project'`，同时回填 Workspace 字段以便在工作空间调用记录中查询；read/search 仍走原 Project 兼容路径，但 Workspace 启用环境选择器后，旧 Project task 的数据库调用必须重新 prepare。
 - `ContextDocumentReadService` 按 task scope 校验 Workspace 聚合缓存或旧 Project 缓存，批量读取文档或章节，并在返回正文前记录调用。
 - `document_read_repository.py` 保存 read_call_id、单次 position、相对路径、章节和状态，不保存正文。
@@ -210,11 +220,12 @@ api/workspaces.py
 - `local_workspace_mapping.py` 读取项目本机 YAML，按 Workspace ID 决定卡片显示、主目录和 reader 目录。`project_registry.py` 以主目录构建唯一文档缓存；reader cwd 返回 `documents_only` 快照，数据库与运行服务按 task.cwd 再次拒绝越权。
 - `workspace_shared_files.py` 扫描主目录 `docs/` 和固定 deploy 目录；`workspace_shared_file_repository.py` 在同一 PostgreSQL 事务中替换源文件副本及 Workspace/Project 运行配置。恢复操作只删除并重建主目录对应的 docs/deploy 目录。
 - `runtime_runner.py` 暴露只允许 Bearer Token 且拒绝浏览器请求的注册、心跳、领取租约和完成回报协议；`scripts/context_router_host_runner.py` 是手动启动的宿主机执行器。
-- `mcp_server.py` 固定注册五个上下文/数据库工具、三个 Workspace 运行工具和两个 Project 兼容工具，并挂载到 `/mcp`。项目或数据源变化不会改变工具名。
-- `mcp_server.py` 使用统一工具分发埋点记录十个固定工具；观测持久化失败只降低链路可见性，不改变 MCP 工具原始成功或失败结果。
+- `mcp_server.py` 固定注册七个上下文/数据库/中间件工具和三个 Workspace 运行工具，并挂载到 `/mcp`。项目、数据源或中间件变化不会改变工具名。
+- `mcp_server.py` 使用统一工具分发埋点记录十个固定工具；观测持久化失败只降低链路可见性，不改变 MCP 工具原始成功或失败结果。中间件调用摘要只记录数量与开关，不记录返回内容；Trace 查询仍识别两个已下线 Project 工具，以展示历史调用。
 - `mcp_tool_call_repository.py` 保存通用工具调用和任务链路摘要；文档与数据库 Repository 继续保存各自明细，并通过可空唯一 `tool_call_id` 关联。
 - `api/mcp_traces.py` 返回全局任务链路列表和单任务统一调用详情；列表支持项目、Agent、固定内部工具、调用状态和关键词的服务端过滤。普通 task 即使没有成功落下内部调用节点也能显示，`web-preview` 与 `connection-test` 系统任务除外。API 已把文档、数据库明细转换为同一 `artifacts` 数组，并返回 `complete / running / partial` 完整性状态与稳定 warning code；主详情只包含 payload 的 available/status/reason，完整 JSON 由带 `Cache-Control: no-store` 的归属校验接口懒加载。
 - `mcp_integration.py` 生成客户端配置，并接收 `workspace_id`，以 MCP Python Client 对后端自身执行 initialize、tools/list、Workspace 匹配、prepare、search 和 read，不绕过协议直接调用 service。
+- `GET /api/mcp/integration/tools` 直接序列化当前 FastMCP 注册表的 `tools/list` 结果，供系统文档菜单按工具拆分为独立只读项；不从系统文档表复制或维护工具定义。
 - 接入测试只返回阶段状态、耗时、task_id、read_call_id 和正文字符数；数据库 URL 与 Markdown 正文不进入 API 响应，且该测试不执行项目业务数据库查询。
 
 ## Engine 能力矩阵
@@ -260,8 +271,8 @@ Markdown 解析器只生成 React 元素，不使用 `dangerouslySetInnerHTML`�
 
 Workspace 调用记录通过 `task-history.ts` 保留文档读取批次和单批位置，通过 `database-access.ts` 把文档 read call 与数据库 call 按创建时间合并为上下文时间线。历史“文档树”视图在前端以被调用文档 ID 为集合递归裁剪当前 Workspace 文档树，只保留命中节点及其全部祖先，隐藏无关旁支和命中节点下未调用的后代；正常“查看文档树”仍展示完整树。后端工作空间任务列表在 `LIMIT` 前过滤既没有 read call 也没有数据库调用的任务；同一次批量读取的文档在一行横向展示，读取成功的卡片复用 Workspace 文档详情接口和 Markdown 抽屉。数据库卡片仍只展示客观摘要。
 
-全局调用链路页由 `trace-explorer.tsx` 读取统一 Trace API，服务端直接返回 `sequence`、调用状态、完整性和关联 artifacts。页面提供任务、Agent、十个固定内部工具和状态筛选，只保留调用树与调用列表；“调用树”只对显式 `parent_tool_call_id` 绘制父子含义，普通调用按稳定顺序纵向排列。文档搜索节点只展示返回文档数量等脱敏摘要，文档工具不请求文档树或 Markdown；数据库工具通过 `database-call-payload-modal.tsx` 点击后懒加载全屏出入参详情。列表和详情会把链路标记为“完整 / 运行中 / 可能不完整”，并把 prepare 缺失、历史、重启中断或未关联明细转换为中文提示。
+全局调用链路页由 `trace-explorer.tsx` 读取统一 Trace API，服务端直接返回 `sequence`、调用状态、完整性和关联 artifacts。页面提供任务、Agent、十个当前工具、两个历史 Project 工具和状态筛选，只保留调用树与调用列表；“调用树”只对显式 `parent_tool_call_id` 绘制父子含义，普通调用按稳定顺序纵向排列。文档搜索节点只展示返回文档数量等脱敏摘要，文档工具不请求文档树或 Markdown；数据库工具通过 `database-call-payload-modal.tsx` 点击后懒加载全屏出入参详情。中间件工具只展示组件数量、是否显式 reveal 和警告数量。列表和详情会把链路标记为“完整 / 运行中 / 可能不完整”，并把 prepare 缺失、历史、重启中断或未关联明细转换为中文提示。
 
 ClickHouse 连接详情展示 secure、verify、bootstrap database、connect timeout 和 send/receive timeout；项目数据源详情展示 `mcp_alias` 和只读策略。AI/运维通过既有批量 API 维护时，后端仍校验同 Workspace 其他项目的别名占用，因此支持合法的别名互换且不会部分保存。历史非只读关联会明确提示不暴露给 MCP。
 
-MCP 接入信息和测试结果通过 `lib/api.ts` 获取；公开 MCP URL 由后端配置统一提供，前端不按浏览器地址猜测。面板展示十个固定工具，并说明文档搜索绑定 prepare 创建的 Workspace task，真正可用的数据库以 prepare 的 `databases` 为准。测试请求发送当前 `workspace_id`；端到端测试任务的 `agent_name` 固定为 `connection-test`，任务列表默认过滤这类记录。
+MCP 接入信息和测试结果通过 `lib/api.ts` 获取；公开 MCP URL 由后端配置统一提供，前端不按浏览器地址猜测。面板展示十个固定工具，并说明文档搜索绑定 prepare 创建的 Workspace task，真正可用的数据库以 `read_task_context` 的 `databases` 为准；中间件信息由 `read_middleware_context` 按“省略环境为 default/local、显式 test/uat 为同名配置档”的规则读取。测试请求发送当前 `workspace_id`；端到端测试任务的 `agent_name` 固定为 `connection-test`，任务列表默认过滤这类记录。

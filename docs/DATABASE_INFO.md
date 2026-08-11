@@ -1,6 +1,6 @@
 # 数据库信息
 
-当前版本使用宿主机已有的 PostgreSQL 作为控制面数据库，持久化工作空间与项目配置、数据源配置、可选 TEST/UAT 数据库环境映射及通用环境 JSON、Workspace MCP task、文档读取顺序、数据库调用元数据，以及可重建的文档词法搜索索引。文档树和 Markdown 原文仍以磁盘与进程内缓存为真源，文档 MCP 完整出入参不会写入控制面数据库；两个数据库 MCP 工具会另存有界、可过期的请求与最终响应快照，供本机页面按需查看。
+当前版本使用宿主机已有的 PostgreSQL 作为控制面数据库，持久化工作空间与项目配置、数据源配置、可选 TEST/UAT 数据库环境映射及通用环境 JSON、Workspace Nacos 中间件配置档、MCP task、文档读取顺序、数据库调用元数据，以及可重建的文档词法搜索索引。文档树和 Markdown 原文仍以磁盘与进程内缓存为真源，文档与中间件 MCP 完整出入参不会写入控制面数据库；两个数据库 MCP 工具会另存有界、可过期的请求与最终响应快照，供本机页面按需查看。
 
 PostgreSQL 控制面数据库与 MCP 查询的业务数据库是两个概念。业务数据库目前可执行的 Connector 为 ClickHouse、PostgreSQL、MySQL 和 MariaDB；SQL Server、SQLite、Oracle 的配置仍可由本机 AI/运维 API 维护，但能力接口会明确标记为不可搜索、不可查询。
 
@@ -23,9 +23,9 @@ docker compose exec backend uv run alembic upgrade head
 docker compose exec backend uv run alembic current
 ```
 
-当前 head 为 `20260808_0025`。`0025 -> 0024` 会删除全部统一系统 JSON 文档；`0024 -> 0023` 会删除数据库中的 Workspace 文档与部署源文件副本，不影响目标目录现有文件。若要验证 downgrade/upgrade，使用一次性测试数据库，不要在保存真实数据的控制面库上直接 downgrade。
+当前 head 为 `20260811_0028`。`0028 -> 0027` 会删除全部 Workspace Nacos 配置档；`0025 -> 0024` 会删除全部统一系统 JSON 文档；`0024 -> 0023` 会删除数据库中的 Workspace 文档与部署源文件副本，不影响目标目录现有文件。若要验证 downgrade/upgrade，使用一次性测试数据库，不要在保存真实数据的控制面库上直接 downgrade。
 
-`system_guides` 只保存 `guide_key`、JSONB 正文、是否随 prepare 直接返回全文、菜单顺序和时间戳，没有 `enabled` 字段。记录存在即进入系统文档菜单和 prepare 目录。
+`system_guides` 保存 `guide_key`、JSONB 正文、菜单顺序和时间戳，没有 `enabled` 字段。历史 `include_in_prepare` 字段不再影响 MCP prepare；记录只进入系统文档菜单。
 
 ## 当前表
 
@@ -38,7 +38,8 @@ docker compose exec backend uv run alembic current
 | `data_source_databases` | 保存每个物理连接下可供项目选择的实际库、schema 或 SQLite 文件清单 |
 | `project_databases` | 保存 `workspace_id`、具体项目与数据库的多对多关联、人类展示别名、Workspace 内大小写无关唯一的 `mcp_alias`、用途和只读/查询限制策略 |
 | `workspace_database_environment_configs` | 保存 Workspace 环境选择器、当前 `test/uat` 环境和单调递增 revision；是否采用数据库环境映射由映射记录是否存在决定 |
-| `workspace_environment_payloads` | 按 Workspace 与 `test/uat` 以明文 JSONB 保存受大小/深度限制的 JSON 对象；可按明确业务需要包含地址和访问凭据，task 所选环境内容只随 prepare 返回给可信本机 MCP 调用方，严禁进入日志、开发文档、链路摘要或示例输出 |
+| `workspace_environment_payloads` | 按 Workspace 与 `test/uat` 以明文 JSONB 保存受大小/深度限制的 JSON 对象；可按明确业务需要包含地址和访问凭据，task 所选环境内容只在显式调用 `read_task_context` 时返回给可信本机 MCP 调用方，严禁进入日志、开发文档、链路摘要或示例输出 |
+| `workspace_nacos_profiles` | 按 Workspace 与 `default/test/uat` 保存 Nacos 地址、命名空间、登录凭据、超时及声明式组件抽取规则；列表 API 不返回密码，本机 `read_middleware_context` 默认返回明文且可显式关闭 reveal 获取脱敏视图，实际响应不进入 Trace 或 payload 表 |
 | `project_database_environment_mappings` | 保存 Project 逻辑数据库、跨环境稳定 `mcp_alias` 和 Workspace 归属 |
 | `project_database_environment_targets` | 把每条逻辑映射的 `test/uat` 目标绑定到既有 `project_databases` 授权；不复制连接和查询策略 |
 | `mcp_tasks` | 保存 prepare 产生的自增 task_id、`project/workspace` scope、Workspace ID/key/name、可选活动项目快照、可选数据库环境、共享 revision 与 `workspace_default/task_explicit` 选择模式，以及兼容旧 Project task 的 project_id/project_key/name |

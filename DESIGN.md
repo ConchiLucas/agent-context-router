@@ -111,6 +111,7 @@ Agent Context is a local developer console. Its primary users inspect workspace 
 2. Prefer direct actions and short confirmations over multi-step state machines. Show only state required to recover from an error.
 3. Treat local paths and file replacement as operational data: render paths in monospace, name the exact affected directories, and never rely on color alone.
 4. Preserve keyboard access, visible focus, Chinese readability, and responsive single-column behavior.
+5. Container-table project updates stay in the row action column: Fast and Full reuse the registered project runtime profiles, expose progress through the button label, and never rely on container-name mapping.
 
 ## Reference decision
 
@@ -174,11 +175,13 @@ At 200% zoom the interface must collapse without hiding the primary or cancel ac
 | Component | Implementation | Required behavior |
 |---|---|---|
 | Workspace card | `.workspace-card` | Show the locally resolved primary path, shared-reader count, refresh action, and enter action. No status-badge matrix. |
+| Workspace detail header | `.workspace-detail-header` | Show only the workspace name and root path, with a circular close action fixed at the header's top-right. Do not repeat the workspace label, type, or a textual back action. |
+| Workspace container view | `WorkspaceContainersModal` | Open full-screen from each workspace card and list only containers carrying that workspace's runtime label. Use compact single-line rows and backend/frontend tabs with backend selected first. Show literal state, project, image, and ports with loading, empty, and recoverable error states. Each row offers a log action that opens one bounded live SSE terminal below the table; show literal connection state, preserve stdout/stderr labels, default to auto-scroll, and close the prior stream when selection, tab, or dialog changes. Footer batch actions restart or stop only the selected backend/frontend tab, require explicit confirmation, disable navigation while running, and report success and failure counts before refreshing the list. |
 | Local mapping reload | workspace dashboard toolbar | One action reloads the project-local YAML; loading prevents duplicate submission; a persistent error explains how to recover. |
 | Shared-file dialog | `WorkspaceSharedFiles` | Show primary root and the two fixed directories. Offer database-to-local and local-to-database full replacement with a single explicit confirmation step. |
 | Confirmation dialog | existing management modal primitives | State which side is replaced and list `docs/` and `deploy/context-router/`; cancel is first, replacement is last. |
 | Error banner | `.error-banner` | Use `role=alert`, preserve the error until the user retries or closes the containing dialog. |
-| System guide manager | `.system-guide-*` | Use the existing sidebar and a list/editor split. JSON source is editable; tree mode is a formatted read-only preview. The browser exposes one “保存内容” action only—no create, delete, key, ordering, prepare policy, enabled, or publishing controls. |
+| System guide manager | `.system-guide-*` | Use the existing sidebar and list/editor split. Render one fixed read-only menu item per tool from the live FastMCP `tools/list` registry; selecting an item shows only that tool definition in source/tree views and exposes no save action. Use concise project-owned Chinese descriptions in this human-facing view while leaving the MCP registry’s original English descriptions unchanged for AI clients. Persisted system-guide JSON remains editable in source mode with one “保存内容” action only—no browser create, delete, key, ordering, prepare policy, enabled, or publishing controls. |
 
 Buttons cover default, hover, focus, disabled, and loading. Critical replacement results use an inline persistent success or error message, not a transient toast. Dialogs trap focus, close on Escape only while idle, and restore focus to the trigger.
 

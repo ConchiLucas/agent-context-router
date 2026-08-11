@@ -9,6 +9,8 @@ import type {
 
 export const INTERNAL_MCP_TOOL_NAMES: readonly InternalMcpToolName[] = [
   "prepare_task_context",
+  "read_task_context",
+  "read_middleware_context",
   "search_context_documents",
   "read_context_document",
   "search_database_objects",

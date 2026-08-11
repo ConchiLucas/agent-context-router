@@ -85,5 +85,5 @@ def test_reader_path_prepares_documents_only_context(tmp_path: Path) -> None:
         task="阅读文档",
         cwd=str(reader_root),
     )
-    assert result.databases == []
+    assert result.access == ["documents"]
     assert result.warnings == ["当前目录共享主工作空间文档；数据库和部署工具不可用"]

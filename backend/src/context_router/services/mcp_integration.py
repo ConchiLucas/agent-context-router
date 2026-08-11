@@ -23,6 +23,10 @@ from context_router.mcp_server import (
     MCP_SERVER_NAME,
     PREPARE_TOOL_DESCRIPTION,
     PREPARE_TOOL_NAME,
+    READ_MIDDLEWARE_CONTEXT_TOOL_DESCRIPTION,
+    READ_MIDDLEWARE_CONTEXT_TOOL_NAME,
+    READ_TASK_CONTEXT_TOOL_DESCRIPTION,
+    READ_TASK_CONTEXT_TOOL_NAME,
     READ_TOOL_DESCRIPTION,
     READ_TOOL_NAME,
     SEARCH_CONTEXT_TOOL_DESCRIPTION,
@@ -72,6 +76,14 @@ class McpIntegrationService:
             ),
             tools=[
                 McpToolInfo(name=PREPARE_TOOL_NAME, description=PREPARE_TOOL_DESCRIPTION),
+                McpToolInfo(
+                    name=READ_TASK_CONTEXT_TOOL_NAME,
+                    description=READ_TASK_CONTEXT_TOOL_DESCRIPTION,
+                ),
+                McpToolInfo(
+                    name=READ_MIDDLEWARE_CONTEXT_TOOL_NAME,
+                    description=READ_MIDDLEWARE_CONTEXT_TOOL_DESCRIPTION,
+                ),
                 McpToolInfo(
                     name=SEARCH_CONTEXT_TOOL_NAME,
                     description=SEARCH_CONTEXT_TOOL_DESCRIPTION,
@@ -200,6 +212,8 @@ class McpIntegrationService:
                             names = [tool.name for tool in result.tools]
                             expected = {
                                 PREPARE_TOOL_NAME,
+                                READ_TASK_CONTEXT_TOOL_NAME,
+                                READ_MIDDLEWARE_CONTEXT_TOOL_NAME,
                                 SEARCH_CONTEXT_TOOL_NAME,
                                 READ_TOOL_NAME,
                                 SEARCH_DATABASE_TOOL_NAME,

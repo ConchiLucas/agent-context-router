@@ -6,6 +6,8 @@ from mcp.server.fastmcp.exceptions import ToolError
 from context_router.mcp_server import (
     MCP_SERVER_INSTRUCTIONS,
     PREPARE_TOOL_DESCRIPTION,
+    READ_MIDDLEWARE_CONTEXT_TOOL_DESCRIPTION,
+    READ_TASK_CONTEXT_TOOL_DESCRIPTION,
     create_context_router_mcp,
 )
 from context_router.schemas.context import SearchContextDocumentsResult
@@ -29,6 +31,10 @@ class RecordingPreparationService:
         self.arguments: dict[str, object] = {}
 
     def prepare(self, **arguments: object) -> _PrepareResult:
+        self.arguments = arguments
+        return _PrepareResult()
+
+    def read_task_context(self, **arguments: object) -> _PrepareResult:
         self.arguments = arguments
         return _PrepareResult()
 
@@ -64,6 +70,15 @@ class RecordingQueryService:
     def execute(self, **arguments: object) -> dict[str, object]:
         self.arguments = arguments
         return {"rows": [[1]], "returned_rows": 1}
+
+
+class RecordingMiddlewareContextService:
+    def __init__(self) -> None:
+        self.arguments: dict[str, object] = {}
+
+    def read(self, **arguments: object) -> _PrepareResult:
+        self.arguments = arguments
+        return _PrepareResult()
 
 
 class _RuntimeResult:
@@ -114,6 +129,8 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
 
     assert [tool.name for tool in tools] == [
         "prepare_task_context",
+        "read_task_context",
+        "read_middleware_context",
         "search_context_documents",
         "read_context_document",
         "search_database_objects",
@@ -121,26 +138,24 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "apply_workspace_changes",
         "start_workspace",
         "get_workspace_operation",
-        "apply_project_changes",
-        "get_project_operation",
     ]
     assert tools[0].annotations is not None
     assert tools[0].annotations.readOnlyHint is True
     assert tools[0].annotations.destructiveHint is False
     assert tools[0].annotations.idempotentHint is False
     assert tools[0].annotations.openWorldHint is False
-    for tool in tools[1:5]:
+    for tool in tools[1:7]:
         assert tool.annotations is not None
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
         assert tool.annotations.idempotentHint is True
         assert tool.annotations.openWorldHint is False
-    for tool in (tools[5], tools[6], tools[8]):
+    for tool in (tools[7], tools[8]):
         assert tool.annotations is not None
         assert tool.annotations.readOnlyHint is False
         assert tool.annotations.destructiveHint is True
         assert tool.annotations.idempotentHint is False
-    for tool in (tools[7], tools[9]):
+    for tool in (tools[9],):
         assert tool.annotations is not None
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
@@ -155,11 +170,27 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
     }
     assert "test" in str(prepare_schema["properties"]["environment"])
     assert "uat" in str(prepare_schema["properties"]["environment"])
-    assert "credentials" in PREPARE_TOOL_DESCRIPTION
+    assert "read_task_context" in PREPARE_TOOL_DESCRIPTION
+    assert "sensitive" in READ_TASK_CONTEXT_TOOL_DESCRIPTION
+    assert "not the authoritative or live source" in READ_TASK_CONTEXT_TOOL_DESCRIPTION
+    assert "reveal_secrets" in READ_MIDDLEWARE_CONTEXT_TOOL_DESCRIPTION
+    assert "returns plaintext fields by default" in READ_MIDDLEWARE_CONTEXT_TOOL_DESCRIPTION
+    assert "Returning and using connection values" in READ_MIDDLEWARE_CONTEXT_TOOL_DESCRIPTION
     assert "never echo it into logs" in MCP_SERVER_INSTRUCTIONS
-    document_search_schema = tools[1].inputSchema
-    database_search_schema = tools[3].inputSchema
-    query_schema = tools[4].inputSchema
+    task_context_schema = tools[1].inputSchema
+    middleware_schema = tools[2].inputSchema
+    document_search_schema = tools[3].inputSchema
+    database_search_schema = tools[5].inputSchema
+    query_schema = tools[6].inputSchema
+    assert task_context_schema["required"] == ["task_id", "sections"]
+    assert set(task_context_schema["properties"]) == {"task_id", "sections"}
+    assert middleware_schema["required"] == ["task_id"]
+    assert set(middleware_schema["properties"]) == {
+        "task_id",
+        "components",
+        "reveal_secrets",
+    }
+    assert middleware_schema["properties"]["reveal_secrets"]["default"] is True
     assert document_search_schema["required"] == ["task_id", "query"]
     assert set(document_search_schema["properties"]) == {"task_id", "query", "limit"}
     assert database_search_schema["required"] == ["task_id", "database", "object_type"]
@@ -236,6 +267,55 @@ def test_prepare_forwards_optional_task_environment() -> None:
         "cwd": "/workspace/project",
         "agent_name": "codex",
         "environment": "test",
+    }
+
+
+def test_read_task_context_forwards_only_requested_sections() -> None:
+    preparation = RecordingPreparationService()
+    document_service = UnusedService()
+    server = create_context_router_mcp(  # type: ignore[arg-type]
+        preparation,
+        document_service,
+    )
+
+    _, result = asyncio.run(
+        server.call_tool(
+            "read_task_context",
+            {"task_id": 9, "sections": ["databases", "environment"]},
+        )
+    )
+
+    assert result == {"task_id": 55}
+    assert preparation.arguments == {
+        "task_id": 9,
+        "sections": ["databases", "environment"],
+    }
+
+
+def test_read_middleware_context_forwards_only_task_scoped_arguments() -> None:
+    document_service = UnusedService()
+    middleware = RecordingMiddlewareContextService()
+    server = create_context_router_mcp(  # type: ignore[arg-type]
+        document_service,
+        document_service,
+        middleware_context_service=middleware,  # type: ignore[arg-type]
+    )
+
+    _, result = asyncio.run(
+        server.call_tool(
+            "read_middleware_context",
+            {
+                "task_id": 9,
+                "components": ["redis-main", "rocketmq"],
+            },
+        )
+    )
+
+    assert result == {"task_id": 55}
+    assert middleware.arguments == {
+        "task_id": 9,
+        "components": ["redis-main", "rocketmq"],
+        "reveal_secrets": True,
     }
 
 
@@ -329,6 +409,10 @@ def test_database_tools_forward_only_fixed_public_arguments() -> None:
 @pytest.mark.parametrize(
     ("tool_name", "arguments"),
     [
+        (
+            "read_middleware_context",
+            {"components": ["redis-main"], "reveal_secrets": True},
+        ),
         (
             "search_context_documents",
             {"query": "数据库迁移"},

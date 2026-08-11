@@ -69,3 +69,22 @@ def test_operation_repository_rejects_a_second_active_workspace_operation() -> N
         assert "已有运行中的操作" in str(exc)
     else:
         raise AssertionError("second active Workspace operation must be rejected")
+
+
+def test_operation_repository_supports_ui_project_update_without_task() -> None:
+    repository = InMemoryRuntimeOperationRepository()
+    draft = operation_draft()
+    operation = repository.create_operation(
+        RuntimeOperationDraft(
+            task_id=None,
+            workspace_id=draft.workspace_id,
+            kind="project_update",
+            trigger="ui",
+            changed_files=(),
+            steps=draft.steps,
+        )
+    )
+
+    assert operation.task_id is None
+    assert operation.kind == "project_update"
+    assert repository.lease_next("runner-a", 30) is not None

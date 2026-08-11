@@ -1,6 +1,6 @@
 # search_context_documents 说明
 
-当 prepare 返回的导航树较大、目标文档不明确、目标 Project 未进入真实根显式树或需要按业务术语定位章节时，调用：
+当目标文档不明确、未进入 prepare 的三层投影或需要按业务术语定位章节时，调用：
 
 ```text
 search_context_documents(task_id, query, limit?)

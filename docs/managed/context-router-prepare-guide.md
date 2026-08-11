@@ -15,7 +15,10 @@
 | `task` | 是 | 当前任务原文，不要改写成泛化关键词 |
 | `cwd` | 是 | 当前工作目录，用于自动识别 Workspace，并在适用时标记 active project |
 | `agent_name` | 否 | `codex`、`antigravity` 等调用方名称 |
+| `environment` | 否 | 单环境 Workspace 省略；配置 TEST/UAT 选择器后可为当前 task 固定 `test` 或 `uat` |
 
-每次调用由服务端生成独立 task_id，并返回 cwd 对应 Workspace 的文档导航树、Project 摘要和可选 active project。Workspace 根 `AGENTS.md` 存在时严格采用其显式父子层级，不自动追加未声明的 Project 根；不存在时返回直接列出 Project 入口的合成根。未进入显式树的 Project 文档仍可通过 `search_context_documents` 定位并按结果 ID 读取。节点只携带显式 Front Matter 中的 title 和 summary，不做候选检索、排名、截断或正文返回。
+每次调用由服务端生成独立 task_id。存在真实 Workspace 根 `AGENTS.md` 时固定以它为第一层；缺少真实根时，才以 cwd 命中的 Project 入口或合成根为第一层。只返回入口在 `## 下级文档` 中显式声明的两级子孙，总高度最多三层。节点只含 `document_id`、`summary` 和 `children`，不返回正文，也不根据 task 内容搜索或排名。
 
-prepare 还返回当前 Workspace 可用于 MCP 的数据库摘要，即所有 Project 有效授权的并集，并保留 Project 归属信息。`database` 是 Workspace 内唯一的 `mcp_alias`，并带 Engine、展示名、用途、readonly 和 `search_objects`/`execute_query` 能力。它只读取控制面配置，不连接业务数据库；停用的 Workspace、无效关联、不可用或系统数据库、非只读授权以及未实现 Connector 的关联不会出现。数据库摘要暂时失败时返回 warning，文档树仍可使用。
+这个三层树只是当前任务的精简导航，不是读取授权清单。更深文档、其他 Project 文档或未挂入真实 Workspace 根的 Project 文档，仍可通过同一 task_id 调用 Workspace 范围的 `search_context_documents`，再按结果 ID 调用 `read_context_document`。
+
+prepare 不直接返回数据库摘要或环境 JSON。任务确实需要这些信息时，再调用 `read_task_context(task_id, sections)`；显式 `environment` 只固定当前 task，不修改 Workspace 默认环境。

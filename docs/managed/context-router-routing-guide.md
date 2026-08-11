@@ -1,6 +1,6 @@
 # 上下文任务路由
 
-调用 `prepare_task_context` 时通常只传 task 和 cwd。后端按 cwd 最长前缀选择已启用 Workspace，返回真实根显式树或合成根树；cwd 落在某个 Project 时，再按最深相对路径标记 active project。prepare 不根据 task 内容搜索、排名或只返回候选；下表用于 Agent 在返回树中选择后续要读的稳定文档。树较大、无法直接判断或目标 Project 未进入显式树时，再用 prepare 返回的 task_id 调用 `search_context_documents`，定位命中文档/章节后调用 read。
+调用 `prepare_task_context` 时通常只传 task 和 cwd。后端按 cwd 最长前缀选择 Workspace；存在真实根 `AGENTS.md` 时固定以它为第一层，缺少真实根时才从活动 Project 入口或合成根开始，并只返回显式下两级。节点仅含 `document_id`、`summary`、`children`。prepare 不根据 task 内容搜索或排名；无法直接判断或目标文档未进入三层投影时，再用 task_id 调用 Workspace 范围的 `search_context_documents`，定位命中文档/章节后调用 read。
 
 | area | document_id | 适用任务 |
 | --- | --- | --- |

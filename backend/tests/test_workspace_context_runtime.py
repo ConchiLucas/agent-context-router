@@ -74,7 +74,7 @@ def test_workspace_task_aggregates_project_documents_and_routes_by_workspace(
 
         | 功能说明 | 相对路径 |
         | --- | --- |
-        | 后端入口 | `./docs/backend/server/AGENTS.md` |
+        | 前端入口 | `./docs/frontend/root/AGENTS.md` |
         """,
     )
     _write_agents(
@@ -111,7 +111,7 @@ def test_workspace_task_aggregates_project_documents_and_routes_by_workspace(
     )
     workspace = workspace_repository.get_workspace("workspace-id")
     registry.register_workspace(workspace)
-    frontend = registry.add_workspace_project(
+    registry.add_workspace_project(
         workspace,
         name="前端",
         relative_path=".",
@@ -125,7 +125,7 @@ def test_workspace_task_aggregates_project_documents_and_routes_by_workspace(
         document_relative_path="docs/backend/server/AGENTS.md",
         project_kind="backend",
     )
-    worker = registry.add_workspace_project(
+    registry.add_workspace_project(
         workspace,
         name="后台任务",
         relative_path="worker",
@@ -141,21 +141,25 @@ def test_workspace_task_aggregates_project_documents_and_routes_by_workspace(
         agent_name="codex",
     )
 
-    assert prepared.workspace.workspace_id == "workspace-id"
-    assert {project.project_id for project in prepared.projects} == {
-        frontend.id,
-        backend.id,
-        worker.id,
-    }
-    assert prepared.active_project is not None
-    assert prepared.active_project.project_id == backend.id
-    assert [node.path for node in prepared.documents.children] == ["docs/backend/server/AGENTS.md"]
+    assert prepared.access == [
+        "documents",
+        "database",
+        "environment",
+        "middleware",
+        "runtime",
+    ]
+    workspace_snapshot = registry.get_workspace_snapshot("workspace-id")
+    assert workspace_snapshot.document_cache is not None
+    assert prepared.documents.document_id == workspace_snapshot.document_cache.root.id
+    assert prepared.documents.summary == "工作空间文档入口"
+    assert [node.summary for node in prepared.documents.children] == ["前端入口"]
     tree_ids = [
         prepared.documents.document_id,
         *[node.document_id for node in prepared.documents.children],
     ]
     assert len(tree_ids) == len(set(tree_ids))
     assert task_repository.created[0]["workspace_id"] == "workspace-id"
+    assert task_repository.created[0]["active_project_id"] == backend.id
 
     searched = ContextDocumentSearchService(
         registry,
@@ -238,8 +242,7 @@ workspace-only-search-needle
         agent_name="codex",
     )
 
-    assert prepared.projects == []
-    assert prepared.documents.title == "工作空间开发索引"
+    assert prepared.documents.summary == "汇总前后端服务文档和业务链路。"
     assert len(prepared.documents.children) == 1
     searched = ContextDocumentSearchService(
         registry,
@@ -312,6 +315,16 @@ def test_workspace_without_root_agents_keeps_synthetic_root(
     ]
     assert len(snapshot.cache.documents) == 2
     assert search_repository.get_workspace_index_state("workspace-empty") is None
+
+    prepared = ContextPreparationService(
+        registry,
+        FakeWorkspaceTaskRepository(),
+    ).prepare(
+        task="开发服务接口",
+        cwd=str(root_path / "service" / "src"),
+        agent_name="codex",
+    )
+    assert prepared.documents.document_id == registry.get_tree(project.id).id
 
 
 def test_workspace_refresh_removes_deleted_root_document_index(

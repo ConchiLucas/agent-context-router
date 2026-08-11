@@ -13,7 +13,7 @@
 ## 核心规则
 
 - 新窗口遇到业务规则、启动、数据库或跨层链路任务时，优先调用 Context Router MCP `prepare_task_context`，传当前 task、cwd 和 agent_name；明确文件或纯源码定位可直接检索。
-- MCP prepare 返回匹配工作空间的文档导航树；真实根 `AGENTS.md` 存在时严格采用其显式层级，缺少根入口时才用合成根列出 Project。cwd 落在某个子项目时还会标记 active project。目标不明确或目标 Project 未进入显式树时，先用同一 task_id 调用 `search_context_documents`，再根据命中的显式 title、summary、path 和章节调用 `read_context_document`。
+- MCP prepare 在真实 Workspace 根 `AGENTS.md` 存在时固定以它为第一层；缺少真实根时，才以 cwd 命中的 Project 入口或合成根为第一层。导航只返回显式下两级，总高度最多三层，每个节点只有 `document_id`、`summary` 和 `children`。这只是任务导航投影，不缩小 Workspace 搜索和按 ID 读取范围；目标不明确或未出现在投影中时，先用同一 task_id 调用 `search_context_documents`，再根据命中的 title、summary、path 和章节调用 `read_context_document`。只有任务需要数据库别名或环境 JSON 时才调用 `read_task_context`。
 - 工作空间根目录存在 `AGENTS.md` 时，它是工作空间级文档树入口；各前端/后端 Project 的源码相对路径与文档入口相对路径彼此独立。新项目入口统一放在工作空间 `docs/` 层级下并命名为 `AGENTS.md`，独立进入 Workspace 检索和按搜索结果 ID 读取范围。不要把未声明的 Project 入口自动追加到真实根的直接下级。
 - 工作空间和项目路径配置由本机 AI/运维 API 管理；工作空间级刷新可由 Workspaces 页面卡片触发。不要把工作空间 `root_path` 当成单个项目文档目录，也不要向刷新接口提交任意路径。
 - 如果 MCP 不可用或没有合适候选，继续使用本索引和仓库检索，不要阻塞任务。

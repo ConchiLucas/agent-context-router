@@ -29,7 +29,7 @@
 
 - 工作空间工具栏新增“环境配置”入口，使用简洁全屏面板分别维护数据库映射和通用 JSON。数据库页并列展示 Project 稳定逻辑别名、TEST/UAT 数据库和完整状态；支持同后缀自动匹配、只看问题、手工编辑、保存和环境切换。
 - 环境映射复用既有 `project_databases` 授权及只读策略，不复制物理连接或口令。前端项目卡片继续隐藏“管理数据源”，映射入口只位于 Workspace 工具栏。
-- `prepare_task_context` 新增可选 `environment='test'|'uat'`。显式选择写入 `task_explicit`，只固定本 task 的环境且不修改 Workspace 当前环境；省略参数写入 `workspace_default` 并使用当前环境。prepare 按 task 环境返回稳定别名和数据库摘要。
+- `prepare_task_context` 新增可选 `environment='test'|'uat'`。显式选择写入 `task_explicit`，只固定本 task 的环境且不修改 Workspace 当前环境；省略参数写入 `workspace_default` 并使用当前环境。数据库别名和环境 JSON 由 `read_task_context` 按 task 环境返回。
 - 保存映射、保存通用 JSON 或切换 Workspace 当前环境都会递增共享 revision；两种选择模式的旧 task 均返回 `environment_changed` 并要求重新 prepare。没有配置环境选择器的单环境 Workspace 在省略参数时保持旧数据库授权链路，显式传参返回 `environment_not_configured`。
 - 通用 JSON 页分别保存 TEST/UAT 有界 JSON 对象，不固定 MQ、Redis、MinIO、ES 等组件结构，并可在没有数据库映射时独立建立选择器；JSON-only 模式继续使用原有数据库别名。可按明确业务需要保存地址和访问凭据，但内容以明文 JSONB 保存在本地，task 所选环境的 `environment_config` 只供可信本机 MCP 调用方和本机管理预览使用，严禁进入日志、开发文档、链路摘要或示例输出。
 - migration head 更新为 `20260730_0022`；`0019` 新增 Workspace 环境选择器、Project 逻辑映射、TEST/UAT 目标表和 task 环境快照，`0020` 新增按环境保存的通用 JSONB，`0021` 新增 `database_environment_selection`，`0022` 删除 Workspace、数据源、授权和环境配置的启停字段。未配置选择器的 Workspace 保持旧数据库授权解析行为。

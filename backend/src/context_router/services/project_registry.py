@@ -364,6 +364,40 @@ class ProjectRegistry:
         )
 
     @staticmethod
+    def _find_document_tree_node(
+        node: CachedTreeNode,
+        document_id: str,
+    ) -> CachedTreeNode | None:
+        if node.id == document_id:
+            return node
+        for child in node.children:
+            matched = ProjectRegistry._find_document_tree_node(child, document_id)
+            if matched is not None:
+                return matched
+        return None
+
+    def get_prepare_document_root(self, workspace: WorkspaceSnapshot) -> CachedTreeNode:
+        """Select the task-local document entry without changing the workspace index.
+
+        A real Workspace AGENTS.md is the canonical task entry, so its explicit hierarchy
+        remains stable regardless of which Project contains cwd. Workspaces without a real
+        root keep the Project-local fallback; a Workspace-level call without an active
+        Project keeps the synthetic root.
+        """
+        if workspace.document_cache is not None:
+            return workspace.cache.root
+        active_project = workspace.active_project
+        if active_project is None:
+            return workspace.cache.root
+        return (
+            self._find_document_tree_node(
+                workspace.cache.root,
+                active_project.cache.root.id,
+            )
+            or active_project.cache.root
+        )
+
+    @staticmethod
     def _build_workspace_cache(
         workspace: WorkspaceState,
         projects: tuple[ProjectSnapshot, ...],

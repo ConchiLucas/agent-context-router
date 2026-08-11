@@ -9,6 +9,7 @@ import type {
   DocumentTreeNode,
   McpIntegrationInfo,
   McpIntegrationTestResult,
+  McpToolsListResult,
   McpTraceDetail,
   McpDatabaseToolPayload,
   McpTraceSummary,
@@ -24,6 +25,9 @@ import type {
   WorkspaceDatabaseEnvironmentMappings,
   WorkspaceDataSourceSummary,
   WorkspaceEnvironmentConfig,
+  WorkspaceContainer,
+  WorkspaceContainerBulkAction,
+  WorkspaceContainerBulkActionResult,
   WorkspaceSummary,
   WorkspaceSharedFilesResult,
   SystemGuideDetail,
@@ -104,6 +108,36 @@ export function publishWorkspaceSharedFiles(
 
 export function getWorkspace(workspaceId: string): Promise<WorkspaceSummary> {
   return request<WorkspaceSummary>(`/api/workspaces/${workspaceId}`);
+}
+
+export function listWorkspaceContainers(
+  workspaceId: string,
+): Promise<WorkspaceContainer[]> {
+  return request<WorkspaceContainer[]>(
+    `/api/workspaces/${workspaceId}/containers`,
+    { cache: "no-store" },
+  );
+}
+
+export function getWorkspaceContainerLogStreamUrl(
+  workspaceId: string,
+  containerId: string,
+): string {
+  return `${API_URL}/api/workspaces/${encodeURIComponent(workspaceId)}/containers/${encodeURIComponent(containerId)}/logs/stream`;
+}
+
+export function runWorkspaceContainerBulkAction(
+  workspaceId: string,
+  action: WorkspaceContainerBulkAction,
+  projectKind: "backend" | "frontend",
+): Promise<WorkspaceContainerBulkActionResult> {
+  return request<WorkspaceContainerBulkActionResult>(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/containers/bulk-action`,
+    {
+      method: "POST",
+      body: JSON.stringify({ action, project_kind: projectKind }),
+    },
+  );
 }
 
 export function refreshWorkspace(
@@ -267,6 +301,12 @@ export function getMcpDatabaseToolPayload(
 
 export function getMcpIntegration(): Promise<McpIntegrationInfo> {
   return request<McpIntegrationInfo>("/api/mcp/integration");
+}
+
+export function listMcpTools(): Promise<McpToolsListResult> {
+  return request<McpToolsListResult>("/api/mcp/integration/tools", {
+    cache: "no-store",
+  });
 }
 
 export function runMcpIntegrationTest(

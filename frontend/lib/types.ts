@@ -67,6 +67,33 @@ export interface WorkspaceSummary {
   updated_at: string;
 }
 
+export interface WorkspaceContainer {
+  id: string;
+  name: string;
+  image: string;
+  state: string;
+  status: string;
+  health: string | null;
+  project_id: string | null;
+  project_name: string | null;
+  project_kind: ProjectKind | null;
+  mode: string | null;
+  operation_id: string | null;
+  ports: string[];
+}
+
+export type WorkspaceContainerBulkAction = "restart" | "stop";
+
+export interface WorkspaceContainerBulkActionResult {
+  workspace_id: string;
+  action: WorkspaceContainerBulkAction;
+  project_kind: ProjectKind;
+  target_count: number;
+  succeeded_count: number;
+  failed_count: number;
+  failed_containers: string[];
+}
+
 export interface WorkspaceSharedFilesResult {
   workspace_id: string;
   source_root: string;
@@ -302,25 +329,8 @@ export interface ProjectDataSourceOptions {
 
 export interface ContextDocumentNode {
   document_id: string;
-  path: string;
-  title?: string;
-  summary?: string;
-  error?: string;
+  summary: string;
   children: ContextDocumentNode[];
-}
-
-export interface PreparedProject {
-  project_id: string;
-  name: string;
-  node_count: number;
-  relative_path: string;
-  document_relative_path: string;
-  project_kind: ProjectKind;
-}
-
-export interface PreparedWorkspace {
-  workspace_id: string;
-  name: string;
 }
 
 export interface PreparedDatabase {
@@ -345,33 +355,10 @@ export interface PreparedDatabaseEnvironment {
 
 export interface PrepareTaskContextResult {
   task_id: number;
-  workspace: PreparedWorkspace;
-  projects: PreparedProject[];
-  active_project?: PreparedProject | null;
-  project?: PreparedProject | null;
   documents: ContextDocumentNode;
-  databases: PreparedDatabase[];
-  database_environment?: PreparedDatabaseEnvironment | null;
-  environment_config?: EnvironmentJsonObject | null;
-  workspace_access: {
-    mode: "full" | "documents_only";
-    message: string;
-  };
-  system_guides: {
-    required: Array<{
-      document_id: string;
-      key: string;
-      title: string;
-      summary: string;
-      content: SystemGuideDocument;
-    }>;
-    catalog: Array<{
-      document_id: string;
-      key: string;
-      title: string;
-      summary: string;
-    }>;
-  };
+  access: Array<
+    "documents" | "database" | "environment" | "middleware" | "runtime"
+  >;
   warnings?: string[];
 }
 
@@ -461,6 +448,8 @@ export type InternalMcpTraceCallSource = "server" | "legacy";
 
 export type InternalMcpToolName =
   | "prepare_task_context"
+  | "read_task_context"
+  | "read_middleware_context"
   | "search_context_documents"
   | "read_context_document"
   | "search_database_objects"
@@ -647,6 +636,10 @@ export interface McpToolInfo {
   description: string;
 }
 
+export interface McpToolsListResult {
+  tools: Array<Record<string, JsonValue>>;
+}
+
 export interface McpClientConfig {
   client: "codex" | "antigravity";
   title: string;
@@ -706,4 +699,3 @@ export interface DocumentReadTaskItem {
   read_count: number;
   sections: string[];
 }
-

@@ -106,6 +106,9 @@ def lease_operation(payload: RunnerLeaseRequest, request: Request) -> dict[str, 
             }
             for step in lease.steps
         ],
+        "project_ids_by_relative_path": {
+            relative_path: project_id for project_id, relative_path in projects.items()
+        },
         "lease_token": lease.lease_token,
     }
 
