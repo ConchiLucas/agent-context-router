@@ -42,6 +42,10 @@ from context_router.services.nacos_middleware import (
     MiddlewareContextError,
     MiddlewareContextService,
 )
+from context_router.services.table_relations import (
+    TableRelationService,
+    TableRelationServiceError,
+)
 from context_router.services.workspace_runtime_orchestration import (
     WorkspaceRuntimeOrchestrationError,
     WorkspaceRuntimeOrchestrationService,
@@ -62,6 +66,9 @@ MCP_SERVER_INSTRUCTIONS = (
     "Use only database aliases returned by read_task_context. Search database objects before "
     "querying "
     "when the schema is uncertain. Database queries are always bounded and read-only. Call "
+    "prepare_table_relation_context when an exact table's directly observed SQL equality joins "
+    "are needed. It uses Workspace table-relation defaults rather than the task environment; its "
+    "edges are undirected query evidence, not foreign keys or lineage. "
     "prepare again for a new conversation when no task_id is available. "
     "Environment config returned by read_task_context may contain connection details and "
     "credentials for the "
@@ -87,6 +94,7 @@ MCP_SERVER_INSTRUCTIONS = (
     READ_TOOL_NAME,
     SEARCH_DATABASE_TOOL_NAME,
     EXECUTE_DATABASE_TOOL_NAME,
+    TABLE_RELATION_TOOL_NAME,
 ) = CONTEXT_ROUTER_CORE_TOOL_NAMES
 APPLY_WORKSPACE_TOOL_NAME = "apply_workspace_changes"
 START_WORKSPACE_TOOL_NAME = "start_workspace"
@@ -154,6 +162,19 @@ SEARCH_DATABASE_TOOL_DESCRIPTION = (
 EXECUTE_DATABASE_TOOL_DESCRIPTION = (
     "Execute exactly one bounded read-only SQL statement against a database alias returned "
     "by read_task_context. Connection details and query limits are enforced server-side."
+)
+TABLE_RELATION_TOOL_DESCRIPTION = (
+    "Return the directly observed SQL equality joins for one exact table in the current task "
+    "Workspace. Results are undirected empirical joins backed by SQL-file evidence; they are "
+    "not foreign keys, ownership, upstream/downstream lineage, or inferred business dependencies. "
+    "This tool always uses the Workspace table-relation default database for each backend project "
+    "and is independent of the task LOCAL/TEST/UAT environment. Database query tools still use the "
+    "task environment. Use database_key/schema only when duplicate names remain among Workspace "
+    "defaults. detail_level defaults to evidence: "
+    "compact omits evidence, evidence returns source paths and join expressions without full SQL, "
+    "and full also returns complete SQL statements and preprocessing audit metadata. Relations "
+    "are stably paginated; has_more/next_offset and per-join evidence counters always disclose "
+    "omitted results instead of silently truncating them."
 )
 PREPARE_TOOL_ANNOTATIONS = ToolAnnotations(
     readOnlyHint=True,
@@ -370,6 +391,7 @@ def create_context_router_mcp(
     document_search_service: ContextDocumentSearchService | None = None,
     workspace_runtime_service: WorkspaceRuntimeOrchestrationService | None = None,
     middleware_context_service: MiddlewareContextService | None = None,
+    table_relation_service: TableRelationService | None = None,
 ) -> FastMCP:
     server = ContextRouterMCP(
         name=MCP_SERVER_NAME,
@@ -562,6 +584,41 @@ def create_context_router_mcp(
             raise ToolError(f"{exc.code}: {exc}") from exc
 
     @server.tool(
+        name=TABLE_RELATION_TOOL_NAME,
+        description=TABLE_RELATION_TOOL_DESCRIPTION,
+        annotations=DATABASE_TOOL_ANNOTATIONS,
+    )
+    def prepare_table_relation_context(
+        task_id: Annotated[int, Field(ge=1, strict=True)],
+        table: Annotated[str, Field(min_length=1, max_length=255)],
+        database_key: Annotated[
+            str | None,
+            Field(max_length=64, pattern=r"^[a-z][a-z0-9_-]{0,63}$"),
+        ] = None,
+        schema: Annotated[str | None, Field(max_length=255)] = None,
+        detail_level: Annotated[Literal["compact", "evidence", "full"], Field()] = "evidence",
+        relation_limit: Annotated[int, Field(ge=1, le=100, strict=True)] = 20,
+        relation_offset: Annotated[int, Field(ge=0, le=10_000, strict=True)] = 0,
+        evidence_limit_per_join: Annotated[int, Field(ge=1, le=20, strict=True)] = 5,
+    ) -> dict[str, object]:
+        if table_relation_service is None:
+            raise ToolError("table_relation_disabled: 表关联工具当前不可用")
+        try:
+            result = table_relation_service.context_for_task(
+                task_id=task_id,
+                table=table,
+                database_key=database_key,
+                schema=schema,
+                detail_level=detail_level,
+                relation_limit=relation_limit,
+                relation_offset=relation_offset,
+                evidence_limit_per_join=evidence_limit_per_join,
+            )
+        except TableRelationServiceError as exc:
+            raise ToolError(f"{exc.code}: {exc}") from exc
+        return result.model_dump(mode="json", exclude_none=True)
+
+    @server.tool(
         name=APPLY_WORKSPACE_TOOL_NAME,
         description=APPLY_WORKSPACE_TOOL_DESCRIPTION,
         annotations=RUNTIME_APPLY_TOOL_ANNOTATIONS,
@@ -702,6 +759,16 @@ def _request_summary(name: str, arguments: dict[str, Any]) -> dict[str, object] 
                 else None
             ),
         }
+    if name == TABLE_RELATION_TOOL_NAME:
+        return {
+            "table": _safe_string(arguments.get("table"), 255),
+            "database_key": _safe_string(arguments.get("database_key"), 64),
+            "schema_scoped": bool(arguments.get("schema")),
+            "detail_level": _safe_string(arguments.get("detail_level"), 16) or "evidence",
+            "relation_limit": arguments.get("relation_limit", 20),
+            "relation_offset": arguments.get("relation_offset", 0),
+            "evidence_limit_per_join": arguments.get("evidence_limit_per_join", 5),
+        }
     if name == APPLY_WORKSPACE_TOOL_NAME:
         changed_files = arguments.get("changed_files")
         return {"changed_file_count": len(changed_files) if isinstance(changed_files, list) else 0}
@@ -796,6 +863,27 @@ def _result_summary(name: str, payload: dict[str, Any]) -> dict[str, object] | N
         return _bounded_result_metadata(payload, count_key="returned_count")
     if name == EXECUTE_DATABASE_TOOL_NAME:
         return _bounded_result_metadata(payload, count_key="returned_rows")
+    if name == TABLE_RELATION_TOOL_NAME:
+        joins = payload.get("joins")
+        related = payload.get("related_tables")
+        return {
+            "join_count": len(joins) if isinstance(joins, list) else 0,
+            "related_table_count": len(related) if isinstance(related, list) else 0,
+            "total_relation_count": payload.get("total_relation_count"),
+            "returned_relation_count": payload.get("returned_relation_count"),
+            "has_more": payload.get("has_more") is True,
+            "truncated_evidence_count": (
+                sum(
+                    isinstance(join, dict) and join.get("evidence_truncated") is True
+                    for join in joins
+                )
+                if isinstance(joins, list)
+                else 0
+            ),
+            "warning_count": (
+                len(payload.get("warnings", [])) if isinstance(payload.get("warnings"), list) else 0
+            ),
+        }
     if name in {
         APPLY_WORKSPACE_TOOL_NAME,
         START_WORKSPACE_TOOL_NAME,

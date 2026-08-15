@@ -45,7 +45,7 @@ export interface RuntimeOperationStep {
   sequence: number;
   owner_type: "workspace" | "project";
   owner_id: string;
-  mode: RuntimeMode | "start";
+  mode: RuntimeMode | "start" | "host";
   status: "queued" | "running" | "succeeded" | "failed" | "skipped" | "cancelled";
   changed_files: string[];
   decision_reason: string;
@@ -62,8 +62,13 @@ export interface RuntimeOperationSummary {
   id: string;
   task_id: number | null;
   workspace_id: string;
-  kind: "apply_changes" | "start_workspace" | "project_update";
+  kind: "apply_changes" | "start_workspace" | "project_update" | "host_action";
   trigger: "mcp" | "api" | "ui";
+  environment: "local" | "test" | "uat";
+  action:
+    | "pzh.ensure-host-runtime"
+    | "pzh.status-host-runtime"
+    | null;
   status: RuntimeOperationStatus;
   changed_files: string[];
   current_step: number;

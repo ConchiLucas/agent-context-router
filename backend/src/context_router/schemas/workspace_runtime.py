@@ -6,6 +6,9 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+HostRuntimeEnvironment = Literal["local", "test", "uat"]
+HostRuntimeAction = Literal["pzh.ensure-host-runtime", "pzh.status-host-runtime"]
+
 RuntimeOperationStatus = Literal[
     "queued", "leased", "running", "succeeded", "failed", "cancelled", "interrupted"
 ]
@@ -74,7 +77,7 @@ class RuntimeOperationStepView(BaseModel):
     sequence: int
     owner_type: Literal["workspace", "project"]
     owner_id: str
-    mode: Literal["start", "fast", "full"]
+    mode: Literal["start", "fast", "full", "host"]
     status: RuntimeStepStatus
     changed_files: list[str]
     decision_reason: str
@@ -91,8 +94,10 @@ class RuntimeOperationView(BaseModel):
     id: str
     task_id: int | None
     workspace_id: str
-    kind: Literal["apply_changes", "start_workspace", "project_update"]
+    kind: Literal["apply_changes", "start_workspace", "project_update", "host_action"]
     trigger: Literal["mcp", "api", "ui"]
+    environment: HostRuntimeEnvironment = "local"
+    action: HostRuntimeAction | None = None
     status: RuntimeOperationStatus
     changed_files: list[str]
     current_step: int
@@ -125,3 +130,8 @@ class RunnerStepResultRequest(RunnerOperationRequest):
     exit_code: int
     error_code: str | None = Field(default=None, max_length=64)
     error_message: str | None = Field(default=None, max_length=2000)
+
+
+class HostRuntimeActionRequest(BaseModel):
+    action: HostRuntimeAction = "pzh.ensure-host-runtime"
+    environment: HostRuntimeEnvironment = "local"

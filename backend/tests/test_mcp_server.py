@@ -11,6 +11,11 @@ from context_router.mcp_server import (
     create_context_router_mcp,
 )
 from context_router.schemas.context import SearchContextDocumentsResult
+from context_router.schemas.table_relations import (
+    TableIdentity,
+    TableRelationContextResult,
+    TableRelationDatabaseScope,
+)
 
 
 class UnusedService:
@@ -81,6 +86,36 @@ class RecordingMiddlewareContextService:
         return _PrepareResult()
 
 
+class RecordingTableRelationService:
+    def __init__(self) -> None:
+        self.arguments: dict[str, object] = {}
+
+    def context_for_task(self, **arguments: object) -> TableRelationContextResult:
+        self.arguments = arguments
+        return TableRelationContextResult(
+            workspace_id="workspace-1",
+            task_id=int(arguments["task_id"]),
+            detail_level=str(arguments["detail_level"]),  # type: ignore[arg-type]
+            relation_database_scope=TableRelationDatabaseScope(
+                config_revision=1,
+                database_key="cargo_db",
+                schema_name="cargo",
+            ),
+            root_table=TableIdentity(
+                project_id="project-1",
+                project_name="cargo-service",
+                database_key="cargo_db",
+                schema_name="cargo",
+                table_name=str(arguments["table"]),
+            ),
+            related_tables=[],
+            joins=[],
+            total_relation_count=0,
+            returned_relation_count=0,
+            has_more=False,
+        )
+
+
 class _RuntimeResult:
     def __init__(self, operation_id: str, task_id: int = 9) -> None:
         self.operation_id = operation_id
@@ -135,6 +170,7 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "read_context_document",
         "search_database_objects",
         "execute_database_query",
+        "prepare_table_relation_context",
         "apply_workspace_changes",
         "start_workspace",
         "get_workspace_operation",
@@ -144,18 +180,18 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
     assert tools[0].annotations.destructiveHint is False
     assert tools[0].annotations.idempotentHint is False
     assert tools[0].annotations.openWorldHint is False
-    for tool in tools[1:7]:
+    for tool in tools[1:8]:
         assert tool.annotations is not None
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
         assert tool.annotations.idempotentHint is True
         assert tool.annotations.openWorldHint is False
-    for tool in (tools[7], tools[8]):
+    for tool in (tools[8], tools[9]):
         assert tool.annotations is not None
         assert tool.annotations.readOnlyHint is False
         assert tool.annotations.destructiveHint is True
         assert tool.annotations.idempotentHint is False
-    for tool in (tools[9],):
+    for tool in (tools[10],):
         assert tool.annotations is not None
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
@@ -182,6 +218,7 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
     document_search_schema = tools[3].inputSchema
     database_search_schema = tools[5].inputSchema
     query_schema = tools[6].inputSchema
+    table_relation_schema = tools[7].inputSchema
     assert task_context_schema["required"] == ["task_id", "sections"]
     assert set(task_context_schema["properties"]) == {"task_id", "sections"}
     assert middleware_schema["required"] == ["task_id"]
@@ -206,6 +243,28 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
     }
     assert query_schema["required"] == ["task_id", "database", "sql"]
     assert set(query_schema["properties"]) == {"task_id", "database", "sql"}
+    assert table_relation_schema["required"] == ["task_id", "table"]
+    assert set(table_relation_schema["properties"]) == {
+        "task_id",
+        "table",
+        "database_key",
+        "schema",
+        "detail_level",
+        "relation_limit",
+        "relation_offset",
+        "evidence_limit_per_join",
+    }
+    assert "tables" not in table_relation_schema["properties"]
+    assert "include_evidence" not in table_relation_schema["properties"]
+    assert table_relation_schema["properties"]["detail_level"]["default"] == "evidence"
+    assert set(table_relation_schema["properties"]["detail_level"]["enum"]) == {
+        "compact",
+        "evidence",
+        "full",
+    }
+    assert table_relation_schema["properties"]["relation_limit"]["default"] == 20
+    assert table_relation_schema["properties"]["relation_offset"]["default"] == 0
+    assert table_relation_schema["properties"]["evidence_limit_per_join"]["default"] == 5
 
 
 def test_workspace_runtime_tools_forward_only_task_scoped_arguments() -> None:
@@ -405,6 +464,73 @@ def test_database_tools_forward_only_fixed_public_arguments() -> None:
     }
 
 
+def test_table_relation_tool_returns_undirected_observed_context() -> None:
+    document_service = UnusedService()
+    relation_service = RecordingTableRelationService()
+    server = create_context_router_mcp(  # type: ignore[arg-type]
+        document_service,
+        document_service,
+        table_relation_service=relation_service,  # type: ignore[arg-type]
+    )
+
+    _, result = asyncio.run(
+        server.call_tool(
+            "prepare_table_relation_context",
+            {
+                "task_id": 9,
+                "table": "cs_dsly_basic_cargo",
+                "database_key": "cargo_db",
+                "schema": "cargo",
+                "detail_level": "full",
+            },
+        )
+    )
+
+    assert relation_service.arguments == {
+        "task_id": 9,
+        "table": "cs_dsly_basic_cargo",
+        "database_key": "cargo_db",
+        "schema": "cargo",
+        "detail_level": "full",
+        "relation_limit": 20,
+        "relation_offset": 0,
+        "evidence_limit_per_join": 5,
+    }
+    assert result["relation_semantics"] == {
+        "kind": "observed_sql_join",
+        "directed": False,
+        "notice": "结果表示项目 SQL 中观察到的字段等值关联，不等同于外键、主从关系或数据血缘。",
+    }
+
+
+def test_table_relation_tool_defaults_to_evidence_detail() -> None:
+    document_service = UnusedService()
+    relation_service = RecordingTableRelationService()
+    server = create_context_router_mcp(  # type: ignore[arg-type]
+        document_service,
+        document_service,
+        table_relation_service=relation_service,  # type: ignore[arg-type]
+    )
+
+    asyncio.run(
+        server.call_tool(
+            "prepare_table_relation_context",
+            {"task_id": 9, "table": "cs_dsly_basic_cargo"},
+        )
+    )
+
+    assert relation_service.arguments == {
+        "task_id": 9,
+        "table": "cs_dsly_basic_cargo",
+        "database_key": None,
+        "schema": None,
+        "detail_level": "evidence",
+        "relation_limit": 20,
+        "relation_offset": 0,
+        "evidence_limit_per_join": 5,
+    }
+
+
 @pytest.mark.parametrize("invalid_task_id", ["9", True])
 @pytest.mark.parametrize(
     ("tool_name", "arguments"),
@@ -428,6 +554,10 @@ def test_database_tools_forward_only_fixed_public_arguments() -> None:
         (
             "execute_database_query",
             {"database": "analytics", "sql": "SELECT 1"},
+        ),
+        (
+            "prepare_table_relation_context",
+            {"table": "example_table"},
         ),
     ],
 )

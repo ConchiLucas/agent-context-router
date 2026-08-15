@@ -37,6 +37,19 @@ def _spec(engine: str, remote_name: str = "app") -> ConnectorSpec:
     )
 
 
+def _doris_spec() -> ConnectorSpec:
+    base = _spec("mysql")
+    return ConnectorSpec(
+        data_source_id=base.data_source_id,
+        config_version=base.config_version,
+        database_id=base.database_id,
+        database_updated_at=base.database_updated_at,
+        engine=base.engine,
+        remote_name=base.remote_name,
+        connection_config={**dict(base.connection_config), "server_flavor": "doris"},
+    )
+
+
 def _policy(engine: str, *, max_rows: int = 2) -> EffectiveQueryPolicy:
     return EffectiveQueryPolicy(
         engine=engine,
@@ -136,12 +149,48 @@ def test_mysql_family_query_uses_server_timeout_readonly_transaction_and_streami
     assert result.truncated is True
 
 
+def test_doris_mysql_protocol_query_does_not_start_unsupported_transaction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connection = FakeMySQLConnection()
+    monkeypatch.setattr(pymysql, "connect", lambda **_: connection)
+
+    result = MySQLConnector(_doris_spec()).execute_query(
+        "SELECT id FROM events",
+        _policy("mysql"),
+    )
+
+    assert connection.executed == [("SELECT id FROM events", None)]
+    assert result.truncated is True
+
+
+def test_doris_server_flavor_is_auto_detected_during_ping(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connection = FakeMySQLConnection(
+        version="5.7.99",
+        version_comment="doris version doris-4.0.5",
+    )
+    monkeypatch.setattr(pymysql, "connect", lambda **_: connection)
+    connector = MySQLConnector(_spec("mysql"))
+
+    connector.ping()
+    connector.execute_query("SELECT id FROM events", _policy("mysql"))
+
+    assert connection.executed == [
+        ("SELECT 1", None),
+        ("SELECT VERSION(), @@version_comment", None),
+        ("SELECT id FROM events", None),
+    ]
+
+
 @pytest.mark.parametrize(
     ("error_code", "expected_code", "expected_message"),
     [
         (3024, "query_timeout", "MySQL 查询超时"),
         (1969, "query_timeout", "MySQL 查询超时"),
         (1317, "query_cancelled", "MySQL 查询已取消"),
+        (2013, "connection_failed", "MySQL 查询连接中断"),
     ],
 )
 def test_mysql_family_maps_query_interruptions_to_stable_errors(
@@ -236,11 +285,26 @@ class FakeMySQLCursor:
     def fetchmany(self, _: int) -> list[tuple[int]]:
         return [(1,), (2,), (3,)]
 
+    def fetchone(self) -> tuple[str, ...] | None:
+        return (
+            (self._connection.version, self._connection.version_comment or "")
+            if self._connection.version
+            else None
+        )
+
 
 class FakeMySQLConnection:
-    def __init__(self, execute_error: pymysql.MySQLError | None = None) -> None:
+    def __init__(
+        self,
+        execute_error: pymysql.MySQLError | None = None,
+        *,
+        version: str | None = None,
+        version_comment: str | None = None,
+    ) -> None:
         self.executed: list[tuple[str, Any]] = []
         self.execute_error = execute_error
+        self.version = version
+        self.version_comment = version_comment
         self.rolled_back = False
         self.closed = False
 

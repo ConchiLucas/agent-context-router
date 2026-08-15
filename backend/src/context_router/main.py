@@ -21,6 +21,7 @@ from context_router.api.projects import router as projects_router
 from context_router.api.runtime_configs import router as runtime_configs_router
 from context_router.api.runtime_runner import router as runtime_runner_router
 from context_router.api.system_guides import router as system_guides_router
+from context_router.api.table_relations import router as table_relations_router
 from context_router.api.tasks import router as tasks_router
 from context_router.api.workspace_runtime import router as workspace_runtime_router
 from context_router.api.workspaces import router as workspaces_router
@@ -113,6 +114,11 @@ from context_router.repositories.system_guide_repository import (
     PostgresSystemGuideRepository,
     SystemGuideStore,
 )
+from context_router.repositories.table_relation_repository import (
+    InMemoryTableRelationRepository,
+    PostgresTableRelationRepository,
+    TableRelationStore,
+)
 from context_router.repositories.task_repository import PostgresTaskRepository, TaskStore
 from context_router.repositories.workspace_deploy_repository import (
     InMemoryWorkspaceDeployRepository,
@@ -153,6 +159,7 @@ from context_router.services.project_registry import ProjectRegistry, ProjectReg
 from context_router.services.runtime_execution import RuntimeExecutionService
 from context_router.services.runtime_materialization import RuntimeMaterializationService
 from context_router.services.system_guides import SystemGuideService
+from context_router.services.table_relations import TableRelationService
 from context_router.services.workspace_containers import WorkspaceContainerService
 from context_router.services.workspace_deploy_sync import WorkspaceDeploySyncService
 from context_router.services.workspace_management import WorkspaceManagementService
@@ -189,6 +196,7 @@ def create_app(
     document_chain_analytics_repository: DocumentChainAnalyticsStore | None = None,
     system_guide_repository: SystemGuideStore | None = None,
     nacos_profile_repository: NacosProfileStore | None = None,
+    table_relation_repository: TableRelationStore | None = None,
 ) -> FastAPI:
     resolved_settings = settings or Settings()
     if workspace_repository is not None:
@@ -358,6 +366,11 @@ def create_app(
         max_cached_connectors=resolved_settings.database_max_cached_connectors,
         max_concurrency_per_source=resolved_settings.database_max_concurrency_per_source,
     )
+    resolved_table_relation_repository = table_relation_repository or (
+        PostgresTableRelationRepository(resolved_settings.database_url)
+        if resolved_settings.database_url
+        else InMemoryTableRelationRepository()
+    )
     workspace_management_service = WorkspaceManagementService(
         settings=resolved_settings,
         workspace_repository=resolved_workspace_repository,
@@ -412,6 +425,13 @@ def create_app(
         resolved_task_repository,
         resolved_document_search_repository,
     )
+    table_relation_service = TableRelationService(
+        registry=registry,
+        task_repository=resolved_task_repository,
+        data_source_repository=resolved_data_source_repository,
+        repository=resolved_table_relation_repository,
+        connector_manager=resolved_connector_manager,
+    )
     database_payload_service = DatabaseToolPayloadService(
         resolved_database_payload_repository,
         request_max_bytes=resolved_settings.database_payload_request_bytes,
@@ -445,6 +465,7 @@ def create_app(
         document_search_service=document_search_service,
         workspace_runtime_service=workspace_runtime_orchestration_service,
         middleware_context_service=middleware_context_service,
+        table_relation_service=table_relation_service,
     )
     mcp_app = mcp_server.streamable_http_app()
 
@@ -541,6 +562,8 @@ def create_app(
     app.state.document_read_stats_service = document_read_stats_service
     app.state.document_chain_analytics_repository = resolved_document_chain_analytics_repository
     app.state.document_chain_analytics_service = document_chain_analytics_service
+    app.state.table_relation_repository = resolved_table_relation_repository
+    app.state.table_relation_service = table_relation_service
     frontend_origins = [
         "http://127.0.0.1:49175",
         "http://localhost:49175",
@@ -569,6 +592,7 @@ def create_app(
     app.include_router(document_read_stats_router, prefix=resolved_settings.api_prefix)
     app.include_router(document_chain_analytics_router, prefix=resolved_settings.api_prefix)
     app.include_router(system_guides_router, prefix=resolved_settings.api_prefix)
+    app.include_router(table_relations_router, prefix=resolved_settings.api_prefix)
 
     @app.get("/health")
     def health() -> dict[str, str]:

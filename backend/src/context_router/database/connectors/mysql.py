@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from time import perf_counter
-from typing import Any
+from typing import Any, Literal
 
 import pymysql
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -26,6 +26,7 @@ from context_router.database.models import (
 _MYSQL_SYSTEM_DATABASES = {"information_schema", "mysql", "performance_schema", "sys"}
 _MYSQL_TIMEOUT_ERROR_CODES = {1969, 3024}
 _MYSQL_CANCELLED_ERROR_CODES = {1317}
+_MYSQL_CONNECTION_ERROR_CODES = {1040, 1203, 2002, 2003, 2006, 2013, 2055}
 
 
 class MySQLConnectionConfig(BaseModel):
@@ -38,6 +39,7 @@ class MySQLConnectionConfig(BaseModel):
     connect_timeout_seconds: int = Field(default=8, ge=1, le=60)
     read_timeout_seconds: int = Field(default=30, ge=1, le=300)
     write_timeout_seconds: int = Field(default=30, ge=1, le=300)
+    server_flavor: Literal["auto", "mysql", "mariadb", "doris"] = "auto"
 
 
 class MySQLConnector:
@@ -63,6 +65,9 @@ class MySQLConnector:
             raise DatabaseConnectorError("invalid_connection_config", "MySQL 连接配置无效") from exc
         self._spec = spec
         self._engine = spec.engine
+        self._server_flavor: str | None = (
+            None if self._config.server_flavor == "auto" else self._config.server_flavor
+        )
         self._closed = False
 
     @property
@@ -75,6 +80,11 @@ class MySQLConnector:
             try:
                 with connection.cursor() as cursor:
                     cursor.execute("SELECT 1")
+                    if self._server_flavor is None:
+                        cursor.execute("SELECT VERSION(), @@version_comment")
+                        row = cursor.fetchone()
+                        identity = " ".join(str(item) for item in row if item) if row else ""
+                        self._server_flavor = _detect_server_flavor(identity, self._engine)
             finally:
                 connection.close()
         except pymysql.MySQLError as exc:
@@ -144,6 +154,9 @@ class MySQLConnector:
                         else "MySQL 元数据读取已取消"
                     ),
                 ) from exc
+            error_code = _mysql_error_code(exc)
+            if error_code in _MYSQL_CONNECTION_ERROR_CODES:
+                raise DatabaseConnectorError("connection_failed", "MySQL 元数据连接中断") from exc
             raise DatabaseConnectorError("catalog_query_failed", "MySQL 元数据读取失败") from exc
         finally:
             if connection is not None:
@@ -166,7 +179,9 @@ class MySQLConnector:
         try:
             connection = self._connect(cursorclass=pymysql.cursors.SSCursor)
             with connection.cursor() as cursor:
-                if self._engine == "mysql":
+                if self._is_doris:
+                    pass
+                elif self._engine == "mysql":
                     cursor.execute(
                         "SET SESSION MAX_EXECUTION_TIME = %s",
                         (policy.query_timeout_ms,),
@@ -176,7 +191,8 @@ class MySQLConnector:
                         "SET SESSION max_statement_time = %s",
                         (policy.query_timeout_ms / 1000,),
                     )
-                cursor.execute("START TRANSACTION READ ONLY")
+                if not self._is_doris:
+                    cursor.execute("START TRANSACTION READ ONLY")
                 cursor.execute(sql_text)
                 rows = cursor.fetchmany(policy.max_rows + 1)
                 description = cursor.description or ()
@@ -192,6 +208,9 @@ class MySQLConnector:
                         else "MySQL 查询已取消"
                     ),
                 ) from exc
+            error_code = _mysql_error_code(exc)
+            if error_code in _MYSQL_CONNECTION_ERROR_CODES:
+                raise DatabaseConnectorError("connection_failed", "MySQL 查询连接中断") from exc
             raise DatabaseConnectorError("query_failed", "MySQL 查询执行失败") from exc
         finally:
             if connection is not None:
@@ -324,6 +343,8 @@ class MySQLConnector:
         cursor: Any,
         policy: EffectiveQueryPolicy,
     ) -> None:
+        if self._is_doris:
+            return
         if self._engine == "mysql":
             cursor.execute(
                 "SET SESSION MAX_EXECUTION_TIME = %s",
@@ -335,6 +356,10 @@ class MySQLConnector:
                 (policy.query_timeout_ms / 1000,),
             )
         cursor.execute("START TRANSACTION READ ONLY")
+
+    @property
+    def _is_doris(self) -> bool:
+        return self._server_flavor == "doris"
 
     def _enrich_relations(
         self,
@@ -360,8 +385,12 @@ class MySQLConnector:
             params,
         )
         columns = cursor.fetchall()
-        cursor.execute(
-            f"""SELECT constraint_info.TABLE_NAME, constraint_info.CONSTRAINT_NAME,
+        if self._is_doris:
+            keys: tuple[Any, ...] = ()
+            indexes: tuple[Any, ...] = ()
+        else:
+            cursor.execute(
+                f"""SELECT constraint_info.TABLE_NAME, constraint_info.CONSTRAINT_NAME,
                        constraint_info.CONSTRAINT_TYPE, key_info.COLUMN_NAME,
                        key_info.ORDINAL_POSITION
                 FROM information_schema.TABLE_CONSTRAINTS AS constraint_info
@@ -377,11 +406,11 @@ class MySQLConnector:
                   )
                 ORDER BY constraint_info.TABLE_NAME,
                          constraint_info.CONSTRAINT_NAME, key_info.ORDINAL_POSITION""",
-            params,
-        )
-        keys = cursor.fetchall()
-        cursor.execute(
-            f"""SELECT index_info.TABLE_NAME, index_info.INDEX_NAME,
+                params,
+            )
+            keys = cursor.fetchall()
+            cursor.execute(
+                f"""SELECT index_info.TABLE_NAME, index_info.INDEX_NAME,
                        index_info.INDEX_TYPE, index_info.NON_UNIQUE,
                        index_info.COLUMN_NAME, index_info.SEQ_IN_INDEX,
                        index_info.SUB_PART, index_info.COLLATION,
@@ -391,9 +420,9 @@ class MySQLConnector:
                   AND index_info.TABLE_NAME IN ({placeholders})
                 ORDER BY index_info.TABLE_NAME, index_info.INDEX_NAME,
                          index_info.SEQ_IN_INDEX""",
-            params,
-        )
-        indexes = cursor.fetchall()
+                params,
+            )
+            indexes = cursor.fetchall()
         relation_columns: dict[str, list[dict[str, Any]]] = {}
         for row in columns:
             relation_columns.setdefault(str(row[0]), []).append(
@@ -533,12 +562,25 @@ def _elapsed_ms(started: float) -> int:
 
 
 def _query_interruption_code(error: pymysql.MySQLError) -> str | None:
-    error_code = error.args[0] if error.args and isinstance(error.args[0], int) else None
+    error_code = _mysql_error_code(error)
     if error_code in _MYSQL_TIMEOUT_ERROR_CODES:
         return "query_timeout"
     if error_code in _MYSQL_CANCELLED_ERROR_CODES:
         return "query_cancelled"
     return None
+
+
+def _mysql_error_code(error: pymysql.MySQLError) -> int | None:
+    return error.args[0] if error.args and isinstance(error.args[0], int) else None
+
+
+def _detect_server_flavor(version: str, configured_engine: str) -> str:
+    normalized = version.casefold()
+    if "doris" in normalized:
+        return "doris"
+    if "mariadb" in normalized:
+        return "mariadb"
+    return configured_engine
 
 
 def _optional_int(value: Any) -> int | None:

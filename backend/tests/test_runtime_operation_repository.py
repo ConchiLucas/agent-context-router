@@ -32,6 +32,9 @@ def test_operation_repository_leases_one_operation_once() -> None:
     repository = InMemoryRuntimeOperationRepository()
     operation = repository.create_operation(operation_draft())
 
+    assert operation.environment == "local"
+    assert operation.action is None
+
     first = repository.lease_next(runner_id="runner-a", lease_seconds=30)
     second = repository.lease_next(runner_id="runner-b", lease_seconds=30)
 

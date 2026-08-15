@@ -4,6 +4,7 @@ import os
 from collections import defaultdict
 from collections.abc import Callable
 from pathlib import Path, PurePosixPath
+from uuid import uuid4
 
 from context_router.repositories.runtime_config_repository import (
     RuntimeConfigRepositoryError,
@@ -59,6 +60,12 @@ FULL_BUILD_FILE_NAMES = {
     "docker-compose.yaml",
     "compose.yml",
     "compose.yaml",
+}
+
+PZH_WORKSPACE_ROOT = Path("/Users/conchi/workforce/company_workforce/panzhihua_dev_workforce")
+HOST_RUNTIME_ACTIONS = {
+    "pzh.ensure-host-runtime",
+    "pzh.status-host-runtime",
 }
 
 
@@ -271,6 +278,65 @@ class WorkspaceRuntimeOrchestrationService:
             )
         )
 
+    def run_host_action(
+        self,
+        *,
+        workspace_id: str,
+        action: str = "pzh.ensure-host-runtime",
+        environment: str = "local",
+        trigger: str = "api",
+    ) -> RuntimeOperationView:
+        if action not in HOST_RUNTIME_ACTIONS:
+            raise WorkspaceRuntimeOrchestrationError(
+                "host_action_not_allowed", "不支持的宿主机动作"
+            )
+        if environment not in {"local", "test", "uat"}:
+            raise WorkspaceRuntimeOrchestrationError(
+                "invalid_environment", "environment 仅支持 local、test 或 uat"
+            )
+        try:
+            workspace = self._registry.get_workspace_snapshot(workspace_id)
+        except ProjectRegistryError as exc:
+            raise WorkspaceRuntimeOrchestrationError(
+                "workspace_not_found", "工作空间不存在"
+            ) from exc
+        if workspace.access_mode != "full":
+            raise WorkspaceRuntimeOrchestrationError(
+                "documents_only", "文档只读映射不能执行宿主机动作"
+            )
+        # The backend runs in Docker, so resolved_root_path is the mounted
+        # /workspace path. root_path remains the exact allowlisted host path
+        # that the Host Runner will receive from the local mapping service.
+        if Path(workspace.root_path).expanduser() != PZH_WORKSPACE_ROOT:
+            raise WorkspaceRuntimeOrchestrationError(
+                "host_action_workspace_not_allowed", "当前工作空间不允许执行该宿主机动作"
+            )
+
+        run_id = uuid4().hex
+        return self._create_view(
+            RuntimeOperationDraft(
+                task_id=None,
+                workspace_id=workspace_id,
+                kind="host_action",
+                trigger=trigger,
+                changed_files=(),
+                environment=environment,
+                action=action,
+                steps=(
+                    RuntimeOperationStepDraft(
+                        owner_type="workspace",
+                        owner_id=workspace_id,
+                        mode="host",
+                        snapshot_id=f"host-{run_id}",
+                        snapshot_relative_path=".",
+                        changed_files=(),
+                        decision_reason=f"执行白名单宿主机动作：{action}",
+                        log_relative_path=f"runs/host-{run_id}/execution.log",
+                    ),
+                ),
+            )
+        )
+
     def get_operation(
         self, operation_id: str, log_characters: int = 10_000
     ) -> RuntimeOperationView:
@@ -379,6 +445,8 @@ class WorkspaceRuntimeOrchestrationService:
             workspace_id=operation.workspace_id,
             kind=operation.kind,  # type: ignore[arg-type]
             trigger=operation.trigger,  # type: ignore[arg-type]
+            environment=operation.environment,  # type: ignore[arg-type]
+            action=operation.action,  # type: ignore[arg-type]
             status=operation.status,  # type: ignore[arg-type]
             changed_files=list(operation.changed_files),
             current_step=operation.current_step,

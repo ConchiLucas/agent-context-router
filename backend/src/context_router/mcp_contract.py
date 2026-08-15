@@ -9,6 +9,7 @@ CONTEXT_ROUTER_CORE_TOOL_NAMES = (
     "read_context_document",
     "search_database_objects",
     "execute_database_query",
+    "prepare_table_relation_context",
 )
 CONTEXT_ROUTER_RUNTIME_TOOL_NAMES = (
     "apply_workspace_changes",

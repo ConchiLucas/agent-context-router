@@ -219,9 +219,10 @@ api/workspaces.py
 - `workspace_runtime_orchestration.py` 以 task 的 Workspace 快照为边界，负责改动归属、fast/full/start 选择、确定性步骤顺序和操作查询；`runtime_materialization.py` 生成不可变执行快照。
 - `local_workspace_mapping.py` 读取项目本机 YAML，按 Workspace ID 决定卡片显示、主目录和 reader 目录。`project_registry.py` 以主目录构建唯一文档缓存；reader cwd 返回 `documents_only` 快照，数据库与运行服务按 task.cwd 再次拒绝越权。
 - `workspace_shared_files.py` 扫描主目录 `docs/` 和固定 deploy 目录；`workspace_shared_file_repository.py` 在同一 PostgreSQL 事务中替换源文件副本及 Workspace/Project 运行配置。恢复操作只删除并重建主目录对应的 docs/deploy 目录。
-- `runtime_runner.py` 暴露只允许 Bearer Token 且拒绝浏览器请求的注册、心跳、领取租约和完成回报协议；`scripts/context_router_host_runner.py` 是手动启动的宿主机执行器。
-- `mcp_server.py` 固定注册七个上下文/数据库/中间件工具和三个 Workspace 运行工具，并挂载到 `/mcp`。项目、数据源或中间件变化不会改变工具名。
-- `mcp_server.py` 使用统一工具分发埋点记录十个固定工具；观测持久化失败只降低链路可见性，不改变 MCP 工具原始成功或失败结果。中间件调用摘要只记录数量与开关，不记录返回内容；Trace 查询仍识别两个已下线 Project 工具，以展示历史调用。
+- `runtime_runner.py` 暴露只允许 Bearer Token 且拒绝浏览器请求的注册、心跳、领取租约和完成回报协议；`scripts/context_router_host_runner.py` 是宿主机执行器。普通部署步骤只执行物化快照；`host_action` 只接受控制面和 Runner 两端共同登记的动作白名单，并把未指定环境固定为 `local`。攀枝花开机保障动作只能调用 `/Users/conchi/script/ensure-panzhihua-host-runtime.sh`，不能执行任意路径或任意命令。
+- `sql_join_analyzer.py` 以采集器输入解析 SQL AST，只生成元数据可验证的跨表字段等值事实；`table_relations.py` 聚合无方向关系并以 generation 原子发布，查询只返回 ready 批次。`api/table_relations.py` 为页面提供状态、刷新、表清单和一跳证据详情。
+- `mcp_server.py` 固定注册八个上下文/数据库/中间件/表关联工具和三个 Workspace 运行工具，并挂载到 `/mcp`。项目、数据源或中间件变化不会改变工具名。
+- `mcp_server.py` 使用统一工具分发埋点记录十一个固定工具；观测持久化失败只降低链路可见性，不改变 MCP 工具原始成功或失败结果。中间件调用摘要只记录数量与开关，不记录返回内容；Trace 查询仍识别两个已下线 Project 工具，以展示历史调用。
 - `mcp_tool_call_repository.py` 保存通用工具调用和任务链路摘要；文档与数据库 Repository 继续保存各自明细，并通过可空唯一 `tool_call_id` 关联。
 - `api/mcp_traces.py` 返回全局任务链路列表和单任务统一调用详情；列表支持项目、Agent、固定内部工具、调用状态和关键词的服务端过滤。普通 task 即使没有成功落下内部调用节点也能显示，`web-preview` 与 `connection-test` 系统任务除外。API 已把文档、数据库明细转换为同一 `artifacts` 数组，并返回 `complete / running / partial` 完整性状态与稳定 warning code；主详情只包含 payload 的 available/status/reason，完整 JSON 由带 `Cache-Control: no-store` 的归属校验接口懒加载。
 - `mcp_integration.py` 生成客户端配置，并接收 `workspace_id`，以 MCP Python Client 对后端自身执行 initialize、tools/list、Workspace 匹配、prepare、search 和 read，不绕过协议直接调用 service。
@@ -258,6 +259,7 @@ app/page.tsx
            -> components/workspace-data-source-overview.tsx
            -> components/workspace-runtime-sync.tsx
      -> components/data-source-dashboard.tsx
+     -> components/table-relation-explorer.tsx
      -> lib/api.ts
      -> lib/browser-api-policy.ts
      -> lib/markdown.ts
@@ -271,8 +273,8 @@ Markdown 解析器只生成 React 元素，不使用 `dangerouslySetInnerHTML`�
 
 Workspace 调用记录通过 `task-history.ts` 保留文档读取批次和单批位置，通过 `database-access.ts` 把文档 read call 与数据库 call 按创建时间合并为上下文时间线。历史“文档树”视图在前端以被调用文档 ID 为集合递归裁剪当前 Workspace 文档树，只保留命中节点及其全部祖先，隐藏无关旁支和命中节点下未调用的后代；正常“查看文档树”仍展示完整树。后端工作空间任务列表在 `LIMIT` 前过滤既没有 read call 也没有数据库调用的任务；同一次批量读取的文档在一行横向展示，读取成功的卡片复用 Workspace 文档详情接口和 Markdown 抽屉。数据库卡片仍只展示客观摘要。
 
-全局调用链路页由 `trace-explorer.tsx` 读取统一 Trace API，服务端直接返回 `sequence`、调用状态、完整性和关联 artifacts。页面提供任务、Agent、十个当前工具、两个历史 Project 工具和状态筛选，只保留调用树与调用列表；“调用树”只对显式 `parent_tool_call_id` 绘制父子含义，普通调用按稳定顺序纵向排列。文档搜索节点只展示返回文档数量等脱敏摘要，文档工具不请求文档树或 Markdown；数据库工具通过 `database-call-payload-modal.tsx` 点击后懒加载全屏出入参详情。中间件工具只展示组件数量、是否显式 reveal 和警告数量。列表和详情会把链路标记为“完整 / 运行中 / 可能不完整”，并把 prepare 缺失、历史、重启中断或未关联明细转换为中文提示。
+全局调用链路页由 `trace-explorer.tsx` 读取统一 Trace API，服务端直接返回 `sequence`、调用状态、完整性和关联 artifacts。页面提供任务、Agent、十一个当前工具、两个历史 Project 工具和状态筛选，只保留调用树与调用列表；“调用树”只对显式 `parent_tool_call_id` 绘制父子含义，普通调用按稳定顺序纵向排列。文档搜索节点只展示返回文档数量等脱敏摘要，文档工具不请求文档树或 Markdown；数据库工具通过 `database-call-payload-modal.tsx` 点击后懒加载全屏出入参详情。中间件工具只展示组件数量、是否显式 reveal 和警告数量。列表和详情会把链路标记为“完整 / 运行中 / 可能不完整”，并把 prepare 缺失、历史、重启中断或未关联明细转换为中文提示。
 
 ClickHouse 连接详情展示 secure、verify、bootstrap database、connect timeout 和 send/receive timeout；项目数据源详情展示 `mcp_alias` 和只读策略。AI/运维通过既有批量 API 维护时，后端仍校验同 Workspace 其他项目的别名占用，因此支持合法的别名互换且不会部分保存。历史非只读关联会明确提示不暴露给 MCP。
 
-MCP 接入信息和测试结果通过 `lib/api.ts` 获取；公开 MCP URL 由后端配置统一提供，前端不按浏览器地址猜测。面板展示十个固定工具，并说明文档搜索绑定 prepare 创建的 Workspace task，真正可用的数据库以 `read_task_context` 的 `databases` 为准；中间件信息由 `read_middleware_context` 按“省略环境为 default/local、显式 test/uat 为同名配置档”的规则读取。测试请求发送当前 `workspace_id`；端到端测试任务的 `agent_name` 固定为 `connection-test`，任务列表默认过滤这类记录。
+MCP 接入信息和测试结果通过 `lib/api.ts` 获取；公开 MCP URL 由后端配置统一提供，前端不按浏览器地址猜测。面板展示十一个固定工具，并说明文档搜索绑定 prepare 创建的 Workspace task，真正可用的数据库以 `read_task_context` 的 `databases` 为准；中间件信息由 `read_middleware_context` 按“省略环境为 default/local、显式 test/uat 为同名配置档”的规则读取。测试请求发送当前 `workspace_id`；端到端测试任务的 `agent_name` 固定为 `connection-test`，任务列表默认过滤这类记录。

@@ -28,10 +28,14 @@ from context_router.schemas.workspace_deploy_sync import (
     WorkspaceDeploySyncCommitRequest,
 )
 from context_router.schemas.workspace_runtime import (
+    HostRuntimeActionRequest,
     WorkspaceRuntimeConfigUpdate,
     WorkspaceRuntimePolicyUpdate,
 )
 from context_router.services.workspace_deploy_sync import WorkspaceDeploySyncError
+from context_router.services.workspace_runtime_orchestration import (
+    WorkspaceRuntimeOrchestrationError,
+)
 
 router = APIRouter(prefix="/workspaces/{workspace_id}", tags=["workspace-runtime"])
 
@@ -176,6 +180,56 @@ def get_workspace_runtime_runner_status(
     return {"available": available}
 
 
+@router.post("/host-runtime/actions")
+def run_workspace_host_action(
+    workspace_id: str,
+    payload: HostRuntimeActionRequest,
+    request: Request,
+) -> dict[str, object]:
+    _workspace(request, workspace_id)
+    try:
+        operation = request.app.state.workspace_runtime_orchestration_service.run_host_action(
+            workspace_id=workspace_id,
+            action=payload.action,
+            environment=payload.environment,
+            trigger="api",
+        )
+    except WorkspaceRuntimeOrchestrationError as exc:
+        status_code = (
+            409
+            if exc.code
+            in {
+                "host_runner_unavailable",
+                "runtime_operation_conflict",
+            }
+            else 422
+        )
+        raise HTTPException(status_code=status_code, detail=f"{exc.code}: {exc}") from exc
+    return operation.model_dump(mode="json", exclude_none=True)
+
+
+@router.get("/host-runtime/status")
+def get_workspace_host_runtime_status(
+    workspace_id: str,
+    request: Request,
+) -> dict[str, object]:
+    _workspace(request, workspace_id)
+    try:
+        available = request.app.state.runtime_runner_repository.is_available(
+            request.app.state.settings.runtime_runner_heartbeat_ttl_seconds
+        )
+        operations = request.app.state.runtime_operation_repository.list_operations(
+            workspace_id, 100
+        )
+    except (RuntimeRunnerRepositoryError, RuntimeOperationRepositoryError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    latest = next((item for item in operations if item.kind == "host_action"), None)
+    return {
+        "runner_available": available,
+        "latest_operation": _operation(latest) if latest is not None else None,
+    }
+
+
 @router.get("/runtime-operations/{operation_id}")
 def get_workspace_runtime_operation(
     workspace_id: str,
@@ -232,6 +286,8 @@ def _operation(record: object) -> dict[str, object]:
         "trigger": record.trigger,
         "status": record.status,
         "changed_files": list(record.changed_files),
+        "environment": record.environment,
+        "action": record.action,
         "current_step": record.current_step,
         "runner_id": record.runner_id,
         "error_code": record.error_code,

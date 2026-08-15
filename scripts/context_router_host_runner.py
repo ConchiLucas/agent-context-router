@@ -14,6 +14,7 @@ import stat
 import subprocess
 import sys
 import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -25,6 +26,19 @@ MANIFEST_FILE = ".runtime-manifest.json"
 ENTRY_FILE = "deploy.sh"
 EXIT_VALIDATION_FAILED = 126
 EXIT_TIMEOUT = 124
+HOST_SCRIPT_ROOT = Path("/Users/conchi/script")
+HOST_ACTIONS: dict[str, tuple[Path, str, int]] = {
+    "pzh.ensure-host-runtime": (
+        HOST_SCRIPT_ROOT / "ensure-panzhihua-host-runtime.sh",
+        "ensure",
+        600,
+    ),
+    "pzh.status-host-runtime": (
+        HOST_SCRIPT_ROOT / "ensure-panzhihua-host-runtime.sh",
+        "status",
+        120,
+    ),
+}
 
 
 class RunnerError(RuntimeError):
@@ -47,6 +61,10 @@ class RunnerApi(Protocol):
         error_code: str | None = None,
         error_message: str | None = None,
     ) -> None: ...
+
+    def submit_host_action(
+        self, workspace_id: str, action: str, environment: str
+    ) -> dict[str, object]: ...
 
 
 class RunnerApiClient:
@@ -78,6 +96,14 @@ class RunnerApiClient:
 
     def lease(self, runner_id: str) -> dict[str, object]:
         return self._post("/api/runtime-runner/lease", {"runner_id": runner_id})
+
+    def submit_host_action(
+        self, workspace_id: str, action: str, environment: str
+    ) -> dict[str, object]:
+        return self._post(
+            f"/api/workspaces/{workspace_id}/host-runtime/actions",
+            {"action": action, "environment": environment},
+        )
 
     def started_operation(self, operation_id: str, lease_token: str) -> None:
         self._post(
@@ -170,7 +196,11 @@ class HostRuntimeRunner:
                 raise RunnerError("运行步骤格式无效")
             step_id = _required_string(raw_step, "id")
             try:
-                execution = self._validate_step(operation, raw_step)
+                environment_name = _operation_environment(operation)
+                if operation.get("kind") == "host_action":
+                    execution = self._validate_host_action(operation, raw_step)
+                else:
+                    execution = self._validate_step(operation, raw_step)
             except RunnerError as exc:
                 self._api.complete_step(
                     operation_id,
@@ -185,14 +215,24 @@ class HostRuntimeRunner:
             if not started:
                 self._api.started_operation(operation_id, lease_token)
                 started = True
-            exit_code, error_code, error_message = self._execute_step(
-                operation_id=operation_id,
-                workspace_id=workspace_id,
-                project_ids_by_relative_path=project_ids_by_relative_path,
-                lease_token=lease_token,
-                step=raw_step,
-                **execution,
-            )
+            if operation.get("kind") == "host_action":
+                exit_code, error_code, error_message = self._execute_host_action(
+                    operation_id=operation_id,
+                    workspace_id=workspace_id,
+                    lease_token=lease_token,
+                    step=raw_step,
+                    **execution,
+                )
+            else:
+                exit_code, error_code, error_message = self._execute_step(
+                    operation_id=operation_id,
+                    workspace_id=workspace_id,
+                    project_ids_by_relative_path=project_ids_by_relative_path,
+                    lease_token=lease_token,
+                    step=raw_step,
+                    environment_name=environment_name,
+                    **execution,
+                )
             self._api.complete_step(
                 operation_id,
                 step_id,
@@ -209,13 +249,7 @@ class HostRuntimeRunner:
         operation: dict[str, object],
         step: dict[str, object],
     ) -> dict[str, object]:
-        workspace_root = Path(_required_string(operation, "workspace_host_root"))
-        if not workspace_root.is_absolute():
-            raise RunnerSecurityError("Workspace 根目录必须是绝对路径")
-        resolved_workspace = workspace_root.resolve(strict=True)
-        _require_within(resolved_workspace, self._allowed_workspace_root, "Workspace 越界")
-        if not resolved_workspace.is_dir():
-            raise RunnerSecurityError("Workspace 根目录不可用")
+        resolved_workspace = self._resolved_workspace(operation)
 
         snapshot_relative = _safe_relative(
             _required_string(step, "snapshot_relative_path"), "快照路径"
@@ -261,6 +295,71 @@ class HostRuntimeRunner:
             "log_path": log_path,
             "timeout_seconds": timeout,
         }
+
+    def _validate_host_action(
+        self,
+        operation: dict[str, object],
+        step: dict[str, object],
+    ) -> dict[str, object]:
+        workspace_root = self._resolved_workspace(operation)
+        action = _required_string(operation, "action")
+        definition = HOST_ACTIONS.get(action)
+        if definition is None:
+            raise RunnerSecurityError("宿主机动作不在白名单中")
+        if step.get("owner_type") != "workspace" or step.get("mode") != "host":
+            raise RunnerSecurityError("宿主机动作步骤身份无效")
+        if step.get("owner_id") != operation.get("workspace_id"):
+            raise RunnerSecurityError("宿主机动作 Workspace 身份不匹配")
+
+        log_relative = _safe_relative(_required_string(step, "log_relative_path"), "日志路径")
+        log_path = self._runtime_root.joinpath(*log_relative.parts)
+        _require_within(log_path.resolve(strict=False), self._runtime_root, "日志路径越界")
+        if log_path.is_symlink():
+            raise RunnerSecurityError("日志文件不能是软链接")
+
+        script, command, action_timeout = definition
+        self._validate_host_script(script)
+        timeout = operation.get("timeout_seconds")
+        if not isinstance(timeout, int) or not 10 <= timeout <= 7200:
+            raise RunnerSecurityError("运行超时范围无效")
+        return {
+            "workspace_root": workspace_root,
+            "script": script,
+            "command": command,
+            "action": action,
+            "environment_name": _operation_environment(operation),
+            "log_path": log_path,
+            "timeout_seconds": min(timeout, action_timeout),
+        }
+
+    def _resolved_workspace(self, operation: dict[str, object]) -> Path:
+        workspace_root = Path(_required_string(operation, "workspace_host_root"))
+        if not workspace_root.is_absolute():
+            raise RunnerSecurityError("Workspace 根目录必须是绝对路径")
+        resolved_workspace = workspace_root.resolve(strict=True)
+        _require_within(resolved_workspace, self._allowed_workspace_root, "Workspace 越界")
+        if not resolved_workspace.is_dir():
+            raise RunnerSecurityError("Workspace 根目录不可用")
+        return resolved_workspace
+
+    @staticmethod
+    def _validate_host_script(script: Path) -> None:
+        root = HOST_SCRIPT_ROOT.resolve(strict=True)
+        try:
+            metadata = script.lstat()
+            resolved = script.resolve(strict=True)
+        except OSError as exc:
+            raise RunnerSecurityError("白名单宿主机脚本不存在") from exc
+        if resolved.parent != root or resolved != script:
+            raise RunnerSecurityError("白名单宿主机脚本路径无效")
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+            raise RunnerSecurityError("白名单宿主机脚本必须是普通文件")
+        if metadata.st_uid != os.getuid():
+            raise RunnerSecurityError("白名单宿主机脚本所有者无效")
+        if stat.S_IMODE(metadata.st_mode) & 0o022:
+            raise RunnerSecurityError("白名单宿主机脚本不能允许组或其他用户写入")
+        if not os.access(script, os.X_OK):
+            raise RunnerSecurityError("白名单宿主机脚本不可执行")
 
     def _verify_manifest(self, snapshot: Path, step: dict[str, object]) -> None:
         manifest_path = snapshot / MANIFEST_FILE
@@ -332,6 +431,7 @@ class HostRuntimeRunner:
         entry: Path,
         log_path: Path,
         timeout_seconds: int,
+        environment_name: str,
     ) -> tuple[int, str | None, str | None]:
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o750)
         environment = _controlled_environment()
@@ -348,6 +448,7 @@ class HostRuntimeRunner:
                 "RUNTIME_SNAPSHOT_DIR": str(snapshot_root),
                 "WORKSPACE_ROOT": str(workspace_root),
                 "WORKSPACE_HOST_ROOT": str(workspace_root),
+                "C12_ENVIRONMENT": environment_name,
             }
         )
         if project_root is not None:
@@ -368,7 +469,8 @@ class HostRuntimeRunner:
                     f"step={_required_string(step, 'id')} "
                     f"owner={_required_string(step, 'owner_type')}:"
                     f"{_required_string(step, 'owner_id')} "
-                    f"mode={_required_string(step, 'mode')}\n"
+                    f"mode={_required_string(step, 'mode')} "
+                    f"environment={environment_name}\n"
                 )
                 log_stream.write(header.encode())
                 log_stream.flush()
@@ -401,6 +503,79 @@ class HostRuntimeRunner:
             if heartbeat.is_alive():
                 heartbeat.join(timeout=self._heartbeat_seconds + 1)
 
+    def _execute_host_action(
+        self,
+        *,
+        operation_id: str,
+        workspace_id: str,
+        lease_token: str,
+        step: dict[str, object],
+        workspace_root: Path,
+        script: Path,
+        command: str,
+        action: str,
+        environment_name: str,
+        log_path: Path,
+        timeout_seconds: int,
+    ) -> tuple[int, str | None, str | None]:
+        log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o750)
+        environment = _controlled_environment()
+        environment.update(
+            {
+                "C12_ENVIRONMENT": environment_name,
+                "RUNTIME_ACTION": action,
+                "RUNTIME_OPERATION_ID": operation_id,
+                "RUNTIME_STEP_ID": _required_string(step, "id"),
+                "RUNTIME_WORKSPACE_ID": workspace_id,
+                "WORKSPACE_ROOT": str(workspace_root),
+                "WORKSPACE_HOST_ROOT": str(workspace_root),
+            }
+        )
+        stop_heartbeat = threading.Event()
+        heartbeat = threading.Thread(
+            target=self._heartbeat_loop,
+            args=(operation_id, lease_token, stop_heartbeat),
+            daemon=True,
+        )
+        try:
+            with log_path.open("wb") as log_stream:
+                header = (
+                    f"[runtime] operation={operation_id} "
+                    f"step={_required_string(step, 'id')} "
+                    f"owner=workspace:{workspace_id} mode=host "
+                    f"action={action} environment={environment_name}\n"
+                )
+                log_stream.write(header.encode())
+                log_stream.flush()
+                process = subprocess.Popen(
+                    [str(script), command, "--environment", environment_name],
+                    cwd=str(HOST_SCRIPT_ROOT),
+                    env=environment,
+                    stdout=log_stream,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                )
+                heartbeat.start()
+                try:
+                    exit_code = process.wait(timeout=timeout_seconds)
+                except subprocess.TimeoutExpired:
+                    os.killpg(process.pid, signal.SIGTERM)
+                    try:
+                        process.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        os.killpg(process.pid, signal.SIGKILL)
+                        process.wait()
+                    return EXIT_TIMEOUT, "runtime_timeout", "宿主机动作超过允许时间"
+                if exit_code != 0:
+                    return exit_code, "runtime_exit_nonzero", f"宿主机动作退出码为 {exit_code}"
+                return 0, None, None
+        except OSError as exc:
+            return EXIT_VALIDATION_FAILED, "runtime_process_failed", str(exc)[:500]
+        finally:
+            stop_heartbeat.set()
+            if heartbeat.is_alive():
+                heartbeat.join(timeout=self._heartbeat_seconds + 1)
+
     def _heartbeat_loop(
         self,
         operation_id: str,
@@ -421,6 +596,9 @@ def run_forever(
     runner_id: str,
     poll_seconds: float,
     once: bool,
+    startup_workspace_id: str | None = None,
+    startup_action: str | None = None,
+    startup_environment: str = "local",
 ) -> None:
     stopped = threading.Event()
 
@@ -431,9 +609,28 @@ def run_forever(
     signal.signal(signal.SIGINT, stop_handler)
     api.register(runner_id)
     print(f"[runner] registered id={runner_id}", flush=True)
+    startup_pending = startup_workspace_id is not None and startup_action is not None
+    next_startup_attempt = 0.0
     while not stopped.is_set():
         try:
             api.heartbeat_runner(runner_id)
+            if startup_pending and time.monotonic() >= next_startup_attempt:
+                try:
+                    result = api.submit_host_action(
+                        startup_workspace_id,
+                        startup_action,
+                        startup_environment,
+                    )
+                    print(
+                        "[runner] startup host action queued "
+                        f"action={startup_action} environment={startup_environment} "
+                        f"operation={result.get('id', 'unknown')}",
+                        flush=True,
+                    )
+                    startup_pending = False
+                except RunnerError as exc:
+                    print(f"[runner] 启动保障任务提交失败：{exc}", file=sys.stderr, flush=True)
+                    next_startup_attempt = time.monotonic() + 15
             lease = api.lease(runner_id)
             if lease.get("operation") is not None:
                 runner.execute_lease(lease)
@@ -542,6 +739,13 @@ def _required_string_map(payload: dict[str, object], key: str) -> dict[str, str]
     return result
 
 
+def _operation_environment(operation: dict[str, object]) -> str:
+    value = operation.get("environment") or "local"
+    if not isinstance(value, str) or value not in {"local", "test", "uat"}:
+        raise RunnerSecurityError("environment 仅支持 local、test 或 uat")
+    return value
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Context Router Host Runtime Runner")
     parser.add_argument("--control-url", default="http://127.0.0.1:49173")
@@ -551,6 +755,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--poll-seconds", type=float, default=2)
     parser.add_argument("--heartbeat-seconds", type=float, default=10)
     parser.add_argument("--runner-id")
+    parser.add_argument("--startup-workspace-id")
+    parser.add_argument("--startup-action", choices=tuple(HOST_ACTIONS))
+    parser.add_argument(
+        "--startup-environment",
+        choices=("local", "test", "uat"),
+        default="local",
+    )
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--daemonize", action="store_true")
     parser.add_argument("--pid-path", type=Path)
@@ -581,6 +792,14 @@ def daemonize(pid_path: Path) -> bool:
         os._exit(1)
 
 
+def write_pid_file(pid_path: Path) -> None:
+    pid_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    temporary = pid_path.with_name(f".{pid_path.name}.{os.getpid()}.tmp")
+    temporary.write_text(f"{os.getpid()}\n", encoding="utf-8")
+    temporary.chmod(0o600)
+    temporary.replace(pid_path)
+
+
 def main() -> int:
     args = parse_args()
     try:
@@ -589,6 +808,12 @@ def main() -> int:
                 raise RunnerError("--daemonize 必须同时提供 --pid-path")
             if not daemonize(args.pid_path):
                 return 0
+        elif args.pid_path is not None:
+            write_pid_file(args.pid_path)
+        if (args.startup_workspace_id is None) != (args.startup_action is None):
+            raise RunnerError(
+                "--startup-workspace-id 与 --startup-action 必须同时提供"
+            )
         token = load_private_token(args.token_path)
         api = RunnerApiClient(args.control_url, token)
         runner = HostRuntimeRunner(
@@ -604,12 +829,15 @@ def main() -> int:
             runner_id=runner_id,
             poll_seconds=max(0.25, args.poll_seconds),
             once=args.once,
+            startup_workspace_id=args.startup_workspace_id,
+            startup_action=args.startup_action,
+            startup_environment=args.startup_environment,
         )
     except RunnerError as exc:
         print(f"[runner] {exc}", file=sys.stderr)
         return 1
     finally:
-        if args.daemonize and args.pid_path is not None and os.getpid() == _pid_file(args.pid_path):
+        if args.pid_path is not None and os.getpid() == _pid_file(args.pid_path):
             try:
                 args.pid_path.unlink(missing_ok=True)
             except OSError:

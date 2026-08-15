@@ -51,6 +51,8 @@ class FakeRegistry:
         self.snapshot = SimpleNamespace(
             id="workspace1",
             workspace_key="workspace-key",
+            access_mode="full",
+            root_path=str(root),
             resolved_root_path=root,
             projects=(
                 SimpleNamespace(
@@ -72,6 +74,10 @@ class FakeRegistry:
         )
 
     def get_workspace_snapshot_for_task(self, **_: object) -> object:
+        return self.snapshot
+
+    def get_workspace_snapshot(self, workspace_id: str) -> object:
+        assert workspace_id == self.snapshot.id
         return self.snapshot
 
 
@@ -165,3 +171,18 @@ def test_start_workspace_always_creates_one_workspace_start_step(tmp_path: Path)
 
     assert operation.kind == "start_workspace"
     assert [(step.owner_type, step.mode) for step in operation.steps] == [("workspace", "start")]
+
+
+def test_host_action_is_allowlisted_and_defaults_to_local(tmp_path: Path, monkeypatch) -> None:
+    service = build_service(tmp_path)
+    monkeypatch.setattr(
+        "context_router.services.workspace_runtime_orchestration.PZH_WORKSPACE_ROOT",
+        service._registry.snapshot.resolved_root_path,  # type: ignore[attr-defined]
+    )
+
+    operation = service.run_host_action(workspace_id="workspace1")
+
+    assert operation.kind == "host_action"
+    assert operation.environment == "local"
+    assert operation.action == "pzh.ensure-host-runtime"
+    assert [(step.owner_type, step.mode) for step in operation.steps] == [("workspace", "host")]

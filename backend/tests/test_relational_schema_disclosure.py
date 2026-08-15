@@ -533,6 +533,49 @@ def test_mysql_family_column_and_index_details_are_layered(
                 ]
 
 
+def test_doris_catalog_uses_columns_without_mysql_transaction_or_index_catalogs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    spec = _spec("mysql")
+    doris_spec = ConnectorSpec(
+        data_source_id=spec.data_source_id,
+        config_version=spec.config_version,
+        database_id=spec.database_id,
+        database_updated_at=spec.database_updated_at,
+        engine=spec.engine,
+        remote_name=spec.remote_name,
+        connection_config={**dict(spec.connection_config), "server_flavor": "doris"},
+    )
+    connection = RecordingMySQLConnection(
+        [
+            (
+                "FROM information_schema.TABLES AS relation",
+                [("events", "app", "table", "OLAP", 12, 1024, "events")],
+            ),
+            (
+                "FROM information_schema.COLUMNS AS column_info",
+                [("events", "id", "bigint", "NO", None, 1, "", "", None)],
+            ),
+        ]
+    )
+    monkeypatch.setattr(pymysql, "connect", lambda **_: connection)
+
+    result = MySQLConnector(doris_spec).search_objects(
+        SearchObjectsRequest(
+            object_type=DatabaseObjectType.TABLE,
+            detail=SearchDetail.FULL,
+        ),
+        _policy("mysql"),
+    )
+
+    item = list(result.objects)[0]
+    assert item.details["columns"][0]["name"] == "id"
+    assert item.details["keys"] == []
+    assert item.details["indexes"] == []
+    assert len(connection.catalog_statements) == 2
+    assert all(statement != "START TRANSACTION READ ONLY" for statement, _ in connection.executed)
+
+
 class RecordingResult:
     def __init__(self, rows: list[tuple[Any, ...]]) -> None:
         self._rows = rows

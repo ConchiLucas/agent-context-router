@@ -349,6 +349,45 @@ class DatabaseAccessService:
             ) from exc
         return self._prepare_database_records(records)
 
+    def list_task_workspace_databases(
+        self,
+        workspace_id: str,
+        *,
+        database_environment: str | None = None,
+        database_environment_revision: int | None = None,
+        database_environment_selection: DatabaseEnvironmentSelection | None = None,
+    ) -> list[ResolvedProjectDatabase]:
+        """Resolve the physical database records authorized by a task environment snapshot."""
+        selector = self.get_active_workspace_environment(workspace_id)
+        selected_environment = self._validated_task_environment(
+            selector,
+            task_environment=database_environment,
+            task_environment_revision=database_environment_revision,
+            database_environment_selection=database_environment_selection,
+        )
+        if selected_environment is None and selector is not None:
+            raise DatabaseAccessError(
+                "environment_changed",
+                "任务缺少环境选择，请重新 prepare",
+            )
+        if selector is not None and self._database_mappings_configured(workspace_id):
+            if selected_environment is None:  # pragma: no cover - guarded above
+                raise DatabaseAccessError(
+                    "environment_changed",
+                    "任务缺少环境选择，请重新 prepare",
+                )
+            return self._list_environment_database_records(
+                workspace_id=workspace_id,
+                environment=selected_environment,
+            )
+        try:
+            return self._data_source_repository.list_workspace_databases_for_mcp(workspace_id)
+        except DataSourceRepositoryError as exc:
+            raise DatabaseAccessError(
+                "database_summary_unavailable",
+                "工作空间数据库摘要暂时不可用",
+            ) from exc
+
     def _prepare_database_records(
         self,
         records: list[ResolvedProjectDatabase],

@@ -17,6 +17,8 @@ def _safe_browser_post_patterns(api_prefix: str) -> tuple[re.Pattern[str], ...]:
         re.compile(rf"^{prefix}/mcp/integration/tests$"),
         re.compile(rf"^{prefix}/workspaces/[^/]+/prepare-preview$"),
         re.compile(rf"^{prefix}/workspaces/[^/]+/refresh$"),
+        re.compile(rf"^{prefix}/workspaces/[^/]+/table-relations/rebuild$"),
+        re.compile(rf"^{prefix}/workspaces/[^/]+/table-relations/projects/[^/]+/rebuild$"),
         re.compile(rf"^{prefix}/workspaces/reload-local-mapping$"),
         re.compile(rf"^{prefix}/workspaces/[^/]+/shared-files/(restore|publish)$"),
         re.compile(rf"^{prefix}/workspaces/[^/]+/containers/bulk-action$"),
@@ -37,7 +39,14 @@ def browser_request_allowed(
         return any(pattern.fullmatch(path) for pattern in _safe_browser_post_patterns(api_prefix))
     if normalized_method == "PUT":
         prefix = re.escape(api_prefix.rstrip("/"))
-        return re.fullmatch(rf"{prefix}/system-guides/[^/]+/content", path) is not None
+        return (
+            re.fullmatch(rf"{prefix}/system-guides/[^/]+/content", path) is not None
+            or re.fullmatch(
+                rf"{prefix}/workspaces/[^/]+/table-relations/projects/[^/]+/sql-whitelist",
+                path,
+            )
+            is not None
+        )
     return False
 
 
@@ -48,7 +57,7 @@ class BrowserReadOnlyMiddleware:
     Local AI and operations clients without those browser headers can continue
     to use the validated command endpoints. Browser requests are limited to
     reads, an explicit diagnostic/read-sensitive POST allowlist, and validated
-    updates to existing system-guide content.
+    updates to existing system-guide content or project SQL scan whitelists.
     """
 
     def __init__(

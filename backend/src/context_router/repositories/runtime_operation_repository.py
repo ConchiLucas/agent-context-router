@@ -37,6 +37,8 @@ class RuntimeOperationDraft:
     trigger: str
     changed_files: tuple[str, ...]
     steps: tuple[RuntimeOperationStepDraft, ...]
+    environment: str = "local"
+    action: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,6 +57,8 @@ class RuntimeOperationRecord:
     trigger: str
     status: str
     changed_files: tuple[str, ...]
+    environment: str
+    action: str | None
     current_step: int
     runner_id: str | None
     lease_token_hash: str | None
@@ -131,6 +135,8 @@ class InMemoryRuntimeOperationRepository:
                 trigger=draft.trigger,
                 status="queued",
                 changed_files=tuple(draft.changed_files),
+                environment=draft.environment,
+                action=draft.action,
                 current_step=0,
                 runner_id=None,
                 lease_token_hash=None,
@@ -306,6 +312,7 @@ class InMemoryRuntimeOperationRepository:
 class PostgresRuntimeOperationRepository:
     _OPERATION_COLUMNS = """
         id, task_id, workspace_id, kind, trigger, status, changed_files,
+        environment, action,
         current_step, runner_id, lease_token_hash, lease_expires_at,
         error_code, error_message, created_at, leased_at, started_at,
         finished_at, last_heartbeat_at
@@ -327,8 +334,9 @@ class PostgresRuntimeOperationRepository:
             with psycopg.connect(self._database_url) as connection:
                 row = connection.execute(
                     f"""INSERT INTO runtime_operations
-                        (id, task_id, workspace_id, kind, trigger, status, changed_files)
-                        VALUES (%s, %s, %s, %s, %s, 'queued', %s)
+                        (id, task_id, workspace_id, kind, trigger, status, changed_files,
+                         environment, action)
+                        VALUES (%s, %s, %s, %s, %s, 'queued', %s, %s, %s)
                         RETURNING {self._OPERATION_COLUMNS}""",
                     (
                         operation_id,
@@ -337,6 +345,8 @@ class PostgresRuntimeOperationRepository:
                         draft.kind,
                         draft.trigger,
                         Jsonb(list(draft.changed_files)),
+                        draft.environment,
+                        draft.action,
                     ),
                 ).fetchone()
                 for sequence, step in enumerate(draft.steps):
@@ -602,17 +612,19 @@ class PostgresRuntimeOperationRepository:
             trigger=str(row[4]),
             status=str(row[5]),
             changed_files=tuple(row[6]),
-            current_step=int(row[7]),
-            runner_id=str(row[8]) if row[8] else None,
-            lease_token_hash=str(row[9]) if row[9] else None,
-            lease_expires_at=row[10],  # type: ignore[arg-type]
-            error_code=str(row[11]) if row[11] else None,
-            error_message=str(row[12]) if row[12] else None,
-            created_at=row[13],  # type: ignore[arg-type]
-            leased_at=row[14],  # type: ignore[arg-type]
-            started_at=row[15],  # type: ignore[arg-type]
-            finished_at=row[16],  # type: ignore[arg-type]
-            last_heartbeat_at=row[17],  # type: ignore[arg-type]
+            environment=str(row[7]),
+            action=str(row[8]) if row[8] else None,
+            current_step=int(row[9]),
+            runner_id=str(row[10]) if row[10] else None,
+            lease_token_hash=str(row[11]) if row[11] else None,
+            lease_expires_at=row[12],  # type: ignore[arg-type]
+            error_code=str(row[13]) if row[13] else None,
+            error_message=str(row[14]) if row[14] else None,
+            created_at=row[15],  # type: ignore[arg-type]
+            leased_at=row[16],  # type: ignore[arg-type]
+            started_at=row[17],  # type: ignore[arg-type]
+            finished_at=row[18],  # type: ignore[arg-type]
+            last_heartbeat_at=row[19],  # type: ignore[arg-type]
         )
 
     @staticmethod

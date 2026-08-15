@@ -23,7 +23,7 @@ docker compose exec backend uv run alembic upgrade head
 docker compose exec backend uv run alembic current
 ```
 
-当前 head 为 `20260811_0028`。`0028 -> 0027` 会删除全部 Workspace Nacos 配置档；`0025 -> 0024` 会删除全部统一系统 JSON 文档；`0024 -> 0023` 会删除数据库中的 Workspace 文档与部署源文件副本，不影响目标目录现有文件。若要验证 downgrade/upgrade，使用一次性测试数据库，不要在保存真实数据的控制面库上直接 downgrade。
+当前 head 为 `20260813_0034`。`0034 -> 0033` 会删除模板预处理证据的 Profile、规则链和候选审计字段；`0033 -> 0032` 会删除表关联结构化跳过诊断并移除完整 warning 计数；`0032 -> 0031` 会删除可重建的 SQL 表关联批次、关系、字段对和证据；`0029` 至 `0031` 是已回滚实验功能的无操作兼容标记；`0028 -> 0027` 会删除全部 Workspace Nacos 配置档；`0025 -> 0024` 会删除全部统一系统 JSON 文档；`0024 -> 0023` 会删除数据库中的 Workspace 文档与部署源文件副本，不影响目标目录现有文件。若要验证 downgrade/upgrade，使用一次性测试数据库，不要在保存真实数据的控制面库上直接 downgrade。
 
 `system_guides` 保存 `guide_key`、JSONB 正文、菜单顺序和时间戳，没有 `enabled` 字段。历史 `include_in_prepare` 字段不再影响 MCP prepare；记录只进入系统文档菜单。
 

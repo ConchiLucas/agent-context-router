@@ -454,6 +454,7 @@ export type InternalMcpToolName =
   | "read_context_document"
   | "search_database_objects"
   | "execute_database_query"
+  | "prepare_table_relation_context"
   | "apply_workspace_changes"
   | "start_workspace"
   | "get_workspace_operation"
@@ -678,6 +679,190 @@ export interface McpIntegrationTestResult {
   started_at: string;
   finished_at: string;
   stages: McpIntegrationTestStage[];
+}
+
+export interface TableRelationIdentity {
+  project_id: string;
+  project_name: string;
+  database_key: string;
+  schema_name: string;
+  table_name: string;
+}
+
+export interface TableRelationEvidence {
+  source_kind: "sql_file";
+  source_path: string;
+  join_expression: string;
+  sql_statement?: string | null;
+  preprocess_profile_id?: string | null;
+  preprocess_profile_hash?: string | null;
+  preprocess_candidate_id?: string | null;
+  applied_rules: string[];
+  template_derived: boolean;
+}
+
+export interface ObservedTableJoin {
+  relation_id: string;
+  relation_kind: "observed_join";
+  directed: false;
+  table_a: TableRelationIdentity;
+  table_b: TableRelationIdentity;
+  column_pairs: Array<{ column_a: string; column_b: string }>;
+  statement_count: number;
+  source_file_count: number;
+  evidence_total: number;
+  evidence_returned: number;
+  evidence_truncated: boolean;
+  evidence: TableRelationEvidence[];
+}
+
+export interface TableRelationContext {
+  workspace_id: string;
+  task_id?: number | null;
+  detail_level: "compact" | "evidence" | "full";
+  relation_semantics: {
+    kind: "observed_sql_join";
+    directed: false;
+    notice: string;
+  };
+  relation_database_scope: {
+    source: "workspace_default";
+    environment_independent: true;
+    config_revision: number;
+    database_key: string;
+    schema_name: string;
+  };
+  root_table: TableRelationIdentity;
+  related_tables: TableRelationIdentity[];
+  joins: ObservedTableJoin[];
+  total_relation_count: number;
+  returned_relation_count: number;
+  has_more: boolean;
+  next_offset?: number | null;
+  warnings: string[];
+}
+
+export interface TableRelationTableOption extends TableRelationIdentity {
+  relation_count: number;
+}
+
+export interface TableRelationTableList {
+  workspace_id: string;
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+  next_offset?: number | null;
+  tables: TableRelationTableOption[];
+}
+
+export interface TableRelationBuildStatus {
+  workspace_id: string;
+  status: "missing" | "building" | "ready" | "partial" | "failed";
+  generation_id?: string | null;
+  project_count: number;
+  ready_project_count: number;
+  sql_file_count: number;
+  statement_count: number;
+  relation_count: number;
+  warning_count: number;
+  attention_warning_count: number;
+  expected_skip_count: number;
+  warnings: string[];
+  error_message?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  config_revision: number;
+  eligible_project_count: number;
+  configured_project_count: number;
+  projects: TableRelationProjectBuildStatus[];
+}
+
+export interface TableRelationProjectBuildStatus {
+  project_id: string;
+  project_name: string;
+  database_key?: string | null;
+  status: "missing" | "building" | "ready" | "failed";
+  sql_file_count: number;
+  statement_count: number;
+  relation_count: number;
+  warning_count: number;
+  attention_warning_count: number;
+  expected_skip_count: number;
+  error_message?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+}
+
+export interface TableRelationDefaultDatabaseProject {
+  project_id: string;
+  project_name: string;
+  selected_project_database_id?: string | null;
+}
+
+export interface TableRelationDefaultDatabaseConfiguration {
+  workspace_id: string;
+  revision: number;
+  configured: boolean;
+  eligible_project_count: number;
+  configured_project_count: number;
+  projects: TableRelationDefaultDatabaseProject[];
+}
+
+export interface TableRelationWarningCategory {
+  code: string;
+  label: string;
+  classification: "source_error" | "preprocessor" | "metadata" | "safe_skip";
+  disposition: "attention" | "expected";
+  count: number;
+}
+
+export interface TableRelationWarningItem {
+  project_id: string;
+  project_name: string;
+  database_key: string;
+  source_path: string;
+  code: string;
+  category: string;
+  classification: "source_error" | "preprocessor" | "metadata" | "safe_skip";
+  disposition: "attention" | "expected";
+  message: string;
+  expression?: string | null;
+  occurrence_count: number;
+}
+
+export interface TableRelationWarningProjectSummary {
+  project_id: string;
+  project_name: string;
+  database_key: string;
+  count: number;
+}
+
+export interface TableRelationWarningList {
+  workspace_id: string;
+  total: number;
+  attention_total: number;
+  expected_total: number;
+  limit: number;
+  offset: number;
+  categories: TableRelationWarningCategory[];
+  projects: TableRelationWarningProjectSummary[];
+  warnings: TableRelationWarningItem[];
+}
+
+export interface TableRelationSqlWhitelistRule {
+  code: "automatic_ddl" | "automatic_single_table_query" | "automatic_write_without_query";
+  label: string;
+  description: string;
+}
+
+export interface TableRelationSqlWhitelistConfiguration {
+  workspace_id: string;
+  project_id: string;
+  project_name: string;
+  paths: string[];
+  suggested_paths: string[];
+  automatic_rules: TableRelationSqlWhitelistRule[];
 }
 
 export interface DocumentReadStatItem {

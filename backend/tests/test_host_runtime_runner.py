@@ -110,6 +110,7 @@ def test_runner_executes_verified_fixed_entry_and_reports_success(tmp_path: Path
         runtime_root,
         "#!/bin/sh\n"
         "printf 'runner-ok:%s\\n' \"$RUNTIME_WORKSPACE_ID\"\n"
+        "printf 'environment:%s\\n' \"$C12_ENVIRONMENT\"\n"
         "printf '%s\\n' \"$RUNTIME_PROJECT_IDS\"\n",
     )
     api = FakeApi()
@@ -126,6 +127,7 @@ def test_runner_executes_verified_fixed_entry_and_reports_success(tmp_path: Path
     assert api.completed == [("operation1", "step1", 0)]
     log = (runtime_root / "runs/snapshot1/execution.log").read_text()
     assert "runner-ok:workspace1" in log
+    assert "environment:local" in log
     assert ".\tproject-root" in log
     assert "web-react\tproject-web" in log
 
@@ -196,3 +198,65 @@ def test_runner_api_treats_connection_reset_as_recoverable(monkeypatch) -> None:
 
     with pytest.raises(module.RunnerError, match="控制面请求失败"):
         client.heartbeat_runner("runner-1")
+
+
+def test_runner_executes_allowlisted_host_action_with_default_local(
+    tmp_path: Path, monkeypatch
+) -> None:
+    module = load_runner_module()
+    runtime_root = tmp_path / "runtime"
+    workspace_root = tmp_path / "workspaces" / "workspace1"
+    workspace_root.mkdir(parents=True)
+    script_root = tmp_path / "script"
+    script_root.mkdir()
+    host_script = script_root / "ensure-panzhihua-host-runtime.sh"
+    host_script.write_text(
+        "#!/bin/sh\n"
+        'printf \'command:%s environment:%s variable:%s\\n\' "$1" "$3" "$C12_ENVIRONMENT"\n'
+    )
+    host_script.chmod(0o750)
+    monkeypatch.setattr(module, "HOST_SCRIPT_ROOT", script_root)
+    monkeypatch.setattr(
+        module,
+        "HOST_ACTIONS",
+        {"pzh.ensure-host-runtime": (host_script, "ensure", 10)},
+    )
+    api = FakeApi()
+    runner = module.HostRuntimeRunner(
+        api=api,
+        allowed_workspace_root=tmp_path / "workspaces",
+        runtime_root=runtime_root,
+        heartbeat_seconds=1,
+    )
+    payload = {
+        "operation": {
+            "id": "operation-host",
+            "workspace_id": "workspace1",
+            "kind": "host_action",
+            "action": "pzh.ensure-host-runtime",
+            "workspace_host_root": str(workspace_root),
+            "timeout_seconds": 10,
+        },
+        "steps": [
+            {
+                "id": "step-host",
+                "owner_type": "workspace",
+                "owner_id": "workspace1",
+                "mode": "host",
+                "snapshot_id": "host-snapshot",
+                "snapshot_relative_path": ".",
+                "entry_file": "deploy.sh",
+                "log_relative_path": "runs/host-snapshot/execution.log",
+                "project_relative_path": None,
+            }
+        ],
+        "project_ids_by_relative_path": {},
+        "lease_token": "h" * 48,
+    }
+
+    runner.execute_lease(payload)
+
+    assert api.started == [("operation-host", "h" * 48)]
+    assert api.completed == [("operation-host", "step-host", 0)]
+    log = (runtime_root / "runs/host-snapshot/execution.log").read_text()
+    assert "command:ensure environment:local variable:local" in log
