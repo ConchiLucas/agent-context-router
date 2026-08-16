@@ -220,7 +220,7 @@ api/workspaces.py
 - `local_workspace_mapping.py` 读取项目本机 YAML，按 Workspace ID 决定卡片显示、主目录和 reader 目录。`project_registry.py` 以主目录构建唯一文档缓存；reader cwd 返回 `documents_only` 快照，数据库与运行服务按 task.cwd 再次拒绝越权。
 - `workspace_shared_files.py` 扫描主目录 `docs/` 和固定 deploy 目录；`workspace_shared_file_repository.py` 在同一 PostgreSQL 事务中替换源文件副本及 Workspace/Project 运行配置。恢复操作只删除并重建主目录对应的 docs/deploy 目录。
 - `runtime_runner.py` 暴露只允许 Bearer Token 且拒绝浏览器请求的注册、心跳、领取租约和完成回报协议；`scripts/context_router_host_runner.py` 是宿主机执行器。普通部署步骤只执行物化快照；`host_action` 只接受控制面和 Runner 两端共同登记的动作白名单，并把未指定环境固定为 `local`。攀枝花开机保障动作只能调用 `/Users/conchi/script/ensure-panzhihua-host-runtime.sh`，不能执行任意路径或任意命令。
-- `sql_join_analyzer.py` 以采集器输入解析 SQL AST，只生成元数据可验证的跨表字段等值事实；`table_relations.py` 聚合无方向关系并以 generation 原子发布，查询只返回 ready 批次。`api/table_relations.py` 为页面提供状态、刷新、表清单和一跳证据详情。
+- `sql_join_analyzer.py` 以采集器输入解析 SQL AST，只生成元数据可验证的跨表字段等值事实；`table_relations.py` 聚合无方向关系并以 generation 原子发布，查询只返回 ready 批次；系统分类文件归属随 generation 写入快照，白名单列表默认读快照，点开文件才读原文。`api/table_relations.py` 为页面提供状态、刷新、表清单、工作空间级系统白名单查看和一跳证据详情。
 - `mcp_server.py` 固定注册八个上下文/数据库/中间件/表关联工具和三个 Workspace 运行工具，并挂载到 `/mcp`。项目、数据源或中间件变化不会改变工具名。
 - `mcp_server.py` 使用统一工具分发埋点记录十一个固定工具；观测持久化失败只降低链路可见性，不改变 MCP 工具原始成功或失败结果。中间件调用摘要只记录数量与开关，不记录返回内容；Trace 查询仍识别两个已下线 Project 工具，以展示历史调用。
 - `mcp_tool_call_repository.py` 保存通用工具调用和任务链路摘要；文档与数据库 Repository 继续保存各自明细，并通过可空唯一 `tool_call_id` 关联。

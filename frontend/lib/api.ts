@@ -33,6 +33,9 @@ import type {
   SystemGuideDetail,
   SystemGuideWrite,
   TableRelationBuildStatus,
+  TableRelationAutomaticWhitelistFileContent,
+  TableRelationAutomaticWhitelistFileList,
+  TableRelationAutomaticWhitelistRuleCode,
   TableRelationContext,
   TableRelationDefaultDatabaseConfiguration,
   TableRelationTableList,
@@ -121,6 +124,61 @@ export function replaceProjectTableRelationSqlWhitelist(
   return request<TableRelationSqlWhitelistConfiguration>(
     `/api/workspaces/${encodeURIComponent(workspaceId)}/table-relations/projects/${encodeURIComponent(projectId)}/sql-whitelist`,
     { method: "PUT", body: JSON.stringify({ paths }) },
+  );
+}
+
+export function listProjectAutomaticWhitelistFiles(
+  workspaceId: string,
+  projectId: string,
+  rule: TableRelationAutomaticWhitelistRuleCode,
+): Promise<TableRelationAutomaticWhitelistFileList> {
+  const search = new URLSearchParams({ rule, limit: "200", offset: "0" });
+  return request<TableRelationAutomaticWhitelistFileList>(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/table-relations/projects/${encodeURIComponent(projectId)}/automatic-whitelist?${search.toString()}`,
+    { cache: "no-store" },
+  );
+}
+
+export function listWorkspaceAutomaticWhitelistFiles(
+  workspaceId: string,
+  rule: TableRelationAutomaticWhitelistRuleCode,
+  projectId?: string,
+): Promise<TableRelationAutomaticWhitelistFileList> {
+  const search = new URLSearchParams({ rule, limit: "200", offset: "0" });
+  if (projectId) search.set("project_id", projectId);
+  return request<TableRelationAutomaticWhitelistFileList>(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/table-relations/automatic-whitelist?${search.toString()}`,
+    { cache: "no-store" },
+  );
+}
+
+export function getProjectAutomaticWhitelistFileContent(
+  workspaceId: string,
+  projectId: string,
+  rule: TableRelationAutomaticWhitelistRuleCode,
+  sourcePath: string,
+): Promise<TableRelationAutomaticWhitelistFileContent> {
+  const search = new URLSearchParams({ rule, source_path: sourcePath });
+  return request<TableRelationAutomaticWhitelistFileContent>(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/table-relations/projects/${encodeURIComponent(projectId)}/automatic-whitelist/file?${search.toString()}`,
+    { cache: "no-store" },
+  );
+}
+
+export function getWorkspaceAutomaticWhitelistFileContent(
+  workspaceId: string,
+  projectId: string,
+  rule: TableRelationAutomaticWhitelistRuleCode,
+  sourcePath: string,
+): Promise<TableRelationAutomaticWhitelistFileContent> {
+  const search = new URLSearchParams({
+    rule,
+    project_id: projectId,
+    source_path: sourcePath,
+  });
+  return request<TableRelationAutomaticWhitelistFileContent>(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/table-relations/automatic-whitelist/file?${search.toString()}`,
+    { cache: "no-store" },
   );
 }
 

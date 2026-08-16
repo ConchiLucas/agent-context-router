@@ -5,9 +5,11 @@ import { useEffect, useMemo, useState } from "react";
 import {
   getTableRelationContext,
   getTableRelationDefaultDatabases,
+  getWorkspaceAutomaticWhitelistFileContent,
   getProjectTableRelationSqlWhitelist,
   getTableRelationStatus,
   listAllTableRelationTables,
+  listWorkspaceAutomaticWhitelistFiles,
   listTableRelationWarnings,
   listWorkspaces,
   rebuildTableRelations,
@@ -17,6 +19,10 @@ import {
 import type {
   ObservedTableJoin,
   TableRelationBuildStatus,
+  TableRelationAutomaticWhitelistFileContent,
+  TableRelationAutomaticWhitelistFileList,
+  TableRelationAutomaticWhitelistGroup,
+  TableRelationAutomaticWhitelistRuleCode,
   TableRelationContext,
   TableRelationDefaultDatabaseProject,
   TableRelationIdentity,
@@ -57,7 +63,7 @@ export function TableRelationExplorer() {
   const [workspaceId, setWorkspaceId] = useState("");
   const [status, setStatus] = useState<TableRelationBuildStatus | null>(null);
   const [projects, setProjects] = useState<TableRelationDefaultDatabaseProject[]>([]);
-  const [projectId, setProjectId] = useState("");
+  const [projectId, setProjectId] = useState(ALL_PROJECTS);
   const [tables, setTables] = useState<TableRelationTableOption[]>([]);
   const [query, setQuery] = useState("");
   const [context, setContext] = useState<TableRelationContext | null>(null);
@@ -76,11 +82,22 @@ export function TableRelationExplorer() {
   const [warningsLoading, setWarningsLoading] = useState(false);
   const [warningsError, setWarningsError] = useState<string | null>(null);
   const [showWhitelist, setShowWhitelist] = useState(false);
+  const [whitelistProjectId, setWhitelistProjectId] = useState(ALL_PROJECTS);
+  const [whitelistByProject, setWhitelistByProject] = useState<
+    Record<string, TableRelationSqlWhitelistConfiguration>
+  >({});
   const [whitelist, setWhitelist] = useState<TableRelationSqlWhitelistConfiguration | null>(null);
   const [whitelistDraft, setWhitelistDraft] = useState("");
   const [whitelistLoading, setWhitelistLoading] = useState(false);
   const [whitelistSaving, setWhitelistSaving] = useState(false);
   const [whitelistError, setWhitelistError] = useState<string | null>(null);
+  const [automaticGroup, setAutomaticGroup] = useState<TableRelationAutomaticWhitelistGroup>("no_value");
+  const [automaticRule, setAutomaticRule] = useState<TableRelationAutomaticWhitelistRuleCode | null>(null);
+  const [automaticFiles, setAutomaticFiles] = useState<TableRelationAutomaticWhitelistFileList | null>(null);
+  const [automaticFileContent, setAutomaticFileContent] = useState<TableRelationAutomaticWhitelistFileContent | null>(null);
+  const [automaticFilesLoading, setAutomaticFilesLoading] = useState(false);
+  const [automaticContentLoading, setAutomaticContentLoading] = useState(false);
+  const [automaticError, setAutomaticError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -114,9 +131,15 @@ export function TableRelationExplorer() {
     setWarningQuery("");
     setWarningReport(null);
     setShowWhitelist(false);
+    setWhitelistProjectId(ALL_PROJECTS);
+    setWhitelistByProject({});
     setWhitelist(null);
     setWhitelistDraft("");
     setWhitelistError(null);
+    setAutomaticRule(null);
+    setAutomaticFiles(null);
+    setAutomaticFileContent(null);
+    setAutomaticError(null);
     Promise.all([
       getTableRelationStatus(workspaceId),
       getTableRelationDefaultDatabases(workspaceId),
@@ -132,9 +155,10 @@ export function TableRelationExplorer() {
         setStatus(nextStatus);
         setProjects(nextProjects);
         setProjectId((current) =>
-          nextProjects.some((item) => item.project_id === current)
+          current === ALL_PROJECTS
+            || nextProjects.some((item) => item.project_id === current)
             ? current
-            : nextProjects[0]?.project_id ?? "",
+            : ALL_PROJECTS,
         );
         setTables(nextTables?.tables ?? []);
       })
@@ -224,8 +248,12 @@ export function TableRelationExplorer() {
     ?? context?.joins[0]
     ?? null;
 
-  async function rebuild(scope: "all" | "project") {
-    if (!workspaceId || rebuildScope || (scope === "project" && !projectId)) return;
+  async function rebuild(scope: "all" | "project", targetProjectId = projectId) {
+    if (
+      !workspaceId
+      || rebuildScope
+      || (scope === "project" && (!targetProjectId || targetProjectId === ALL_PROJECTS))
+    ) return;
     setRebuildScope(scope);
     setError(null);
     setStatus((current) => current
@@ -233,7 +261,7 @@ export function TableRelationExplorer() {
           ...current,
           status: "building",
           projects: current.projects.map((item) =>
-            scope === "all" || item.project_id === projectId
+            scope === "all" || item.project_id === targetProjectId
               ? { ...item, status: "building", error_message: null }
               : item,
           ),
@@ -241,7 +269,7 @@ export function TableRelationExplorer() {
       : current);
     try {
       if (scope === "project") {
-        await rebuildProjectTableRelations(workspaceId, projectId);
+        await rebuildProjectTableRelations(workspaceId, targetProjectId);
       } else {
         await rebuildTableRelations(workspaceId);
       }
@@ -291,19 +319,106 @@ export function TableRelationExplorer() {
     await selectTable({ ...table, relation_count: 0 });
   }
 
+  function applyWhitelistSelection(
+    scope: string,
+    byProject: Record<string, TableRelationSqlWhitelistConfiguration>,
+  ) {
+    setWhitelistProjectId(scope);
+    if (scope === ALL_PROJECTS) {
+      setWhitelist(null);
+      setWhitelistDraft("");
+      return;
+    }
+    const result = byProject[scope] ?? null;
+    setWhitelist(result);
+    setWhitelistDraft(result?.paths.join("\n") ?? "");
+  }
+
   async function openWhitelist() {
-    if (!workspaceId || !projectId || projectId === ALL_PROJECTS) return;
+    if (!workspaceId || projects.length === 0) return;
+    const scope = projectId || ALL_PROJECTS;
     setShowWhitelist(true);
     setWhitelistLoading(true);
     setWhitelistError(null);
+    setAutomaticGroup("no_value");
+    setAutomaticRule(null);
+    setAutomaticFiles(null);
+    setAutomaticFileContent(null);
+    setAutomaticError(null);
     try {
-      const result = await getProjectTableRelationSqlWhitelist(workspaceId, projectId);
-      setWhitelist(result);
-      setWhitelistDraft(result.paths.join("\n"));
+      const results = await Promise.all(
+        projects.map((item) => getProjectTableRelationSqlWhitelist(workspaceId, item.project_id)),
+      );
+      const byProject = Object.fromEntries(results.map((item) => [item.project_id, item]));
+      setWhitelistByProject(byProject);
+      applyWhitelistSelection(scope, byProject);
     } catch (reason) {
       setWhitelistError(reason instanceof Error ? reason.message : "SQL 白名单读取失败");
     } finally {
       setWhitelistLoading(false);
+    }
+  }
+
+  function selectWhitelistProject(nextProjectId: string) {
+    applyWhitelistSelection(nextProjectId, whitelistByProject);
+    setAutomaticRule(null);
+    setAutomaticFiles(null);
+    setAutomaticFileContent(null);
+    setAutomaticError(null);
+  }
+
+  function selectAutomaticGroup(group: TableRelationAutomaticWhitelistGroup) {
+    setAutomaticGroup(group);
+    setAutomaticRule(null);
+    setAutomaticFiles(null);
+    setAutomaticFileContent(null);
+    setAutomaticError(null);
+  }
+
+  async function selectAutomaticRule(rule: TableRelationAutomaticWhitelistRuleCode) {
+    if (!workspaceId) return;
+    setAutomaticRule(rule);
+    setAutomaticFiles(null);
+    setAutomaticFileContent(null);
+    setAutomaticError(null);
+    setAutomaticFilesLoading(true);
+    try {
+      const result = await listWorkspaceAutomaticWhitelistFiles(
+        workspaceId,
+        rule,
+        whitelistProjectId === ALL_PROJECTS ? undefined : whitelistProjectId,
+      );
+      setAutomaticFiles(result);
+      if (result.files[0]) {
+        await selectAutomaticFile(rule, result.files[0].project_id, result.files[0].source_path);
+      }
+    } catch (reason) {
+      setAutomaticError(reason instanceof Error ? reason.message : "系统白名单 SQL 读取失败");
+    } finally {
+      setAutomaticFilesLoading(false);
+    }
+  }
+
+  async function selectAutomaticFile(
+    rule: TableRelationAutomaticWhitelistRuleCode,
+    fileProjectId: string,
+    sourcePath: string,
+  ) {
+    if (!workspaceId || !fileProjectId) return;
+    setAutomaticContentLoading(true);
+    setAutomaticError(null);
+    try {
+      const result = await getWorkspaceAutomaticWhitelistFileContent(
+        workspaceId,
+        fileProjectId,
+        rule,
+        sourcePath,
+      );
+      setAutomaticFileContent(result);
+    } catch (reason) {
+      setAutomaticError(reason instanceof Error ? reason.message : "SQL 内容读取失败");
+    } finally {
+      setAutomaticContentLoading(false);
     }
   }
 
@@ -318,7 +433,12 @@ export function TableRelationExplorer() {
   }
 
   async function saveWhitelist() {
-    if (!workspaceId || !projectId || projectId === ALL_PROJECTS || whitelistSaving) return;
+    if (
+      !workspaceId
+      || !whitelistProjectId
+      || whitelistProjectId === ALL_PROJECTS
+      || whitelistSaving
+    ) return;
     setWhitelistSaving(true);
     setWhitelistError(null);
     const paths = whitelistDraft
@@ -326,11 +446,12 @@ export function TableRelationExplorer() {
       .map((item) => item.trim())
       .filter(Boolean);
     try {
-      await replaceProjectTableRelationSqlWhitelist(workspaceId, projectId, paths);
+      await replaceProjectTableRelationSqlWhitelist(workspaceId, whitelistProjectId, paths);
       setShowWhitelist(false);
+      setWhitelistByProject({});
       setWhitelist(null);
       setWhitelistDraft("");
-      await rebuild("project");
+      await rebuild("project", whitelistProjectId);
     } catch (reason) {
       setWhitelistError(reason instanceof Error ? reason.message : "SQL 白名单保存失败");
     } finally {
@@ -380,12 +501,7 @@ export function TableRelationExplorer() {
             type="button"
             className="secondary-button"
             onClick={() => void openWhitelist()}
-            disabled={
-              !workspaceId
-              || !projectId
-              || projectId === ALL_PROJECTS
-              || rebuildScope !== null
-            }
+            disabled={!workspaceId || projects.length === 0 || rebuildScope !== null}
           >
             SQL 白名单
           </button>
@@ -506,17 +622,37 @@ export function TableRelationExplorer() {
 
       {showWhitelist ? (
         <SqlWhitelistDialog
+          projects={projects}
+          selectedProjectId={whitelistProjectId}
+          configurations={whitelistByProject}
           configuration={whitelist}
           draft={whitelistDraft}
           loading={whitelistLoading}
           saving={whitelistSaving}
           error={whitelistError}
+          automaticGroup={automaticGroup}
+          automaticRule={automaticRule}
+          automaticFiles={automaticFiles}
+          automaticFileContent={automaticFileContent}
+          automaticFilesLoading={automaticFilesLoading}
+          automaticContentLoading={automaticContentLoading}
+          automaticError={automaticError}
+          onSelectProjectId={selectWhitelistProject}
           onDraft={setWhitelistDraft}
           onIncludeSuggested={includeSuggestedPaths}
+          onSelectAutomaticGroup={selectAutomaticGroup}
+          onSelectAutomaticRule={(rule) => void selectAutomaticRule(rule)}
+          onSelectAutomaticFile={(rule, fileProjectId, sourcePath) =>
+            void selectAutomaticFile(rule, fileProjectId, sourcePath)}
           onClose={() => {
             if (whitelistSaving) return;
             setShowWhitelist(false);
             setWhitelistError(null);
+            setAutomaticGroup("no_value");
+            setAutomaticRule(null);
+            setAutomaticFiles(null);
+            setAutomaticFileContent(null);
+            setAutomaticError(null);
           }}
           onSave={() => void saveWhitelist()}
         />
@@ -582,29 +718,72 @@ export function TableRelationExplorer() {
 }
 
 function SqlWhitelistDialog({
+  projects,
+  selectedProjectId,
+  configurations,
   configuration,
   draft,
   loading,
   saving,
   error,
+  automaticGroup,
+  automaticRule,
+  automaticFiles,
+  automaticFileContent,
+  automaticFilesLoading,
+  automaticContentLoading,
+  automaticError,
+  onSelectProjectId,
   onDraft,
   onIncludeSuggested,
+  onSelectAutomaticGroup,
+  onSelectAutomaticRule,
+  onSelectAutomaticFile,
   onClose,
   onSave,
 }: {
+  projects: TableRelationDefaultDatabaseProject[];
+  selectedProjectId: string;
+  configurations: Record<string, TableRelationSqlWhitelistConfiguration>;
   configuration: TableRelationSqlWhitelistConfiguration | null;
   draft: string;
   loading: boolean;
   saving: boolean;
   error: string | null;
+  automaticGroup: TableRelationAutomaticWhitelistGroup;
+  automaticRule: TableRelationAutomaticWhitelistRuleCode | null;
+  automaticFiles: TableRelationAutomaticWhitelistFileList | null;
+  automaticFileContent: TableRelationAutomaticWhitelistFileContent | null;
+  automaticFilesLoading: boolean;
+  automaticContentLoading: boolean;
+  automaticError: string | null;
+  onSelectProjectId: (projectId: string) => void;
   onDraft: (value: string) => void;
   onIncludeSuggested: () => void;
+  onSelectAutomaticGroup: (group: TableRelationAutomaticWhitelistGroup) => void;
+  onSelectAutomaticRule: (rule: TableRelationAutomaticWhitelistRuleCode) => void;
+  onSelectAutomaticFile: (
+    rule: TableRelationAutomaticWhitelistRuleCode,
+    projectId: string,
+    sourcePath: string,
+  ) => void;
   onClose: () => void;
   onSave: () => void;
 }) {
+  const viewingAll = selectedProjectId === ALL_PROJECTS;
+  const selectedProject = projects.find((item) => item.project_id === selectedProjectId);
+  const automaticRules = configuration?.automatic_rules
+    ?? Object.values(configurations)[0]?.automatic_rules
+    ?? [];
+  const groupedRules = automaticRules.filter((rule) => rule.group === automaticGroup);
+  const viewingParserGap = automaticGroup === "parser_gap";
   const pathCount = draft.split("\n").filter((item) => item.trim()).length;
+  const groupedPaths = projects.map((project) => ({
+    project,
+    configuration: configurations[project.project_id],
+  }));
   return (
-    <div className="project-settings-modal" role="presentation">
+    <div className="project-settings-modal table-relation-whitelist-overlay" role="presentation">
       <section
         className="management-modal table-relation-whitelist-modal"
         role="dialog"
@@ -618,7 +797,9 @@ function SqlWhitelistDialog({
           <div>
             <span className="file-chip">项目级扫描排除</span>
             <h2 id="table-relation-whitelist-title">
-              {configuration?.project_name ?? "当前项目"} SQL 白名单
+              {viewingAll
+                ? "全部项目 SQL 白名单"
+                : `${configuration?.project_name ?? selectedProject?.project_name ?? "当前项目"} SQL 白名单`}
             </h2>
           </div>
           <button
@@ -632,54 +813,186 @@ function SqlWhitelistDialog({
           </button>
         </header>
 
-        <p className="table-relation-whitelist-notice">
-          白名单按项目相对路径精确匹配。命中后整个 SQL 文件不参与扫描，其中原本可识别的关系也会一并忽略。
-        </p>
+        <div className="table-relation-whitelist-body">
+          <p className="table-relation-whitelist-notice">
+            系统分类可按全部项目或单个项目查看。「没有分析价值」整文件不扫描；「解析器暂不支持」只分类查看，文件仍扫描，已经找到的关系会保留。每个 SQL 文件只进入一个 tab，先按语句形态和缺表/语句错误归类，再按更具体的解析器缺口，最后才落到复杂 SQL。项目路径白名单按项目相对路径精确匹配，命中后整个 SQL 文件不参与扫描。全部项目下只读展示各项目已保存路径，保存前需先选择具体项目。
+          </p>
 
-        <section className="table-relation-whitelist-rules" aria-labelledby="automatic-rules-title">
-          <header>
-            <strong id="automatic-rules-title">系统白名单</strong>
-            <span>自动生效，不需要填写文件路径</span>
-          </header>
-          <div>
-            {configuration?.automatic_rules.map((rule) => (
-              <article key={rule.code}>
-                <strong>{rule.label}</strong>
-                <p>{rule.description}</p>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <label className="table-relation-whitelist-editor">
-          <span>项目路径白名单 · {pathCount} 个文件</span>
-          <textarea
-            value={draft}
-            disabled={loading || saving}
-            onChange={(event) => onDraft(event.target.value)}
-            placeholder="每行一个项目相对路径，例如：src/main/resources/sql-ext/example.sql"
-          />
-        </label>
-
-        {configuration?.suggested_paths.length ? (
-          <div className="table-relation-whitelist-suggestions">
-            <div>
-              <strong>{configuration.suggested_paths.length} 个当前异常 SQL 文件</strong>
-              <span>可一次加入编辑区，保存前仍可删除任意路径。</span>
-            </div>
+          <div className="table-relation-warning-projects" aria-label="白名单项目筛选">
             <button
               type="button"
-              className="secondary-button"
-              disabled={loading || saving}
-              onClick={onIncludeSuggested}
+              data-active={viewingAll}
+              onClick={() => onSelectProjectId(ALL_PROJECTS)}
             >
-              加入当前异常 SQL
+              全部项目
             </button>
+            {projects.map((project) => (
+              <button
+                type="button"
+                key={project.project_id}
+                data-active={selectedProjectId === project.project_id}
+                onClick={() => onSelectProjectId(project.project_id)}
+              >
+                {project.project_name}
+                <span>{configurations[project.project_id]?.paths.length ?? 0}</span>
+              </button>
+            ))}
           </div>
-        ) : null}
 
-        {loading ? <p className="empty-state">正在读取白名单…</p> : null}
-        {error ? <div className="error-banner" role="alert">{error}</div> : null}
+          <section className="table-relation-whitelist-rules" aria-labelledby="automatic-rules-title">
+            <header>
+              <strong id="automatic-rules-title">系统分类</strong>
+              <span>
+                {viewingParserGap
+                  ? "这些 SQL 可能有表关系，文件仍扫描；点 tab 查看解析器暂时无法提取的部分"
+                  : "这些 SQL 没有表关系分析价值，整文件不扫描"}
+              </span>
+            </header>
+            <div className="table-relation-whitelist-kinds" aria-label="系统分类">
+              <button
+                type="button"
+                data-active={automaticGroup === "no_value"}
+                onClick={() => onSelectAutomaticGroup("no_value")}
+              >
+                没有分析价值
+              </button>
+              <button
+                type="button"
+                data-active={automaticGroup === "parser_gap"}
+                onClick={() => onSelectAutomaticGroup("parser_gap")}
+              >
+                解析器暂不支持
+              </button>
+            </div>
+            <div>
+              {groupedRules.map((rule) => (
+                <button
+                  type="button"
+                  key={rule.code}
+                  data-active={automaticRule === rule.code}
+                  onClick={() => onSelectAutomaticRule(rule.code)}
+                >
+                  <strong>{rule.label}</strong>
+                  <p>{rule.description}</p>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          {automaticRule ? (
+            <section className="table-relation-automatic-browser" aria-label="系统白名单 SQL 查看器">
+              <header>
+                <div>
+                  <strong>{automaticFiles?.rule.label ?? "系统白名单 SQL"}</strong>
+                  <span>
+                    {automaticFilesLoading
+                      ? "正在查找文件…"
+                      : viewingParserGap
+                        ? `${automaticFiles?.total ?? 0} 个文件`
+                        : `${automaticFiles?.total ?? 0} 个自动跳过文件`}
+                  </span>
+                </div>
+                {automaticFileContent?.truncated ? <small>内容已按 512 KiB 截断</small> : null}
+              </header>
+              <div>
+                <nav aria-label="自动跳过 SQL 文件">
+                  {automaticFiles?.files.map((file) => (
+                    <button
+                      type="button"
+                      key={`${file.project_id}\u0000${file.source_path}`}
+                      data-active={
+                        automaticFileContent?.project_id === file.project_id
+                        && automaticFileContent.source_path === file.source_path
+                      }
+                      disabled={automaticContentLoading}
+                      onClick={() => onSelectAutomaticFile(
+                        automaticRule,
+                        file.project_id,
+                        file.source_path,
+                      )}
+                    >
+                      {viewingAll ? (
+                        <>
+                          <small>{file.project_name}</small>
+                          {file.source_path}
+                        </>
+                      ) : file.source_path}
+                    </button>
+                  ))}
+                  {!automaticFilesLoading && !automaticFiles?.files.length ? (
+                    <p className="empty-state">
+                      {viewingAll ? "当前工作空间" : "当前项目"}没有命中此规则的 SQL 文件。
+                    </p>
+                  ) : null}
+                </nav>
+                <article>
+                  <code>
+                    {automaticFileContent
+                      ? `${automaticFileContent.project_name} · ${automaticFileContent.source_path}`
+                      : "选择左侧 SQL 文件查看内容"}
+                  </code>
+                  {automaticContentLoading ? <p className="empty-state">正在读取 SQL…</p> : null}
+                  {automaticFileContent ? <pre>{automaticFileContent.statement}</pre> : null}
+                </article>
+              </div>
+              {automaticError ? <div className="error-banner" role="alert">{automaticError}</div> : null}
+            </section>
+          ) : null}
+
+          {viewingAll ? (
+            <section className="table-relation-whitelist-groups" aria-label="各项目路径白名单">
+              {groupedPaths.map(({ project, configuration: item }) => (
+                <article key={project.project_id} className="table-relation-whitelist-group">
+                  <header>
+                    <strong>{project.project_name}</strong>
+                    <span>{item?.paths.length ?? 0} 个文件</span>
+                  </header>
+                  {item?.paths.length ? (
+                    <ul>
+                      {item.paths.map((path) => (
+                        <li key={path}>{path}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="empty-state">未配置路径白名单</p>
+                  )}
+                </article>
+              ))}
+            </section>
+          ) : (
+            <>
+              <label className="table-relation-whitelist-editor">
+                <span>项目路径白名单 · {pathCount} 个文件</span>
+                <textarea
+                  value={draft}
+                  disabled={loading || saving}
+                  onChange={(event) => onDraft(event.target.value)}
+                  placeholder="每行一个项目相对路径，例如：src/main/resources/sql-ext/example.sql"
+                />
+              </label>
+
+              {configuration?.suggested_paths.length ? (
+                <div className="table-relation-whitelist-suggestions">
+                  <div>
+                    <strong>{configuration.suggested_paths.length} 个当前异常 SQL 文件</strong>
+                    <span>可一次加入编辑区，保存前仍可删除任意路径。</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={loading || saving}
+                    onClick={onIncludeSuggested}
+                  >
+                    加入当前异常 SQL
+                  </button>
+                </div>
+              ) : null}
+            </>
+          )}
+
+          {loading ? <p className="empty-state">正在读取白名单…</p> : null}
+          {error ? <div className="error-banner" role="alert">{error}</div> : null}
+        </div>
 
         <footer>
           <button type="button" className="secondary-button" disabled={saving} onClick={onClose}>
@@ -688,10 +1001,14 @@ function SqlWhitelistDialog({
           <button
             type="button"
             className="primary-button"
-            disabled={loading || saving || !configuration}
+            disabled={loading || saving || viewingAll || !configuration}
             onClick={onSave}
           >
-            {saving ? "保存并更新中…" : "保存并更新当前项目"}
+            {saving
+              ? "保存并更新中…"
+              : viewingAll
+                ? "请先选择项目再保存"
+                : "保存并更新当前项目"}
           </button>
         </footer>
       </section>
@@ -730,6 +1047,7 @@ function WarningDiagnostics({
     source_error: "源码错误",
     preprocessor: "预处理边界",
     metadata: "元数据未确认",
+    relation_gap: "关系能力缺口",
     safe_skip: "安全跳过",
   } as const;
   return (

@@ -204,7 +204,46 @@ def test_sql_file_collector_prunes_target_directories(tmp_path: Path) -> None:
         ("UPDATE cargo SET name = 'coal' WHERE id = 1", "automatic_write_without_query"),
         (
             "CREATE TABLE cargo (id BIGINT); UPDATE cargo SET id = 1",
-            "automatic_safe_mixed",
+            "automatic_single_table_initialization",
+        ),
+        (
+            "INSERT INTO cargo (id) SELECT 1 FROM DUAL "
+            "WHERE NOT EXISTS (SELECT 1 FROM cargo WHERE id = 1)",
+            "automatic_single_table_initialization",
+        ),
+        (
+            "<#-- page --> SELECT @pageTag() { t.id, t.name @} FROM cargo t "
+            "WHERE 1 = 1 <<AND t.id = :id>> <#if active> AND t.deleted = 0 "
+            "<#else> AND t.deleted = 1 </#if>",
+            "automatic_single_table_query",
+        ),
+        (
+            "SELECT c.id FROM cargo c JOIN category k ON c.category_id = k.id OR c.id = k.id",
+            "automatic_complex_sql",
+        ),
+        (
+            "SELECT * FROM cargo WHERE 1 = 1 <<AND tenant_id = :tenantId>>",
+            "automatic_single_table_query",
+        ),
+        ("SELECT FROM", "automatic_complex_sql"),
+        ("INSERT INTO cargo_archive SELECT * FROM cargo", "automatic_complex_sql"),
+        (
+            "UPDATE cargo SET name = (SELECT name FROM category "
+            "WHERE category.id = cargo.category_id)",
+            "automatic_complex_sql",
+        ),
+        (
+            "WITH category_ids AS (SELECT id FROM category) "
+            "SELECT c.id FROM cargo c JOIN category_ids k ON k.id = c.category_id",
+            None,
+        ),
+        (
+            "SELECT c.id FROM cargo c JOIN category k ON k.id <> c.category_id",
+            "automatic_complex_sql",
+        ),
+        (
+            "SELECT c.id FROM cargo c JOIN category k ON k.id = category_id",
+            "automatic_complex_sql",
         ),
     ],
 )
@@ -216,18 +255,61 @@ def test_automatic_whitelist_accepts_only_explicit_safe_statement_shapes(
 
 
 @pytest.mark.parametrize(
-    "sql",
+    ("sql", "classification"),
     [
-        "SELECT c.id FROM cargo c JOIN category k ON k.id = c.category_id",
-        "INSERT INTO cargo_archive SELECT * FROM cargo",
-        "UPDATE cargo c JOIN category k ON k.id = c.category_id SET c.name = k.name",
-        "UPDATE cargo SET name = (SELECT name FROM category WHERE category.id = cargo.category_id)",
-        "SELECT * FROM cargo WHERE <<tenant_id = :tenantId>>",
-        "SELECT FROM",
+        ("SELECT c.id FROM cargo c JOIN category k ON k.id = c.category_id", None),
+        ("UPDATE cargo c JOIN category k ON k.id = c.category_id SET c.name = k.name", None),
+        (
+            "<#list columns as column>SELECT ${column} FROM cargo</#list>",
+            "automatic_complex_sql",
+        ),
     ],
 )
-def test_automatic_whitelist_fails_closed_for_relational_or_unparseable_sql(sql: str) -> None:
-    assert SqlAutomaticWhitelist().classify(source(sql)) is None
+def test_automatic_whitelist_fails_closed_for_relational_or_unparseable_sql(
+    sql: str,
+    classification: str | None,
+) -> None:
+    assert SqlAutomaticWhitelist().classify(source(sql)) == classification
+
+
+def test_automatic_whitelist_keeps_template_wrapped_direct_join_for_metadata_validation() -> None:
+    candidate = source(
+        "SELECT c.id FROM cargo c JOIN category k ON k.id = c.category_id "
+        "<#if active> WHERE c.deleted = 0 </#if>"
+    )
+
+    whitelist = SqlAutomaticWhitelist()
+
+    assert whitelist.source_has_potential_direct_join(candidate) is True
+    assert whitelist.classify(candidate) is None
+
+
+def test_manual_whitelist_preflight_removes_direct_join_candidates(tmp_path: Path) -> None:
+    sql_path = tmp_path / "sql" / "cargo_category.sql"
+    sql_path.parent.mkdir(parents=True)
+    sql_path.write_text(
+        "SELECT c.id FROM cargo c JOIN category k ON k.id = c.category_id",
+        encoding="utf-8",
+    )
+    service = TableRelationService(
+        registry=cast("object", None),
+        task_repository=cast("object", None),
+        data_source_repository=cast("object", None),
+        repository=cast("object", None),
+        connector_manager=cast("object", None),
+    )
+
+    kept = service._without_potential_relation_paths(  # noqa: SLF001
+        workspace_id="workspace-1",
+        project=SimpleNamespace(
+            id="project-1",
+            name="cargo-service",
+            resolved_project_root=tmp_path,
+        ),
+        paths=["sql/cargo_category.sql"],
+    )
+
+    assert kept == []
 
 
 @pytest.fixture
@@ -268,8 +350,8 @@ def test_sql_relation_golden_cases(case: dict[str, object]) -> None:
     assert all("\x1b" not in warning.message for warning in warnings)
 
 
-def test_golden_suite_has_thirty_three_reviewable_cases() -> None:
-    assert len(_GOLDEN_SUITE["cases"]) == 33
+def test_golden_suite_has_thirty_four_reviewable_cases() -> None:
+    assert len(_GOLDEN_SUITE["cases"]) == 34
 
 
 def test_extracts_only_metadata_validated_equality_join_evidence(
@@ -808,9 +890,7 @@ def test_warning_diagnostics_are_grouped_filterable_and_keep_expressions() -> No
 
     expected = service.list_warnings("workspace-1", disposition="expected")
     assert expected.total == 1
-    assert [(item.code, item.disposition) for item in expected.warnings] == [
-        ("join_or_unsupported", "expected")
-    ]
+    assert [item.source_path for item in expected.warnings] == ["sql/tag.sql"]
     assert [item.code for item in expected.categories] == ["join_or_unsupported"]
 
     unknown_project = service.list_warnings(
@@ -829,11 +909,28 @@ def test_warning_diagnostics_are_grouped_filterable_and_keep_expressions() -> No
     )
     assert whitelist.paths == ["sql/cargo.sql"]
     assert whitelist.suggested_paths == []
-    assert [rule.code for rule in whitelist.automatic_rules] == [
-        "automatic_ddl",
-        "automatic_single_table_query",
-        "automatic_write_without_query",
+    assert [(rule.code, rule.group) for rule in whitelist.automatic_rules] == [
+        ("automatic_ddl", "no_value"),
+        ("automatic_single_table_query", "no_value"),
+        ("automatic_write_without_query", "no_value"),
+        ("automatic_single_table_initialization", "no_value"),
+        ("automatic_missing_table_or_column", "no_value"),
+        ("automatic_invalid_sql", "no_value"),
+        ("automatic_complex_sql", "parser_gap"),
+        ("automatic_derived_relation", "parser_gap"),
+        ("automatic_or_unsupported", "parser_gap"),
+        ("automatic_non_equality", "parser_gap"),
+        ("automatic_correlated_reference", "parser_gap"),
     ]
+
+    filtered = service.list_warnings("workspace-1", disposition="attention")
+    assert filtered.total == 0
+    assert filtered.attention_total == 0
+    assert filtered.warnings == []
+    filtered_status = service.get_status("workspace-1")
+    assert filtered_status.warning_count == 1
+    assert filtered_status.attention_warning_count == 0
+    assert filtered_status.projects[0].warning_count == 1
 
     with pytest.raises(TableRelationServiceError) as invalid_path:
         service.replace_sql_whitelist(
@@ -847,12 +944,18 @@ def test_warning_diagnostics_are_grouped_filterable_and_keep_expressions() -> No
 @pytest.mark.parametrize(
     ("code", "classification", "disposition"),
     [
-        ("join_derived_relation_unsupported", "safe_skip", "expected"),
-        ("join_unqualified_column_unsupported", "safe_skip", "expected"),
-        ("join_correlated_reference_unsupported", "safe_skip", "expected"),
+        ("join_derived_relation_unsupported", "relation_gap", "expected"),
+        ("join_unqualified_column_unsupported", "relation_gap", "expected"),
+        ("join_correlated_reference_unsupported", "relation_gap", "expected"),
+        ("join_or_unsupported", "relation_gap", "expected"),
+        ("join_non_equality_ignored", "relation_gap", "expected"),
+        ("where_relation_unsupported", "relation_gap", "expected"),
+        ("template_loop_ignored", "relation_gap", "expected"),
+        ("dynamic_identifier_unsupported", "relation_gap", "attention"),
+        ("migration_sql_ignored", "safe_skip", "expected"),
         ("join_metadata_unresolved", "metadata", "attention"),
-        ("join_metadata_table_not_found", "metadata", "attention"),
-        ("join_metadata_column_not_found", "metadata", "attention"),
+        ("join_metadata_table_not_found", "metadata", "expected"),
+        ("join_metadata_column_not_found", "metadata", "expected"),
         ("join_metadata_table_ambiguous", "metadata", "attention"),
         ("join_metadata_column_ambiguous", "metadata", "attention"),
         ("join_alias_unresolved", "source_error", "attention"),
@@ -1004,3 +1107,139 @@ def test_partial_workspace_returns_only_ready_target_relations() -> None:
             schema="app",
         )
     assert caught.value.code == "table_relation_table_not_found"
+
+
+def test_workspace_automatic_whitelist_lists_same_path_across_configured_projects() -> None:
+    repository = InMemoryTableRelationRepository()
+    _configure_defaults(repository, "project-a", "project-b")
+    sources = [
+        SqlSource(
+            workspace_id="workspace-1",
+            project_id="project-a",
+            project_name="alpha",
+            database_key="automatic-whitelist",
+            dialect="mysql",
+            source_path="sql/create.sql",
+            statement="CREATE TABLE cargo (id BIGINT)",
+        ),
+        SqlSource(
+            workspace_id="workspace-1",
+            project_id="project-b",
+            project_name="beta",
+            database_key="automatic-whitelist",
+            dialect="mysql",
+            source_path="sql/create.sql",
+            statement="CREATE TABLE category (id BIGINT)",
+        ),
+        SqlSource(
+            workspace_id="workspace-1",
+            project_id="project-b",
+            project_name="beta",
+            database_key="automatic-whitelist",
+            dialect="mysql",
+            source_path="sql/join.sql",
+            statement="SELECT c.id FROM cargo c JOIN category k ON k.id = c.category_id",
+        ),
+    ]
+
+    class _Collector:
+        def collect(self, *, project_id: str, **_: object) -> list[SqlSource]:
+            return [item for item in sources if item.project_id == project_id]
+
+    class _Registry:
+        def get_workspace_snapshot(self, _: str) -> object:
+            return SimpleNamespace(
+                projects=[
+                    SimpleNamespace(id="project-a", project_kind="backend"),
+                    SimpleNamespace(id="project-b", project_kind="backend"),
+                ]
+            )
+
+        def get_snapshot(self, project_id: str) -> object:
+            names = {"project-a": "alpha", "project-b": "beta"}
+            if project_id not in names:
+                raise ProjectRegistryError("项目不存在")
+            return SimpleNamespace(
+                id=project_id,
+                name=names[project_id],
+                workspace_id="workspace-1",
+                project_kind="backend",
+                resolved_project_root=Path("/tmp"),
+            )
+
+    class _DataSources:
+        def list_workspace_databases_for_mcp(self, _: str) -> list[object]:
+            return [
+                SimpleNamespace(
+                    link_id="link-project-a",
+                    project_id="project-a",
+                    project_name="alpha",
+                    mcp_alias="db_a",
+                    database_remote_name="a",
+                    database_display_name="a",
+                    data_source_name="test",
+                    engine="mysql",
+                    readonly=True,
+                    database_available=True,
+                    database_system=False,
+                ),
+                SimpleNamespace(
+                    link_id="link-project-b",
+                    project_id="project-b",
+                    project_name="beta",
+                    mcp_alias="db_b",
+                    database_remote_name="b",
+                    database_display_name="b",
+                    data_source_name="test",
+                    engine="mysql",
+                    readonly=True,
+                    database_available=True,
+                    database_system=False,
+                ),
+            ]
+
+    service = TableRelationService(
+        registry=_Registry(),  # type: ignore[arg-type]
+        task_repository=cast("object", None),
+        data_source_repository=_DataSources(),  # type: ignore[arg-type]
+        repository=repository,
+        connector_manager=cast("object", None),
+        collector=_Collector(),  # type: ignore[arg-type]
+    )
+
+    listed = service.list_automatic_whitelist_files(
+        workspace_id="workspace-1",
+        rule_code="automatic_ddl",
+    )
+    assert listed.project_id is None
+    assert [(item.project_id, item.source_path) for item in listed.files] == [
+        ("project-a", "sql/create.sql"),
+        ("project-b", "sql/create.sql"),
+    ]
+
+    filtered = service.list_automatic_whitelist_files(
+        workspace_id="workspace-1",
+        project_id="project-b",
+        rule_code="automatic_ddl",
+    )
+    assert filtered.project_id == "project-b"
+    assert [(item.project_id, item.source_path) for item in filtered.files] == [
+        ("project-b", "sql/create.sql"),
+    ]
+
+    content_a = service.get_automatic_whitelist_file_content(
+        workspace_id="workspace-1",
+        project_id="project-a",
+        rule_code="automatic_ddl",
+        source_path="sql/create.sql",
+    )
+    content_b = service.get_automatic_whitelist_file_content(
+        workspace_id="workspace-1",
+        project_id="project-b",
+        rule_code="automatic_ddl",
+        source_path="sql/create.sql",
+    )
+    assert content_a.project_name == "alpha"
+    assert content_a.statement == "CREATE TABLE cargo (id BIGINT)"
+    assert content_b.project_name == "beta"
+    assert content_b.statement == "CREATE TABLE category (id BIGINT)"

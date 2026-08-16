@@ -4,7 +4,11 @@ import test from "node:test";
 import {
   listAllTableRelationTables,
   listTableRelationWarnings,
+  getProjectAutomaticWhitelistFileContent,
   getProjectTableRelationSqlWhitelist,
+  getWorkspaceAutomaticWhitelistFileContent,
+  listProjectAutomaticWhitelistFiles,
+  listWorkspaceAutomaticWhitelistFiles,
   rebuildProjectTableRelations,
   rebuildTableRelations,
   refreshWorkspace,
@@ -149,6 +153,75 @@ test("project SQL whitelist uses the project-scoped read and replace endpoint", 
     assert.equal(calls[1]?.url, expected);
     assert.equal(calls[1]?.method, "PUT");
     assert.equal(calls[1]?.body, JSON.stringify({ paths: ["sql/custom.sql"] }));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("automatic whitelist APIs scope both list and source content to one rule", async () => {
+  const originalFetch = globalThis.fetch;
+  const requestedUrls: string[] = [];
+  globalThis.fetch = async (input) => {
+    requestedUrls.push(String(input));
+    return new Response(JSON.stringify({}), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+
+  try {
+    await listProjectAutomaticWhitelistFiles("workspace-1", "project-1", "automatic_ddl");
+    await getProjectAutomaticWhitelistFileContent(
+      "workspace-1",
+      "project-1",
+      "automatic_ddl",
+      "sql/create table.sql",
+    );
+    assert.equal(
+      requestedUrls[0],
+      "http://127.0.0.1:49173/api/workspaces/workspace-1/table-relations/projects/project-1/automatic-whitelist?rule=automatic_ddl&limit=200&offset=0",
+    );
+    assert.equal(
+      requestedUrls[1],
+      "http://127.0.0.1:49173/api/workspaces/workspace-1/table-relations/projects/project-1/automatic-whitelist/file?rule=automatic_ddl&source_path=sql%2Fcreate+table.sql",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("workspace automatic whitelist APIs can omit or keep a project filter", async () => {
+  const originalFetch = globalThis.fetch;
+  const requestedUrls: string[] = [];
+  globalThis.fetch = async (input) => {
+    requestedUrls.push(String(input));
+    return new Response(JSON.stringify({}), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+
+  try {
+    await listWorkspaceAutomaticWhitelistFiles("workspace-1", "automatic_ddl");
+    await listWorkspaceAutomaticWhitelistFiles("workspace-1", "automatic_ddl", "project-1");
+    await getWorkspaceAutomaticWhitelistFileContent(
+      "workspace-1",
+      "project-1",
+      "automatic_ddl",
+      "sql/create table.sql",
+    );
+    assert.equal(
+      requestedUrls[0],
+      "http://127.0.0.1:49173/api/workspaces/workspace-1/table-relations/automatic-whitelist?rule=automatic_ddl&limit=200&offset=0",
+    );
+    assert.equal(
+      requestedUrls[1],
+      "http://127.0.0.1:49173/api/workspaces/workspace-1/table-relations/automatic-whitelist?rule=automatic_ddl&limit=200&offset=0&project_id=project-1",
+    );
+    assert.equal(
+      requestedUrls[2],
+      "http://127.0.0.1:49173/api/workspaces/workspace-1/table-relations/automatic-whitelist/file?rule=automatic_ddl&project_id=project-1&source_path=sql%2Fcreate+table.sql",
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }

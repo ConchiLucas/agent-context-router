@@ -497,8 +497,32 @@ code {
   overflow-wrap: anywhere;
 }
 
-.table-relation-whitelist-modal {
-  width: min(780px, 100%);
+.management-modal.table-relation-whitelist-modal {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  min-height: 0;
+  border-radius: 0;
+  padding: 28px 48px;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.project-settings-modal.table-relation-whitelist-overlay {
+  padding: 0;
+  place-items: stretch;
+}
+
+.table-relation-whitelist-body {
+  display: grid;
+  min-height: 0;
+  gap: 18px;
+  flex: 1 1 auto;
+  align-content: start;
+  overflow: auto;
+  padding-right: 4px;
 }
 
 .table-relation-whitelist-notice {
@@ -531,10 +555,71 @@ code {
   font-size: 0.72rem;
 }
 
-.table-relation-whitelist-rules > div {
+.table-relation-whitelist-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.table-relation-whitelist-kinds button {
+  min-height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 14px;
+  color: var(--muted);
+  background: var(--surface-soft);
+  font-size: 0.78rem;
+}
+
+.table-relation-whitelist-kinds button:hover:not(:disabled),
+.table-relation-whitelist-kinds button[data-active="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.table-relation-whitelist-rules > div:not(.table-relation-whitelist-kinds) {
   display: grid;
   gap: 8px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.table-relation-whitelist-rules > div:not(.table-relation-whitelist-kinds) button {
+  display: grid;
+  min-height: 120px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 11px;
+  background: var(--surface-soft);
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.table-relation-whitelist-rules > div:not(.table-relation-whitelist-kinds) button:hover:not(:disabled),
+.table-relation-whitelist-rules > div:not(.table-relation-whitelist-kinds) button[data-active="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.table-relation-whitelist-rules button:focus-visible,
+.table-relation-automatic-browser button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.table-relation-whitelist-rules > div:not(.table-relation-whitelist-kinds) button strong {
+  align-self: end;
+  color: var(--accent);
+  font-size: 0.78rem;
+}
+
+.table-relation-whitelist-rules > div:not(.table-relation-whitelist-kinds) button p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 400;
+  line-height: 1.5;
 }
 
 .table-relation-whitelist-rules article {
@@ -565,6 +650,105 @@ code {
   font-weight: 650;
 }
 
+.table-relation-automatic-browser {
+  display: grid;
+  min-height: 360px;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  background: var(--surface-soft);
+}
+
+.table-relation-automatic-browser > header,
+.table-relation-automatic-browser > header > div {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.table-relation-automatic-browser > header strong {
+  color: var(--foreground);
+  font-size: 0.82rem;
+}
+
+.table-relation-automatic-browser > header span,
+.table-relation-automatic-browser > header small {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.table-relation-automatic-browser > div {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: minmax(260px, 32%) minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+}
+
+.table-relation-automatic-browser nav {
+  display: grid;
+  min-height: 0;
+  align-content: start;
+  overflow: auto;
+  border-right: 1px solid var(--border);
+  padding: 6px;
+}
+
+.table-relation-automatic-browser nav button {
+  border: 0;
+  border-radius: 6px;
+  padding: 9px 10px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  font: 0.7rem/1.45 "SFMono-Regular", Consolas, monospace;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.table-relation-automatic-browser nav button:hover:not(:disabled),
+.table-relation-automatic-browser nav button[data-active="true"] {
+  color: var(--foreground);
+  background: var(--accent-soft);
+}
+
+.table-relation-automatic-browser nav button:disabled {
+  cursor: progress;
+}
+
+.table-relation-automatic-browser article {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
+  overflow: auto;
+  padding: 12px;
+}
+
+.table-relation-automatic-browser article > code {
+  color: var(--accent);
+  font-size: 0.72rem;
+  overflow-wrap: anywhere;
+}
+
+.table-relation-automatic-browser article pre {
+  min-width: 0;
+  margin: 0;
+  overflow: auto;
+  border-radius: 7px;
+  padding: 12px;
+  color: var(--foreground);
+  background: #101412;
+  font: 0.72rem/1.6 "SFMono-Regular", Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .table-relation-whitelist-editor textarea {
   width: 100%;
   min-height: 220px;
@@ -590,6 +774,50 @@ code {
 .table-relation-whitelist-suggestions > div {
   display: grid;
   gap: 3px;
+}
+
+.table-relation-whitelist-groups {
+  display: grid;
+  gap: 10px;
+}
+
+.table-relation-whitelist-group {
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 11px 12px;
+  background: var(--surface-soft);
+}
+
+.table-relation-whitelist-group header {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.table-relation-whitelist-group header strong {
+  color: var(--foreground);
+  font-size: 0.82rem;
+}
+
+.table-relation-whitelist-group header span,
+.table-relation-whitelist-group .empty-state {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.table-relation-whitelist-group ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--foreground);
+  font: 0.74rem/1.55 "SFMono-Regular", Consolas, monospace;
+}
+
+.table-relation-automatic-browser nav button small {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--accent);
+  font: 0.64rem/1.4 "IBM Plex Sans", "PingFang SC", sans-serif;
 }
 
 .table-relation-layout {
@@ -6553,8 +6781,22 @@ p.workspace-runtime-runner-status {
     width: 100%;
   }
 
-  .table-relation-whitelist-rules > div {
+  .table-relation-whitelist-rules > div:not(.table-relation-whitelist-kinds) {
     grid-template-columns: 1fr;
+  }
+
+  .table-relation-whitelist-modal {
+    padding: 18px;
+  }
+
+  .table-relation-automatic-browser > div {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(130px, 35%) minmax(260px, 1fr);
+  }
+
+  .table-relation-automatic-browser nav {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
   }
 
   .table-relation-whitelist-suggestions {

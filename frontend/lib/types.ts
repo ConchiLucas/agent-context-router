@@ -812,7 +812,7 @@ export interface TableRelationDefaultDatabaseConfiguration {
 export interface TableRelationWarningCategory {
   code: string;
   label: string;
-  classification: "source_error" | "preprocessor" | "metadata" | "safe_skip";
+  classification: "source_error" | "preprocessor" | "metadata" | "relation_gap" | "safe_skip";
   disposition: "attention" | "expected";
   count: number;
 }
@@ -824,7 +824,7 @@ export interface TableRelationWarningItem {
   source_path: string;
   code: string;
   category: string;
-  classification: "source_error" | "preprocessor" | "metadata" | "safe_skip";
+  classification: "source_error" | "preprocessor" | "metadata" | "relation_gap" | "safe_skip";
   disposition: "attention" | "expected";
   message: string;
   expression?: string | null;
@@ -850,8 +850,11 @@ export interface TableRelationWarningList {
   warnings: TableRelationWarningItem[];
 }
 
+export type TableRelationAutomaticWhitelistGroup = "no_value" | "parser_gap";
+
 export interface TableRelationSqlWhitelistRule {
-  code: "automatic_ddl" | "automatic_single_table_query" | "automatic_write_without_query";
+  code: TableRelationAutomaticWhitelistRuleCode;
+  group: TableRelationAutomaticWhitelistGroup;
   label: string;
   description: string;
 }
@@ -863,6 +866,56 @@ export interface TableRelationSqlWhitelistConfiguration {
   paths: string[];
   suggested_paths: string[];
   automatic_rules: TableRelationSqlWhitelistRule[];
+}
+
+export type TableRelationAutomaticWhitelistRuleCode =
+  | "automatic_ddl"
+  | "automatic_single_table_query"
+  | "automatic_write_without_query"
+  | "automatic_single_table_initialization"
+  | "automatic_missing_table_or_column"
+  | "automatic_invalid_sql"
+  | "automatic_complex_sql"
+  | "automatic_derived_relation"
+  | "automatic_or_unsupported"
+  | "automatic_non_equality"
+  | "automatic_correlated_reference";
+
+export interface TableRelationAutomaticWhitelistRule {
+  code: TableRelationAutomaticWhitelistRuleCode;
+  group: TableRelationAutomaticWhitelistGroup;
+  label: string;
+  description: string;
+}
+
+export interface TableRelationAutomaticWhitelistFile {
+  project_id: string;
+  project_name: string;
+  source_path: string;
+  statement_bytes: number;
+}
+
+export interface TableRelationAutomaticWhitelistFileList {
+  workspace_id: string;
+  project_id?: string | null;
+  project_name?: string | null;
+  rule: TableRelationAutomaticWhitelistRule;
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+  next_offset?: number | null;
+  files: TableRelationAutomaticWhitelistFile[];
+}
+
+export interface TableRelationAutomaticWhitelistFileContent {
+  workspace_id: string;
+  project_id: string;
+  project_name: string;
+  rule: TableRelationAutomaticWhitelistRule;
+  source_path: string;
+  statement: string;
+  truncated: boolean;
 }
 
 export interface DocumentReadStatItem {

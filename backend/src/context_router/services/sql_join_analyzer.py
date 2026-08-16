@@ -191,12 +191,45 @@ class SqlAutomaticWhitelist:
     _QUERY_KEYS = frozenset({"except", "intersect", "select", "union"})
     _WRITE_KEYS = frozenset({"insert", "update"})
 
-    def classify(self, source: SqlSource) -> str | None:
-        normalized, template_removed = SqlObservedJoinAnalyzer._normalize_statement(
-            source.statement
+    @staticmethod
+    def _normalize_for_classification(statement: str) -> tuple[str, bool]:
+        """Remove only presentation/filter templates that cannot add table references.
+
+        This is intentionally narrower than the workspace preprocessor. The automatic
+        whitelist may skip a source only when its static table shape is provably safe.
+        Page-field wrappers, Freemarker ``if`` tags, and existing ``<<...>>`` condition
+        placeholders do not introduce a table by themselves; unknown Freemarker syntax
+        remains untouched and therefore fails closed during parsing.
+        """
+
+        normalized, angle_removed = SqlObservedJoinAnalyzer._normalize_statement(statement)
+        normalized, comments_removed = re.subn(r"<#--.*?-->", " ", normalized, flags=re.DOTALL)
+        normalized, page_open_removed = re.subn(
+            r"@pageTag\(\)\s*\{", " ", normalized, flags=re.IGNORECASE
         )
-        if template_removed:
-            return None
+        normalized, page_close_removed = re.subn(r"@\}", " ", normalized)
+        normalized, if_open_removed = re.subn(
+            r"<#if\s+[^>]*>", " ", normalized, flags=re.IGNORECASE
+        )
+        normalized, if_close_removed = re.subn(r"</#if\s*>", " ", normalized, flags=re.IGNORECASE)
+        normalized, else_removed = re.subn(r"<#else\s*>", " ", normalized, flags=re.IGNORECASE)
+        return (
+            normalized,
+            any(
+                (
+                    angle_removed,
+                    comments_removed,
+                    page_open_removed,
+                    page_close_removed,
+                    if_open_removed,
+                    if_close_removed,
+                    else_removed,
+                )
+            ),
+        )
+
+    def classify(self, source: SqlSource) -> str | None:
+        normalized, template_removed = self._normalize_for_classification(source.statement)
         try:
             statements = [
                 statement
@@ -204,14 +237,70 @@ class SqlAutomaticWhitelist:
                 if isinstance(statement, exp.Expression)
             ]
         except (ParseError, ValueError):
-            return None
+            return "automatic_complex_sql"
         if not statements:
             return None
-        reasons = [self._statement_reason(statement) for statement in statements]
-        if any(reason is None for reason in reasons):
+        # A known presentation/filter template must not cause an otherwise
+        # extractable equality join to disappear from the index.  The actual
+        # analyzer still performs database table/column validation before it
+        # emits a fact; this check only decides whether the complete file may
+        # be excluded up front.
+        if self.has_potential_direct_join(statements):
             return None
+        reasons = [self._statement_reason(statement) for statement in statements]
+        if all(
+            self._is_single_table_initialization_statement(statement) for statement in statements
+        ):
+            # Keep the three more precise existing categories for one-statement SQL.
+            # Mixed migration/initialization scripts and same-table INSERT..SELECT
+            # otherwise land in "complex" merely because their safe statements differ.
+            if "automatic_complex_sql" in reasons or len(set(reasons)) > 1:
+                return "automatic_single_table_initialization"
+        if any(reason is None for reason in reasons):
+            return "automatic_complex_sql" if template_removed else None
         unique = set(reasons)
-        return next(iter(unique)) if len(unique) == 1 else "automatic_safe_mixed"
+        return next(iter(unique)) if len(unique) == 1 else "automatic_complex_sql"
+
+    def source_has_potential_direct_join(self, source: SqlSource) -> bool:
+        """Check a source with the same bounded template normalization as classification."""
+
+        normalized, _ = self._normalize_for_classification(source.statement)
+        try:
+            statements = [
+                statement
+                for statement in sqlglot.parse(normalized, read=source.dialect)
+                if isinstance(statement, exp.Expression)
+            ]
+        except (ParseError, ValueError):
+            return False
+        return self.has_potential_direct_join(statements)
+
+    @staticmethod
+    def has_potential_direct_join(statements: list[exp.Expression]) -> bool:
+        """Return whether a parsed source contains an extractable JOIN candidate.
+
+        This is deliberately only a pre-filter.  A candidate becomes a stored
+        relation only after :class:`SqlObservedJoinAnalyzer` resolves both
+        tables and columns through the configured default database.
+        """
+
+        for statement in statements:
+            for join in statement.find_all(exp.Join):
+                condition = join.args.get("on")
+                if condition is None:
+                    continue
+                for group in SqlObservedJoinAnalyzer._and_groups(condition):
+                    if not isinstance(group, exp.EQ):
+                        continue
+                    left = group.this
+                    right = group.expression
+                    if not isinstance(left, exp.Column) or not isinstance(right, exp.Column):
+                        continue
+                    if not left.table or not right.table:
+                        continue
+                    if left.table.casefold() != right.table.casefold():
+                        return True
+        return False
 
     def _statement_reason(self, statement: exp.Expression) -> str | None:
         if statement.key in self._DDL_KEYS:
@@ -220,7 +309,56 @@ class SqlAutomaticWhitelist:
             return "automatic_single_table_query"
         if statement.key in self._WRITE_KEYS and self._is_write_without_query(statement):
             return "automatic_write_without_query"
+        if self._is_complex_statement(statement):
+            return "automatic_complex_sql"
         return None
+
+    @classmethod
+    def _is_complex_statement(cls, statement: exp.Expression) -> bool:
+        """Only classify shapes for which the current analyzer cannot emit a safe edge.
+
+        Complex sources are deliberately excluded as a whole. The UI exposes their source SQL
+        so they remain reviewable even though this analyzer does not attempt partial relations.
+        """
+
+        has_complex_relation = False
+        for join in statement.find_all(exp.Join):
+            condition = join.args.get("on")
+            if condition is None:
+                continue
+            for group in SqlObservedJoinAnalyzer._and_groups(condition):
+                if isinstance(group, exp.EQ):
+                    left = group.this
+                    right = group.expression
+                    if (
+                        isinstance(left, exp.Column)
+                        and isinstance(right, exp.Column)
+                        and (not left.table or not right.table)
+                    ):
+                        has_complex_relation = True
+                        continue
+                if not SqlObservedJoinAnalyzer._contains_cross_table_predicate(group):
+                    continue
+                if not isinstance(group, exp.EQ):
+                    has_complex_relation = True
+
+        for where in statement.find_all(exp.Where):
+            if any(
+                SqlObservedJoinAnalyzer._contains_cross_table_predicate(equality)
+                for equality in where.this.find_all(exp.EQ)
+            ):
+                has_complex_relation = True
+
+        if has_complex_relation:
+            return True
+        has_nested_query = statement.key in cls._WRITE_KEYS and any(
+            nested is not statement and nested.key in cls._QUERY_KEYS for nested in statement.walk()
+        )
+        return (
+            statement.find(exp.CTE) is not None
+            or statement.find(exp.Subquery) is not None
+            or has_nested_query
+        )
 
     @staticmethod
     def _physical_tables(statement: exp.Expression) -> set[str]:
@@ -247,6 +385,21 @@ class SqlAutomaticWhitelist:
         ):
             return False
         return len(self._physical_tables(statement)) <= 1
+
+    def _is_single_table_initialization_statement(self, statement: exp.Expression) -> bool:
+        """Recognize non-relational DDL/write migration statements.
+
+        ``INSERT .. SELECT`` with a same-table ``NOT EXISTS`` guard is an
+        initialization idiom, not a relationship between different tables. A source is
+        eligible only if every statement is DDL/INSERT/UPDATE, has no JOIN or CTE, and
+        mentions at most one non-DUAL physical table.
+        """
+
+        if statement.key not in self._DDL_KEYS | self._WRITE_KEYS:
+            return False
+        if statement.find(exp.Join) is not None or statement.find(exp.CTE) is not None:
+            return False
+        return len(self._physical_tables(statement) - {"dual"}) <= 1
 
 
 class SqlObservedJoinAnalyzer:
@@ -368,7 +521,7 @@ class SqlObservedJoinAnalyzer:
                         continue
                     equality = group if isinstance(group, exp.EQ) else None
                     if equality is None:
-                        if len(list(group.find_all(exp.Column))) >= 2:
+                        if self._contains_cross_table_predicate(group):
                             warnings.append(
                                 self._warning(
                                     source,

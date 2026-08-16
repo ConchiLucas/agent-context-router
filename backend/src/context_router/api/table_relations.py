@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 
 from context_router.schemas.table_relations import (
+    TableRelationAutomaticWhitelistFileContent,
+    TableRelationAutomaticWhitelistFileList,
+    TableRelationAutomaticWhitelistRuleCode,
     TableRelationBuildStatus,
     TableRelationContextResult,
     TableRelationDefaultDatabaseConfiguration,
@@ -91,6 +94,50 @@ def rebuild_project_table_relations(
 
 
 @router.get(
+    "/automatic-whitelist",
+    response_model=TableRelationAutomaticWhitelistFileList,
+)
+def list_workspace_automatic_whitelist_files(
+    workspace_id: str,
+    request: Request,
+    rule: TableRelationAutomaticWhitelistRuleCode,
+    project_id: str | None = Query(default=None, max_length=64),
+    limit: int = Query(default=100, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> TableRelationAutomaticWhitelistFileList:
+    return _call(
+        lambda: _service(request).list_automatic_whitelist_files(
+            workspace_id=workspace_id,
+            project_id=project_id,
+            rule_code=rule,
+            limit=limit,
+            offset=offset,
+        )
+    )
+
+
+@router.get(
+    "/automatic-whitelist/file",
+    response_model=TableRelationAutomaticWhitelistFileContent,
+)
+def get_workspace_automatic_whitelist_file_content(
+    workspace_id: str,
+    request: Request,
+    rule: TableRelationAutomaticWhitelistRuleCode,
+    project_id: Annotated[str, Query(min_length=1, max_length=64)],
+    source_path: Annotated[str, Query(min_length=1, max_length=1000)],
+) -> TableRelationAutomaticWhitelistFileContent:
+    return _call(
+        lambda: _service(request).get_automatic_whitelist_file_content(
+            workspace_id=workspace_id,
+            project_id=project_id,
+            rule_code=rule,
+            source_path=source_path,
+        )
+    )
+
+
+@router.get(
     "/projects/{project_id}/sql-whitelist",
     response_model=TableRelationSqlWhitelistConfiguration,
 )
@@ -117,6 +164,50 @@ def replace_project_sql_whitelist(
             workspace_id=workspace_id,
             project_id=project_id,
             paths=payload.paths,
+        )
+    )
+
+
+@router.get(
+    "/projects/{project_id}/automatic-whitelist",
+    response_model=TableRelationAutomaticWhitelistFileList,
+)
+def list_project_automatic_whitelist_files(
+    workspace_id: str,
+    project_id: str,
+    request: Request,
+    rule: TableRelationAutomaticWhitelistRuleCode,
+    limit: int = Query(default=100, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> TableRelationAutomaticWhitelistFileList:
+    return _call(
+        lambda: _service(request).list_automatic_whitelist_files(
+            workspace_id=workspace_id,
+            project_id=project_id,
+            rule_code=rule,
+            limit=limit,
+            offset=offset,
+        )
+    )
+
+
+@router.get(
+    "/projects/{project_id}/automatic-whitelist/file",
+    response_model=TableRelationAutomaticWhitelistFileContent,
+)
+def get_project_automatic_whitelist_file_content(
+    workspace_id: str,
+    project_id: str,
+    request: Request,
+    rule: TableRelationAutomaticWhitelistRuleCode,
+    source_path: Annotated[str, Query(min_length=1, max_length=1000)],
+) -> TableRelationAutomaticWhitelistFileContent:
+    return _call(
+        lambda: _service(request).get_automatic_whitelist_file_content(
+            workspace_id=workspace_id,
+            project_id=project_id,
+            rule_code=rule,
+            source_path=source_path,
         )
     )
 

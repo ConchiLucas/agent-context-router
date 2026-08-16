@@ -66,6 +66,16 @@ class TableRelationWarningRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class TableRelationAutomaticFileRecord:
+    project_id: str
+    project_name: str
+    database_key: str
+    source_path: str
+    rule_code: str
+    statement_bytes: int
+
+
+@dataclass(frozen=True, slots=True)
 class TableRelationBuildRecord:
     workspace_id: str
     project_id: str
@@ -82,6 +92,7 @@ class TableRelationBuildRecord:
     finished_at: datetime | None
     warning_count: int = 0
     config_revision: int = 0
+    automatic_file_count: int | None = None
 
 
 class TableRelationStore(Protocol):
@@ -114,6 +125,7 @@ class TableRelationStore(Protocol):
         build: TableRelationBuildRecord,
         relations: list[TableJoinRelationRecord],
         warning_records: list[TableRelationWarningRecord] | None = None,
+        automatic_files: list[TableRelationAutomaticFileRecord] | None = None,
     ) -> None: ...
 
     def mark_failed(
@@ -127,6 +139,7 @@ class TableRelationStore(Protocol):
         error_message: str,
         warnings: list[str],
         warning_records: list[TableRelationWarningRecord] | None = None,
+        automatic_files: list[TableRelationAutomaticFileRecord] | None = None,
     ) -> None: ...
 
     def list_builds(self, workspace_id: str) -> list[TableRelationBuildRecord]: ...
@@ -134,6 +147,14 @@ class TableRelationStore(Protocol):
     def list_relations(self, workspace_id: str) -> list[TableJoinRelationRecord]: ...
 
     def list_warnings(self, workspace_id: str) -> list[TableRelationWarningRecord]: ...
+
+    def list_automatic_files(
+        self,
+        workspace_id: str,
+        *,
+        rule_code: str,
+        project_id: str | None = None,
+    ) -> list[TableRelationAutomaticFileRecord]: ...
 
     def get_sql_whitelist(self, workspace_id: str, project_id: str) -> tuple[str, ...]: ...
 
@@ -152,6 +173,9 @@ class InMemoryTableRelationRepository:
         self._builds: dict[tuple[str, str, str], TableRelationBuildRecord] = {}
         self._relations: dict[tuple[str, str, str], list[TableJoinRelationRecord]] = {}
         self._warnings: dict[tuple[str, str, str], list[TableRelationWarningRecord]] = {}
+        self._automatic_files: dict[
+            tuple[str, str, str], list[TableRelationAutomaticFileRecord]
+        ] = {}
         self._default_configs: dict[str, TableRelationDefaultDatabaseConfigRecord] = {}
         self._sql_whitelists: dict[tuple[str, str], tuple[str, ...]] = {}
 
@@ -233,6 +257,7 @@ class InMemoryTableRelationRepository:
         build: TableRelationBuildRecord,
         relations: list[TableJoinRelationRecord],
         warning_records: list[TableRelationWarningRecord] | None = None,
+        automatic_files: list[TableRelationAutomaticFileRecord] | None = None,
     ) -> None:
         key = self._key(build.workspace_id, build.project_id, build.database_key)
         with self._lock:
@@ -241,11 +266,18 @@ class InMemoryTableRelationRepository:
                 raise TableRelationRepositoryError("表关联构建批次已经变化")
             self._relations[key] = list(relations)
             self._warnings[key] = list(warning_records or [])
+            if automatic_files is not None:
+                self._automatic_files[key] = list(automatic_files)
             self._builds[key] = replace(
                 build,
                 status="ready",
                 finished_at=datetime.now(UTC),
                 config_revision=current.config_revision,
+                automatic_file_count=(
+                    len(automatic_files)
+                    if automatic_files is not None
+                    else build.automatic_file_count
+                ),
             )
 
     def mark_failed(
@@ -259,6 +291,7 @@ class InMemoryTableRelationRepository:
         error_message: str,
         warnings: list[str],
         warning_records: list[TableRelationWarningRecord] | None = None,
+        automatic_files: list[TableRelationAutomaticFileRecord] | None = None,
     ) -> None:
         key = self._key(workspace_id, project_id, database_key)
         with self._lock:
@@ -280,8 +313,13 @@ class InMemoryTableRelationRepository:
                 finished_at=datetime.now(UTC),
                 warning_count=sum(item.occurrence_count for item in warning_records or []),
                 config_revision=current.config_revision if current else 0,
+                automatic_file_count=(
+                    len(automatic_files) if automatic_files is not None else None
+                ),
             )
             self._warnings[key] = list(warning_records or [])
+            if automatic_files is not None:
+                self._automatic_files[key] = list(automatic_files)
 
     def list_builds(self, workspace_id: str) -> list[TableRelationBuildRecord]:
         with self._lock:
@@ -312,6 +350,34 @@ class InMemoryTableRelationRepository:
                     item.database_key.casefold(),
                     item.source_path.casefold(),
                     item.message,
+                ),
+            )
+
+    def list_automatic_files(
+        self,
+        workspace_id: str,
+        *,
+        rule_code: str,
+        project_id: str | None = None,
+    ) -> list[TableRelationAutomaticFileRecord]:
+        with self._lock:
+            records: list[TableRelationAutomaticFileRecord] = []
+            for key, build in self._builds.items():
+                if build.workspace_id != workspace_id or build.status not in {"ready", "failed"}:
+                    continue
+                if project_id is not None and build.project_id != project_id:
+                    continue
+                records.extend(
+                    item
+                    for item in self._automatic_files.get(key, [])
+                    if item.rule_code == rule_code
+                )
+            return sorted(
+                records,
+                key=lambda item: (
+                    item.project_name.casefold(),
+                    item.source_path.casefold(),
+                    item.project_id,
                 ),
             )
 
@@ -443,7 +509,7 @@ class PostgresTableRelationRepository:
                                      status='building', started_at=NOW(), finished_at=NULL,
                                      sql_file_count=0, statement_count=0, relation_count=0,
                                      warning_count=0, warnings='[]'::jsonb,
-                                     error_message=NULL""",
+                                     error_message=NULL, automatic_file_count=NULL""",
                     (
                         workspace_id,
                         project_id,
@@ -462,6 +528,7 @@ class PostgresTableRelationRepository:
         build: TableRelationBuildRecord,
         relations: list[TableJoinRelationRecord],
         warning_records: list[TableRelationWarningRecord] | None = None,
+        automatic_files: list[TableRelationAutomaticFileRecord] | None = None,
     ) -> None:
         try:
             with psycopg.connect(self._database_url) as connection:
@@ -483,6 +550,12 @@ class PostgresTableRelationRepository:
                        WHERE workspace_id=%s AND project_id=%s AND database_key=%s""",
                     (build.workspace_id, build.project_id, build.database_key),
                 )
+                if automatic_files is not None:
+                    connection.execute(
+                        """DELETE FROM table_relation_automatic_files
+                           WHERE workspace_id=%s AND project_id=%s AND database_key=%s""",
+                        (build.workspace_id, build.project_id, build.database_key),
+                    )
                 for relation in relations:
                     connection.execute(
                         """INSERT INTO table_join_relations (
@@ -550,11 +623,28 @@ class PostgresTableRelationRepository:
                             warning.occurrence_count,
                         ),
                     )
+                for item in automatic_files or []:
+                    connection.execute(
+                        """INSERT INTO table_relation_automatic_files (
+                               workspace_id, project_id, project_name, database_key,
+                               generation_id, source_path, rule_code, statement_bytes
+                           ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
+                        (
+                            build.workspace_id,
+                            item.project_id,
+                            item.project_name,
+                            item.database_key,
+                            build.generation_id,
+                            item.source_path,
+                            item.rule_code,
+                            item.statement_bytes,
+                        ),
+                    )
                 updated = connection.execute(
                     """UPDATE table_relation_builds
                        SET status='ready', sql_file_count=%s, statement_count=%s,
                            relation_count=%s, warning_count=%s, warnings=%s, error_message=NULL,
-                           finished_at=NOW()
+                           finished_at=NOW(), automatic_file_count=%s
                        WHERE workspace_id=%s AND project_id=%s AND database_key=%s
                          AND generation_id=%s AND status='building'""",
                     (
@@ -563,6 +653,7 @@ class PostgresTableRelationRepository:
                         len(relations),
                         build.warning_count,
                         Jsonb(list(build.warnings)),
+                        None if automatic_files is None else len(automatic_files),
                         build.workspace_id,
                         build.project_id,
                         build.database_key,
@@ -587,6 +678,7 @@ class PostgresTableRelationRepository:
         error_message: str,
         warnings: list[str],
         warning_records: list[TableRelationWarningRecord] | None = None,
+        automatic_files: list[TableRelationAutomaticFileRecord] | None = None,
     ) -> None:
         try:
             with psycopg.connect(self._database_url) as connection:
@@ -595,13 +687,19 @@ class PostgresTableRelationRepository:
                        WHERE workspace_id=%s AND project_id=%s AND database_key=%s""",
                     (workspace_id, project_id, database_key),
                 )
+                if automatic_files is not None:
+                    connection.execute(
+                        """DELETE FROM table_relation_automatic_files
+                           WHERE workspace_id=%s AND project_id=%s AND database_key=%s""",
+                        (workspace_id, project_id, database_key),
+                    )
                 connection.execute(
                     """INSERT INTO table_relation_builds (
                            workspace_id, project_id, project_name, database_key,
                            generation_id, status, started_at, finished_at,
                            sql_file_count, statement_count, relation_count, warning_count,
-                           warnings, error_message
-                       ) VALUES (%s,%s,%s,%s,%s,'failed',NOW(),NOW(),0,0,0,%s,%s,%s)
+                           warnings, error_message, automatic_file_count
+                       ) VALUES (%s,%s,%s,%s,%s,'failed',NOW(),NOW(),0,0,0,%s,%s,%s,%s)
                        ON CONFLICT (workspace_id, project_id, database_key)
                        DO UPDATE SET project_name=EXCLUDED.project_name,
                                      generation_id=EXCLUDED.generation_id,
@@ -609,7 +707,8 @@ class PostgresTableRelationRepository:
                                      sql_file_count=0, statement_count=0, relation_count=0,
                                      warning_count=EXCLUDED.warning_count,
                                      warnings=EXCLUDED.warnings,
-                                     error_message=EXCLUDED.error_message""",
+                                     error_message=EXCLUDED.error_message,
+                                     automatic_file_count=EXCLUDED.automatic_file_count""",
                     (
                         workspace_id,
                         project_id,
@@ -619,6 +718,7 @@ class PostgresTableRelationRepository:
                         sum(item.occurrence_count for item in warning_records or []),
                         Jsonb(warnings),
                         error_message[:2000],
+                        None if automatic_files is None else len(automatic_files),
                     ),
                 )
                 for warning in warning_records or []:
@@ -641,6 +741,23 @@ class PostgresTableRelationRepository:
                             warning.occurrence_count,
                         ),
                     )
+                for item in automatic_files or []:
+                    connection.execute(
+                        """INSERT INTO table_relation_automatic_files (
+                               workspace_id, project_id, project_name, database_key,
+                               generation_id, source_path, rule_code, statement_bytes
+                           ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
+                        (
+                            workspace_id,
+                            item.project_id,
+                            item.project_name,
+                            item.database_key,
+                            generation_id,
+                            item.source_path,
+                            item.rule_code,
+                            item.statement_bytes,
+                        ),
+                    )
         except psycopg.Error as exc:
             raise TableRelationRepositoryError("表关联失败状态写入失败") from exc
 
@@ -652,7 +769,7 @@ class PostgresTableRelationRepository:
                               generation_id, status, config_revision,
                               sql_file_count, statement_count,
                               relation_count, warning_count, warnings, error_message,
-                              started_at, finished_at
+                              started_at, finished_at, automatic_file_count
                        FROM table_relation_builds WHERE workspace_id=%s
                        ORDER BY project_name, database_key""",
                     (workspace_id,),
@@ -824,6 +941,44 @@ class PostgresTableRelationRepository:
             raise TableRelationRepositoryError("表关联 SQL 白名单保存失败") from exc
         return normalized
 
+    def list_automatic_files(
+        self,
+        workspace_id: str,
+        *,
+        rule_code: str,
+        project_id: str | None = None,
+    ) -> list[TableRelationAutomaticFileRecord]:
+        try:
+            with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
+                rows = connection.execute(
+                    """SELECT item.project_id, item.project_name, item.database_key,
+                              item.source_path, item.rule_code, item.statement_bytes
+                       FROM table_relation_automatic_files item
+                       JOIN table_relation_builds build
+                         ON build.workspace_id=item.workspace_id
+                        AND build.project_id=item.project_id
+                        AND build.database_key=item.database_key
+                        AND build.generation_id=item.generation_id
+                        AND build.status IN ('ready','failed')
+                       WHERE item.workspace_id=%s AND item.rule_code=%s
+                         AND (%s IS NULL OR item.project_id=%s)
+                       ORDER BY item.project_name, item.source_path, item.project_id""",
+                    (workspace_id, rule_code, project_id, project_id),
+                ).fetchall()
+        except psycopg.Error as exc:
+            raise TableRelationRepositoryError("表关联系统分类读取失败") from exc
+        return [
+            TableRelationAutomaticFileRecord(
+                project_id=str(row["project_id"]),
+                project_name=str(row["project_name"]),
+                database_key=str(row["database_key"]),
+                source_path=str(row["source_path"]),
+                rule_code=str(row["rule_code"]),
+                statement_bytes=int(row["statement_bytes"]),
+            )
+            for row in rows
+        ]
+
     @staticmethod
     def _build(row: dict[str, object]) -> TableRelationBuildRecord:
         warnings = row["warnings"] if isinstance(row["warnings"], list) else []
@@ -843,4 +998,9 @@ class PostgresTableRelationRepository:
             finished_at=(row["finished_at"] if isinstance(row["finished_at"], datetime) else None),
             warning_count=int(row["warning_count"]),
             config_revision=int(row["config_revision"]),
+            automatic_file_count=(
+                int(row["automatic_file_count"])
+                if row.get("automatic_file_count") is not None
+                else None
+            ),
         )

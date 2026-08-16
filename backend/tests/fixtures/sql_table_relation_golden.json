@@ -121,6 +121,12 @@
       "warnings": ["join_non_equality_ignored"]
     },
     {
+      "id": "single_table_arithmetic_filter_is_not_relation_gap",
+      "sql": "SELECT * FROM cargo c JOIN category k ON c.category_id = k.id AND c.qty - c.hold_qty > 0",
+      "facts": [["cargo", "category_id", "category", "id"]],
+      "warnings": []
+    },
+    {
       "id": "or_condition_is_fail_closed",
       "sql": "SELECT * FROM cargo c JOIN category k ON c.category_id = k.id OR c.tenant_id = k.tenant_id",
       "facts": [],

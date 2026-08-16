@@ -55,6 +55,6 @@
 - 顶层页面只读展示 Workspace；进入详情后使用“前端项目 / 后端项目 / 数据源汇总”三页签。环境详情、查看调用记录、查看文档树和查看 MCP JSON 位于 Workspace 工具栏；前端项目不显示数据库授权，后端项目只读展示项目级数据源授权。环境映射/JSON与运行配置同样只读。
 - 完整出入参只对白名单数据库工具 `search_database_objects`、`execute_database_query` 自动采集，并通过 no-store 详情 API 懒加载；prepare/search/read 不建立完整 payload 快照。
 - 新 task 使用 `scope='workspace'` 和无外键的稳定 Workspace/活动项目快照；`scope='project'` 的旧 task 继续按原 project_id/project_key 读取、搜索和解析数据库，避免升级后历史串链。后端启动会收敛遗留 running 调用，Trace API 与页面明确区分完整、运行中和可能不完整。
-- migration head 为 `20260815_0037`；`0032` 增加 SQL 等值表关联索引，`0033` 增加结构化跳过诊断，`0034` 增加模板预处理证据审计字段，`0036` 增加项目默认数据库，`0037` 增加项目级 SQL 白名单，`0029` 至 `0031` 仅保留已回滚功能的兼容 revision 标记。旧项目 ID、数据库授权和调用历史保持不变。
+- migration head 为 `20260816_0038`；`0038` 增加表关联系统分类文件快照，`0032` 增加 SQL 等值表关联索引，`0033` 增加结构化跳过诊断，`0034` 增加模板预处理证据审计字段，`0036` 增加项目默认数据库，`0037` 增加项目级 SQL 白名单，`0029` 至 `0031` 仅保留已回滚功能的兼容 revision 标记。旧项目 ID、数据库授权和调用历史保持不变。
 - SQL 表关联的采集、准确性边界、参考项目借鉴点和测试入口见 [SQL 表关联索引](./development-details/TABLE_RELATION_INDEX.md)。
 - 本地服务默认只绑定回环地址；真实 ClickHouse 测试使用根 Compose 的 `integration` profile 和固定镜像版本。

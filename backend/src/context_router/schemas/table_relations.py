@@ -7,6 +7,20 @@ from pydantic import BaseModel, Field
 
 TableRelationDetailLevel = Literal["compact", "evidence", "full"]
 TableRelationWarningDisposition = Literal["attention", "expected"]
+TableRelationAutomaticWhitelistGroup = Literal["no_value", "parser_gap"]
+TableRelationAutomaticWhitelistRuleCode = Literal[
+    "automatic_ddl",
+    "automatic_single_table_query",
+    "automatic_write_without_query",
+    "automatic_single_table_initialization",
+    "automatic_missing_table_or_column",
+    "automatic_invalid_sql",
+    "automatic_complex_sql",
+    "automatic_derived_relation",
+    "automatic_or_unsupported",
+    "automatic_non_equality",
+    "automatic_correlated_reference",
+]
 
 
 class TableIdentity(BaseModel):
@@ -134,7 +148,7 @@ class TableRelationBuildStatus(BaseModel):
 class TableRelationWarningCategory(BaseModel):
     code: str
     label: str
-    classification: Literal["source_error", "preprocessor", "metadata", "safe_skip"]
+    classification: Literal["source_error", "preprocessor", "metadata", "relation_gap", "safe_skip"]
     disposition: TableRelationWarningDisposition
     count: int = Field(ge=0)
 
@@ -146,7 +160,7 @@ class TableRelationWarningItem(BaseModel):
     source_path: str
     code: str
     category: str
-    classification: Literal["source_error", "preprocessor", "metadata", "safe_skip"]
+    classification: Literal["source_error", "preprocessor", "metadata", "relation_gap", "safe_skip"]
     disposition: TableRelationWarningDisposition
     message: str
     expression: str | None = None
@@ -173,11 +187,8 @@ class TableRelationWarningList(BaseModel):
 
 
 class TableRelationSqlWhitelistRule(BaseModel):
-    code: Literal[
-        "automatic_ddl",
-        "automatic_single_table_query",
-        "automatic_write_without_query",
-    ]
+    code: TableRelationAutomaticWhitelistRuleCode
+    group: TableRelationAutomaticWhitelistGroup
     label: str
     description: str
 
@@ -193,6 +204,36 @@ class TableRelationSqlWhitelistConfiguration(BaseModel):
 
 class TableRelationSqlWhitelistUpdate(BaseModel):
     paths: list[str] = Field(default_factory=list, max_length=1000)
+
+
+class TableRelationAutomaticWhitelistFile(BaseModel):
+    project_id: str
+    project_name: str
+    source_path: str
+    statement_bytes: int = Field(ge=0)
+
+
+class TableRelationAutomaticWhitelistFileList(BaseModel):
+    workspace_id: str
+    project_id: str | None = None
+    project_name: str | None = None
+    rule: TableRelationSqlWhitelistRule
+    total: int = Field(ge=0)
+    limit: int = Field(ge=1, le=200)
+    offset: int = Field(ge=0)
+    has_more: bool
+    next_offset: int | None = Field(default=None, ge=0)
+    files: list[TableRelationAutomaticWhitelistFile]
+
+
+class TableRelationAutomaticWhitelistFileContent(BaseModel):
+    workspace_id: str
+    project_id: str
+    project_name: str
+    rule: TableRelationSqlWhitelistRule
+    source_path: str
+    statement: str
+    truncated: bool = False
 
 
 class TableRelationDefaultDatabaseOption(BaseModel):

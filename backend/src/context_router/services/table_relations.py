@@ -6,7 +6,7 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from context_router.database.errors import DatabaseConnectorError
@@ -27,6 +27,7 @@ from context_router.repositories.data_source_repository import (
 from context_router.repositories.table_relation_repository import (
     TableJoinEvidenceRecord,
     TableJoinRelationRecord,
+    TableRelationAutomaticFileRecord,
     TableRelationBuildRecord,
     TableRelationConfigRevisionError,
     TableRelationDefaultDatabaseConfigRecord,
@@ -40,6 +41,10 @@ from context_router.schemas.table_relations import (
     TableIdentity,
     TableJoinColumnPair,
     TableJoinEvidence,
+    TableRelationAutomaticWhitelistFile,
+    TableRelationAutomaticWhitelistFileContent,
+    TableRelationAutomaticWhitelistFileList,
+    TableRelationAutomaticWhitelistRuleCode,
     TableRelationBuildStatus,
     TableRelationContextResult,
     TableRelationDatabaseScope,
@@ -82,20 +87,109 @@ _ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 _AUTOMATIC_WHITELIST_RULES = (
     TableRelationSqlWhitelistRule(
         code="automatic_ddl",
+        group="no_value",
         label="DDL",
         description="CREATE、ALTER、DROP、TRUNCATE 等结构语句不参与表关联扫描。",
     ),
     TableRelationSqlWhitelistRule(
         code="automatic_single_table_query",
-        label="单表查询",
-        description="只读取一张物理表且不包含 JOIN 的查询不参与扫描。",
+        group="no_value",
+        label="单表 / 无表查询",
+        description="最多读取一张物理表且不包含 JOIN 的查询不参与扫描。",
     ),
     TableRelationSqlWhitelistRule(
         code="automatic_write_without_query",
+        group="no_value",
         label="纯 INSERT / UPDATE",
         description="不包含查询、JOIN、子查询或第二张表的 INSERT / UPDATE 不参与扫描。",
     ),
+    TableRelationSqlWhitelistRule(
+        code="automatic_single_table_initialization",
+        group="no_value",
+        label="无关联初始化脚本",
+        description="由 DDL、单表写入或同表存在性检查组成，不包含跨表关系的脚本不参与扫描。",
+    ),
+    TableRelationSqlWhitelistRule(
+        code="automatic_missing_table_or_column",
+        group="no_value",
+        label="缺表 / 缺字段",
+        description="默认数据库缺少 JOIN 表或关联字段的 SQL 不参与扫描。",
+    ),
+    TableRelationSqlWhitelistRule(
+        code="automatic_invalid_sql",
+        group="no_value",
+        label="语句错误",
+        description="未限定表别名、循环模板或仅 WHERE 跨表等值等无法安全分析的 SQL 不参与扫描。",
+    ),
+    TableRelationSqlWhitelistRule(
+        code="automatic_complex_sql",
+        group="parser_gap",
+        label="复杂 SQL",
+        description="未发现可提取的直接字段等值 JOIN。文件仍扫描，供后续增强解析器。",
+    ),
+    TableRelationSqlWhitelistRule(
+        code="automatic_derived_relation",
+        group="parser_gap",
+        label="CTE / 派生表",
+        description="JOIN 跨过 CTE 或派生表边界，第一版不建边。文件仍扫描。",
+    ),
+    TableRelationSqlWhitelistRule(
+        code="automatic_or_unsupported",
+        group="parser_gap",
+        label="复杂 OR",
+        description="包含跨表条件的 OR 分组暂不拆分。文件仍扫描，旁边能确认的等值关系仍采集。",
+    ),
+    TableRelationSqlWhitelistRule(
+        code="automatic_non_equality",
+        group="parser_gap",
+        label="非等值",
+        description="跨表条件不是直接字段等值，第一版不建边。文件仍扫描。",
+    ),
+    TableRelationSqlWhitelistRule(
+        code="automatic_correlated_reference",
+        group="parser_gap",
+        label="相关子查询",
+        description="JOIN 引用外层查询字段，第一版不跨作用域建边。文件仍扫描。",
+    ),
 )
+_AUTOMATIC_WHITELIST_RULES_BY_CODE = {item.code: item for item in _AUTOMATIC_WHITELIST_RULES}
+_SKIP_AUTOMATIC_CLASSIFY_CODES = frozenset(
+    {
+        "automatic_ddl",
+        "automatic_single_table_query",
+        "automatic_write_without_query",
+        "automatic_single_table_initialization",
+    }
+)
+_METADATA_WHITELIST_CODES = frozenset(
+    {
+        "automatic_missing_table_or_column",
+        "join_metadata_table_not_found",
+        "join_metadata_column_not_found",
+    }
+)
+_INVALID_SQL_WHITELIST_CODES = frozenset(
+    {
+        "automatic_invalid_sql",
+        "join_unqualified_column_unsupported",
+        "template_loop_ignored",
+        "where_relation_unsupported",
+    }
+)
+_PARSER_GAP_WARNING_CODES = {
+    "automatic_derived_relation": "join_derived_relation_unsupported",
+    "automatic_or_unsupported": "join_or_unsupported",
+    "automatic_non_equality": "join_non_equality_ignored",
+    "automatic_correlated_reference": "join_correlated_reference_unsupported",
+}
+_PARSER_GAP_RULE_PRIORITY = (
+    "automatic_derived_relation",
+    "automatic_correlated_reference",
+    "automatic_or_unsupported",
+    "automatic_non_equality",
+)
+_PARSER_GAP_EXPECTED_CODES = frozenset(_PARSER_GAP_WARNING_CODES.values())
+_AUTOMATIC_SQL_CONTENT_MAX_BYTES = 512 * 1024
 
 
 class TableRelationServiceError(RuntimeError):
@@ -252,6 +346,8 @@ class TableRelationService:
         "join_metadata_table_ambiguous": "默认数据库表无法唯一确认",
         "join_metadata_column_ambiguous": "默认数据库字段无法唯一确认",
         "join_non_equality_ignored": "非等值关联未采集",
+        "automatic_missing_table_or_column": "缺表或缺字段 SQL 已跳过",
+        "automatic_invalid_sql": "语句错误 SQL 已跳过",
         "where_relation_unsupported": "WHERE 跨表等值暂未采集",
         "template_candidate_parse_failed": "模板候选 SQL 无法解析",
         "template_candidate_limit_exceeded": "模板候选达到安全上限",
@@ -281,15 +377,17 @@ class TableRelationService:
         "join_metadata_column_not_found": "metadata",
         "join_metadata_table_ambiguous": "metadata",
         "join_metadata_column_ambiguous": "metadata",
-        "join_derived_relation_unsupported": "safe_skip",
-        "join_unqualified_column_unsupported": "safe_skip",
-        "join_correlated_reference_unsupported": "safe_skip",
+        "automatic_missing_table_or_column": "safe_skip",
+        "automatic_invalid_sql": "safe_skip",
+        "join_derived_relation_unsupported": "relation_gap",
+        "join_unqualified_column_unsupported": "relation_gap",
+        "join_correlated_reference_unsupported": "relation_gap",
         "migration_sql_ignored": "safe_skip",
-        "join_or_unsupported": "safe_skip",
-        "join_non_equality_ignored": "safe_skip",
-        "where_relation_unsupported": "safe_skip",
-        "template_loop_ignored": "safe_skip",
-        "dynamic_identifier_unsupported": "safe_skip",
+        "join_or_unsupported": "relation_gap",
+        "join_non_equality_ignored": "relation_gap",
+        "where_relation_unsupported": "relation_gap",
+        "template_loop_ignored": "relation_gap",
+        "dynamic_identifier_unsupported": "relation_gap",
     }
 
     def __init__(
@@ -362,8 +460,17 @@ class TableRelationService:
         project_id: str,
         paths: list[str],
     ) -> TableRelationSqlWhitelistConfiguration:
-        self._project_for_workspace(workspace_id, project_id)
+        project = self._project_for_workspace(workspace_id, project_id)
         normalized = self._normalize_whitelist_paths(paths)
+        # A whitelist is only for files that cannot contribute a direct table
+        # relation.  Do not persist an explicit JOIN candidate merely because
+        # it also contains templates or unsupported predicates; the rebuild
+        # pipeline will validate it against real database metadata.
+        normalized = self._without_potential_relation_paths(
+            workspace_id=workspace_id,
+            project=project,
+            paths=normalized,
+        )
         try:
             self._repository.replace_sql_whitelist(
                 workspace_id=workspace_id,
@@ -375,6 +482,105 @@ class TableRelationService:
                 "table_relation_repository_error", "表关联 SQL 白名单保存失败"
             ) from exc
         return self.get_sql_whitelist(workspace_id, project_id)
+
+    def list_automatic_whitelist_files(
+        self,
+        *,
+        workspace_id: str,
+        rule_code: TableRelationAutomaticWhitelistRuleCode,
+        project_id: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> TableRelationAutomaticWhitelistFileList:
+        rule = self._automatic_whitelist_rule(rule_code)
+        projects = (
+            [self._project_for_workspace(workspace_id, project_id)]
+            if project_id
+            else self._configured_backend_projects(workspace_id)
+        )
+        files = [
+            TableRelationAutomaticWhitelistFile(
+                project_id=item.project_id,
+                project_name=item.project_name,
+                source_path=item.source_path,
+                statement_bytes=item.statement_bytes,
+            )
+            for project in projects
+            for item in self._automatic_files_for_rule(
+                workspace_id=workspace_id,
+                project=project,
+                rule_code=rule_code,
+            )
+        ]
+        files.sort(
+            key=lambda item: (
+                item.project_name.casefold(),
+                item.source_path.casefold(),
+                item.project_id,
+            )
+        )
+        total = len(files)
+        page = files[offset : offset + limit]
+        next_offset = offset + len(page)
+        selected = projects[0] if project_id and projects else None
+        return TableRelationAutomaticWhitelistFileList(
+            workspace_id=workspace_id,
+            project_id=selected.id if selected else None,
+            project_name=selected.name if selected else None,
+            rule=rule,
+            total=total,
+            limit=limit,
+            offset=offset,
+            has_more=next_offset < total,
+            next_offset=next_offset if next_offset < total else None,
+            files=page,
+        )
+
+    def get_automatic_whitelist_file_content(
+        self,
+        *,
+        workspace_id: str,
+        project_id: str,
+        rule_code: TableRelationAutomaticWhitelistRuleCode,
+        source_path: str,
+    ) -> TableRelationAutomaticWhitelistFileContent:
+        project = self._project_for_workspace(workspace_id, project_id)
+        rule = self._automatic_whitelist_rule(rule_code)
+        normalized_path = self._normalize_whitelist_paths([source_path])[0]
+        assigned = next(
+            (
+                item
+                for item in self._automatic_files_for_rule(
+                    workspace_id=workspace_id,
+                    project=project,
+                    rule_code=rule_code,
+                )
+                if item.source_path.casefold() == normalized_path.casefold()
+            ),
+            None,
+        )
+        if assigned is None:
+            raise TableRelationServiceError(
+                "table_relation_automatic_sql_not_found",
+                "SQL 文件不存在，或不属于所选系统白名单规则",
+            )
+        statement = self._read_automatic_sql(project, assigned.source_path)
+        encoded = statement.encode("utf-8")
+        truncated = len(encoded) > _AUTOMATIC_SQL_CONTENT_MAX_BYTES
+        if truncated:
+            statement = encoded[:_AUTOMATIC_SQL_CONTENT_MAX_BYTES].decode(
+                "utf-8",
+                errors="ignore",
+            )
+        return TableRelationAutomaticWhitelistFileContent(
+            workspace_id=workspace_id,
+            project_id=project_id,
+            project_name=project.name,
+            rule=rule,
+            source_path=assigned.source_path,
+            statement=statement,
+            truncated=truncated,
+        )
 
     def get_default_database_configuration(
         self,
@@ -532,6 +738,14 @@ class TableRelationService:
         for target in targets:
             generation_id = uuid4().hex
             database = target.database
+            metadata_whitelist = self._metadata_whitelist_paths(
+                workspace_id,
+                database.project_id,
+            )
+            invalid_sql_whitelist = self._invalid_sql_whitelist_paths(
+                workspace_id,
+                database.project_id,
+            )
             self._repository.mark_building(
                 workspace_id=workspace_id,
                 project_id=database.project_id,
@@ -541,8 +755,10 @@ class TableRelationService:
                 config_revision=config.revision,
             )
             analyzer_warnings: list[AnalyzerWarning] = []
+            collected_sources: list[Any] = []
+            custom_whitelist: set[str] = set()
             try:
-                sources = self._collector.collect(
+                collected_sources = self._collector.collect(
                     workspace_id=workspace_id,
                     project_id=database.project_id,
                     project_name=database.project_name,
@@ -550,6 +766,7 @@ class TableRelationService:
                     database_key=database.mcp_alias,
                     dialect="mysql",
                 )
+                sources = collected_sources
                 custom_whitelist = {
                     item.casefold()
                     for item in self._repository.get_sql_whitelist(
@@ -557,12 +774,45 @@ class TableRelationService:
                         database.project_id,
                     )
                 }
+                skipped_metadata = [
+                    source
+                    for source in sources
+                    if source.source_path.casefold() in metadata_whitelist
+                    and source.source_path.casefold() not in custom_whitelist
+                    and not self._skips_by_automatic_classify(source)
+                ]
+                skipped_invalid_sql = [
+                    source
+                    for source in sources
+                    if source.source_path.casefold() in invalid_sql_whitelist
+                    and source.source_path.casefold() not in custom_whitelist
+                    and source.source_path.casefold() not in metadata_whitelist
+                    and not self._skips_by_automatic_classify(source)
+                ]
                 sources = [
                     source
                     for source in sources
                     if source.source_path.casefold() not in custom_whitelist
-                    and self._automatic_whitelist.classify(source) is None
+                    and source.source_path.casefold() not in metadata_whitelist
+                    and source.source_path.casefold() not in invalid_sql_whitelist
+                    and not self._skips_by_automatic_classify(source)
                 ]
+                analyzer_warnings.extend(
+                    AnalyzerWarning(
+                        source_path=source.source_path,
+                        code="automatic_missing_table_or_column",
+                        message="默认数据库缺少 JOIN 表或关联字段，已按系统白名单跳过扫描",
+                    )
+                    for source in skipped_metadata
+                )
+                analyzer_warnings.extend(
+                    AnalyzerWarning(
+                        source_path=source.source_path,
+                        code="automatic_invalid_sql",
+                        message="SQL 语句无法安全分析，已按系统白名单跳过扫描",
+                    )
+                    for source in skipped_invalid_sql
+                )
                 metadata = ConnectorTableMetadataProvider(
                     database=database,
                     connector_manager=self._connector_manager,
@@ -601,6 +851,12 @@ class TableRelationService:
                 relations = self._aggregate(workspace_id, facts)
                 warning_records = self._aggregate_warnings(database, analyzer_warnings)
                 warning_previews = [self._warning_preview(item) for item in warning_records[:20]]
+                automatic_files = self._automatic_file_records(
+                    database=database,
+                    sources=collected_sources,
+                    custom_whitelist=custom_whitelist,
+                    analyzer_warnings=analyzer_warnings,
+                )
                 build = TableRelationBuildRecord(
                     workspace_id=workspace_id,
                     project_id=database.project_id,
@@ -617,16 +873,24 @@ class TableRelationService:
                     finished_at=None,
                     warning_count=sum(item.occurrence_count for item in warning_records),
                     config_revision=config.revision,
+                    automatic_file_count=len(automatic_files),
                 )
                 self._repository.publish(
                     build=build,
                     relations=relations,
                     warning_records=warning_records,
+                    automatic_files=automatic_files,
                 )
             except Exception as exc:
                 message = self._safe_error(exc)
                 failures.append(f"{database.project_name}/{database.mcp_alias}: {message}")
                 warning_records = self._aggregate_warnings(database, analyzer_warnings)
+                automatic_files = self._automatic_file_records(
+                    database=database,
+                    sources=collected_sources,
+                    custom_whitelist=custom_whitelist,
+                    analyzer_warnings=analyzer_warnings,
+                )
                 self._repository.mark_failed(
                     workspace_id=workspace_id,
                     project_id=database.project_id,
@@ -636,6 +900,7 @@ class TableRelationService:
                     error_message=message,
                     warnings=[self._warning_preview(item) for item in warning_records[:20]],
                     warning_records=warning_records,
+                    automatic_files=automatic_files,
                 )
         status = self.get_status(workspace_id)
         if failures and status.ready_project_count == 0:
@@ -644,6 +909,14 @@ class TableRelationService:
                 "；".join(failures[:5]),
             )
         return status
+
+    def _configured_backend_projects(self, workspace_id: str) -> list[ProjectSnapshot]:
+        configuration = self.get_default_database_configuration(workspace_id)
+        return [
+            self._project_for_workspace(workspace_id, item.project_id)
+            for item in configuration.projects
+            if item.selected_project_database_id
+        ]
 
     def _project_for_workspace(self, workspace_id: str, project_id: str) -> ProjectSnapshot:
         try:
@@ -684,6 +957,327 @@ class TableRelationService:
             )
         return sorted(normalized.values(), key=str.casefold)
 
+    @staticmethod
+    def _automatic_whitelist_rule(
+        rule_code: TableRelationAutomaticWhitelistRuleCode,
+    ) -> TableRelationSqlWhitelistRule:
+        rule = _AUTOMATIC_WHITELIST_RULES_BY_CODE.get(rule_code)
+        if rule is None:  # pragma: no cover - route/schema validates the finite literal
+            raise TableRelationServiceError(
+                "table_relation_automatic_rule_not_found", "系统白名单规则不存在"
+            )
+        return rule
+
+    def _automatic_files_for_rule(
+        self,
+        *,
+        workspace_id: str,
+        project: ProjectSnapshot,
+        rule_code: TableRelationAutomaticWhitelistRuleCode,
+    ) -> list[TableRelationAutomaticFileRecord]:
+        try:
+            builds = self._repository.list_builds(workspace_id)
+        except TableRelationRepositoryError as exc:
+            raise TableRelationServiceError(
+                "table_relation_repository_error", "表关联系统分类读取失败"
+            ) from exc
+        build = next(
+            (
+                item
+                for item in builds
+                if item.project_id == project.id and item.status in {"ready", "failed"}
+            ),
+            None,
+        )
+        if build is not None and build.automatic_file_count is not None:
+            try:
+                return self._repository.list_automatic_files(
+                    workspace_id,
+                    rule_code=rule_code,
+                    project_id=project.id,
+                )
+            except TableRelationRepositoryError as exc:
+                raise TableRelationServiceError(
+                    "table_relation_repository_error", "表关联系统分类读取失败"
+                ) from exc
+        return [
+            TableRelationAutomaticFileRecord(
+                project_id=project.id,
+                project_name=project.name,
+                database_key="automatic-whitelist",
+                source_path=source.source_path,
+                rule_code=rule_code,
+                statement_bytes=len(source.statement.encode("utf-8")),
+            )
+            for source in self._automatic_sources_for_rule(
+                workspace_id=workspace_id,
+                project=project,
+                rule_code=rule_code,
+            )
+        ]
+
+    def _automatic_file_records(
+        self,
+        *,
+        database: Any,
+        sources: list[Any],
+        custom_whitelist: set[str],
+        analyzer_warnings: list[AnalyzerWarning],
+    ) -> list[TableRelationAutomaticFileRecord]:
+        warning_codes: dict[str, set[str]] = {}
+        for warning in analyzer_warnings:
+            warning_codes.setdefault(warning.source_path.casefold(), set()).add(warning.code)
+        metadata_paths = {
+            path for path, codes in warning_codes.items() if codes & _METADATA_WHITELIST_CODES
+        }
+        invalid_paths = {
+            path for path, codes in warning_codes.items() if codes & _INVALID_SQL_WHITELIST_CODES
+        }
+        records: list[TableRelationAutomaticFileRecord] = []
+        for source in sources:
+            if source.source_path.casefold() in custom_whitelist:
+                continue
+            rule_code = self._assign_automatic_rule(
+                source,
+                metadata_paths=metadata_paths,
+                invalid_paths=invalid_paths,
+                warning_codes=warning_codes,
+            )
+            if rule_code is None:
+                continue
+            records.append(
+                TableRelationAutomaticFileRecord(
+                    project_id=database.project_id,
+                    project_name=database.project_name,
+                    database_key=database.mcp_alias,
+                    source_path=source.source_path,
+                    rule_code=rule_code,
+                    statement_bytes=len(source.statement.encode("utf-8")),
+                )
+            )
+        return records
+
+    def _read_automatic_sql(self, project: ProjectSnapshot, source_path: str) -> str:
+        root = getattr(project, "resolved_project_root", None)
+        if isinstance(root, Path):
+            try:
+                resolved_root = root.resolve()
+                candidate = (resolved_root / source_path).resolve()
+                if candidate.is_file() and candidate.is_relative_to(resolved_root):
+                    return candidate.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError, ValueError):
+                pass
+        source = next(
+            (
+                item
+                for item in self._collector.collect(
+                    workspace_id=getattr(project, "workspace_id", ""),
+                    project_id=project.id,
+                    project_name=project.name,
+                    project_root=root if isinstance(root, Path) else Path("/"),
+                    database_key="automatic-whitelist",
+                    dialect="mysql",
+                )
+                if item.source_path.casefold() == source_path.casefold()
+            ),
+            None,
+        )
+        if source is None:
+            raise TableRelationServiceError(
+                "table_relation_automatic_sql_not_found",
+                "SQL 文件不存在，或不属于所选系统白名单规则",
+            )
+        return source.statement
+
+    def _automatic_sources_for_rule(
+        self,
+        *,
+        workspace_id: str,
+        project: ProjectSnapshot,
+        rule_code: TableRelationAutomaticWhitelistRuleCode,
+    ) -> list[Any]:
+        sources = self._collector.collect(
+            workspace_id=workspace_id,
+            project_id=project.id,
+            project_name=project.name,
+            project_root=project.resolved_project_root,
+            database_key="automatic-whitelist",
+            dialect="mysql",
+        )
+        metadata_paths = self._metadata_whitelist_paths(workspace_id, project.id)
+        invalid_paths = self._invalid_sql_whitelist_paths(workspace_id, project.id)
+        warning_codes = self._warning_codes_by_path(workspace_id, project.id)
+        return [
+            source
+            for source in sources
+            if self._assign_automatic_rule(
+                source,
+                metadata_paths=metadata_paths,
+                invalid_paths=invalid_paths,
+                warning_codes=warning_codes,
+            )
+            == rule_code
+        ]
+
+    def _assign_automatic_rule(
+        self,
+        source: Any,
+        *,
+        metadata_paths: set[str],
+        invalid_paths: set[str],
+        warning_codes: dict[str, set[str]],
+    ) -> TableRelationAutomaticWhitelistRuleCode | None:
+        classify = self._automatic_whitelist.classify(source)
+        if classify in _SKIP_AUTOMATIC_CLASSIFY_CODES:
+            return cast(TableRelationAutomaticWhitelistRuleCode, classify)
+        path = source.source_path.casefold()
+        if path in metadata_paths:
+            return "automatic_missing_table_or_column"
+        if path in invalid_paths:
+            return "automatic_invalid_sql"
+        codes = warning_codes.get(path, set())
+        for item in _PARSER_GAP_RULE_PRIORITY:
+            if _PARSER_GAP_WARNING_CODES[item] in codes:
+                return item
+        if classify == "automatic_complex_sql":
+            return "automatic_complex_sql"
+        return None
+
+    def _warning_codes_by_path(
+        self,
+        workspace_id: str,
+        project_id: str | None,
+    ) -> dict[str, set[str]]:
+        try:
+            warnings = self._repository.list_warnings(workspace_id)
+        except TableRelationRepositoryError as exc:
+            raise TableRelationServiceError(
+                "table_relation_repository_error", "表关联跳过提示读取失败"
+            ) from exc
+        codes: dict[str, set[str]] = {}
+        for item in warnings:
+            if project_id is not None and item.project_id != project_id:
+                continue
+            codes.setdefault(item.source_path.casefold(), set()).add(item.code)
+        return codes
+
+    def _skips_by_automatic_classify(self, source: Any) -> bool:
+        return self._automatic_whitelist.classify(source) in _SKIP_AUTOMATIC_CLASSIFY_CODES
+
+    def _warning_source_paths(
+        self,
+        workspace_id: str,
+        project_id: str | None,
+        codes: set[str],
+    ) -> set[str]:
+        try:
+            warnings = self._repository.list_warnings(workspace_id)
+        except TableRelationRepositoryError as exc:
+            raise TableRelationServiceError(
+                "table_relation_repository_error", "表关联跳过提示读取失败"
+            ) from exc
+        return {
+            item.source_path.casefold()
+            for item in warnings
+            if item.code in codes and (project_id is None or item.project_id == project_id)
+        }
+
+    def _metadata_whitelist_paths(
+        self,
+        workspace_id: str,
+        project_id: str | None = None,
+    ) -> set[str]:
+        try:
+            warnings = self._repository.list_warnings(workspace_id)
+        except TableRelationRepositoryError as exc:
+            raise TableRelationServiceError(
+                "table_relation_repository_error", "表关联跳过提示读取失败"
+            ) from exc
+        return {
+            item.source_path.casefold()
+            for item in warnings
+            if item.code in _METADATA_WHITELIST_CODES
+            and (project_id is None or item.project_id == project_id)
+        }
+
+    def _invalid_sql_whitelist_paths(
+        self,
+        workspace_id: str,
+        project_id: str | None = None,
+    ) -> set[str]:
+        return self._warning_source_paths(
+            workspace_id,
+            project_id,
+            set(_INVALID_SQL_WHITELIST_CODES),
+        )
+
+    def _without_potential_relation_paths(
+        self,
+        *,
+        workspace_id: str,
+        project: ProjectSnapshot,
+        paths: list[str],
+    ) -> list[str]:
+        """Keep explicit exclusions only when they contain no direct JOIN candidate.
+
+        This check intentionally precedes metadata lookup.  It prevents a
+        future manual whitelist from hiding a relation just because a database
+        happens to be temporarily unavailable at save time.  The subsequent
+        rebuild remains the sole authority that validates tables and fields.
+        """
+
+        if not paths:
+            return paths
+        project_root = getattr(project, "resolved_project_root", None)
+        if not isinstance(project_root, Path) or not project_root.is_dir():
+            # Test doubles and an unavailable project root retain the existing
+            # validation behavior; a real Workspace snapshot always has a root.
+            return paths
+        wanted = {path.casefold() for path in paths}
+        sources = self._collector.collect(
+            workspace_id=workspace_id,
+            project_id=project.id,
+            project_name=project.name,
+            project_root=project_root,
+            database_key="whitelist-preflight",
+            dialect="mysql",
+        )
+        recognized = {
+            source.source_path.casefold()
+            for source in sources
+            if source.source_path.casefold() in wanted
+            and self._automatic_whitelist.source_has_potential_direct_join(source)
+        }
+        return [path for path in paths if path.casefold() not in recognized]
+
+    def _without_custom_whitelisted_warnings(
+        self,
+        workspace_id: str,
+        records: list[TableRelationWarningRecord],
+    ) -> list[TableRelationWarningRecord]:
+        """Immediately hide diagnostics for files the user has explicitly excluded."""
+
+        project_ids = sorted({item.project_id for item in records})
+        if not project_ids:
+            return records
+        try:
+            paths_by_project = {
+                project_id: {
+                    path.casefold()
+                    for path in self._repository.get_sql_whitelist(workspace_id, project_id)
+                }
+                for project_id in project_ids
+            }
+        except TableRelationRepositoryError as exc:
+            raise TableRelationServiceError(
+                "table_relation_repository_error", "表关联 SQL 白名单读取失败"
+            ) from exc
+        return [
+            item
+            for item in records
+            if item.source_path.casefold() not in paths_by_project.get(item.project_id, set())
+        ]
+
     def get_status(
         self,
         workspace_id: str,
@@ -711,6 +1305,10 @@ class TableRelationService:
             for item in warning_records
             if (item.project_id.casefold(), item.database_key.casefold()) in active_warning_keys
         ]
+        warning_records = self._without_custom_whitelisted_warnings(
+            workspace_id,
+            warning_records,
+        )
         attention_warning_count = sum(
             item.occurrence_count
             for item in warning_records
@@ -774,7 +1372,7 @@ class TableRelationService:
             if missing_build_count > 0
             else "ready"
         )
-        warning_previews = [warning for build in builds for warning in build.warnings]
+        warning_previews = [self._warning_preview(item) for item in warning_records]
         latest = max(
             (item.finished_at or item.started_at for item in builds if item.started_at),
             default=None,
@@ -792,7 +1390,7 @@ class TableRelationService:
             sql_file_count=sum(item.sql_file_count for item in builds),
             statement_count=sum(item.statement_count for item in builds),
             relation_count=sum(item.relation_count for item in builds),
-            warning_count=sum(item.warning_count for item in builds),
+            warning_count=sum(item.occurrence_count for item in warning_records),
             attention_warning_count=attention_warning_count,
             expected_skip_count=expected_skip_count,
             warnings=warning_previews[:20],
@@ -856,7 +1454,7 @@ class TableRelationService:
                     sql_file_count=build.sql_file_count,
                     statement_count=build.statement_count,
                     relation_count=build.relation_count,
-                    warning_count=build.warning_count,
+                    warning_count=attention + expected,
                     attention_warning_count=attention,
                     expected_skip_count=expected,
                     error_message=build.error_message,
@@ -931,6 +1529,7 @@ class TableRelationService:
             for item in records
             if (item.project_id.casefold(), item.database_key.casefold()) in active_keys
         ]
+        records = self._without_custom_whitelisted_warnings(workspace_id, records)
         attention_total = sum(
             item.occurrence_count
             for item in records
@@ -1480,6 +2079,13 @@ class TableRelationService:
     @classmethod
     def _warning_disposition(cls, code: str) -> TableRelationWarningDisposition:
         if cls._WARNING_CLASSIFICATIONS.get(code) == "safe_skip":
+            return "expected"
+        if code in {
+            "join_metadata_table_not_found",
+            "join_metadata_column_not_found",
+            *_PARSER_GAP_EXPECTED_CODES,
+            *_INVALID_SQL_WHITELIST_CODES,
+        }:
             return "expected"
         return "attention"
 
