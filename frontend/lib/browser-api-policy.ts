@@ -4,8 +4,6 @@ const SAFE_BROWSER_POST_PATHS = [
   /^\/api\/mcp\/integration\/tests$/,
   /^\/api\/workspaces\/[^/]+\/prepare-preview(?:\?.*)?$/,
   /^\/api\/workspaces\/[^/]+\/refresh$/,
-  /^\/api\/workspaces\/[^/]+\/table-relations\/rebuild(?:\?.*)?$/,
-  /^\/api\/workspaces\/[^/]+\/table-relations\/projects\/[^/]+\/rebuild$/,
   /^\/api\/workspaces\/reload-local-mapping$/,
   /^\/api\/workspaces\/[^/]+\/shared-files\/(restore|publish)$/,
   /^\/api\/workspaces\/[^/]+\/containers\/bulk-action$/,
@@ -24,8 +22,7 @@ export function isBrowserApiRequestAllowed(
     return SAFE_BROWSER_POST_PATHS.some((pattern) => pattern.test(path));
   }
   if (normalizedMethod === "PUT") {
-    return /^\/api\/system-guides\/[^/]+\/content$/.test(path)
-      || /^\/api\/workspaces\/[^/]+\/table-relations\/projects\/[^/]+\/sql-whitelist$/.test(path);
+    return /^\/api\/system-guides\/[^/]+\/content$/.test(path);
   }
   return false;
 }

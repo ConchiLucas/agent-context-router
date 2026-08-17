@@ -39,27 +39,6 @@ test("allows reads and the explicit safe browser POST allowlist", () => {
   );
   assert.equal(
     isBrowserApiRequestAllowed(
-      "/api/workspaces/workspace-1/table-relations/rebuild",
-      "POST",
-    ),
-    true,
-  );
-  assert.equal(
-    isBrowserApiRequestAllowed(
-      "/api/workspaces/workspace-1/table-relations/rebuild?failed_only=true",
-      "POST",
-    ),
-    true,
-  );
-  assert.equal(
-    isBrowserApiRequestAllowed(
-      "/api/workspaces/workspace-1/table-relations/projects/project-1/rebuild",
-      "POST",
-    ),
-    true,
-  );
-  assert.equal(
-    isBrowserApiRequestAllowed(
       "/api/workspaces/workspace-1/containers/bulk-action",
       "POST",
     ),
@@ -77,13 +56,6 @@ test("allows reads and the explicit safe browser POST allowlist", () => {
   assert.equal(isBrowserApiRequestAllowed("/api/system-guides", "POST"), false);
   assert.equal(
     isBrowserApiRequestAllowed("/api/system-guides/guide-1/content", "PUT"),
-    true,
-  );
-  assert.equal(
-    isBrowserApiRequestAllowed(
-      "/api/workspaces/workspace-1/table-relations/projects/project-1/sql-whitelist",
-      "PUT",
-    ),
     true,
   );
   assert.equal(

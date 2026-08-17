@@ -31,7 +31,6 @@
 - 工作空间、项目、数据源、数据库清单、项目授权、环境映射/JSON、默认环境和运行配置仍由本机 AI/运维使用既有受校验 API 维护；此类调用不携带 `Origin` 或 `Sec-Fetch-*` 浏览器请求头。不要为了绕过页面限制直接写 PostgreSQL，否则会跳过路径、事务、环境 revision、缓存与 Connector 失效处理。
 - 物理数据源配置全局共享，数据库授权继续由 `project_databases` 绑定具体 Project；Workspace task 汇总使用所有子项目当前有效的授权，`mcp_alias` 在整个 Workspace 内大小写无关唯一。
 - 可选的 Workspace 数据库环境映射把同一逻辑别名分别绑定到 TEST/UAT 的项目数据库关联。`prepare_task_context` 可选传 `environment='test'|'uat'`：显式值只固定本 task 的 `task_explicit` 环境，不修改 Workspace 当前环境；省略时固化当前环境并记录为 `workspace_default`。两种模式都保存共享 revision，revision 变化后旧 task 必须重新 prepare，禁止静默换库。
-- SQL 表关联另外为每个可用后端项目保存一个 Workspace 默认数据库，不复用 task 的 LOCAL/TEST/UAT 环境。`prepare_table_relation_context` 始终查询这套默认数据库对应的派生索引；数据库对象搜索、只读 SQL、中间件和部署工具仍按 task 环境执行。默认库配置有独立 revision，变更后旧关系批次立即失效并要求重建。
 - 没有配置环境选择器的单环境 Workspace 继续使用原有 Workspace alias 链路；省略 `environment` 保持旧行为，显式传入时返回 `environment_not_configured`，不得猜测或自动创建选择器。
 - 同一 Workspace 环境选择器还可分别保存 TEST/UAT JSON 对象，用于 MQ、Redis、MinIO、ES、任务调度或未来组件的环境差异；JSON 不预设字段，也不要求数据库映射存在。可按明确业务需要保存地址和访问凭据，但内容以明文 JSONB 保存在本地，所选环境 JSON 只在显式调用 `read_task_context` 时返回给可信本机 MCP 调用方，严禁进入日志、开发文档、链路摘要或示例输出。两份 JSON 合计最多 256 KiB、最多嵌套 20 层。
 - Workspace 还可按 `default/test/uat` 保存 Nacos 配置档和组件抽取规则。prepare 未显式传环境时，`read_middleware_context` 固定读取 `default/local`；显式传 `test/uat` 时读取同名配置档，不受 Workspace 当前默认环境影响。工具只接受 task_id、可选组件名和明文开关；规则以 JSON 定义 dataId、group 和字段路径，新增中间件无需修改 Python。本机工具默认返回明文，显式 `reveal_secrets=false` 时脱敏，响应值永不写入 Trace 摘要或 payload 表。
@@ -50,11 +49,10 @@
 - SQL 安全策略必须 fail-closed：只允许单条、可解析、限定当前数据库/Schema 的只读语句；不能把客户端 LIMIT 当作唯一边界，仍需服务端行数、字节数、超时和数据库侧只读限制。
 - Connector 延迟创建且生命周期只归 `ConnectorManager`；数据源配置版本变化或删除时必须失效旧连接，应用退出时统一关闭。
 - `mcp_database_calls` 审计历史只保存客观元数据和 SQL SHA-256；两个数据库 MCP 工具另以独立、可过期的有界 JSON 快照保存实际请求和最终 MCP 响应，主 Trace 接口不内联这些大字段。
-- Context Router 十个当前 MCP 工具在统一分发入口记录到 `mcp_tool_calls`；任务内顺序由 PostgreSQL 调用 ID 生成，文档/数据库专属明细通过 `tool_call_id` 关联，观测失败不得改变工具业务结果；中间件工具只记录组件数量、脱敏模式和警告数量，不记录连接值；已下线的 Project 兼容工具历史仍可查询。
-- 调用链路页面记录 Codex、Antigravity 等客户端实际发送到 Context Router `/mcp` 的十个当前工具调用，并保留两个已下线 Project 工具的历史记录；不连接、代理、聚合或接收其他 MCP Server 的调用上报，也不建设跨 Server Trace。
+- Context Router 十个当前 MCP 工具在统一分发入口记录到 `mcp_tool_calls`；任务内顺序由 PostgreSQL 调用 ID 生成，文档/数据库专属明细通过 `tool_call_id` 关联，观测失败不得改变工具业务结果；中间件工具只记录组件数量、脱敏模式和警告数量，不记录连接值；已下线的兼容工具历史仍可查询。
+- 调用链路页面记录 Codex、Antigravity 等客户端实际发送到 Context Router `/mcp` 的十个当前工具调用，并保留三个已下线工具的历史记录；不连接、代理、聚合或接收其他 MCP Server 的调用上报，也不建设跨 Server Trace。
 - 顶层页面只读展示 Workspace；进入详情后使用“前端项目 / 后端项目 / 数据源汇总”三页签。环境详情、查看调用记录、查看文档树和查看 MCP JSON 位于 Workspace 工具栏；前端项目不显示数据库授权，后端项目只读展示项目级数据源授权。环境映射/JSON与运行配置同样只读。
 - 完整出入参只对白名单数据库工具 `search_database_objects`、`execute_database_query` 自动采集，并通过 no-store 详情 API 懒加载；prepare/search/read 不建立完整 payload 快照。
 - 新 task 使用 `scope='workspace'` 和无外键的稳定 Workspace/活动项目快照；`scope='project'` 的旧 task 继续按原 project_id/project_key 读取、搜索和解析数据库，避免升级后历史串链。后端启动会收敛遗留 running 调用，Trace API 与页面明确区分完整、运行中和可能不完整。
-- migration head 为 `20260816_0038`；`0038` 增加表关联系统分类文件快照，`0032` 增加 SQL 等值表关联索引，`0033` 增加结构化跳过诊断，`0034` 增加模板预处理证据审计字段，`0036` 增加项目默认数据库，`0037` 增加项目级 SQL 白名单，`0029` 至 `0031` 仅保留已回滚功能的兼容 revision 标记。旧项目 ID、数据库授权和调用历史保持不变。
-- SQL 表关联的采集、准确性边界、参考项目借鉴点和测试入口见 [SQL 表关联索引](./development-details/TABLE_RELATION_INDEX.md)。
+- migration head 为 `20260813_0035`；`0035` 增加带 LOCAL 默认值的白名单宿主机运行动作，`0029` 与 `0030` 仅保留已回滚功能的兼容 revision 标记。旧项目 ID、数据库授权和调用历史保持不变。
 - 本地服务默认只绑定回环地址；真实 ClickHouse 测试使用根 Compose 的 `integration` profile 和固定镜像版本。

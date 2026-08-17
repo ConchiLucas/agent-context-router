@@ -26,7 +26,7 @@ docker compose up -d --force-recreate backend frontend
 
 Compose 的前端和后端宿主机端口都显式绑定 `127.0.0.1`，不会默认监听局域网网卡。后端 CORS 只允许 `http://127.0.0.1:49175` 和 `http://localhost:49175`；本项目当前定位为本机工具，不提供应用层鉴权。若未来需要远程访问，应先补 HTTPS、鉴权和新的 Origin 配置，而不是直接改成公网绑定。
 
-携带任意 `Origin` 或浏览器 Fetch Metadata（`Sec-Fetch-Mode` / `Sec-Fetch-Site`）的请求由后端中间件限制为读取、既有安全操作、按 Workspace/项目类型受限的容器批量重启或停止、系统文档 JSON 正文的受校验保存，以及项目级表关联 SQL 白名单的替换。浏览器不能新建或删除系统文档，也不能修改 key、顺序或 prepare 策略；其他控制面配置写请求返回 `405 management_read_only`。本机 AI 或运维调用方不携带这些浏览器请求头，仍可使用既有受 Schema、Service 和 Repository 校验的本地 API 维护配置；这只是回环单用户部署下的调用边界，不替代身份认证。
+携带任意 `Origin` 或浏览器 Fetch Metadata（`Sec-Fetch-Mode` / `Sec-Fetch-Site`）的请求由后端中间件限制为读取、既有安全操作、按 Workspace/项目类型受限的容器批量重启或停止，以及系统文档 JSON 正文的受校验保存。浏览器不能新建或删除系统文档，也不能修改 key、顺序或 prepare 策略；其他控制面配置写请求返回 `405 management_read_only`。本机 AI 或运维调用方不携带这些浏览器请求头，仍可使用既有受 Schema、Service 和 Repository 校验的本地 API 维护配置；这只是回环单用户部署下的调用边界，不替代身份认证。
 
 ## Docker Desktop 与 Host Runner
 
@@ -144,15 +144,9 @@ CONTEXT_ROUTER_DATABASE_URL=postgresql://USER:PASSWORD@host.docker.internal:5432
 docker compose exec backend uv run alembic upgrade head
 ```
 
-当前 migration head 为 `20260816_0038`。`0038` 把表关联系统分类文件快照绑定到构建 generation；`0037` 增加项目级表关联 SQL 路径白名单；`0036` 增加表关联专用的 Workspace 项目默认数据库和独立 revision，并把构建批次绑定到该 revision；`0035` 增加带 LOCAL 默认值的白名单宿主机运行动作；`0032` 增加可重建的 SQL 等值表关联索引、字段对和证据；`0033` 增加与当前 generation 绑定的结构化跳过诊断及完整计数；`0034` 增加模板预处理证据的 Profile、规则链和候选审计字段；`0029` 至 `0031` 保留为已回滚实验功能的兼容 revision 标记，以便既有本地数据库继续向前升级；`0028` 增加 Workspace Nacos 中间件配置档。
+当前 migration head 为 `20260813_0035`。`0035` 增加带 LOCAL 默认值的白名单宿主机运行动作；`0029` 与 `0030` 保留为已回滚实验功能的兼容 revision 标记，以便既有本地数据库继续向前升级；`0028` 增加 Workspace Nacos 中间件配置档。
 
-表关联页面使用一个项目下拉框和一个更新按钮：选择具体后端项目时只重建该项目，选择“全部项目”时扫描 Workspace 全部后端项目。下拉框按当前默认数据库配置 revision 标注每个项目的“就绪 / 失败 / 扫描中 / 未构建”状态；聚合状态下方只列失败项目及简短原因，点击失败项会选中该项目，随后仍使用同一个更新按钮重试。不做修改文件自动检测，也不提交多项目 `project_ids`。SQL 收集器在目录遍历阶段直接排除任意层级的 `target/`、`build/`、`dist/` 等构建产物目录，只扫描源码目录中的 `.sql` 文件。两种更新范围都只保留 AST 能确认的跨表字段等值条件，并使用每个项目单独配置的表关联默认数据库校验表和字段。JOIN 内只涉及单表字段与常量的 OR 过滤条件会静默忽略；OR 分支内部存在跨表字段条件时才记录保守跳过提示，旁边可独立确认的顶层 AND 等值关系仍正常采集。扫描诊断按现有 code 派生为“需要处理”和“正常忽略”，不增加持久化字段；CTE/派生表、复杂 OR、非等值和相关子查询进入系统分类「解析器暂不支持」并视为正常忽略，默认数据库缺表、缺字段和语句错误进入「没有分析价值」并视为正常忽略，表/字段歧义和别名异常属于需要处理。元数据提示包含默认数据库、物理表和字段，同一 JOIN 两侧问题分别记录。状态栏只强调源码、预处理和元数据问题，迁移 SQL、非等值关系等预期排除仍可在诊断详情中查看。结果是无方向的观察事实，不表示外键、上下游或血缘。MCP `prepare_table_relation_context` 必须使用 `prepare_task_context` 返回的 Workspace `task_id` 和单个精确 `table`，但不读取该 task 的 LOCAL/TEST/UAT 环境；只有多个项目的默认库仍存在同名表时才需要使用 `database_key/schema` 消除歧义。数据库对象搜索、只读 SQL、中间件和部署继续按 task 环境执行。`detail_level` 默认 `evidence`，可选 `compact` 或包含完整 SQL 的 `full`。关系默认每页 20 条、每条关系默认 5 份证据，响应通过总数、返回数、`has_more/next_offset` 和证据截断标记明确提示后续读取。默认库缺失、配置 revision 已变化、索引构建中或构建失败时都会拒绝返回旧结果。
-
-进入表关联页面时项目下拉默认“全部项目”。SQL 白名单可按全部项目或单个项目查看系统分类。外层两个入口：「没有分析价值」列出整文件跳过的 DDL、单表、纯写入、无关联初始化、缺表/缺字段和语句错误；「解析器暂不支持」列出复杂 SQL、CTE/派生表、复杂 OR、非等值和相关子查询，这些文件仍扫描。每个 SQL 文件只出现在一个 tab。系统分类在项目更新时写入当前 generation，白名单列表直接读快照，不再每次重新扫描全部 SQL；点开文件才读取原文。未升级的旧批次仍按现场分类回退。项目路径白名单仍按单个项目编辑，保存会立即重建该项目。白名单只接受项目内精确 `.sql` 相对路径，命中后整个文件不进入解析器，也不产生诊断。`INSERT ... SELECT`、`UPDATE ... JOIN/FROM` 和其他可能含跨表关系的语句继续扫描。单表查询判断只会移除 `@pageTag`、`<#if>`、`<#else>` 与 `<<...>>` 等不会新增表引用的已知展示/过滤模板；未知模板语法一律失败关闭。自动判断无法确认时，文件仍进入正常解析流程。
-
-工作空间可选在根目录保存 `deploy/context-router/sql-preprocessors.yaml`。后端仅加载允许列表中的模板处理器，再按项目名、SQL 相对路径和方言匹配 Profile；`exclude_paths` 可明确排除迁移/DDL，`freemarker_conditions.strategy=baseline_and_single` 可避免连续条件的候选笛卡尔组合，`angle_conditionals.mode=include` 可保留 `<<...>>` 条件体，strict 值占位符只处理可证明的值位置。配置缺失时保持标准 SQL 行为，配置无效、动态表名/字段名或无法闭合的模板一律失败关闭。预处理只生成内存候选，不修改业务 SQL 文件；模板派生关系在证据中携带 Profile、配置哈希、候选 ID 和规则链。
-
-MySQL Connector 会从服务端版本标识区分 MySQL、MariaDB 和 Doris。Doris 使用 MySQL 协议接入，但目录读取不会启动其不支持的只读事务，也不会读取尚未验证兼容的 MySQL 约束/索引目录；表关联所需的表和字段校验不受影响。表关联页面的单项目和全量更新都由用户手动触发；连接中断或超时最多额外重试两次。
+MySQL Connector 会从服务端版本标识区分 MySQL、MariaDB 和 Doris。Doris 使用 MySQL 协议接入，但目录读取不会启动其不支持的只读事务，也不会读取尚未验证兼容的 MySQL 约束/索引目录。
 
 PostgreSQL 保存 Workspace、Project 类型、源码相对路径、文档入口相对路径、数据源、数据库清单、项目数据库关联及 Workspace 唯一 `mcp_alias`、可选 TEST/UAT 数据库映射与通用 JSON、带 scope/环境/revision/选择模式的 MCP task、read call、文档顺序、数据库调用审计元数据，以及可重建的文档搜索分块与索引状态。文档树和 Markdown 原文仍从磁盘重建，文档工具完整出入参不持久化；`search_database_objects` 和 `execute_database_query` 自动保存有界、可过期的详情快照，供本机链路页面按需查看。后端启动时恢复工作空间和全部项目配置，并从磁盘重建每个项目的内存树与匹配版本词法索引；路径失效的项目仍保留在页面并显示错误。
 

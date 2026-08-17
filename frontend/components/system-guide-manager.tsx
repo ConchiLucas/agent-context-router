@@ -29,8 +29,6 @@ const MCP_TOOL_DESCRIPTIONS_ZH: Readonly<Record<string, string>> = {
     "在当前任务已授权的数据库中搜索 Schema、表、视图、字段或索引。",
   execute_database_query:
     "使用 read_task_context 返回的数据库别名执行一条受限制的只读 SQL。",
-  prepare_table_relation_context:
-    "按精确表名返回 SQL 文件中实际出现的等值关联和源码证据，不推断外键或上下游。",
   apply_workspace_changes:
     "根据 Workspace 相对变更路径定位受影响项目，并选择快速或完整更新。",
   start_workspace:

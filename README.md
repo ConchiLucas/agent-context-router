@@ -102,6 +102,6 @@ docker compose exec backend uv run alembic upgrade head
 | `PATCH /api/projects/{project_id}/databases/{link_id}/mcp-alias` | 修改数据库 alias；唯一性按所属 Workspace 校验 |
 | `POST /api/mcp/integration/tests` | 对指定 Workspace 执行真实 MCP 连接测试 |
 
-旧 `/api/projects` 仅保留兼容入口，`document_projects.agents_path/project_type` 也暂时保留；新的文档树、刷新、MCP JSON 和调用记录都只走 Workspace API。migration head 为 `20260815_0037`；`0032` 增加可重建的 SQL 等值表关联索引，`0033` 增加与当前 generation 绑定的结构化跳过诊断，`0034` 为模板派生证据增加工作空间 Profile、规则链和候选审计字段，`0036` 增加项目默认数据库，`0037` 增加项目级 SQL 白名单。升级前的 task 保持 `scope='project'` 兼容读取、搜索和数据库调用，历史记录继续可见。
+旧 `/api/projects` 仅保留兼容入口，`document_projects.agents_path/project_type` 也暂时保留；新的文档树、刷新、MCP JSON 和调用记录都只走 Workspace API。migration head 为 `20260813_0035`；`0035` 增加带 LOCAL 默认值的白名单宿主机运行动作。升级前的 task 保持 `scope='project'` 兼容读取、搜索和数据库调用，历史记录继续可见。
 
 开发、测试和重启命令见 [启动与开发规范](./docs/STARTUP_GUIDE.md)。

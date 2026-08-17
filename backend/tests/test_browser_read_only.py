@@ -29,18 +29,6 @@ def _app() -> FastAPI:
     def refresh_workspace() -> dict[str, bool]:
         return {"refreshed": True}
 
-    @app.post("/api/workspaces/workspace-1/table-relations/rebuild")
-    def rebuild_table_relations() -> dict[str, bool]:
-        return {"rebuilt": True}
-
-    @app.post("/api/workspaces/workspace-1/table-relations/projects/project-1/rebuild")
-    def rebuild_project_table_relations() -> dict[str, bool]:
-        return {"rebuilt": True}
-
-    @app.put("/api/workspaces/workspace-1/table-relations/projects/project-1/sql-whitelist")
-    def replace_project_table_relation_sql_whitelist() -> dict[str, bool]:
-        return {"saved": True}
-
     @app.post("/api/workspaces/reload-local-mapping")
     def reload_mapping() -> dict[str, bool]:
         return {"reloaded": True}
@@ -118,27 +106,6 @@ def test_browser_origin_can_read_and_run_allowlisted_actions() -> None:
         assert (
             client.post(
                 "/api/workspaces/workspace-1/refresh",
-                headers=headers,
-            ).status_code
-            == 200
-        )
-        assert (
-            client.post(
-                "/api/workspaces/workspace-1/table-relations/rebuild",
-                headers=headers,
-            ).status_code
-            == 200
-        )
-        assert (
-            client.post(
-                "/api/workspaces/workspace-1/table-relations/projects/project-1/rebuild",
-                headers=headers,
-            ).status_code
-            == 200
-        )
-        assert (
-            client.put(
-                "/api/workspaces/workspace-1/table-relations/projects/project-1/sql-whitelist",
                 headers=headers,
             ).status_code
             == 200

@@ -6,10 +6,9 @@ import { DataSourceDashboard } from "@/components/data-source-dashboard";
 import { DocumentReadStats } from "@/components/document-read-stats";
 import { TraceExplorer } from "@/components/trace-explorer";
 import { SystemGuideManager } from "@/components/system-guide-manager";
-import { TableRelationExplorer } from "@/components/table-relation-explorer";
 import { WorkspaceDashboard } from "@/components/workspace-dashboard";
 
-type Section = "workspaces" | "data-sources" | "table-relations" | "traces" | "system-guides" | "doc-stats";
+type Section = "workspaces" | "data-sources" | "traces" | "system-guides" | "doc-stats";
 
 function NavIcon({ kind }: { kind: Section }) {
   if (kind === "workspaces") {
@@ -34,15 +33,6 @@ function NavIcon({ kind }: { kind: Section }) {
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M6 3.5h9l3 3V20.5H6z" />
         <path d="M15 3.5v3h3M9 10h6M9 14h6M9 18h4" />
-      </svg>
-    );
-  }
-  if (kind === "table-relations") {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <rect x="2.5" y="4" width="7" height="5" rx="1" />
-        <rect x="14.5" y="15" width="7" height="5" rx="1" />
-        <path d="M9.5 6.5h4a4 4 0 0 1 4 4V15M14.5 17.5h-4a4 4 0 0 1-4-4V9" />
       </svg>
     );
   }
@@ -106,15 +96,6 @@ export function AppShell() {
           </button>
           <button
             type="button"
-            aria-label="表关联"
-            data-active={section === "table-relations"}
-            onClick={() => setSection("table-relations")}
-          >
-            <NavIcon kind="table-relations" />
-            <span>表关联</span>
-          </button>
-          <button
-            type="button"
             aria-label="系统文档"
             data-active={section === "system-guides"}
             onClick={() => setSection("system-guides")}
@@ -137,7 +118,6 @@ export function AppShell() {
       <main
         className={
           section === "traces" ||
-          section === "table-relations" ||
           section === "system-guides" ||
           section === "doc-stats"
             ? "app-content app-content--traces"
@@ -146,7 +126,6 @@ export function AppShell() {
       >
         {section === "workspaces" ? <WorkspaceDashboard /> : null}
         {section === "data-sources" ? <DataSourceDashboard /> : null}
-        {section === "table-relations" ? <TableRelationExplorer /> : null}
         {section === "traces" ? <TraceExplorer /> : null}
         {section === "system-guides" ? <SystemGuideManager /> : null}
         {section === "doc-stats" ? <DocumentReadStats /> : null}

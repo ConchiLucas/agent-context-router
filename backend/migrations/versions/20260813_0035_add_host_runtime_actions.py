@@ -1,7 +1,7 @@
 """Add allowlisted host runtime actions.
 
 Revision ID: 20260813_0035
-Revises: 20260813_0034
+Revises: 20260812_0030
 Create Date: 2026-08-13
 """
 
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "20260813_0035"
-down_revision: str | None = "20260813_0034"
+down_revision: str | None = "20260812_0030"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
