@@ -48,9 +48,9 @@ CONTEXT_ROUTER_DATABASE_URL=postgresql://USER:PASSWORD@host.docker.internal:5432
 
 MCP 始终暴露十个无状态工具：
 
-- `prepare_task_context(task, cwd, agent_name?, environment?)`：按 cwd 定位 Workspace，创建 task_id，并返回节点仅含 `document_id`、`summary`、`children` 的文档树与可用能力；完整 Workspace task 的 `access` 显式包含 `middleware`。
+- `prepare_task_context(task, cwd, agent_name?, environment?)`：按 cwd 定位 Workspace，创建 task_id；`environment` 可传该工作空间已登记的任意环境，省略时固定使用 `local`。
 - `read_task_context(task_id, sections)`：任务需要时才返回数据库别名或通用环境 JSON；它不是 Nacos 中间件实时信息的权威来源。
-- `read_middleware_context(task_id, components?, reveal_secrets?)`：prepare 未传环境时读取 `default/local` Nacos 配置档，显式传 `test/uat` 时读取同名配置档；本机工具默认返回明文，只有显式 `reveal_secrets=false` 才脱敏。
+- `read_middleware_context(task_id, environment?, components?, reveal_secrets?)`：显式环境使用同名 Nacos 配置档，省略时继承 task 环境；本机工具默认返回明文，只有显式 `reveal_secrets=false` 才脱敏。
 - `search_context_documents(task_id, query, limit?)`：在 task 绑定 Workspace 的根文档和全部项目映射文档中，按路径、标题、概要、正文和章节做 PostgreSQL 全文与模糊检索；返回文档 ID、相关度、命中章节和命中原因，不返回完整正文。
 - `read_context_document(task_id, requests)`：在 task 绑定 Workspace 的聚合缓存中一次读取 1 到 10 个文档或指定章节；task_id 必须来自当前任务的 prepare，返回顺序与 requests 一致。
 - `search_database_objects(task_id, database, object_type, ...)`：按 `read_task_context` 返回的 Workspace 唯一数据库 alias 渐进搜索 schema、表、视图、列或索引。
@@ -92,9 +92,10 @@ docker compose exec backend uv run alembic upgrade head
 | `GET /api/workspaces/{id}/documents/{document_id}` | 从工作空间聚合缓存读取 Markdown |
 | `POST /api/workspaces/{id}/prepare-preview` | 创建 Workspace 预览 task 并返回 MCP JSON |
 | `GET /api/workspaces/{id}/tasks` | 获取工作空间最近 MCP task 与调用次数 |
-| `GET /api/workspaces/{id}/data-source-summary` | 汇总工作空间内项目的数据源授权 |
+| `GET /api/workspaces/{id}/environments` | 列出该工作空间独立拥有的动态环境；`local` 固定存在且为默认 |
+| `GET /api/workspaces/{id}/data-source-summary?environment={key}` | 汇总所选环境关联的项目数据源授权 |
 | `GET /api/workspaces/{id}/nacos-profiles` | 只读列出 Nacos 配置档摘要，不返回密码 |
-| `PUT /api/workspaces/{id}/nacos-profiles/{default\|test\|uat}` | 由本机 AI/运维保存 Nacos 连接与组件规则 |
+| `PUT /api/workspaces/{id}/nacos-profiles/{environment}` | 由本机 AI/运维为已登记环境保存唯一 Nacos 连接与组件规则 |
 | `GET /api/tasks/{task_id}/document-reads` | 获取任务的有序文档读取记录 |
 | `GET /api/data-source-engines` | 获取各数据库 Engine 的配置、同步、搜索和查询能力 |
 | `POST /api/data-sources/{id}/test` | 使用当前配置执行一次独立连接测试 |
@@ -102,6 +103,6 @@ docker compose exec backend uv run alembic upgrade head
 | `PATCH /api/projects/{project_id}/databases/{link_id}/mcp-alias` | 修改数据库 alias；唯一性按所属 Workspace 校验 |
 | `POST /api/mcp/integration/tests` | 对指定 Workspace 执行真实 MCP 连接测试 |
 
-旧 `/api/projects` 仅保留兼容入口，`document_projects.agents_path/project_type` 也暂时保留；新的文档树、刷新、MCP JSON 和调用记录都只走 Workspace API。migration head 为 `20260813_0035`；`0035` 增加带 LOCAL 默认值的白名单宿主机运行动作。升级前的 task 保持 `scope='project'` 兼容读取、搜索和数据库调用，历史记录继续可见。
+旧 `/api/projects` 仅保留兼容入口，`document_projects.agents_path/project_type` 也暂时保留；新的文档树、刷新、MCP JSON 和调用记录都只走 Workspace API。migration head 为 `20260820_0040`；`0040` 用动态 Workspace 环境替代固定 TEST/UAT 和逐 MCP 默认值，所有工作空间都以 `local` 为默认。升级前的 task 保持 `scope='project'` 兼容读取、搜索和数据库调用，历史记录继续可见。
 
 开发、测试和重启命令见 [启动与开发规范](./docs/STARTUP_GUIDE.md)。

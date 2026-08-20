@@ -1,0 +1,2702 @@
+[
+  {
+    "table": "cs_dsly_highway_attachment",
+    "column": "file_id",
+    "java_field": "fileId",
+    "target_tables": [
+      "cs_dsly_order_file",
+      "cs_file"
+    ],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "父行在别处已存在，父键从入参或查询取得，可被多次调用复用",
+      "存在返回单体的 finder，读取侧按一父一子处理",
+      "目标表命名存在歧义，候选 2 张，需人工确认"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/attachment/service/HighwayAttachmentAdminService.java",
+        "line": 97,
+        "method": "saveOrUpdate",
+        "receiver": "this",
+        "argument": "attachment",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "uploadAndSave"
+      }
+    ],
+    "evidence": [
+      {
+        "kind": "condition_pair",
+        "dto": "HighwayAttachment",
+        "accessor": "fileId",
+        "detail": "右值 fileId",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/attachment/service/HighwayAttachmentAdminService.java",
+        "line": 187
+      },
+      {
+        "kind": "finder_single",
+        "dto": "",
+        "accessor": "fileId",
+        "detail": "HighwayAttachment findByFileId(...)",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/attachment/service/HighwayAttachmentAdminService.java",
+        "line": 185
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_highway_attachment",
+    "column": "source_id",
+    "java_field": "sourceId",
+    "target_tables": [],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "1 处批量写入的循环体内把 sourceId 赋成批内恒定值，一个父键对应整批子行",
+      "存在 groupingBy 分组，作者按一父多子处理"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/attachment/service/HighwayAttachmentBasicService.java",
+        "line": 237,
+        "method": "batchInsert",
+        "receiver": "this",
+        "argument": "dispatchAttachment",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "batchInsertWithDispatchId"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/attachment/service/HighwayAttachmentAdminService.java",
+        "line": 97,
+        "method": "saveOrUpdate",
+        "receiver": "this",
+        "argument": "attachment",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "uploadAndSave"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderAdminService.java",
+        "line": 214,
+        "method": "batchInsert",
+        "receiver": "attachmentAdminService",
+        "argument": "allSignAttachments",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "sign"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/container/service/HighwayContainerPortalService.java",
+        "line": 217,
+        "method": "batchInsert",
+        "receiver": "attachmentPortalService",
+        "argument": "dispatchAttachment",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "saveContainerAttachment"
+      }
+    ],
+    "evidence": [
+      {
+        "kind": "condition_pair",
+        "dto": "HighwayAttachment",
+        "accessor": "sourceId",
+        "detail": "右值 containerId",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/attachment/service/HighwayAttachmentBasicService.java",
+        "line": 56
+      },
+      {
+        "kind": "condition_pair",
+        "dto": "HighwayAttachment",
+        "accessor": "sourceId",
+        "detail": "右值 dispatchOrderId",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/attachment/service/HighwayAttachmentBasicService.java",
+        "line": 74
+      },
+      {
+        "kind": "condition_pair",
+        "dto": "HighwayAttachment",
+        "accessor": "sourceId",
+        "detail": "右值 dispatchOrderId",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/attachment/service/HighwayAttachmentAdminService.java",
+        "line": 159
+      },
+      {
+        "kind": "condition_pair",
+        "dto": "HighwayAttachment",
+        "accessor": "sourceId",
+        "detail": "右值 id",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/attachment/service/HighwayAttachmentAdminService.java",
+        "line": 243
+      },
+      {
+        "kind": "condition_pair",
+        "dto": "HighwayAttachment",
+        "accessor": "sourceId",
+        "detail": "右值 carrierOrder.getId()",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/attachment/service/HighwayAttachmentPortalService.java",
+        "line": 46
+      },
+      {
+        "kind": "condition_pair",
+        "dto": "HighwayAttachment",
+        "accessor": "sourceId",
+        "detail": "右值 sourceId",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/attachment/service/HighwayAttachmentPortalService.java",
+        "line": 64
+      },
+      {
+        "kind": "grouping_by",
+        "dto": "HighwayAttachment",
+        "accessor": "sourceId",
+        "detail": "按外键分组，作者认为可能一父多子",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderAdminService.java",
+        "line": 122
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_highway_cargo",
+    "column": "cargo_id",
+    "java_field": "cargoId",
+    "target_tables": [
+      "cs_dsly_highway_inbound_order_cargo"
+    ],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "父行在别处已存在，父键从入参或查询取得，可被多次调用复用"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/carrier/service/HighwayCarrierOrderAdminService.java",
+        "line": 306,
+        "method": "batchInsert",
+        "receiver": "cargoDao",
+        "argument": "insertCargoList",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "batchCreateCarrierOrder"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_cargo",
+    "column": "carrier_order_no",
+    "java_field": "carrierOrderNo",
+    "target_tables": [
+      "cs_dsly_highway_carrier_order"
+    ],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "1 处批量写入的循环体内把 carrierOrderNo 赋成批内恒定值，一个父键对应整批子行",
+      "存在返回单体的 finder，读取侧按一父一子处理"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/cargo/service/HighwayCargoBasicService.java",
+        "line": 43,
+        "method": "update",
+        "receiver": "this",
+        "argument": "carrierCargo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "setLoadQuantity"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/cargo/service/HighwayCargoBasicService.java",
+        "line": 62,
+        "method": "update",
+        "receiver": "this",
+        "argument": "carrierCargo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "setCargoQuantity"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/cargo/service/HighwayCargoBasicService.java",
+        "line": 82,
+        "method": "update",
+        "receiver": "this",
+        "argument": "carrierCargo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "modifyCargoQuantity"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderPortalService.java",
+        "line": 665,
+        "method": "update",
+        "receiver": "cargoDao",
+        "argument": "carrierCargo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "redispatch"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderPortalService.java",
+        "line": 666,
+        "method": "update",
+        "receiver": "cargoDao",
+        "argument": "dispatchCargo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "redispatch"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/carrier/service/HighwayCarrierOrderAdminService.java",
+        "line": 306,
+        "method": "batchInsert",
+        "receiver": "cargoDao",
+        "argument": "insertCargoList",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "batchCreateCarrierOrder"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/carrier/service/HighwayCarrierOrderPortalService.java",
+        "line": 214,
+        "method": "batchInsert",
+        "receiver": "cargoDao",
+        "argument": "insertCargoList",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "batchDispatchOrder"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/carrier/service/HighwayCarrierOrderPortalService.java",
+        "line": 248,
+        "method": "update",
+        "receiver": "cargoDao",
+        "argument": "carrierCargo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "batchDispatchOrder"
+      }
+    ],
+    "evidence": [
+      {
+        "kind": "condition_pair",
+        "dto": "HighwayCargo",
+        "accessor": "carrierOrderNo",
+        "detail": "右值 carrierOrderNo",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/cargo/dao/HighwayCargoDao.java",
+        "line": 23
+      },
+      {
+        "kind": "condition_pair",
+        "dto": "HighwayCargo",
+        "accessor": "carrierOrderNo",
+        "detail": "右值 carrierOrderNo",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/cargo/dao/HighwayCargoDao.java",
+        "line": 34
+      },
+      {
+        "kind": "strict_to_map",
+        "dto": "HighwayCargo",
+        "accessor": "carrierOrderNo",
+        "detail": "无合并函数，键重复必抛 IllegalStateException，生产未崩即数据已验证唯一",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/carrier/service/HighwayCarrierOrderBasicService.java",
+        "line": 185
+      },
+      {
+        "kind": "finder_single",
+        "dto": "",
+        "accessor": "carrierOrderNo",
+        "detail": "HighwayCargo findByCarrierOrderNo(...)",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/cargo/dao/HighwayCargoDao.java",
+        "line": 21
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_highway_cargo",
+    "column": "category_id",
+    "java_field": "categoryId",
+    "target_tables": [
+      "cs_dsly_basic_cargo_category"
+    ],
+    "cardinality": "unknown",
+    "confidence": "none",
+    "reasons": [
+      "该表 11 处写入入口都归属不到 categoryId，赋值可能跨越多层构建器，改用读取侧证据判定",
+      "没有可用的基数证据"
+    ],
+    "write_sites": [],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_cargo",
+    "column": "dispatch_order_no",
+    "java_field": "dispatchOrderNo",
+    "target_tables": [
+      "cs_dsly_highway_dispatch_order"
+    ],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "1 处批量写入的循环体内把 dispatchOrderNo 赋成批内恒定值，一个父键对应整批子行",
+      "存在带合并函数的 toMap，作者预见过重复，实际可能是一父多子",
+      "存在返回单体的 finder，读取侧按一父一子处理"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/cargo/service/HighwayCargoBasicService.java",
+        "line": 42,
+        "method": "update",
+        "receiver": "this",
+        "argument": "dispatchCargo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "setLoadQuantity"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/cargo/service/HighwayCargoBasicService.java",
+        "line": 61,
+        "method": "update",
+        "receiver": "this",
+        "argument": "dispatchCargo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "setCargoQuantity"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/cargo/service/HighwayCargoBasicService.java",
+        "line": 81,
+        "method": "update",
+        "receiver": "this",
+        "argument": "dispatchCargo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "modifyCargoQuantity"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderPortalService.java",
+        "line": 665,
+        "method": "update",
+        "receiver": "cargoDao",
+        "argument": "carrierCargo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "redispatch"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderPortalService.java",
+        "line": 666,
+        "method": "update",
+        "receiver": "cargoDao",
+        "argument": "dispatchCargo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "redispatch"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/carrier/service/HighwayCarrierOrderPortalService.java",
+        "line": 214,
+        "method": "batchInsert",
+        "receiver": "cargoDao",
+        "argument": "insertCargoList",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "batchDispatchOrder"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/carrier/service/HighwayCarrierOrderPortalService.java",
+        "line": 248,
+        "method": "update",
+        "receiver": "cargoDao",
+        "argument": "carrierCargo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "batchDispatchOrder"
+      }
+    ],
+    "evidence": [
+      {
+        "kind": "condition_pair",
+        "dto": "HighwayCargo",
+        "accessor": "dispatchOrderNo",
+        "detail": "右值 dispatchOrderNo",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/cargo/dao/HighwayCargoDao.java",
+        "line": 57
+      },
+      {
+        "kind": "condition_pair",
+        "dto": "HighwayCargo",
+        "accessor": "dispatchOrderNo",
+        "detail": "右值 dispatchOrderNo",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/cargo/dao/HighwayCargoDao.java",
+        "line": 89
+      },
+      {
+        "kind": "strict_to_map",
+        "dto": "HighwayCargo",
+        "accessor": "dispatchOrderNo",
+        "detail": "无合并函数，键重复必抛 IllegalStateException，生产未崩即数据已验证唯一",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/carrier/service/HighwayCarrierOrderPortalService.java",
+        "line": 149
+      },
+      {
+        "kind": "loose_to_map",
+        "dto": "HighwayCargo",
+        "accessor": "dispatchOrderNo",
+        "detail": "带合并函数，作者预见重复后降级取一条",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/carrier/service/HighwayCarrierOrderPortalService.java",
+        "line": 523
+      },
+      {
+        "kind": "loose_to_map",
+        "dto": "HighwayCargoQuery",
+        "accessor": "dispatchOrderNo",
+        "detail": "带合并函数，作者预见重复后降级取一条",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/risk/service/HighwayDispatchRiskDataService.java",
+        "line": 126
+      },
+      {
+        "kind": "finder_single",
+        "dto": "",
+        "accessor": "dispatchOrderNo",
+        "detail": "HighwayCargo findByDispatchOrderNo(...)",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/cargo/dao/HighwayCargoDao.java",
+        "line": 87
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_highway_carrier_order",
+    "column": "address_id",
+    "java_field": "addressId",
+    "target_tables": [
+      "cs_dsly_basic_address"
+    ],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "1 处批量写入的循环体内把 addressId 赋成批内恒定值，一个父键对应整批子行"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/carrier/service/HighwayCarrierOrderAdminService.java",
+        "line": 304,
+        "method": "batchInsert",
+        "receiver": "this",
+        "argument": "insertCarrierOrderList",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "batchCreateCarrierOrder"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_carrier_order",
+    "column": "carrier_id",
+    "java_field": "carrierId",
+    "target_tables": [
+      "cs_dsly_line_route_carrier"
+    ],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "父行在别处已存在，父键从入参或查询取得，可被多次调用复用"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderPortalService.java",
+        "line": 682,
+        "method": "update",
+        "receiver": "carrierOrderDao",
+        "argument": "carrierOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "redispatch"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/carrier/service/HighwayCarrierOrderAdminService.java",
+        "line": 210,
+        "method": "update",
+        "receiver": "this",
+        "argument": "carrierOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "changeCarrierOrderInfo"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/carrier/service/HighwayCarrierOrderAdminService.java",
+        "line": 304,
+        "method": "batchInsert",
+        "receiver": "this",
+        "argument": "insertCarrierOrderList",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "batchCreateCarrierOrder"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_carrier_order",
+    "column": "contract_no",
+    "java_field": "contractNo",
+    "target_tables": [],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "1 处批量写入的循环体内把 contractNo 赋成批内恒定值，一个父键对应整批子行"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/carrier/service/HighwayCarrierOrderAdminService.java",
+        "line": 210,
+        "method": "update",
+        "receiver": "this",
+        "argument": "carrierOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "changeCarrierOrderInfo"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/carrier/service/HighwayCarrierOrderAdminService.java",
+        "line": 304,
+        "method": "batchInsert",
+        "receiver": "this",
+        "argument": "insertCarrierOrderList",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "batchCreateCarrierOrder"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_carrier_order",
+    "column": "entrusted_order_no",
+    "java_field": "entrustedOrderNo",
+    "target_tables": [
+      "cs_dsly_operation_entrusted_order",
+      "cs_dsly_order_entrusted_order"
+    ],
+    "cardinality": "unknown",
+    "confidence": "none",
+    "reasons": [
+      "该表 5 处写入入口都归属不到 entrustedOrderNo，赋值可能跨越多层构建器，改用读取侧证据判定",
+      "没有可用的基数证据",
+      "目标表命名存在歧义，候选 2 张，需人工确认"
+    ],
+    "write_sites": [],
+    "evidence": [
+      {
+        "kind": "condition_pair",
+        "dto": "HighwayCarrierOrder",
+        "accessor": "entrustedOrderNo",
+        "detail": "右值 entrustedNo",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/carrier/dao/HighwayCarrierOrderDao.java",
+        "line": 69
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_highway_carrier_order",
+    "column": "route_no",
+    "java_field": "routeNo",
+    "target_tables": [
+      "cs_bt_route",
+      "cs_dsly_line_route"
+    ],
+    "cardinality": "unknown",
+    "confidence": "low",
+    "reasons": [
+      "虽有 1 处批量写入，但 routeNo 在批内逐行变化，批量本身不构成基数证据",
+      "目标表命名存在歧义，候选 2 张，需人工确认"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/carrier/service/HighwayCarrierOrderAdminService.java",
+        "line": 304,
+        "method": "batchInsert",
+        "receiver": "this",
+        "argument": "insertCarrierOrderList",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "batchCreateCarrierOrder"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_carrier_order",
+    "column": "shipper_id",
+    "java_field": "shipperId",
+    "target_tables": [],
+    "cardinality": "unknown",
+    "confidence": "none",
+    "reasons": [
+      "该表 5 处写入入口都归属不到 shipperId，赋值可能跨越多层构建器，改用读取侧证据判定",
+      "没有可用的基数证据"
+    ],
+    "write_sites": [],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_carrier_settlement",
+    "column": "carrier_order_no",
+    "java_field": "carrierOrderNo",
+    "target_tables": [
+      "cs_dsly_highway_carrier_order"
+    ],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "1 处批量写入的循环体内把 carrierOrderNo 赋成批内恒定值，一个父键对应整批子行"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/carrier/service/HighwayCarrierOrderAdminService.java",
+        "line": 308,
+        "method": "batchInsert",
+        "receiver": "settlementAdminService",
+        "argument": "insertSettlementList",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "batchCreateCarrierOrder"
+      }
+    ],
+    "evidence": [
+      {
+        "kind": "condition_pair",
+        "dto": "Settlement",
+        "accessor": "carrierOrderNo",
+        "detail": "右值 carrierOrderNo",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/settlement/dao/SettlementDao.java",
+        "line": 22
+      },
+      {
+        "kind": "condition_pair",
+        "dto": "Settlement",
+        "accessor": "carrierOrderNo",
+        "detail": "右值 carrierOrderNo",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/settlement/dao/SettlementDao.java",
+        "line": 28
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_highway_container",
+    "column": "seal_no",
+    "java_field": "sealNo",
+    "target_tables": [],
+    "cardinality": "unknown",
+    "confidence": "none",
+    "reasons": [
+      "该表 4 处写入入口都归属不到 sealNo，赋值可能跨越多层构建器，改用读取侧证据判定",
+      "没有可用的基数证据"
+    ],
+    "write_sites": [],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_container",
+    "column": "source_id",
+    "java_field": "sourceId",
+    "target_tables": [],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "1 处批量写入的循环体内把 sourceId 赋成批内恒定值，一个父键对应整批子行",
+      "存在带合并函数的 toMap，作者预见过重复，实际可能是一父多子"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/container/service/HighwayContainerPortalService.java",
+        "line": 108,
+        "method": "saveOrUpdate",
+        "receiver": "this",
+        "argument": "container",
+        "is_batch": false,
+        "loop_shape": "per_parent_iteration",
+        "enclosing_method": "reDispatchModifyContainerInfo"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/container/service/HighwayContainerPortalService.java",
+        "line": 170,
+        "method": "update",
+        "receiver": "this",
+        "argument": "first",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "modifyByLoad"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/container/service/HighwayContainerPortalService.java",
+        "line": 186,
+        "method": "update",
+        "receiver": "this",
+        "argument": "second",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "modifyByLoad"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/carrier/service/HighwayCarrierOrderAdminService.java",
+        "line": 311,
+        "method": "batchInsert",
+        "receiver": "containerDao",
+        "argument": "insertContainerList",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "batchCreateCarrierOrder"
+      }
+    ],
+    "evidence": [
+      {
+        "kind": "loose_to_map",
+        "dto": "HighwayContainerQuery",
+        "accessor": "sourceId",
+        "detail": "带合并函数，作者预见重复后降级取一条",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderBasicService.java",
+        "line": 103
+      },
+      {
+        "kind": "strict_to_map",
+        "dto": "HighwayContainerQuery",
+        "accessor": "sourceId",
+        "detail": "无合并函数，键重复必抛 IllegalStateException，生产未崩即数据已验证唯一",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderBasicService.java",
+        "line": 109
+      },
+      {
+        "kind": "loose_to_map",
+        "dto": "HighwayContainerQuery",
+        "accessor": "sourceId",
+        "detail": "带合并函数，作者预见重复后降级取一条",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderBasicService.java",
+        "line": 431
+      },
+      {
+        "kind": "strict_to_map",
+        "dto": "HighwayContainerQuery",
+        "accessor": "sourceId",
+        "detail": "无合并函数，键重复必抛 IllegalStateException，生产未崩即数据已验证唯一",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderBasicService.java",
+        "line": 436
+      },
+      {
+        "kind": "loose_to_map",
+        "dto": "HighwayContainerQuery",
+        "accessor": "sourceId",
+        "detail": "带合并函数，作者预见重复后降级取一条",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderBasicService.java",
+        "line": 510
+      },
+      {
+        "kind": "strict_to_map",
+        "dto": "HighwayContainerQuery",
+        "accessor": "sourceId",
+        "detail": "无合并函数，键重复必抛 IllegalStateException，生产未崩即数据已验证唯一",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderBasicService.java",
+        "line": 516
+      },
+      {
+        "kind": "loose_to_map",
+        "dto": "HighwayContainerQuery",
+        "accessor": "sourceId",
+        "detail": "带合并函数，作者预见重复后降级取一条",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderPortalService.java",
+        "line": 623
+      },
+      {
+        "kind": "strict_to_map",
+        "dto": "HighwayContainerQuery",
+        "accessor": "sourceId",
+        "detail": "无合并函数，键重复必抛 IllegalStateException，生产未崩即数据已验证唯一",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderPortalService.java",
+        "line": 628
+      },
+      {
+        "kind": "condition_pair",
+        "dto": "HighwayContainer",
+        "accessor": "sourceId",
+        "detail": "右值 dispatchOrderPortalDetailQuery.getId()",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/container/service/HighwayContainerBasicService.java",
+        "line": 50
+      },
+      {
+        "kind": "condition_pair",
+        "dto": "HighwayContainer",
+        "accessor": "sourceId",
+        "detail": "右值 redispatchItem.getDispatchId()",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/container/service/HighwayContainerPortalService.java",
+        "line": 96
+      },
+      {
+        "kind": "condition_pair",
+        "dto": "HighwayContainer",
+        "accessor": "sourceId",
+        "detail": "右值 dispatchId",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/container/service/HighwayContainerPortalService.java",
+        "line": 153
+      },
+      {
+        "kind": "condition_pair",
+        "dto": "HighwayContainer",
+        "accessor": "sourceId",
+        "detail": "右值 dispatchId",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/container/service/HighwayContainerPortalService.java",
+        "line": 233
+      },
+      {
+        "kind": "loose_to_map",
+        "dto": "HighwayContainerQuery",
+        "accessor": "sourceId",
+        "detail": "带合并函数，作者预见重复后降级取一条",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/carrier/service/HighwayCarrierOrderPortalService.java",
+        "line": 528
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_highway_dispatch_box_relation",
+    "column": "box_no",
+    "java_field": "boxNo",
+    "target_tables": [
+      "cs_bt_daily_plan_box",
+      "cs_bt_waybill_box",
+      "cs_dsly_basic_outbound_box"
+    ],
+    "cardinality": "unknown",
+    "confidence": "low",
+    "reasons": [
+      "虽有 1 处批量写入，但 boxNo 在批内逐行变化，批量本身不构成基数证据",
+      "目标表命名存在歧义，候选 3 张，需人工确认"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatchbox/service/HighwayDispatchBoxPortalService.java",
+        "line": 371,
+        "method": "batchInsert",
+        "receiver": "relationDao",
+        "argument": "inserts",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "sync"
+      }
+    ],
+    "evidence": [
+      {
+        "kind": "condition_pair",
+        "dto": "HighwayDispatchBoxRelation",
+        "accessor": "boxNo",
+        "detail": "右值 boxNo",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatchbox/dao/HighwayDispatchBoxRelationDao.java",
+        "line": 85
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_highway_dispatch_box_relation",
+    "column": "data_box_id",
+    "java_field": "dataBoxId",
+    "target_tables": [],
+    "cardinality": "unknown",
+    "confidence": "low",
+    "reasons": [
+      "虽有 1 处批量写入，但 dataBoxId 在批内逐行变化，批量本身不构成基数证据",
+      "存在带合并函数的 toMap，作者预见过重复，实际可能是一父多子",
+      "存在返回 List 的 finder，读取侧按一父多子处理"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatchbox/service/HighwayDispatchBoxPortalService.java",
+        "line": 371,
+        "method": "batchInsert",
+        "receiver": "relationDao",
+        "argument": "inserts",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "sync"
+      }
+    ],
+    "evidence": [
+      {
+        "kind": "loose_to_map",
+        "dto": "HighwayDispatchBoxRelation",
+        "accessor": "dataBoxId",
+        "detail": "带合并函数，作者预见重复后降级取一条",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatchbox/service/HighwayDispatchBoxPortalService.java",
+        "line": 114
+      },
+      {
+        "kind": "finder_list",
+        "dto": "",
+        "accessor": "dataBoxId",
+        "detail": "List<HighwayDispatchBoxRelation> findByDataBoxIds(...)",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatchbox/dao/HighwayDispatchBoxRelationDao.java",
+        "line": 51
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_highway_dispatch_box_relation",
+    "column": "dispatch_order_id",
+    "java_field": "dispatchOrderId",
+    "target_tables": [
+      "cs_dsly_highway_dispatch_order"
+    ],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "1 处批量写入的循环体内把 dispatchOrderId 赋成批内恒定值，一个父键对应整批子行"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatchbox/service/HighwayDispatchBoxPortalService.java",
+        "line": 371,
+        "method": "batchInsert",
+        "receiver": "relationDao",
+        "argument": "inserts",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "sync"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_dispatch_box_relation",
+    "column": "dispatch_order_no",
+    "java_field": "dispatchOrderNo",
+    "target_tables": [
+      "cs_dsly_highway_dispatch_order"
+    ],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "1 处批量写入的循环体内把 dispatchOrderNo 赋成批内恒定值，一个父键对应整批子行",
+      "存在 groupingBy 分组，作者按一父多子处理",
+      "存在返回 List 的 finder，读取侧按一父多子处理"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatchbox/service/HighwayDispatchBoxPortalService.java",
+        "line": 371,
+        "method": "batchInsert",
+        "receiver": "relationDao",
+        "argument": "inserts",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "sync"
+      }
+    ],
+    "evidence": [
+      {
+        "kind": "condition_pair",
+        "dto": "HighwayDispatchBoxRelation",
+        "accessor": "dispatchOrderNo",
+        "detail": "右值 dispatchOrderNo",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatchbox/dao/HighwayDispatchBoxRelationDao.java",
+        "line": 26
+      },
+      {
+        "kind": "grouping_by",
+        "dto": "HighwayDispatchBoxRelation",
+        "accessor": "dispatchOrderNo",
+        "detail": "按外键分组，作者认为可能一父多子",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatchbox/service/HighwayDispatchBoxPortalService.java",
+        "line": 301
+      },
+      {
+        "kind": "finder_list",
+        "dto": "",
+        "accessor": "dispatchOrderNo",
+        "detail": "List<HighwayDispatchBoxRelation> findByDispatchOrderNo(...)",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatchbox/dao/HighwayDispatchBoxRelationDao.java",
+        "line": 24
+      },
+      {
+        "kind": "finder_list",
+        "dto": "",
+        "accessor": "dispatchOrderNo",
+        "detail": "List<HighwayDispatchBoxRelation> findByDispatchOrderNos(...)",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatchbox/dao/HighwayDispatchBoxRelationDao.java",
+        "line": 36
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_highway_dispatch_box_relation",
+    "column": "outbound_order_id",
+    "java_field": "outboundOrderId",
+    "target_tables": [
+      "cs_dsly_order_outbound_order"
+    ],
+    "cardinality": "unknown",
+    "confidence": "low",
+    "reasons": [
+      "虽有 1 处批量写入，但 outboundOrderId 在批内逐行变化，批量本身不构成基数证据"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatchbox/service/HighwayDispatchBoxPortalService.java",
+        "line": 371,
+        "method": "batchInsert",
+        "receiver": "relationDao",
+        "argument": "inserts",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "sync"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_dispatch_box_relation",
+    "column": "outbound_order_no",
+    "java_field": "outboundOrderNo",
+    "target_tables": [
+      "cs_dsly_order_outbound_order"
+    ],
+    "cardinality": "unknown",
+    "confidence": "low",
+    "reasons": [
+      "虽有 1 处批量写入，但 outboundOrderNo 在批内逐行变化，批量本身不构成基数证据"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatchbox/service/HighwayDispatchBoxPortalService.java",
+        "line": 371,
+        "method": "batchInsert",
+        "receiver": "relationDao",
+        "argument": "inserts",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "sync"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_dispatch_box_relation",
+    "column": "sku_id",
+    "java_field": "skuId",
+    "target_tables": [],
+    "cardinality": "unknown",
+    "confidence": "low",
+    "reasons": [
+      "虽有 1 处批量写入，但 skuId 在批内逐行变化，批量本身不构成基数证据"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatchbox/service/HighwayDispatchBoxPortalService.java",
+        "line": 371,
+        "method": "batchInsert",
+        "receiver": "relationDao",
+        "argument": "inserts",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "sync"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_dispatch_box_relation",
+    "column": "upstream_order_no",
+    "java_field": "upstreamOrderNo",
+    "target_tables": [],
+    "cardinality": "unknown",
+    "confidence": "low",
+    "reasons": [
+      "虽有 1 处批量写入，但 upstreamOrderNo 在批内逐行变化，批量本身不构成基数证据",
+      "存在返回 List 的 finder，读取侧按一父多子处理"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatchbox/service/HighwayDispatchBoxPortalService.java",
+        "line": 371,
+        "method": "batchInsert",
+        "receiver": "relationDao",
+        "argument": "inserts",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "sync"
+      }
+    ],
+    "evidence": [
+      {
+        "kind": "condition_pair",
+        "dto": "HighwayDispatchBoxRelation",
+        "accessor": "upstreamOrderNo",
+        "detail": "右值 upstreamOrderNo",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatchbox/dao/HighwayDispatchBoxRelationDao.java",
+        "line": 85
+      },
+      {
+        "kind": "finder_list",
+        "dto": "",
+        "accessor": "upstreamOrderNo",
+        "detail": "List<HighwayDispatchBoxRelation> findByUpstreamOrderNos(...)",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatchbox/dao/HighwayDispatchBoxRelationDao.java",
+        "line": 66
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_highway_dispatch_order",
+    "column": "address_id",
+    "java_field": "addressId",
+    "target_tables": [
+      "cs_dsly_basic_address"
+    ],
+    "cardinality": "unknown",
+    "confidence": "none",
+    "reasons": [
+      "该表 11 处写入入口都归属不到 addressId，赋值可能跨越多层构建器，改用读取侧证据判定",
+      "没有可用的基数证据"
+    ],
+    "write_sites": [],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_dispatch_order",
+    "column": "carrier_id",
+    "java_field": "carrierId",
+    "target_tables": [
+      "cs_dsly_line_route_carrier"
+    ],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "父行在别处已存在，父键从入参或查询取得，可被多次调用复用"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderPortalService.java",
+        "line": 185,
+        "method": "update",
+        "receiver": "this",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "load"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderPortalService.java",
+        "line": 222,
+        "method": "update",
+        "receiver": "this",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "modifyLoadInfo"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderPortalService.java",
+        "line": 265,
+        "method": "update",
+        "receiver": "this",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "unload"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderPortalService.java",
+        "line": 314,
+        "method": "update",
+        "receiver": "this",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "modifyUnloadInfo"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderPortalService.java",
+        "line": 672,
+        "method": "update",
+        "receiver": "this",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "redispatch"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/carrier/service/HighwayCarrierOrderPortalService.java",
+        "line": 217,
+        "method": "batchInsert",
+        "receiver": "dispatchOrderDao",
+        "argument": "insertDispatchOrderList",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "batchDispatchOrder"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_dispatch_order",
+    "column": "carrier_order_no",
+    "java_field": "carrierOrderNo",
+    "target_tables": [
+      "cs_dsly_highway_carrier_order"
+    ],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "父行在别处已存在，父键从入参或查询取得，可被多次调用复用",
+      "存在 groupingBy 分组，作者按一父多子处理",
+      "存在返回 List 的 finder，读取侧按一父多子处理"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderAdminService.java",
+        "line": 206,
+        "method": "update",
+        "receiver": "this",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "sign"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderPortalService.java",
+        "line": 185,
+        "method": "update",
+        "receiver": "this",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "load"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderPortalService.java",
+        "line": 222,
+        "method": "update",
+        "receiver": "this",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "modifyLoadInfo"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderPortalService.java",
+        "line": 265,
+        "method": "update",
+        "receiver": "this",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "unload"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderPortalService.java",
+        "line": 314,
+        "method": "update",
+        "receiver": "this",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "modifyUnloadInfo"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderPortalService.java",
+        "line": 672,
+        "method": "update",
+        "receiver": "this",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "redispatch"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/carrier/service/HighwayCarrierOrderPortalService.java",
+        "line": 217,
+        "method": "batchInsert",
+        "receiver": "dispatchOrderDao",
+        "argument": "insertDispatchOrderList",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "batchDispatchOrder"
+      }
+    ],
+    "evidence": [
+      {
+        "kind": "condition_pair",
+        "dto": "HighwayDispatchOrder",
+        "accessor": "carrierOrderNo",
+        "detail": "右值 carrierOrderNo",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/dao/HighwayDispatchOrderDao.java",
+        "line": 98
+      },
+      {
+        "kind": "grouping_by",
+        "dto": "HighwayDispatchOrder",
+        "accessor": "carrierOrderNo",
+        "detail": "按外键分组，作者认为可能一父多子",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/carrier/service/HighwayCarrierOrderBasicService.java",
+        "line": 93
+      },
+      {
+        "kind": "grouping_by",
+        "dto": "HighwayDispatchOrder",
+        "accessor": "carrierOrderNo",
+        "detail": "按外键分组，作者认为可能一父多子",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/carrier/service/HighwayCarrierOrderBasicService.java",
+        "line": 193
+      },
+      {
+        "kind": "finder_list",
+        "dto": "",
+        "accessor": "carrierOrderNo",
+        "detail": "List<HighwayDispatchOrder> findByCarrierOrderNos(...)",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/dao/HighwayDispatchOrderDao.java",
+        "line": 85
+      },
+      {
+        "kind": "finder_list",
+        "dto": "",
+        "accessor": "carrierOrderNo",
+        "detail": "List<HighwayDispatchOrder> findByCarrierOrderNo(...)",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/dao/HighwayDispatchOrderDao.java",
+        "line": 96
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_highway_dispatch_order",
+    "column": "driver_id",
+    "java_field": "driverId",
+    "target_tables": [
+      "cs_dsly_basic_driver"
+    ],
+    "cardinality": "unknown",
+    "confidence": "low",
+    "reasons": [
+      "虽有 1 处批量写入，但 driverId 在批内逐行变化，批量本身不构成基数证据"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderPortalService.java",
+        "line": 672,
+        "method": "update",
+        "receiver": "this",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "redispatch"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/carrier/service/HighwayCarrierOrderPortalService.java",
+        "line": 217,
+        "method": "batchInsert",
+        "receiver": "dispatchOrderDao",
+        "argument": "insertDispatchOrderList",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "batchDispatchOrder"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_dispatch_order",
+    "column": "risk_evaluation_no",
+    "java_field": "riskEvaluationNo",
+    "target_tables": [],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "1 处批量写入的循环体内把 riskEvaluationNo 赋成批内恒定值，一个父键对应整批子行"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/risk/service/HighwayRiskEvaluationTaskService.java",
+        "line": 391,
+        "method": "saveOrUpdate",
+        "receiver": "dispatchOrderDao",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "applyOrderRiskResult"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/risk/service/HighwayRiskEvaluationTaskService.java",
+        "line": 467,
+        "method": "saveOrUpdate",
+        "receiver": "dispatchOrderDao",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "writes_loop_collection",
+        "enclosing_method": "enqueueDispatchEvaluations"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/risk/service/HighwayRiskEvaluationTaskService.java",
+        "line": 605,
+        "method": "saveOrUpdate",
+        "receiver": "dispatchOrderDao",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "markOrderPending"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/risk/service/HighwayRiskEvaluationTaskService.java",
+        "line": 872,
+        "method": "saveOrUpdate",
+        "receiver": "dispatchOrderDao",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "updateOrderRiskResult"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_dispatch_order",
+    "column": "risk_request_id",
+    "java_field": "riskRequestId",
+    "target_tables": [],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "1 处批量写入的循环体内把 riskRequestId 赋成批内恒定值，一个父键对应整批子行"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/risk/service/HighwayRiskEvaluationTaskService.java",
+        "line": 391,
+        "method": "saveOrUpdate",
+        "receiver": "dispatchOrderDao",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "applyOrderRiskResult"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/risk/service/HighwayRiskEvaluationTaskService.java",
+        "line": 467,
+        "method": "saveOrUpdate",
+        "receiver": "dispatchOrderDao",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "writes_loop_collection",
+        "enclosing_method": "enqueueDispatchEvaluations"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/risk/service/HighwayRiskEvaluationTaskService.java",
+        "line": 605,
+        "method": "saveOrUpdate",
+        "receiver": "dispatchOrderDao",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "markOrderPending"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/risk/service/HighwayRiskEvaluationTaskService.java",
+        "line": 872,
+        "method": "saveOrUpdate",
+        "receiver": "dispatchOrderDao",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "updateOrderRiskResult"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_dispatch_order",
+    "column": "vehicle_no",
+    "java_field": "vehicleNo",
+    "target_tables": [
+      "cs_dsly_basic_vehicle",
+      "cs_dsly_operation_appointment_vehicle"
+    ],
+    "cardinality": "unknown",
+    "confidence": "low",
+    "reasons": [
+      "虽有 1 处批量写入，但 vehicleNo 在批内逐行变化，批量本身不构成基数证据",
+      "存在带合并函数的 toMap，作者预见过重复，实际可能是一父多子",
+      "目标表命名存在歧义，候选 2 张，需人工确认"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderPortalService.java",
+        "line": 265,
+        "method": "update",
+        "receiver": "this",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "unload"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderPortalService.java",
+        "line": 672,
+        "method": "update",
+        "receiver": "this",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "redispatch"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/carrier/service/HighwayCarrierOrderPortalService.java",
+        "line": 217,
+        "method": "batchInsert",
+        "receiver": "dispatchOrderDao",
+        "argument": "insertDispatchOrderList",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "batchDispatchOrder"
+      }
+    ],
+    "evidence": [
+      {
+        "kind": "loose_to_map",
+        "dto": "HighwayVehicleQuery",
+        "accessor": "vehicleNo",
+        "detail": "带合并函数，作者预见重复后降级取一条",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderBasicService.java",
+        "line": 476
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_highway_dispatch_record",
+    "column": "dispatch_order_no",
+    "java_field": "dispatchOrderNo",
+    "target_tables": [
+      "cs_dsly_highway_dispatch_order"
+    ],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "1 处批量写入的循环体内把 dispatchOrderNo 赋成批内恒定值，一个父键对应整批子行",
+      "存在 groupingBy 分组，作者按一父多子处理"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderAdminService.java",
+        "line": 210,
+        "method": "saveOrUpdate",
+        "receiver": "routePortalService",
+        "argument": "record",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "sign"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderPortalService.java",
+        "line": 189,
+        "method": "saveOrUpdate",
+        "receiver": "routePortalService",
+        "argument": "record",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "load"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderPortalService.java",
+        "line": 225,
+        "method": "saveOrUpdate",
+        "receiver": "routePortalService",
+        "argument": "record",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "modifyLoadInfo"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderPortalService.java",
+        "line": 269,
+        "method": "saveOrUpdate",
+        "receiver": "routePortalService",
+        "argument": "record",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "unload"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderPortalService.java",
+        "line": 317,
+        "method": "saveOrUpdate",
+        "receiver": "routePortalService",
+        "argument": "record",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "modifyUnloadInfo"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderPortalService.java",
+        "line": 671,
+        "method": "saveOrUpdate",
+        "receiver": "routePortalService",
+        "argument": "record",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "redispatch"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/carrier/service/HighwayCarrierOrderPortalService.java",
+        "line": 223,
+        "method": "batchInsert",
+        "receiver": "recordPortalService",
+        "argument": "insertRecordList",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "batchDispatchOrder"
+      }
+    ],
+    "evidence": [
+      {
+        "kind": "condition_pair",
+        "dto": "HighwayRecord",
+        "accessor": "dispatchOrderNo",
+        "detail": "右值 dispatchOrderNo",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/record/dao/HighwayRecordDao.java",
+        "line": 43
+      },
+      {
+        "kind": "condition_pair",
+        "dto": "HighwayRecord",
+        "accessor": "dispatchOrderNo",
+        "detail": "右值 dispatchOrderNo",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/record/service/HighwayRecordBasicService.java",
+        "line": 73
+      },
+      {
+        "kind": "condition_pair",
+        "dto": "HighwayRecord",
+        "accessor": "dispatchOrderNo",
+        "detail": "右值 dispatchOrderNo",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/record/service/HighwayRecordBasicService.java",
+        "line": 146
+      },
+      {
+        "kind": "grouping_by",
+        "dto": "HighwayRecord",
+        "accessor": "dispatchOrderNo",
+        "detail": "按外键分组，作者认为可能一父多子",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/record/service/HighwayRecordBasicService.java",
+        "line": 196
+      },
+      {
+        "kind": "grouping_by",
+        "dto": "HighwayRecord",
+        "accessor": "dispatchOrderNo",
+        "detail": "按外键分组，作者认为可能一父多子",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/record/service/HighwayRecordBasicService.java",
+        "line": 248
+      },
+      {
+        "kind": "grouping_by",
+        "dto": "HighwayRecord",
+        "accessor": "dispatchOrderNo",
+        "detail": "按外键分组，作者认为可能一父多子",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderBasicService.java",
+        "line": 483
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_highway_dispatch_record",
+    "column": "operator_id",
+    "java_field": "operatorId",
+    "target_tables": [],
+    "cardinality": "unknown",
+    "confidence": "low",
+    "reasons": [
+      "存在批量写入入口 1 处、写入循环集合 0 处，但无法确认 operatorId 在批内是否恒定，需人工确认"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderAdminService.java",
+        "line": 210,
+        "method": "saveOrUpdate",
+        "receiver": "routePortalService",
+        "argument": "record",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "sign"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderPortalService.java",
+        "line": 189,
+        "method": "saveOrUpdate",
+        "receiver": "routePortalService",
+        "argument": "record",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "load"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderPortalService.java",
+        "line": 225,
+        "method": "saveOrUpdate",
+        "receiver": "routePortalService",
+        "argument": "record",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "modifyLoadInfo"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderPortalService.java",
+        "line": 269,
+        "method": "saveOrUpdate",
+        "receiver": "routePortalService",
+        "argument": "record",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "unload"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderPortalService.java",
+        "line": 317,
+        "method": "saveOrUpdate",
+        "receiver": "routePortalService",
+        "argument": "record",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "modifyUnloadInfo"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/dispatch/service/HighwayDispatchOrderPortalService.java",
+        "line": 671,
+        "method": "saveOrUpdate",
+        "receiver": "routePortalService",
+        "argument": "record",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "redispatch"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/carrier/service/HighwayCarrierOrderPortalService.java",
+        "line": 223,
+        "method": "batchInsert",
+        "receiver": "recordPortalService",
+        "argument": "insertRecordList",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "batchDispatchOrder"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_inbound_order",
+    "column": "carrier_id",
+    "java_field": "carrierId",
+    "target_tables": [
+      "cs_dsly_line_route_carrier"
+    ],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "父行在别处已存在，父键从入参或查询取得，可被多次调用复用"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/inboundorder/service/MtpInboundOrderCreateService.java",
+        "line": 91,
+        "method": "saveOrUpdate",
+        "receiver": "inboundOrderDao",
+        "argument": "inboundOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "createAndPublish"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/inboundorder/service/MtpInboundOrderCreateService.java",
+        "line": 109,
+        "method": "update",
+        "receiver": "inboundOrderDao",
+        "argument": "inboundOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "createAndPublish"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_inbound_order",
+    "column": "dispatch_order_id",
+    "java_field": "dispatchOrderId",
+    "target_tables": [
+      "cs_dsly_highway_dispatch_order"
+    ],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "父行在别处已存在，父键从入参或查询取得，可被多次调用复用"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/inboundorder/service/MtpInboundOrderCreateService.java",
+        "line": 91,
+        "method": "saveOrUpdate",
+        "receiver": "inboundOrderDao",
+        "argument": "inboundOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "createAndPublish"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/inboundorder/service/MtpInboundOrderCreateService.java",
+        "line": 109,
+        "method": "update",
+        "receiver": "inboundOrderDao",
+        "argument": "inboundOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "createAndPublish"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_inbound_order",
+    "column": "dispatch_order_no",
+    "java_field": "dispatchOrderNo",
+    "target_tables": [
+      "cs_dsly_highway_dispatch_order"
+    ],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "父行在别处已存在，父键从入参或查询取得，可被多次调用复用",
+      "存在返回单体的 finder，读取侧按一父一子处理"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/inboundorder/service/MtpInboundOrderCreateService.java",
+        "line": 91,
+        "method": "saveOrUpdate",
+        "receiver": "inboundOrderDao",
+        "argument": "inboundOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "createAndPublish"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/inboundorder/service/MtpInboundOrderCreateService.java",
+        "line": 109,
+        "method": "update",
+        "receiver": "inboundOrderDao",
+        "argument": "inboundOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "createAndPublish"
+      }
+    ],
+    "evidence": [
+      {
+        "kind": "condition_pair",
+        "dto": "HighwayInboundOrder",
+        "accessor": "dispatchOrderNo",
+        "detail": "右值 dispatchOrderNo",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/inboundorder/dao/HighwayInboundOrderDao.java",
+        "line": 73
+      },
+      {
+        "kind": "finder_single",
+        "dto": "",
+        "accessor": "dispatchOrderNo",
+        "detail": "HighwayInboundOrder findByDispatchOrderNo(...)",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/inboundorder/dao/HighwayInboundOrderDao.java",
+        "line": 71
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_highway_inbound_order",
+    "column": "shipper_id",
+    "java_field": "shipperId",
+    "target_tables": [],
+    "cardinality": "unknown",
+    "confidence": "low",
+    "reasons": [
+      "目标表未解析，无法判断父键来源"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/inboundorder/service/MtpInboundOrderCreateService.java",
+        "line": 91,
+        "method": "saveOrUpdate",
+        "receiver": "inboundOrderDao",
+        "argument": "inboundOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "createAndPublish"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/inboundorder/service/MtpInboundOrderCreateService.java",
+        "line": 109,
+        "method": "update",
+        "receiver": "inboundOrderDao",
+        "argument": "inboundOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "createAndPublish"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_inbound_order",
+    "column": "warehouse_id",
+    "java_field": "warehouseId",
+    "target_tables": [],
+    "cardinality": "unknown",
+    "confidence": "low",
+    "reasons": [
+      "目标表未解析，无法判断父键来源"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/inboundorder/service/MtpInboundOrderCreateService.java",
+        "line": 91,
+        "method": "saveOrUpdate",
+        "receiver": "inboundOrderDao",
+        "argument": "inboundOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "createAndPublish"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/inboundorder/service/MtpInboundOrderCreateService.java",
+        "line": 109,
+        "method": "update",
+        "receiver": "inboundOrderDao",
+        "argument": "inboundOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "createAndPublish"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_inbound_order_cargo",
+    "column": "cargo_id",
+    "java_field": "cargoId",
+    "target_tables": [
+      "cs_dsly_highway_cargo"
+    ],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "父行在别处已存在，父键从入参或查询取得，可被多次调用复用"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/inboundorder/service/MtpInboundOrderCreateService.java",
+        "line": 96,
+        "method": "saveOrUpdate",
+        "receiver": "inboundOrderCargoDao",
+        "argument": "inboundCargo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "createAndPublish"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_inbound_order_cargo",
+    "column": "inbound_order_id",
+    "java_field": "inboundOrderId",
+    "target_tables": [
+      "cs_dsly_highway_inbound_order"
+    ],
+    "cardinality": "one_to_one",
+    "confidence": "upper_bound",
+    "reasons": [
+      "每处创建入口都在同一方法内新建父行，父键不可复用",
+      "全部 1 处创建入口均为单对象写入，上界为 1，但缺少运行时验证证据",
+      "存在返回单体的 finder，读取侧按一父一子处理"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/inboundorder/service/MtpInboundOrderCreateService.java",
+        "line": 96,
+        "method": "saveOrUpdate",
+        "receiver": "inboundOrderCargoDao",
+        "argument": "inboundCargo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "createAndPublish"
+      }
+    ],
+    "evidence": [
+      {
+        "kind": "condition_pair",
+        "dto": "HighwayInboundOrderCargo",
+        "accessor": "inboundOrderId",
+        "detail": "右值 inboundOrderId",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/inboundorder/dao/HighwayInboundOrderCargoDao.java",
+        "line": 23
+      },
+      {
+        "kind": "condition_pair",
+        "dto": "HighwayInboundOrderCargo",
+        "accessor": "inboundOrderId",
+        "detail": "右值 inboundOrderId",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/inboundorder/dao/HighwayInboundOrderCargoDao.java",
+        "line": 37
+      },
+      {
+        "kind": "finder_single",
+        "dto": "",
+        "accessor": "inboundOrderId",
+        "detail": "HighwayInboundOrderCargo findByInboundOrderId(...)",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/inboundorder/dao/HighwayInboundOrderCargoDao.java",
+        "line": 21
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_highway_inbound_order_cargo",
+    "column": "inbound_order_no",
+    "java_field": "inboundOrderNo",
+    "target_tables": [
+      "cs_dsly_highway_inbound_order"
+    ],
+    "cardinality": "one_to_one",
+    "confidence": "upper_bound",
+    "reasons": [
+      "每处创建入口都在同一方法内新建父行，父键不可复用",
+      "全部 1 处创建入口均为单对象写入，上界为 1，但缺少运行时验证证据",
+      "存在返回单体的 finder，读取侧按一父一子处理"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/inboundorder/service/MtpInboundOrderCreateService.java",
+        "line": 96,
+        "method": "saveOrUpdate",
+        "receiver": "inboundOrderCargoDao",
+        "argument": "inboundCargo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "createAndPublish"
+      }
+    ],
+    "evidence": [
+      {
+        "kind": "finder_single",
+        "dto": "",
+        "accessor": "inboundOrderNo",
+        "detail": "HighwayInboundOrder findByInboundOrderNo(...)",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/inboundorder/dao/HighwayInboundOrderDao.java",
+        "line": 59
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_highway_inbound_receipt_sync_record",
+    "column": "cargo_id",
+    "java_field": "cargoId",
+    "target_tables": [
+      "cs_dsly_highway_cargo",
+      "cs_dsly_highway_inbound_order_cargo"
+    ],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "父行在别处已存在，父键从入参或查询取得，可被多次调用复用",
+      "目标表命名存在歧义，候选 2 张，需人工确认"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/inboundorder/service/WmsInboundOrderSyncService.java",
+        "line": 85,
+        "method": "saveOrUpdate",
+        "receiver": "receiptSyncRecordDao",
+        "argument": "record",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "processReceipt"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_inbound_receipt_sync_record",
+    "column": "inbound_order_id",
+    "java_field": "inboundOrderId",
+    "target_tables": [
+      "cs_dsly_highway_inbound_order"
+    ],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "父行在别处已存在，父键从入参或查询取得，可被多次调用复用",
+      "存在返回单体的 finder，读取侧按一父一子处理"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/inboundorder/service/WmsInboundOrderSyncService.java",
+        "line": 85,
+        "method": "saveOrUpdate",
+        "receiver": "receiptSyncRecordDao",
+        "argument": "record",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "processReceipt"
+      }
+    ],
+    "evidence": [
+      {
+        "kind": "finder_single",
+        "dto": "",
+        "accessor": "inboundOrderId",
+        "detail": "HighwayInboundOrderCargo findByInboundOrderId(...)",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/inboundorder/dao/HighwayInboundOrderCargoDao.java",
+        "line": 21
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_highway_inbound_receipt_sync_record",
+    "column": "inbound_order_no",
+    "java_field": "inboundOrderNo",
+    "target_tables": [
+      "cs_dsly_highway_inbound_order"
+    ],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "父行在别处已存在，父键从入参或查询取得，可被多次调用复用",
+      "存在返回单体的 finder，读取侧按一父一子处理"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/inboundorder/service/WmsInboundOrderSyncService.java",
+        "line": 85,
+        "method": "saveOrUpdate",
+        "receiver": "receiptSyncRecordDao",
+        "argument": "record",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "processReceipt"
+      }
+    ],
+    "evidence": [
+      {
+        "kind": "finder_single",
+        "dto": "",
+        "accessor": "inboundOrderNo",
+        "detail": "HighwayInboundOrder findByInboundOrderNo(...)",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/inboundorder/dao/HighwayInboundOrderDao.java",
+        "line": 59
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_highway_inbound_receipt_sync_record",
+    "column": "receive_no",
+    "java_field": "receiveNo",
+    "target_tables": [],
+    "cardinality": "unknown",
+    "confidence": "low",
+    "reasons": [
+      "目标表未解析，无法判断父键来源",
+      "存在返回单体的 finder，读取侧按一父一子处理"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/inboundorder/service/WmsInboundOrderSyncService.java",
+        "line": 85,
+        "method": "saveOrUpdate",
+        "receiver": "receiptSyncRecordDao",
+        "argument": "record",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "processReceipt"
+      }
+    ],
+    "evidence": [
+      {
+        "kind": "condition_pair",
+        "dto": "HighwayInboundReceiptSyncRecord",
+        "accessor": "receiveNo",
+        "detail": "右值 receiveNo",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/inboundorder/dao/HighwayInboundReceiptSyncRecordDao.java",
+        "line": 23
+      },
+      {
+        "kind": "finder_single",
+        "dto": "",
+        "accessor": "receiveNo",
+        "detail": "HighwayInboundReceiptSyncRecord findByReceiveNo(...)",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/inboundorder/dao/HighwayInboundReceiptSyncRecordDao.java",
+        "line": 21
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_highway_park_appointment",
+    "column": "dispatch_order_id",
+    "java_field": "dispatchOrderId",
+    "target_tables": [
+      "cs_dsly_highway_dispatch_order"
+    ],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "父行在别处已存在，父键从入参或查询取得，可被多次调用复用"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/parkappointment/service/HighwayParkAppointmentPortalService.java",
+        "line": 87,
+        "method": "saveOrUpdate",
+        "receiver": "this",
+        "argument": "appointment",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "report"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/parkappointment/service/HighwayParkAppointmentPortalService.java",
+        "line": 144,
+        "method": "saveOrUpdate",
+        "receiver": "this",
+        "argument": "appointment",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "reappoint"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_park_appointment",
+    "column": "dispatch_order_no",
+    "java_field": "dispatchOrderNo",
+    "target_tables": [
+      "cs_dsly_highway_dispatch_order"
+    ],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "父行在别处已存在，父键从入参或查询取得，可被多次调用复用"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/parkappointment/service/HighwayParkAppointmentPortalService.java",
+        "line": 87,
+        "method": "saveOrUpdate",
+        "receiver": "this",
+        "argument": "appointment",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "report"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/parkappointment/service/HighwayParkAppointmentPortalService.java",
+        "line": 119,
+        "method": "update",
+        "receiver": "this",
+        "argument": "latestAppointment",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "edit"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/parkappointment/service/HighwayParkAppointmentPortalService.java",
+        "line": 144,
+        "method": "saveOrUpdate",
+        "receiver": "this",
+        "argument": "appointment",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "reappoint"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/parkappointment/service/HighwayParkAppointmentPortalService.java",
+        "line": 162,
+        "method": "update",
+        "receiver": "this",
+        "argument": "appointment",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "updateAuditStatus"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/parkappointment/service/HighwayParkAppointmentPortalService.java",
+        "line": 195,
+        "method": "update",
+        "receiver": "this",
+        "argument": "appointment",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "updateAccessTime"
+      }
+    ],
+    "evidence": [
+      {
+        "kind": "condition_pair",
+        "dto": "HighwayParkAppointment",
+        "accessor": "dispatchOrderNo",
+        "detail": "右值 dispatchOrderNo",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/parkappointment/dao/HighwayParkAppointmentDao.java",
+        "line": 19
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_highway_park_appointment",
+    "column": "park_id",
+    "java_field": "parkId",
+    "target_tables": [],
+    "cardinality": "unknown",
+    "confidence": "low",
+    "reasons": [
+      "目标表未解析，无法判断父键来源"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/parkappointment/service/HighwayParkAppointmentPortalService.java",
+        "line": 87,
+        "method": "saveOrUpdate",
+        "receiver": "this",
+        "argument": "appointment",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "report"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/parkappointment/service/HighwayParkAppointmentPortalService.java",
+        "line": 119,
+        "method": "update",
+        "receiver": "this",
+        "argument": "latestAppointment",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "edit"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/parkappointment/service/HighwayParkAppointmentPortalService.java",
+        "line": 144,
+        "method": "saveOrUpdate",
+        "receiver": "this",
+        "argument": "appointment",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "reappoint"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_park_appointment",
+    "column": "park_report_id",
+    "java_field": "parkReportId",
+    "target_tables": [],
+    "cardinality": "unknown",
+    "confidence": "low",
+    "reasons": [
+      "目标表未解析，无法判断父键来源",
+      "存在返回单体的 finder，读取侧按一父一子处理"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/parkappointment/service/HighwayParkAppointmentPortalService.java",
+        "line": 87,
+        "method": "saveOrUpdate",
+        "receiver": "this",
+        "argument": "appointment",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "report"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/parkappointment/service/HighwayParkAppointmentPortalService.java",
+        "line": 119,
+        "method": "update",
+        "receiver": "this",
+        "argument": "latestAppointment",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "edit"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/parkappointment/service/HighwayParkAppointmentPortalService.java",
+        "line": 144,
+        "method": "saveOrUpdate",
+        "receiver": "this",
+        "argument": "appointment",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "reappoint"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/parkappointment/service/HighwayParkAppointmentPortalService.java",
+        "line": 195,
+        "method": "update",
+        "receiver": "this",
+        "argument": "appointment",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "updateAccessTime"
+      }
+    ],
+    "evidence": [
+      {
+        "kind": "condition_pair",
+        "dto": "HighwayParkAppointment",
+        "accessor": "parkReportId",
+        "detail": "右值 parkReportId",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/parkappointment/dao/HighwayParkAppointmentDao.java",
+        "line": 27
+      },
+      {
+        "kind": "finder_single",
+        "dto": "",
+        "accessor": "parkReportId",
+        "detail": "HighwayParkAppointment findByParkReportId(...)",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/parkappointment/dao/HighwayParkAppointmentDao.java",
+        "line": 25
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_highway_risk_bypass_log",
+    "column": "carrier_id",
+    "java_field": "carrierId",
+    "target_tables": [
+      "cs_dsly_line_route_carrier"
+    ],
+    "cardinality": "unknown",
+    "confidence": "none",
+    "reasons": [
+      "分析范围内没有找到写入入口，可能由其他模块或外部接口写入"
+    ],
+    "write_sites": [],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_risk_bypass_log",
+    "column": "dispatch_order_no",
+    "java_field": "dispatchOrderNo",
+    "target_tables": [
+      "cs_dsly_highway_dispatch_order"
+    ],
+    "cardinality": "unknown",
+    "confidence": "none",
+    "reasons": [
+      "分析范围内没有找到写入入口，可能由其他模块或外部接口写入"
+    ],
+    "write_sites": [],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_risk_bypass_log",
+    "column": "driver_id",
+    "java_field": "driverId",
+    "target_tables": [
+      "cs_dsly_basic_driver"
+    ],
+    "cardinality": "unknown",
+    "confidence": "none",
+    "reasons": [
+      "分析范围内没有找到写入入口，可能由其他模块或外部接口写入"
+    ],
+    "write_sites": [],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_risk_bypass_log",
+    "column": "operator_id",
+    "java_field": "operatorId",
+    "target_tables": [],
+    "cardinality": "unknown",
+    "confidence": "none",
+    "reasons": [
+      "分析范围内没有找到写入入口，可能由其他模块或外部接口写入"
+    ],
+    "write_sites": [],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_risk_bypass_log",
+    "column": "white_no",
+    "java_field": "whiteNo",
+    "target_tables": [],
+    "cardinality": "unknown",
+    "confidence": "none",
+    "reasons": [
+      "分析范围内没有找到写入入口，可能由其他模块或外部接口写入"
+    ],
+    "write_sites": [],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_risk_bypass_log",
+    "column": "whitelist_id",
+    "java_field": "whitelistId",
+    "target_tables": [],
+    "cardinality": "unknown",
+    "confidence": "none",
+    "reasons": [
+      "分析范围内没有找到写入入口，可能由其他模块或外部接口写入"
+    ],
+    "write_sites": [],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_risk_evaluation_task",
+    "column": "dispatch_order_no",
+    "java_field": "dispatchOrderNo",
+    "target_tables": [
+      "cs_dsly_highway_dispatch_order"
+    ],
+    "cardinality": "unknown",
+    "confidence": "none",
+    "reasons": [
+      "分析范围内没有找到写入入口，可能由其他模块或外部接口写入"
+    ],
+    "write_sites": [],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_risk_evaluation_task",
+    "column": "evaluation_no",
+    "java_field": "evaluationNo",
+    "target_tables": [],
+    "cardinality": "unknown",
+    "confidence": "none",
+    "reasons": [
+      "分析范围内没有找到写入入口，可能由其他模块或外部接口写入"
+    ],
+    "write_sites": [],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_risk_evaluation_task",
+    "column": "external_id",
+    "java_field": "externalId",
+    "target_tables": [
+      "cs_dsly_basic_cargo_external"
+    ],
+    "cardinality": "unknown",
+    "confidence": "none",
+    "reasons": [
+      "分析范围内没有找到写入入口，可能由其他模块或外部接口写入"
+    ],
+    "write_sites": [],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_highway_risk_evaluation_task",
+    "column": "request_id",
+    "java_field": "requestId",
+    "target_tables": [],
+    "cardinality": "unknown",
+    "confidence": "none",
+    "reasons": [
+      "分析范围内没有找到写入入口，可能由其他模块或外部接口写入"
+    ],
+    "write_sites": [],
+    "evidence": [
+      {
+        "kind": "condition_pair",
+        "dto": "HighwayRiskEvaluationTask",
+        "accessor": "requestId",
+        "detail": "右值 requestId",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-highway-service/c12-mtp-highway-biz/src/main/java/com/chinaservices/dsly/highway/module/risk/service/HighwayRiskEvaluationTaskService.java",
+        "line": 627
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_white_enterprise",
+    "column": "external_id",
+    "java_field": "externalId",
+    "target_tables": [
+      "cs_dsly_basic_cargo_external"
+    ],
+    "cardinality": "unknown",
+    "confidence": "none",
+    "reasons": [
+      "分析范围内没有找到写入入口，可能由其他模块或外部接口写入"
+    ],
+    "write_sites": [],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_white_enterprise",
+    "column": "white_no",
+    "java_field": "whiteNo",
+    "target_tables": [],
+    "cardinality": "unknown",
+    "confidence": "none",
+    "reasons": [
+      "分析范围内没有找到写入入口，可能由其他模块或外部接口写入"
+    ],
+    "write_sites": [],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_white_enterprise",
+    "column": "external_id",
+    "java_field": "externalId",
+    "target_tables": [
+      "cs_dsly_basic_cargo_external"
+    ],
+    "cardinality": "unknown",
+    "confidence": "none",
+    "reasons": [
+      "分析范围内没有找到写入入口，可能由其他模块或外部接口写入"
+    ],
+    "write_sites": [],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_white_enterprise",
+    "column": "white_no",
+    "java_field": "whiteNo",
+    "target_tables": [],
+    "cardinality": "unknown",
+    "confidence": "none",
+    "reasons": [
+      "分析范围内没有找到写入入口，可能由其他模块或外部接口写入"
+    ],
+    "write_sites": [],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_white_enterprise",
+    "column": "external_id",
+    "java_field": "externalId",
+    "target_tables": [
+      "cs_dsly_basic_cargo_external"
+    ],
+    "cardinality": "unknown",
+    "confidence": "none",
+    "reasons": [
+      "分析范围内没有找到写入入口，可能由其他模块或外部接口写入"
+    ],
+    "write_sites": [],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_white_enterprise",
+    "column": "white_no",
+    "java_field": "whiteNo",
+    "target_tables": [],
+    "cardinality": "unknown",
+    "confidence": "none",
+    "reasons": [
+      "分析范围内没有找到写入入口，可能由其他模块或外部接口写入"
+    ],
+    "write_sites": [],
+    "evidence": []
+  }
+]

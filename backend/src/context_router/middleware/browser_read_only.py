@@ -48,7 +48,7 @@ class BrowserReadOnlyMiddleware:
     Local AI and operations clients without those browser headers can continue
     to use the validated command endpoints. Browser requests are limited to
     reads, an explicit diagnostic/read-sensitive POST allowlist, and validated
-    updates to existing system-guide content or project SQL scan whitelists.
+    updates to existing system-guide content.
     """
 
     def __init__(

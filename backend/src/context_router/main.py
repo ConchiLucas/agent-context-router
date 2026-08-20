@@ -21,6 +21,7 @@ from context_router.api.projects import router as projects_router
 from context_router.api.runtime_configs import router as runtime_configs_router
 from context_router.api.runtime_runner import router as runtime_runner_router
 from context_router.api.system_guides import router as system_guides_router
+from context_router.api.table_relations import router as table_relations_router
 from context_router.api.tasks import router as tasks_router
 from context_router.api.workspace_runtime import router as workspace_runtime_router
 from context_router.api.workspaces import router as workspaces_router
@@ -72,6 +73,11 @@ from context_router.repositories.document_search_repository import (
     DocumentSearchStore,
     PostgresDocumentSearchRepository,
 )
+from context_router.repositories.mcp_environment_default_repository import (
+    InMemoryMcpEnvironmentDefaultRepository,
+    McpEnvironmentDefaultStore,
+    PostgresMcpEnvironmentDefaultRepository,
+)
 from context_router.repositories.mcp_tool_call_repository import (
     InMemoryMcpToolCallRepository,
     McpToolCallStore,
@@ -113,6 +119,11 @@ from context_router.repositories.system_guide_repository import (
     PostgresSystemGuideRepository,
     SystemGuideStore,
 )
+from context_router.repositories.table_relation_repository import (
+    InMemoryTableRelationRepository,
+    PostgresTableRelationRepository,
+    TableRelationStore,
+)
 from context_router.repositories.task_repository import PostgresTaskRepository, TaskStore
 from context_router.repositories.workspace_deploy_repository import (
     InMemoryWorkspaceDeployRepository,
@@ -153,6 +164,7 @@ from context_router.services.project_registry import ProjectRegistry, ProjectReg
 from context_router.services.runtime_execution import RuntimeExecutionService
 from context_router.services.runtime_materialization import RuntimeMaterializationService
 from context_router.services.system_guides import SystemGuideService
+from context_router.services.table_relation_context import TableRelationContextService
 from context_router.services.workspace_containers import WorkspaceContainerService
 from context_router.services.workspace_deploy_sync import WorkspaceDeploySyncService
 from context_router.services.workspace_management import WorkspaceManagementService
@@ -178,6 +190,7 @@ def create_app(
     document_search_repository: DocumentSearchStore | None = None,
     workspace_repository: WorkspaceStore | None = None,
     database_environment_repository: DatabaseEnvironmentStore | None = None,
+    table_relation_repository: TableRelationStore | None = None,
     runtime_config_repository: RuntimeConfigStore | None = None,
     runtime_run_repository: RuntimeRunStore | None = None,
     workspace_runtime_repository: WorkspaceRuntimeStore | None = None,
@@ -189,6 +202,7 @@ def create_app(
     document_chain_analytics_repository: DocumentChainAnalyticsStore | None = None,
     system_guide_repository: SystemGuideStore | None = None,
     nacos_profile_repository: NacosProfileStore | None = None,
+    mcp_environment_default_repository: McpEnvironmentDefaultStore | None = None,
 ) -> FastAPI:
     resolved_settings = settings or Settings()
     if workspace_repository is not None:
@@ -228,15 +242,30 @@ def create_app(
         if resolved_settings.database_url
         else InMemoryDataSourceRepository(resolved_project_repository)
     )
-    resolved_database_environment_repository = database_environment_repository or (
-        PostgresDatabaseEnvironmentRepository(resolved_settings.database_url)
+    if database_environment_repository is not None:
+        resolved_database_environment_repository = database_environment_repository
+    elif isinstance(resolved_workspace_repository, InMemoryWorkspaceRepository):
+        resolved_database_environment_repository = InMemoryDatabaseEnvironmentRepository()
+    elif resolved_settings.database_url:
+        resolved_database_environment_repository = PostgresDatabaseEnvironmentRepository(
+            resolved_settings.database_url
+        )
+    else:
+        resolved_database_environment_repository = InMemoryDatabaseEnvironmentRepository()
+    resolved_table_relation_repository = table_relation_repository or (
+        PostgresTableRelationRepository(resolved_settings.database_url)
         if resolved_settings.database_url
-        else InMemoryDatabaseEnvironmentRepository()
+        else InMemoryTableRelationRepository()
     )
     resolved_nacos_profile_repository = nacos_profile_repository or (
         PostgresNacosProfileRepository(resolved_settings.database_url)
         if resolved_settings.database_url
         else InMemoryNacosProfileRepository()
+    )
+    resolved_mcp_environment_default_repository = mcp_environment_default_repository or (
+        PostgresMcpEnvironmentDefaultRepository(resolved_settings.database_url)
+        if resolved_settings.database_url
+        else InMemoryMcpEnvironmentDefaultRepository()
     )
     resolved_runtime_config_repository = runtime_config_repository or (
         PostgresRuntimeConfigRepository(resolved_settings.database_url)
@@ -364,6 +393,7 @@ def create_app(
         project_repository=resolved_project_repository,
         project_registry=registry,
         data_source_repository=resolved_data_source_repository,
+        database_environment_repository=resolved_database_environment_repository,
         local_mapping=local_workspace_mapping,
     )
     database_access_service = DatabaseAccessService(
@@ -394,12 +424,14 @@ def create_app(
         registry,
         resolved_task_repository,
         database_access_service,
+        resolved_mcp_environment_default_repository,
     )
     middleware_context_service = MiddlewareContextService(
         registry=registry,
         task_repository=resolved_task_repository,
         profile_repository=resolved_nacos_profile_repository,
         database_access_service=database_access_service,
+        mcp_environment_defaults=resolved_mcp_environment_default_repository,
     )
     document_read_service = ContextDocumentReadService(
         registry,
@@ -435,6 +467,12 @@ def create_app(
     document_chain_analytics_service = DocumentChainAnalyticsService(
         repository=resolved_document_chain_analytics_repository,
     )
+    table_relation_context_service = TableRelationContextService(
+        registry=registry,
+        task_repository=resolved_task_repository,
+        reader=resolved_table_relation_repository,
+        mcp_environment_defaults=resolved_mcp_environment_default_repository,
+    )
     mcp_server = create_context_router_mcp(
         context_service,
         document_read_service,
@@ -445,6 +483,7 @@ def create_app(
         document_search_service=document_search_service,
         workspace_runtime_service=workspace_runtime_orchestration_service,
         middleware_context_service=middleware_context_service,
+        table_relation_context_service=table_relation_context_service,
     )
     mcp_app = mcp_server.streamable_http_app()
 
@@ -523,7 +562,10 @@ def create_app(
     app.state.mcp_server = mcp_server
     app.state.data_source_repository = resolved_data_source_repository
     app.state.database_environment_repository = resolved_database_environment_repository
+    app.state.table_relation_repository = resolved_table_relation_repository
+    app.state.table_relation_context_service = table_relation_context_service
     app.state.nacos_profile_repository = resolved_nacos_profile_repository
+    app.state.mcp_environment_default_repository = resolved_mcp_environment_default_repository
     app.state.middleware_context_service = middleware_context_service
     app.state.database_call_repository = resolved_database_call_repository
     app.state.connector_registry = resolved_connector_registry
@@ -561,6 +603,7 @@ def create_app(
     app.include_router(workspaces_router, prefix=resolved_settings.api_prefix)
     app.include_router(workspace_runtime_router, prefix=resolved_settings.api_prefix)
     app.include_router(database_environments_router, prefix=resolved_settings.api_prefix)
+    app.include_router(table_relations_router, prefix=resolved_settings.api_prefix)
     app.include_router(nacos_profiles_router, prefix=resolved_settings.api_prefix)
     app.include_router(tasks_router, prefix=resolved_settings.api_prefix)
     app.include_router(mcp_integration_router, prefix=resolved_settings.api_prefix)

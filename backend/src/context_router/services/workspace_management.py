@@ -8,6 +8,10 @@ from context_router.repositories.data_source_repository import (
     DataSourceRepositoryError,
     DataSourceStore,
 )
+from context_router.repositories.database_environment_repository import (
+    DatabaseEnvironmentRepositoryError,
+    DatabaseEnvironmentStore,
+)
 from context_router.repositories.project_repository import ProjectStore
 from context_router.repositories.workspace_repository import (
     WorkspaceRecord,
@@ -44,6 +48,7 @@ class WorkspaceManagementService:
         project_repository: ProjectStore,
         project_registry: ProjectRegistry,
         data_source_repository: DataSourceStore,
+        database_environment_repository: DatabaseEnvironmentStore | None = None,
         local_mapping: LocalWorkspaceMappingService | None = None,
     ) -> None:
         self._settings = settings
@@ -51,6 +56,7 @@ class WorkspaceManagementService:
         self._project_repository = project_repository
         self._project_registry = project_registry
         self._data_source_repository = data_source_repository
+        self._database_environment_repository = database_environment_repository
         self._local_mapping = local_mapping
 
     def list_workspaces(self) -> list[WorkspaceSummary]:
@@ -107,6 +113,18 @@ class WorkspaceManagementService:
             record = self._workspace_repository.get_workspace(workspace_id)
         except WorkspaceRepositoryError as exc:
             raise WorkspaceManagementError(str(exc)) from exc
+        if self._database_environment_repository is not None:
+            try:
+                self._database_environment_repository.upsert_environment(
+                    workspace_id=workspace_id,
+                    environment="local",
+                    display_name="LOCAL",
+                    sort_order=0,
+                )
+            except DatabaseEnvironmentRepositoryError as exc:
+                raise WorkspaceManagementError(
+                    "工作空间已创建，但默认 local 环境初始化失败"
+                ) from exc
         self._project_registry.register_workspace(record)
         return self._workspace_summary(record)
 
@@ -244,7 +262,12 @@ class WorkspaceManagementService:
         except ProjectRegistryError as exc:
             raise WorkspaceManagementError(str(exc)) from exc
 
-    def data_source_summary(self, workspace_id: str) -> WorkspaceDataSourceSummary:
+    def data_source_summary(
+        self,
+        workspace_id: str,
+        *,
+        environment: str | None = None,
+    ) -> WorkspaceDataSourceSummary:
         self._workspace_record(workspace_id)
         try:
             record = self._data_source_repository.get_workspace_data_source_summary(
@@ -252,7 +275,55 @@ class WorkspaceManagementService:
             )
         except DataSourceRepositoryError as exc:
             raise WorkspaceManagementError(str(exc)) from exc
-        return WorkspaceDataSourceSummary.model_validate(record)
+        summary = WorkspaceDataSourceSummary.model_validate(record)
+        if environment is None:
+            return summary
+        repository = self._database_environment_repository
+        if repository is None:
+            if environment != "local":
+                raise WorkspaceManagementError("工作空间没有配置所选环境")
+            return summary
+        try:
+            if not repository.has_environment(workspace_id, environment):
+                raise WorkspaceManagementError("工作空间没有配置所选环境")
+            mappings_configured = bool(repository.list_mappings(workspace_id))
+            targets = repository.list_mapping_targets(
+                workspace_id=workspace_id,
+                environment=environment,
+            )
+        except DatabaseEnvironmentRepositoryError as exc:
+            raise WorkspaceManagementError(str(exc)) from exc
+        if not mappings_configured and environment == "local":
+            return summary
+        allowed_link_ids = {target.link_id for target in targets}
+        sources = []
+        for source in summary.sources:
+            assignments = [
+                assignment
+                for assignment in source.assignments
+                if assignment.link_id in allowed_link_ids
+            ]
+            if not assignments:
+                continue
+            sources.append(
+                source.model_copy(
+                    update={
+                        "assignments": assignments,
+                        "database_count": len({item.database_id for item in assignments}),
+                        "assignment_count": len(assignments),
+                        "project_count": len({item.project_id for item in assignments}),
+                    }
+                )
+            )
+        assignments = [item for source in sources for item in source.assignments]
+        return WorkspaceDataSourceSummary(
+            workspace_id=workspace_id,
+            source_count=len(sources),
+            database_count=len({item.database_id for item in assignments}),
+            assignment_count=len(assignments),
+            project_count=len({item.project_id for item in assignments}),
+            sources=sources,
+        )
 
     def _workspace_record(self, workspace_id: str) -> WorkspaceRecord:
         try:

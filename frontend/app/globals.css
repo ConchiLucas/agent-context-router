@@ -4647,6 +4647,403 @@ p {
   margin-left: auto;
 }
 
+.workspace-environment-defaults-link,
+.mcp-environment-back-link {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  color: var(--foreground);
+  text-decoration: none;
+}
+
+/* ---------- Workspace 环境详情 ---------- */
+
+.mcp-environment-page {
+  min-height: 100vh;
+  background: var(--background);
+}
+
+.mcp-environment-page-shell {
+  width: min(1120px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 56px 0 72px;
+}
+
+.mcp-environment-page-header {
+  display: flex;
+  gap: 32px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.mcp-environment-page-header h1 {
+  margin: 8px 0;
+  font-size: clamp(1.8rem, 3vw, 2.45rem);
+  letter-spacing: -0.04em;
+}
+
+.mcp-environment-page-header p {
+  max-width: 720px;
+  margin-bottom: 0;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.mcp-environment-workspace-card {
+  display: grid;
+  margin-bottom: 20px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  padding: 16px 18px;
+  gap: 12px;
+  grid-template-columns: minmax(180px, 0.6fr) minmax(0, 1.4fr);
+  align-items: center;
+  background: var(--surface);
+}
+
+.mcp-environment-workspace-card > div {
+  display: grid;
+  gap: 4px;
+}
+
+.mcp-environment-workspace-card span,
+.mcp-environment-source {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.mcp-environment-workspace-card code {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.mcp-environment-load-error {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.workspace-environment-header-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.workspace-environment-select {
+  display: grid;
+  min-width: 210px;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.workspace-environment-select select {
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 8px 34px 8px 12px;
+  color: var(--foreground);
+  background: var(--surface);
+  font: inherit;
+  font-size: 14px;
+}
+
+.workspace-environment-select select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.workspace-environment-select select:disabled {
+  opacity: 0.7;
+}
+
+.workspace-environment-flow-grid {
+  display: grid;
+  margin-top: 18px;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.workspace-environment-flow-card {
+  display: flex;
+  min-width: 0;
+  min-height: 190px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 22px;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--surface);
+  box-shadow: 0 6px 24px rgb(32 33 31 / 4%);
+}
+
+.workspace-environment-flow-card-wide {
+  min-height: auto;
+  grid-column: 1 / -1;
+}
+
+.workspace-environment-card-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.workspace-environment-flow-card > strong {
+  margin-top: 4px;
+  font-size: 1.08rem;
+  overflow-wrap: anywhere;
+}
+
+.workspace-environment-flow-card > code {
+  width: fit-content;
+  max-width: 100%;
+  border-radius: 6px;
+  padding: 4px 7px;
+  color: var(--muted);
+  background: var(--surface-soft);
+  overflow-wrap: anywhere;
+}
+
+.workspace-environment-flow-card > p {
+  margin: auto 0 0;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.workspace-environment-data-sources {
+  margin-top: 24px;
+  border-top: 1px solid var(--border);
+  padding-top: 28px;
+}
+
+.workspace-environment-data-sources > header {
+  display: flex;
+  margin-bottom: 18px;
+  gap: 28px;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.workspace-environment-data-sources h2 {
+  margin: 5px 0 0;
+  font-size: 1.35rem;
+}
+
+.workspace-environment-data-sources > header > p {
+  max-width: 580px;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+  text-align: right;
+}
+
+.mcp-environment-tool-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.mcp-environment-tool-card {
+  display: flex;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 22px;
+  flex-direction: column;
+  background: var(--surface);
+  box-shadow: 0 6px 24px rgb(32 33 31 / 4%);
+}
+
+.mcp-environment-tool-card > header {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.mcp-environment-tool-card h2 {
+  margin-bottom: 5px;
+  font-size: 1.08rem;
+}
+
+.mcp-environment-tool-card header code {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.mcp-environment-source {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: var(--surface-soft);
+}
+
+.mcp-environment-tool-card > p {
+  min-height: 44px;
+  margin: 16px 0 18px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.mcp-environment-tool-card fieldset {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.mcp-environment-tool-card legend {
+  margin-bottom: 9px;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.mcp-environment-options {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+}
+
+.mcp-environment-options label {
+  display: flex;
+  min-height: 42px;
+  gap: 9px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 8px 12px;
+  background: var(--surface-soft);
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.mcp-environment-options label:hover {
+  border-color: var(--border-strong);
+}
+
+.mcp-environment-options label[data-selected="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.mcp-environment-options input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.mcp-environment-tool-card footer {
+  min-height: 20px;
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.mcp-environment-tool-card footer[data-kind="success"] {
+  color: var(--accent);
+}
+
+.mcp-environment-tool-card footer[data-kind="error"] {
+  color: var(--danger);
+}
+
+@media (max-width: 900px) {
+  .mcp-environment-tool-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mcp-environment-page-header,
+  .mcp-environment-workspace-card,
+  .mcp-environment-load-error {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+
+  .mcp-environment-page-header {
+    gap: 18px;
+  }
+
+  .workspace-environment-header-actions,
+  .workspace-environment-data-sources > header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .workspace-environment-data-sources > header > p {
+    max-width: none;
+    text-align: left;
+  }
+
+  .mcp-environment-workspace-card code {
+    text-align: left;
+  }
+}
+
+@media (max-width: 640px) {
+  .mcp-environment-page-shell {
+    width: min(100% - 28px, 1120px);
+    padding: 28px 0 48px;
+  }
+
+  .mcp-environment-back-link {
+    width: 100%;
+  }
+
+  .workspace-environment-header-actions,
+  .workspace-environment-select {
+    width: 100%;
+  }
+
+  .workspace-environment-flow-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-environment-flow-card-wide {
+    grid-column: auto;
+  }
+
+  .mcp-environment-tool-card {
+    padding: 18px;
+  }
+
+  .mcp-environment-tool-card > header {
+    flex-direction: column;
+  }
+
+  .mcp-environment-tool-card > p {
+    min-height: 0;
+  }
+
+  .mcp-environment-options {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-environment-defaults-link,
+  .mcp-environment-back-link,
+  .mcp-environment-options label {
+    transition: none;
+  }
+}
+
 .workspace-containers-overlay {
   padding: 0;
   background: var(--background);
@@ -6428,5 +6825,811 @@ p.workspace-runtime-runner-status {
 
   .system-guide-footer button {
     width: 100%;
+  }
+}
+
+/* ---------- 表关联 ---------- */
+
+.table-relation-explorer {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  padding: 28px 32px 40px;
+  gap: 18px;
+}
+
+.table-relation-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.table-relation-header h1 {
+  margin: 0 0 6px;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 40px;
+}
+
+.table-relation-header p {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--muted);
+}
+
+.table-relation-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.table-relation-workspace span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.table-relation-workspace select {
+  min-width: 220px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--foreground);
+}
+
+.table-relation-error {
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--danger);
+  border-radius: 9px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.table-relation-empty-note {
+  margin: 0;
+  padding: 14px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.table-relation-empty-card {
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+}
+
+.table-relation-empty-card h2 {
+  margin: 0 0 8px;
+  font-size: 21px;
+  font-weight: 650;
+}
+
+.table-relation-empty-card p {
+  max-width: 68ch;
+  margin: 0 0 14px;
+  color: var(--muted);
+}
+
+.table-relation-empty-card pre {
+  overflow-x: auto;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-soft);
+}
+
+.table-relation-empty-card code {
+  font-family: SFMono-Regular, Consolas, monospace;
+  font-size: 13px;
+}
+
+.table-relation-layout {
+  display: grid;
+  min-height: 0;
+  gap: 18px;
+  grid-template-columns: 320px minmax(0, 1fr);
+}
+
+.table-relation-panel {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+}
+
+.table-relation-panel--detail {
+  padding: 22px 24px;
+}
+
+/* 左栏 */
+
+.table-relation-list-controls {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+  gap: 10px;
+}
+
+.table-relation-search {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.table-relation-search span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.table-relation-search input,
+.table-relation-search select {
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--foreground);
+}
+
+.table-relation-search select {
+  width: 100%;
+}
+
+.table-relation-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.table-relation-toggle input {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  accent-color: var(--accent);
+}
+
+.table-relation-list-summary {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.table-relation-list-items {
+  max-height: calc(100vh - 320px);
+  overflow-y: auto;
+  margin: 0;
+  padding: 12px 0 0;
+  list-style: none;
+}
+
+.table-relation-list-items li + li {
+  margin-top: 6px;
+}
+
+.table-relation-list-items button {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  gap: 4px;
+  text-align: left;
+}
+
+.table-relation-list-items button:hover {
+  border-color: var(--border);
+  background: var(--surface-soft);
+}
+
+.table-relation-list-items button[data-active="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.table-relation-list-name {
+  font-family: SFMono-Regular, Consolas, monospace;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.table-relation-list-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.table-relation-list-counts {
+  display: flex;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 12px;
+  gap: 4px 10px;
+}
+
+/* 中栏 */
+
+.table-relation-detail {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.table-relation-detail-header {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.table-relation-detail-header > div {
+  min-width: 0;
+}
+
+.table-relation-detail-header .secondary-button {
+  flex-shrink: 0;
+  padding: 8px 14px;
+}
+
+.table-relation-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.table-relation-detail-header h2 {
+  margin: 0 0 4px;
+  font-family: SFMono-Regular, Consolas, monospace;
+  font-size: 21px;
+  font-weight: 650;
+}
+
+.table-relation-detail-header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.table-relation-rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  gap: 8px;
+  list-style: none;
+}
+
+/* 边框和背景留在 li 上，栅格和内边距交给里面的按钮，
+   这样整行的可点区域和看起来的行是同一块。 */
+.table-relation-row {
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--surface-soft);
+}
+
+/* 两个维度结论不一致时加一道左边框。颜色不单独承载信息，
+   面板底部同时用文字给出条数。 */
+.table-relation-row[data-diverging="true"] {
+  border-left: 3px solid var(--warning);
+}
+
+/* 关系标识占主要宽度，两个维度的判定右对齐成一列，方便竖着扫。 */
+.table-relation-row-open {
+  display: grid;
+  width: 100%;
+  align-items: center;
+  border: 0;
+  border-radius: inherit;
+  padding: 10px 14px;
+  color: inherit;
+  background: transparent;
+  gap: 12px 18px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  text-align: left;
+}
+
+.table-relation-row-open:hover {
+  background: var(--surface);
+}
+
+.table-relation-row-open[data-busy="true"] {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.table-relation-row-identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 0;
+  gap: 6px;
+}
+
+.table-relation-row-id,
+.table-relation-row-target {
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  font-family: SFMono-Regular, Consolas, monospace;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+/* 外键那一侧才是关系身份，指向的父键是次要信息。 */
+.table-relation-row-id {
+  color: var(--foreground);
+  font-weight: 650;
+}
+
+.table-relation-row-target {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.table-relation-row-arrow {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.table-relation-row-verdicts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.table-relation-badge {
+  display: inline-flex;
+  align-items: baseline;
+  padding: 4px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  background: var(--surface);
+  gap: 7px;
+  white-space: nowrap;
+}
+
+/* 代码维度是注解，数据维度是主结论：代码看的是结构允许几条，
+   数据看的是当前实际几条。 */
+.table-relation-badge[data-muted="true"] {
+  border-color: var(--border);
+  background: transparent;
+}
+
+.table-relation-badge-dimension {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.table-relation-badge-glyph {
+  font-family: SFMono-Regular, Consolas, monospace;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+}
+
+.table-relation-badge-evidence {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* 测不出的一侧压低对比度，避免和真的测出来的结论看起来同等确定。 */
+.table-relation-badge[data-cardinality="unknown"] .table-relation-badge-glyph {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.table-relation-detail-footnote {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (max-width: 1080px) {
+  .table-relation-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .table-relation-list-items {
+    max-height: 320px;
+  }
+}
+
+@media (max-width: 720px) {
+  .table-relation-explorer {
+    padding: 20px 16px 32px;
+  }
+
+  /* 窄屏放不下并排两列，判定换行到标识下面。 */
+  .table-relation-row-open {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .table-relation-workspace select {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+/* ---- 关系依据全屏弹窗 ---- */
+
+.relation-evidence-modal {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  overflow: hidden;
+  background: var(--background);
+}
+
+.relation-evidence-panel {
+  display: grid;
+  width: 100%;
+  height: 100vh;
+  min-width: 0;
+  min-height: 0;
+  padding: 28px 36px 34px;
+  grid-template-rows: auto minmax(0, 1fr);
+  background: var(--background);
+}
+
+.relation-evidence-header {
+  display: flex;
+  min-width: 0;
+  gap: 24px;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 20px;
+}
+
+.relation-evidence-title {
+  min-width: 0;
+}
+
+/* 弹窗头部把列表行的标识和两个徽章原样重复一遍，点进来才有连续感。 */
+.relation-evidence-header .table-relation-row-id,
+.relation-evidence-header .table-relation-row-target {
+  font-size: 15px;
+}
+
+.relation-evidence-context {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.relation-evidence-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  padding-top: 22px;
+  gap: 22px;
+}
+
+/* 两个维度并排，因为整套心智模型就是它们可以打架；
+   上下排会把对比变成一件要靠记性的事。 */
+.relation-evidence-dimensions {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.relation-evidence-dimension {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px 20px;
+  background: var(--surface);
+  gap: 10px;
+}
+
+/* 数据维度是主结论，代码维度是注解：数据看的是当前实际几条，
+   代码看的是结构允许几条。 */
+.relation-evidence-dimension[data-dimension="code"] {
+  background: var(--surface-soft);
+}
+
+.relation-evidence-dimension h3 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.relation-evidence-verdict {
+  display: flex;
+  align-items: baseline;
+  margin: 0;
+  gap: 10px;
+}
+
+.relation-evidence-glyph {
+  font-family: SFMono-Regular, Consolas, monospace;
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+}
+
+.relation-evidence-evidence {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.relation-evidence-explanation {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+/* 代码维度的结论是读出来的，不是编译出来的，这一点必须写在脸上。 */
+.relation-evidence-caveat {
+  margin: 0;
+  border-left: 3px solid var(--border-strong);
+  padding-left: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.relation-evidence-timestamp {
+  margin: auto 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.relation-evidence-checks h3 {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.relation-evidence-checks ol {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  list-style: none;
+}
+
+.relation-evidence-check {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 18px;
+  background: var(--surface);
+  gap: 10px;
+}
+
+/* 需关注的项加一道左边框。颜色不单独承载信息，
+   结论文字本身就把问题说清楚了。 */
+.relation-evidence-check[data-outcome="attention"] {
+  border-left: 3px solid var(--warning);
+}
+
+.relation-evidence-check-head {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.relation-evidence-check-head h4 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.relation-evidence-outcome {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.relation-evidence-check[data-outcome="attention"] .relation-evidence-outcome {
+  color: var(--warning);
+  font-weight: 650;
+}
+
+.relation-evidence-check-summary {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+/* 写入入口和读取方式各占一节。合成一列的话，groupingBy 会挤在写入路径中间，
+   看起来像是它也在建行。 */
+.relation-evidence-sites h3 {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.relation-evidence-group-note {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.relation-evidence-sites ol {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  list-style: none;
+}
+
+.relation-evidence-site {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 18px;
+  background: var(--surface);
+  gap: 10px;
+}
+
+/* 读取方式退一档：它解释的是当时的预期，不是基数的依据。 */
+.relation-evidence-sites[data-role="read"] .relation-evidence-site {
+  background: var(--surface-soft);
+}
+
+.relation-evidence-site-head {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.relation-evidence-site-head h4 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.relation-evidence-site-implies {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+/* 文件和方法名就是这里的坐标，所以给足对比度；没有行号可给，
+   也正因为没有，它不会在别人改完代码之后继续指错地方。 */
+.relation-evidence-site-location {
+  display: flex;
+  margin: 0;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: baseline;
+  font-size: 12px;
+}
+
+.relation-evidence-site-location code {
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.relation-evidence-site-method {
+  flex: 0 0 auto;
+  border-radius: 6px;
+  padding: 1px 6px;
+  background: var(--surface-soft);
+  font-family: var(--font-mono, monospace);
+  font-weight: 600;
+}
+
+.relation-evidence-sites[data-role="read"] .relation-evidence-site-method {
+  background: var(--surface);
+}
+
+.relation-evidence-snippet {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--surface-soft);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.relation-evidence-sites[data-role="read"] .relation-evidence-snippet {
+  background: var(--surface);
+}
+
+/* SQL 就是这个面板的立论方式：数字旁边放着能把它重算一遍的查询，
+   结论才从"要不要信"变成"跑一下就知道"。 */
+.relation-evidence-sql {
+  margin-top: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  overflow: hidden;
+}
+
+.relation-evidence-sql-head {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  padding: 7px 8px 7px 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.relation-evidence-sql-head .secondary-button {
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.relation-evidence-sql pre {
+  margin: 0;
+  overflow-x: auto;
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.table-relation-mcp-panel {
+  width: min(960px, calc(100vw - 48px));
+}
+
+.table-relation-mcp-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.table-relation-mcp-json {
+  max-height: min(62vh, 720px);
+  overflow: auto;
+  white-space: pre;
+}
+
+@media (max-width: 900px) {
+  .relation-evidence-panel {
+    padding: 20px 16px 26px;
+  }
+
+  .relation-evidence-dimensions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .relation-evidence-header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 14px;
   }
 }

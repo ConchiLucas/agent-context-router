@@ -16,6 +16,7 @@ from pydantic import Field
 from context_router.database.errors import DatabaseAccessError
 from context_router.mcp_contract import (
     CONTEXT_ROUTER_CORE_TOOL_NAMES,
+    CONTEXT_ROUTER_TABLE_RELATION_TOOL_NAMES,
 )
 from context_router.mcp_contract import (
     CONTEXT_ROUTER_TRACE_SERVER_NAME as TRACE_SERVER_NAME,
@@ -41,6 +42,10 @@ from context_router.services.mcp_trace import McpTraceService
 from context_router.services.nacos_middleware import (
     MiddlewareContextError,
     MiddlewareContextService,
+)
+from context_router.services.table_relation_context import (
+    TableRelationContextError,
+    TableRelationContextService,
 )
 from context_router.services.workspace_runtime_orchestration import (
     WorkspaceRuntimeOrchestrationError,
@@ -69,11 +74,21 @@ MCP_SERVER_INSTRUCTIONS = (
     "echo it into logs or unrelated output. "
     "For Redis, MQ, Elasticsearch, MinIO, job scheduler, object storage, or other live "
     "middleware connection or diagnosis tasks, call read_middleware_context with "
-    "the current task_id. A prepare call without environment reads the default/local Nacos "
-    "profile; an explicit test or uat environment reads the matching profile. This local-only "
+    "the current task_id. For every environment-aware tool, an explicit environment argument "
+    "wins; when it is omitted, the tool uses its saved Workspace default. prepare_task_context, "
+    "read_table_relations, and search_relation_tables support test/uat; "
+    "read_middleware_context also supports local. This local-only "
     "tool returns plaintext by default. Set reveal_secrets=false only when a redacted view is "
     "preferred. Returning and using connection values in the current authorized task is allowed; "
     "never persist them in logs, source code, documentation, unrelated tool arguments, or commits. "
+    "When a task involves how a database table relates to other tables, or where in the "
+    "source code its rows are inserted or updated, call read_table_relations with the current "
+    "task_id and up to 10 table names instead of scanning source code. It returns curated "
+    "relations plus insert and update entry points grouped by source file, with paths relative "
+    "to the workspace_root stated once per response; include_evidence=true adds per-dimension "
+    "verdicts, measurements, re-runnable check SQL, and relation code sites. "
+    "Empty writes or updates only mean no entry points are recorded yet. When only a business "
+    "term is known, find exact table names first with search_relation_tables. "
     "When the user asks to start services, call start_workspace: start always means every "
     "registered project in the task Workspace. After modifying registered Workspace code, "
     "call apply_workspace_changes once with task_id and actual Workspace-relative changed "
@@ -88,6 +103,10 @@ MCP_SERVER_INSTRUCTIONS = (
     SEARCH_DATABASE_TOOL_NAME,
     EXECUTE_DATABASE_TOOL_NAME,
 ) = CONTEXT_ROUTER_CORE_TOOL_NAMES
+(
+    READ_TABLE_RELATIONS_TOOL_NAME,
+    SEARCH_RELATION_TABLES_TOOL_NAME,
+) = CONTEXT_ROUTER_TABLE_RELATION_TOOL_NAMES
 APPLY_WORKSPACE_TOOL_NAME = "apply_workspace_changes"
 START_WORKSPACE_TOOL_NAME = "start_workspace"
 GET_WORKSPACE_OPERATION_TOOL_NAME = "get_workspace_operation"
@@ -110,7 +129,7 @@ PREPARE_TOOL_DESCRIPTION = (
     "at most two explicit descendant levels. Nodes contain only document_id, summary, and "
     "children. Unrelated documents and deeper descendants are omitted from prepare but remain "
     "available through workspace-wide search_context_documents and read_context_document. "
-    "Omit environment to use the workspace default, or pass test/uat for this task only "
+    "Omit environment to use this tool's Workspace default, or pass test/uat for this task only "
     "without changing the workspace active environment. access states which task capabilities "
     "are available. Database aliases and environment config are intentionally omitted; request "
     "them only when needed with read_task_context. access includes middleware when live Nacos "
@@ -127,8 +146,8 @@ READ_MIDDLEWARE_CONTEXT_TOOL_DESCRIPTION = (
     "Authoritative live source for Redis, MQ, Elasticsearch, MinIO, job scheduler, object "
     "storage, and other Nacos-managed middleware connection or diagnosis tasks. Call this after "
     "prepare_task_context with the current task_id instead of inferring runtime values from "
-    "application files or generic environment JSON. If prepare omitted environment, this reads "
-    "the default/local profile; an explicit test or uat selection reads the matching profile. "
+    "application files or generic environment JSON. Pass environment to select local, test, or "
+    "uat for this call; omit it to use this tool's Workspace default. "
     "Omit components to read every configured component, or pass configured component IDs. The "
     "server derives Workspace, environment, Nacos address, namespace, dataIds, and extraction "
     "paths; callers cannot supply them. This local-only tool returns plaintext fields by default; "
@@ -154,6 +173,36 @@ SEARCH_DATABASE_TOOL_DESCRIPTION = (
 EXECUTE_DATABASE_TOOL_DESCRIPTION = (
     "Execute exactly one bounded read-only SQL statement against a database alias returned "
     "by read_task_context. Connection details and query limits are enforced server-side."
+)
+READ_TABLE_RELATIONS_TOOL_DESCRIPTION = (
+    "Read the curated relation list plus insert and update entry points for up to 10 database "
+    "tables in the current task's workspace. Pass environment to select test or uat for this "
+    "call; omit it to use this tool's Workspace default. Pass task_id and bare table "
+    "names; add database only when a table name exists in several databases. A name that "
+    "cannot be resolved fails as one entry of the answer with close-name suggestions, without "
+    "failing the other tables. sections selects any of relations, writes, updates and defaults "
+    "to all three. Relations state the table's role (child/parent/self) and one cardinality, "
+    "read from the code side because it states what the write paths permit; uncertain=true "
+    "marks a relation whose code and data readings differ. Set include_evidence=true to also "
+    "get, per relation, both per-dimension verdicts, the stored measurement numbers, "
+    "re-runnable check SQL for execute_database_query, and the code sites behind the code "
+    "verdict. Entry points are grouped by source file: each group carries the class, a "
+    "workspace-relative file path, and the methods that persist the table. Join file paths "
+    "onto workspace_root, which is stated once per response. Locate a method by name; line "
+    "numbers are intentionally not provided. An empty writes or updates list means no entry "
+    "points are recorded yet, never that nothing writes the table. Use search_relation_tables "
+    "to discover table names; use search_database_objects for raw schema structure."
+)
+SEARCH_RELATION_TABLES_TOOL_DESCRIPTION = (
+    "Find tables in the current task's curated table-relation data by name substring. Use "
+    "this when only a business term or entity name is known, or to list which tables of a "
+    "database have recorded relations; results are sorted by relation count and resolve into "
+    "exact names for read_table_relations. only_related=false includes tables without any "
+    "recorded relation. Pass environment to select test or uat for this call; omit it to use "
+    "this tool's Workspace default. This searches the curated relation snapshot only; a table "
+    "missing "
+    "here may still exist in the database — check search_database_objects before concluding "
+    "it does not exist."
 )
 PREPARE_TOOL_ANNOTATIONS = ToolAnnotations(
     readOnlyHint=True,
@@ -370,6 +419,7 @@ def create_context_router_mcp(
     document_search_service: ContextDocumentSearchService | None = None,
     workspace_runtime_service: WorkspaceRuntimeOrchestrationService | None = None,
     middleware_context_service: MiddlewareContextService | None = None,
+    table_relation_context_service: TableRelationContextService | None = None,
 ) -> FastMCP:
     server = ContextRouterMCP(
         name=MCP_SERVER_NAME,
@@ -394,9 +444,11 @@ def create_context_router_mcp(
         cwd: Annotated[str, Field(min_length=1)],
         agent_name: Annotated[str | None, Field(max_length=64)] = None,
         environment: Annotated[
-            Literal["test", "uat"] | None,
+            str | None,
             Field(
-                description=("Optional task-only environment. Omit to use the workspace default.")
+                max_length=32,
+                pattern=r"^[a-z][a-z0-9_-]{0,31}$",
+                description=("Optional task-only environment. Omit to use local."),
             ),
         ] = None,
     ) -> dict[str, Any]:
@@ -439,6 +491,14 @@ def create_context_router_mcp(
     )
     def read_middleware_context(
         task_id: Annotated[int, Field(ge=1, strict=True)],
+        environment: Annotated[
+            str | None,
+            Field(
+                max_length=32,
+                pattern=r"^[a-z][a-z0-9_-]{0,31}$",
+                description="Optional call environment. Omit to inherit the task environment.",
+            ),
+        ] = None,
         components: Annotated[
             list[
                 Annotated[
@@ -460,6 +520,7 @@ def create_context_router_mcp(
         try:
             result = middleware_context_service.read(
                 task_id=task_id,
+                environment=environment,
                 components=components,
                 reveal_secrets=reveal_secrets,
             )
@@ -562,6 +623,86 @@ def create_context_router_mcp(
             raise ToolError(f"{exc.code}: {exc}") from exc
 
     @server.tool(
+        name=READ_TABLE_RELATIONS_TOOL_NAME,
+        description=READ_TABLE_RELATIONS_TOOL_DESCRIPTION,
+        annotations=READ_TOOL_ANNOTATIONS,
+    )
+    def read_table_relations(
+        task_id: Annotated[int, Field(ge=1, strict=True)],
+        tables: Annotated[
+            list[Annotated[str, Field(min_length=1, max_length=255)]],
+            Field(min_length=1, max_length=10),
+        ],
+        environment: Annotated[
+            str | None,
+            Field(
+                max_length=32,
+                pattern=r"^[a-z][a-z0-9_-]{0,31}$",
+                description="Optional call environment. Omit to inherit the task environment.",
+            ),
+        ] = None,
+        sections: Annotated[
+            list[Literal["relations", "writes", "updates"]] | None,
+            Field(default=None, min_length=1, max_length=3),
+        ] = None,
+        database: Annotated[
+            str | None,
+            Field(max_length=64, pattern=r"^[a-z][a-z0-9_-]{0,63}$"),
+        ] = None,
+        include_evidence: Annotated[bool, Field(strict=True)] = False,
+    ) -> dict[str, object]:
+        if table_relation_context_service is None:
+            raise ToolError("table_relations_disabled: 表关联上下文工具当前不可用")
+        try:
+            return table_relation_context_service.read(
+                task_id=task_id,
+                environment=environment,
+                tables=tables,
+                sections=sections,
+                database=database,
+                include_evidence=include_evidence,
+            )
+        except TableRelationContextError as exc:
+            raise ToolError(f"{exc.code}: {exc}") from exc
+
+    @server.tool(
+        name=SEARCH_RELATION_TABLES_TOOL_NAME,
+        description=SEARCH_RELATION_TABLES_TOOL_DESCRIPTION,
+        annotations=READ_TOOL_ANNOTATIONS,
+    )
+    def search_relation_tables(
+        task_id: Annotated[int, Field(ge=1, strict=True)],
+        environment: Annotated[
+            str | None,
+            Field(
+                max_length=32,
+                pattern=r"^[a-z][a-z0-9_-]{0,31}$",
+                description="Optional call environment. Omit to inherit the task environment.",
+            ),
+        ] = None,
+        query: Annotated[str | None, Field(min_length=1, max_length=255)] = None,
+        database: Annotated[
+            str | None,
+            Field(max_length=64, pattern=r"^[a-z][a-z0-9_-]{0,63}$"),
+        ] = None,
+        only_related: Annotated[bool, Field(strict=True)] = True,
+        limit: Annotated[int, Field(ge=1, le=200, strict=True)] = 50,
+    ) -> dict[str, object]:
+        if table_relation_context_service is None:
+            raise ToolError("table_relations_disabled: 表关联上下文工具当前不可用")
+        try:
+            return table_relation_context_service.search(
+                task_id=task_id,
+                environment=environment,
+                query=query,
+                database=database,
+                only_related=only_related,
+                limit=limit,
+            )
+        except TableRelationContextError as exc:
+            raise ToolError(f"{exc.code}: {exc}") from exc
+
+    @server.tool(
         name=APPLY_WORKSPACE_TOOL_NAME,
         description=APPLY_WORKSPACE_TOOL_DESCRIPTION,
         annotations=RUNTIME_APPLY_TOOL_ANNOTATIONS,
@@ -647,6 +788,7 @@ def _request_summary(name: str, arguments: dict[str, Any]) -> dict[str, object] 
         return {
             "task_characters": len(task) if isinstance(task, str) else 0,
             "agent_name": agent_name if isinstance(agent_name, str) else None,
+            "environment": _safe_string(arguments.get("environment"), 16),
         }
     if name == READ_TASK_CONTEXT_TOOL_NAME:
         sections = arguments.get("sections")
@@ -658,6 +800,7 @@ def _request_summary(name: str, arguments: dict[str, Any]) -> dict[str, object] 
     if name == READ_MIDDLEWARE_CONTEXT_TOOL_NAME:
         components = arguments.get("components")
         return {
+            "environment": _safe_string(arguments.get("environment"), 16),
             "component_count": len(components) if isinstance(components, list) else None,
             "all_components": components is None,
             "reveal_secrets": arguments.get("reveal_secrets", True) is True,
@@ -686,6 +829,7 @@ def _request_summary(name: str, arguments: dict[str, Any]) -> dict[str, object] 
     if name == SEARCH_DATABASE_TOOL_NAME:
         return {
             "database": _safe_string(arguments.get("database"), 64),
+            "environment": _safe_string(arguments.get("environment"), 16),
             "object_type": _safe_string(arguments.get("object_type"), 32),
             "detail": _safe_string(arguments.get("detail"), 16),
             "limit": arguments.get("limit") if isinstance(arguments.get("limit"), int) else None,
@@ -701,6 +845,32 @@ def _request_summary(name: str, arguments: dict[str, Any]) -> dict[str, object] 
                 if isinstance(sql, str)
                 else None
             ),
+        }
+    if name == READ_TABLE_RELATIONS_TOOL_NAME:
+        sections = arguments.get("sections")
+        tables = arguments.get("tables")
+        return {
+            "tables": (
+                [_safe_string(item, 255) for item in tables if isinstance(item, str)]
+                if isinstance(tables, list)
+                else None
+            ),
+            "database": _safe_string(arguments.get("database"), 64),
+            "environment": _safe_string(arguments.get("environment"), 16),
+            "sections": (
+                [item for item in sections if isinstance(item, str)]
+                if isinstance(sections, list)
+                else None
+            ),
+            "include_evidence": arguments.get("include_evidence", False) is True,
+        }
+    if name == SEARCH_RELATION_TABLES_TOOL_NAME:
+        return {
+            "query": _safe_string(arguments.get("query"), 255),
+            "database": _safe_string(arguments.get("database"), 64),
+            "environment": _safe_string(arguments.get("environment"), 16),
+            "only_related": arguments.get("only_related", True) is True,
+            "limit": arguments.get("limit") if isinstance(arguments.get("limit"), int) else None,
         }
     if name == APPLY_WORKSPACE_TOOL_NAME:
         changed_files = arguments.get("changed_files")
@@ -796,6 +966,44 @@ def _result_summary(name: str, payload: dict[str, Any]) -> dict[str, object] | N
         return _bounded_result_metadata(payload, count_key="returned_count")
     if name == EXECUTE_DATABASE_TOOL_NAME:
         return _bounded_result_metadata(payload, count_key="returned_rows")
+    if name == READ_TABLE_RELATIONS_TOOL_NAME:
+        entries = payload.get("tables")
+        if not isinstance(entries, list):
+            return {"table_count": 0}
+        resolved = [entry for entry in entries if isinstance(entry, dict) and "error" not in entry]
+        return {
+            "table_count": len(entries),
+            "error_count": len(entries) - len(resolved),
+            "relation_count": sum(
+                entry["relation_count"]
+                for entry in resolved
+                if isinstance(entry.get("relation_count"), int)
+            ),
+            "write_count": sum(
+                len(entry["writes"]) for entry in resolved if isinstance(entry.get("writes"), list)
+            ),
+            "update_count": sum(
+                len(entry["updates"])
+                for entry in resolved
+                if isinstance(entry.get("updates"), list)
+            ),
+        }
+    if name == SEARCH_RELATION_TABLES_TOOL_NAME:
+        return {
+            "returned_count": (
+                payload.get("returned_count")
+                if isinstance(payload.get("returned_count"), int)
+                else None
+            ),
+            "related_count": (
+                payload.get("related_count")
+                if isinstance(payload.get("related_count"), int)
+                else None
+            ),
+            "total_count": (
+                payload.get("total_count") if isinstance(payload.get("total_count"), int) else None
+            ),
+        }
     if name in {
         APPLY_WORKSPACE_TOOL_NAME,
         START_WORKSPACE_TOOL_NAME,

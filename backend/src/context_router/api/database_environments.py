@@ -20,6 +20,7 @@ from context_router.repositories.database_environment_repository import (
     DatabaseEnvironmentMappingWrite,
     DatabaseEnvironmentRepositoryError,
     DatabaseEnvironmentStore,
+    EnvironmentDatabaseTargetWrite,
 )
 from context_router.repositories.workspace_repository import (
     WorkspaceRepositoryError,
@@ -38,6 +39,10 @@ from context_router.schemas.database_environments import (
     WorkspaceDatabaseEnvironmentMappings,
     WorkspaceEnvironmentConfig,
     WorkspaceEnvironmentConfigUpdate,
+    WorkspaceEnvironmentDatabaseTargetsUpdate,
+    WorkspaceEnvironmentList,
+    WorkspaceEnvironmentOption,
+    WorkspaceEnvironmentUpsert,
 )
 from context_router.services.project_registry import ProjectRegistry
 
@@ -81,6 +86,116 @@ def _http_error(exc: Exception) -> HTTPException:
         if exc.code == "database_mapping_not_found":
             return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.get(
+    "/{workspace_id}/environments",
+    response_model=WorkspaceEnvironmentList,
+)
+def list_workspace_environments(
+    workspace_id: str,
+    request: Request,
+    response: Response,
+) -> WorkspaceEnvironmentList:
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        _workspace_store(request).get_workspace(workspace_id)
+        records = _environment_store(request).list_environments(workspace_id)
+    except (DatabaseEnvironmentRepositoryError, WorkspaceRepositoryError) as exc:
+        raise _http_error(exc) from exc
+    return WorkspaceEnvironmentList(
+        workspace_id=workspace_id,
+        default_environment="local",
+        environments=[
+            WorkspaceEnvironmentOption(
+                key=record.key,
+                display_name=record.display_name,
+                is_default=record.is_default,
+                sort_order=record.sort_order,
+            )
+            for record in records
+        ],
+    )
+
+
+@router.put(
+    "/{workspace_id}/environments/{environment}",
+    response_model=WorkspaceEnvironmentOption,
+)
+def upsert_workspace_environment(
+    workspace_id: str,
+    environment: str,
+    payload: WorkspaceEnvironmentUpsert,
+    request: Request,
+) -> WorkspaceEnvironmentOption:
+    try:
+        _workspace_store(request).get_workspace(workspace_id)
+        record = _environment_store(request).upsert_environment(
+            workspace_id=workspace_id,
+            environment=environment,
+            display_name=payload.display_name,
+            sort_order=payload.sort_order,
+        )
+    except (DatabaseEnvironmentRepositoryError, WorkspaceRepositoryError) as exc:
+        raise _http_error(exc) from exc
+    return WorkspaceEnvironmentOption(
+        key=record.key,
+        display_name=record.display_name,
+        is_default=record.is_default,
+        sort_order=record.sort_order,
+    )
+
+
+@router.delete(
+    "/{workspace_id}/environments/{environment}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_workspace_environment(
+    workspace_id: str,
+    environment: str,
+    request: Request,
+) -> Response:
+    try:
+        _workspace_store(request).get_workspace(workspace_id)
+        _environment_store(request).delete_environment(
+            workspace_id=workspace_id,
+            environment=environment,
+        )
+    except (DatabaseEnvironmentRepositoryError, WorkspaceRepositoryError) as exc:
+        raise _http_error(exc) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.put(
+    "/{workspace_id}/environments/{environment}/database-mappings",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def replace_workspace_environment_database_mappings(
+    workspace_id: str,
+    environment: str,
+    payload: WorkspaceEnvironmentDatabaseTargetsUpdate,
+    request: Request,
+) -> Response:
+    try:
+        _workspace_store(request).get_workspace(workspace_id)
+        _environment_store(request).replace_environment_targets(
+            workspace_id=workspace_id,
+            environment=environment,
+            targets=[
+                EnvironmentDatabaseTargetWrite(
+                    id=item.id or uuid4().hex,
+                    workspace_id=workspace_id,
+                    project_id=item.project_id,
+                    logical_name=item.logical_name,
+                    mcp_alias=item.mcp_alias,
+                    link_id=item.link_id,
+                )
+                for item in payload.targets
+            ],
+        )
+    except (DatabaseEnvironmentRepositoryError, WorkspaceRepositoryError) as exc:
+        raise _http_error(exc) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get(
@@ -234,7 +349,7 @@ def _build_environment_config_response(
     config = snapshot.config
     values = snapshot.payloads.environments
     active_config = (
-        values[config.active_environment]
+        values.get(config.active_environment)
         if snapshot.payloads.configured
         and snapshot.selector_configured
         and config.active_environment is not None
@@ -246,8 +361,8 @@ def _build_environment_config_response(
         active_environment=(config.active_environment if snapshot.selector_configured else None),
         revision=config.revision,
         environments=EnvironmentJsonPair(
-            test=values["test"],
-            uat=values["uat"],
+            test=values.get("test", {}),
+            uat=values.get("uat", {}),
         ),
         active_config=active_config,
     )

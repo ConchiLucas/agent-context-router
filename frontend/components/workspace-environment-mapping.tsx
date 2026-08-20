@@ -8,7 +8,6 @@ import {
 } from "@/lib/api";
 import { formatEnvironmentJson } from "@/lib/environment-config";
 import type {
-  DatabaseEnvironment,
   DatabaseEnvironmentTarget,
   WorkspaceDatabaseEnvironmentMapping,
   WorkspaceDatabaseEnvironmentMappings,
@@ -16,11 +15,12 @@ import type {
   WorkspaceSummary,
 } from "@/lib/types";
 
-const ENVIRONMENTS: DatabaseEnvironment[] = ["test", "uat"];
+type LegacyDatabaseEnvironment = "test" | "uat";
+const ENVIRONMENTS: LegacyDatabaseEnvironment[] = ["test", "uat"];
 type EnvironmentPanelTab = "database-mappings" | "environment-json";
 type MappingStatusFilter = "all" | "complete" | "issue";
 
-const ENVIRONMENT_LABELS: Record<DatabaseEnvironment, string> = {
+const ENVIRONMENT_LABELS: Record<LegacyDatabaseEnvironment, string> = {
   test: "TEST",
   uat: "UAT",
 };
@@ -47,7 +47,7 @@ interface MappingRow {
 interface WorkspaceEnvironmentMappingProps {
   workspace: WorkspaceSummary;
   onClose: () => void;
-  onEnvironmentChanged?: (environment: DatabaseEnvironment | null) => void;
+  onEnvironmentChanged?: (environment: LegacyDatabaseEnvironment | null) => void;
 }
 
 function issueLabel(issue: string): string {
@@ -60,7 +60,7 @@ function targetTitle(target: DatabaseEnvironmentTarget): string {
 
 function targetIssues(
   target: DatabaseEnvironmentTarget,
-  environment: DatabaseEnvironment,
+  environment: LegacyDatabaseEnvironment,
 ): string[] {
   const label = ENVIRONMENT_LABELS[environment];
   const issues: string[] = [];
@@ -114,7 +114,7 @@ function evaluateMapping(
 function resolveActiveEnvironment(
   configuration: WorkspaceDatabaseEnvironmentMappings | null,
   environmentConfig: WorkspaceEnvironmentConfig | null,
-): DatabaseEnvironment | null {
+): LegacyDatabaseEnvironment | null {
   if (configuration?.configured) {
     return (
       configuration.active_environment ??
@@ -129,7 +129,7 @@ function resolveActiveEnvironment(
 
 function environmentJsonValue(
   environmentConfig: WorkspaceEnvironmentConfig,
-  environment: DatabaseEnvironment,
+  environment: LegacyDatabaseEnvironment,
 ) {
   if (
     environmentConfig.active_environment === environment &&

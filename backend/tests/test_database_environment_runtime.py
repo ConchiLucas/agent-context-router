@@ -33,7 +33,7 @@ def _mapping() -> DatabaseEnvironmentMappingWrite:
     )
 
 
-def test_in_memory_environment_mapping_defaults_to_uat_and_switches_atomically() -> None:
+def test_in_memory_environment_mapping_defaults_to_local_and_switches_atomically() -> None:
     repository = InMemoryDatabaseEnvironmentRepository()
 
     saved = repository.replace_mappings(
@@ -42,7 +42,7 @@ def test_in_memory_environment_mapping_defaults_to_uat_and_switches_atomically()
         mappings=[_mapping()],
     )
 
-    assert saved.active_environment == "uat"
+    assert saved.active_environment == "local"
     assert saved.revision == 1
     assert (
         repository.resolve_mapping(
@@ -98,7 +98,7 @@ def test_environment_json_can_switch_without_database_mappings() -> None:
         },
     )
 
-    assert saved.active_environment == "uat"
+    assert saved.active_environment == "local"
     assert saved.revision == 1
     assert repository.list_mappings("workspace-1") == []
 
@@ -135,7 +135,7 @@ def test_environment_json_uses_shared_revision_and_tracks_active_environment() -
     )
 
     assert saved.revision == 2
-    assert saved.active_environment == "uat"
+    assert saved.active_environment == "local"
     payloads = repository.get_environment_payloads("workspace-1")
     assert payloads.environments == {"test": test_config, "uat": uat_config}
     assert payloads.environments["uat"] is not uat_config

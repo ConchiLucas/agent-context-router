@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 
+from context_router.repositories.mcp_environment_default_repository import (
+    McpEnvironmentDefaultStore,
+)
 from context_router.repositories.task_repository import (
     TaskRecord,
     TaskRepositoryError,
@@ -28,6 +32,7 @@ from context_router.services.project_registry import (
 )
 
 PREPARE_DOCUMENT_TREE_LEVELS = 3
+_ENVIRONMENT_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 
 
 class ContextPreparationError(ValueError):
@@ -55,10 +60,12 @@ class ContextPreparationService:
         registry: ProjectRegistry,
         task_repository: TaskStore,
         database_access_service: DatabaseAccessService | None = None,
+        mcp_environment_defaults: McpEnvironmentDefaultStore | None = None,
     ) -> None:
         self._registry = registry
         self._task_repository = task_repository
         self._database_access_service = database_access_service
+        self._mcp_environment_defaults = mcp_environment_defaults
 
     def read_task_context(
         self,
@@ -161,7 +168,7 @@ class ContextPreparationService:
     ) -> TaskEnvironmentContext:
         if (
             workspace_id is None
-            or task.database_environment not in {"test", "uat"}
+            or task.database_environment is None
             or task.database_environment_revision is None
         ):
             return TaskEnvironmentContext(configured=False)
@@ -203,12 +210,17 @@ class ContextPreparationService:
             workspace = self._registry.find_workspace_for_cwd(cwd)
         except ProjectRegistryError as exc:
             raise ContextPreparationError(str(exc)) from exc
+        resolved_environment, environment_selection = self._resolve_prepare_environment(
+            workspace.id,
+            normalized_environment,
+        )
         return self._prepare_snapshot(
             workspace,
             task=normalized_task,
             cwd=cwd.strip(),
             agent_name=normalized_agent,
-            environment=normalized_environment,
+            environment=resolved_environment,
+            requested_selection=environment_selection,
         )
 
     def prepare_for_workspace(
@@ -223,12 +235,17 @@ class ContextPreparationService:
         except ProjectRegistryError as exc:
             raise ContextPreparationError(str(exc)) from exc
 
+        resolved_environment, environment_selection = self._resolve_prepare_environment(
+            workspace.id,
+            normalized_environment,
+        )
         return self._prepare_snapshot(
             workspace,
             task=f"查看工作空间 {workspace.name} 的 MCP JSON",
             cwd=workspace.root_path,
             agent_name="web-preview",
-            environment=normalized_environment,
+            environment=resolved_environment,
+            requested_selection=environment_selection,
         )
 
     def prepare_for_project(self, project_id: str) -> PrepareTaskContextResult:
@@ -241,13 +258,27 @@ class ContextPreparationService:
             active_project = next(item for item in workspace.projects if item.id == project.id)
         except (ProjectRegistryError, StopIteration) as exc:
             raise ContextPreparationError(str(exc)) from exc
+        resolved_environment, environment_selection = self._resolve_prepare_environment(
+            workspace.id,
+            None,
+        )
         return self._prepare_snapshot(
             replace(workspace, active_project=active_project),
             task=f"查看工作空间 {workspace.name} 的 MCP JSON",
             cwd=workspace.root_path,
             agent_name="web-preview",
-            environment=None,
+            environment=resolved_environment,
+            requested_selection=environment_selection,
         )
+
+    def _resolve_prepare_environment(
+        self,
+        workspace_id: str,
+        environment: DatabaseEnvironment | None,
+    ) -> tuple[DatabaseEnvironment | None, DatabaseEnvironmentSelection | None]:
+        if environment is not None:
+            return environment, "task_explicit"
+        return "local", "workspace_default"
 
     @staticmethod
     def _validate_input(task: str, agent_name: str | None) -> tuple[str, str | None]:
@@ -266,9 +297,9 @@ class ContextPreparationService:
     def _validate_environment(
         environment: DatabaseEnvironment | None,
     ) -> DatabaseEnvironment | None:
-        if environment not in {None, "test", "uat"}:
+        if environment is not None and not _ENVIRONMENT_PATTERN.fullmatch(environment):
             raise ContextPreparationError(
-                "environment 必须是 test 或 uat",
+                "environment 必须是有效的工作空间环境标识",
                 code="invalid_environment",
             )
         return environment
@@ -281,6 +312,7 @@ class ContextPreparationService:
         cwd: str,
         agent_name: str | None,
         environment: DatabaseEnvironment | None,
+        requested_selection: DatabaseEnvironmentSelection | None,
     ) -> PrepareTaskContextResult:
         database_environment = None
         selected_database_environment: DatabaseEnvironment | None = None
@@ -288,14 +320,14 @@ class ContextPreparationService:
         database_environment_warning: str | None = None
         documents_only = workspace.access_mode == "documents_only"
         if documents_only:
-            if environment is not None:
+            if environment is not None and requested_selection == "task_explicit":
                 raise ContextPreparationError(
                     "共享文档目录不能选择数据库环境",
                     code="documents_only",
                 )
             database_environment_warning = "当前目录共享主工作空间文档；数据库和部署工具不可用"
         elif self._database_access_service is None:
-            if environment is not None:
+            if environment is not None and requested_selection == "task_explicit":
                 raise ContextPreparationError(
                     "工作空间尚未配置环境选择器，不能显式选择环境",
                     code="environment_not_configured",
@@ -306,24 +338,36 @@ class ContextPreparationService:
                     self._database_access_service.get_active_workspace_environment(workspace.id)
                 )
             except DatabaseAccessError as exc:
-                if environment is not None:
+                if environment is not None and requested_selection == "task_explicit":
                     raise ContextPreparationError(
                         str(exc),
                         code=exc.code,
                     ) from exc
                 database_environment_warning = "工作空间环境配置暂时不可用；文档上下文不受影响"
             if database_environment is None and environment is not None:
-                raise ContextPreparationError(
-                    "工作空间尚未配置环境选择器，不能显式选择环境",
-                    code="environment_not_configured",
-                )
+                if requested_selection == "task_explicit":
+                    raise ContextPreparationError(
+                        "工作空间尚未配置环境选择器，不能显式选择环境",
+                        code="environment_not_configured",
+                    )
             if database_environment is not None:
                 selected_database_environment = (
                     environment or database_environment.active_environment
                 )
-                database_environment_selection = (
-                    "task_explicit" if environment is not None else "workspace_default"
+                has_environment = getattr(
+                    self._database_access_service,
+                    "has_workspace_environment",
+                    None,
                 )
+                if selected_database_environment is None or (
+                    callable(has_environment)
+                    and not has_environment(workspace.id, selected_database_environment)
+                ):
+                    raise ContextPreparationError(
+                        "工作空间没有配置所选环境",
+                        code="environment_not_configured",
+                    )
+                database_environment_selection = requested_selection or "workspace_default"
 
         try:
             active_project = workspace.active_project

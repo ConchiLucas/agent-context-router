@@ -4,8 +4,51 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-DatabaseEnvironment = Literal["test", "uat"]
+DatabaseEnvironment = str
 DatabaseEnvironmentMappingStatus = Literal["complete", "incomplete", "invalid", "suggested"]
+
+
+class WorkspaceEnvironmentOption(BaseModel):
+    key: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,31}$")
+    display_name: str
+    is_default: bool
+    sort_order: int
+
+
+class WorkspaceEnvironmentList(BaseModel):
+    workspace_id: str
+    default_environment: str = "local"
+    environments: list[WorkspaceEnvironmentOption] = Field(default_factory=list)
+
+
+class WorkspaceEnvironmentUpsert(BaseModel):
+    display_name: str = Field(min_length=1, max_length=80)
+    sort_order: int = Field(default=100, ge=-10000, le=10000)
+
+    @field_validator("display_name")
+    @classmethod
+    def strip_display_name(cls, value: str) -> str:
+        return value.strip()
+
+
+class WorkspaceEnvironmentDatabaseTargetUpdate(BaseModel):
+    id: str | None = Field(default=None, min_length=1, max_length=32)
+    project_id: str = Field(min_length=1, max_length=32)
+    logical_name: str = Field(min_length=1, max_length=120)
+    mcp_alias: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,63}$")
+    link_id: str = Field(min_length=1, max_length=32)
+
+    @field_validator("logical_name", "mcp_alias")
+    @classmethod
+    def strip_target_text(cls, value: str) -> str:
+        return value.strip()
+
+
+class WorkspaceEnvironmentDatabaseTargetsUpdate(BaseModel):
+    targets: list[WorkspaceEnvironmentDatabaseTargetUpdate] = Field(
+        default_factory=list,
+        max_length=5000,
+    )
 
 
 class DatabaseEnvironmentTargetSummary(BaseModel):

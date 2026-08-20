@@ -135,6 +135,8 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "read_context_document",
         "search_database_objects",
         "execute_database_query",
+        "read_table_relations",
+        "search_relation_tables",
         "apply_workspace_changes",
         "start_workspace",
         "get_workspace_operation",
@@ -144,18 +146,18 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
     assert tools[0].annotations.destructiveHint is False
     assert tools[0].annotations.idempotentHint is False
     assert tools[0].annotations.openWorldHint is False
-    for tool in tools[1:7]:
+    for tool in tools[1:9]:
         assert tool.annotations is not None
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
         assert tool.annotations.idempotentHint is True
         assert tool.annotations.openWorldHint is False
-    for tool in (tools[7], tools[8]):
+    for tool in (tools[9], tools[10]):
         assert tool.annotations is not None
         assert tool.annotations.readOnlyHint is False
         assert tool.annotations.destructiveHint is True
         assert tool.annotations.idempotentHint is False
-    for tool in (tools[9],):
+    for tool in (tools[11],):
         assert tool.annotations is not None
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
@@ -168,8 +170,9 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "agent_name",
         "environment",
     }
-    assert "test" in str(prepare_schema["properties"]["environment"])
-    assert "uat" in str(prepare_schema["properties"]["environment"])
+    environment_schema = str(prepare_schema["properties"]["environment"])
+    assert "^[a-z][a-z0-9_-]{0,31}$" in environment_schema
+    assert "Omit to use local" in environment_schema
     assert "read_task_context" in PREPARE_TOOL_DESCRIPTION
     assert "sensitive" in READ_TASK_CONTEXT_TOOL_DESCRIPTION
     assert "not the authoritative or live source" in READ_TASK_CONTEXT_TOOL_DESCRIPTION
@@ -187,6 +190,7 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
     assert middleware_schema["required"] == ["task_id"]
     assert set(middleware_schema["properties"]) == {
         "task_id",
+        "environment",
         "components",
         "reveal_secrets",
     }
@@ -206,6 +210,26 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
     }
     assert query_schema["required"] == ["task_id", "database", "sql"]
     assert set(query_schema["properties"]) == {"task_id", "database", "sql"}
+    relation_schema = tools[7].inputSchema
+    assert relation_schema["required"] == ["task_id", "tables"]
+    assert set(relation_schema["properties"]) == {
+        "task_id",
+        "tables",
+        "environment",
+        "sections",
+        "database",
+        "include_evidence",
+    }
+    relation_search_schema = tools[8].inputSchema
+    assert relation_search_schema["required"] == ["task_id"]
+    assert set(relation_search_schema["properties"]) == {
+        "task_id",
+        "environment",
+        "query",
+        "database",
+        "only_related",
+        "limit",
+    }
 
 
 def test_workspace_runtime_tools_forward_only_task_scoped_arguments() -> None:
@@ -314,6 +338,7 @@ def test_read_middleware_context_forwards_only_task_scoped_arguments() -> None:
     assert result == {"task_id": 55}
     assert middleware.arguments == {
         "task_id": 9,
+        "environment": None,
         "components": ["redis-main", "rocketmq"],
         "reveal_secrets": True,
     }

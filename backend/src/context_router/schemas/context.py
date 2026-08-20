@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 ProjectKind = Literal["frontend", "backend"]
 TaskScope = Literal["project", "workspace"]
-DatabaseEnvironment = Literal["test", "uat"]
+DatabaseEnvironment = str
 DatabaseEnvironmentSelection = Literal["workspace_default", "task_explicit"]
 
 

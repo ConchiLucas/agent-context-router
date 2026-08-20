@@ -68,13 +68,13 @@ def test_nacos_profile_api_rejects_embedded_url_credentials_and_duplicate_compon
         payload = _payload()
         payload["base_url"] = "http://user:password@localhost:8848"
         invalid_url = client.put(
-            "/api/workspaces/workspace-1/nacos-profiles/default",
+            "/api/workspaces/workspace-1/nacos-profiles/local",
             json=payload,
         )
         payload = _payload()
         payload["components"] = [payload["components"][0], payload["components"][0]]  # type: ignore[index]
         duplicates = client.put(
-            "/api/workspaces/workspace-1/nacos-profiles/default",
+            "/api/workspaces/workspace-1/nacos-profiles/local",
             json=payload,
         )
 

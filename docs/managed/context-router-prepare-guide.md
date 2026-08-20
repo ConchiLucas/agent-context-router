@@ -15,7 +15,7 @@
 | `task` | 是 | 当前任务原文，不要改写成泛化关键词 |
 | `cwd` | 是 | 当前工作目录，用于自动识别 Workspace，并在适用时标记 active project |
 | `agent_name` | 否 | `codex`、`antigravity` 等调用方名称 |
-| `environment` | 否 | 单环境 Workspace 省略；配置 TEST/UAT 选择器后可为当前 task 固定 `test` 或 `uat` |
+| `environment` | 否 | 可传当前 Workspace 已登记的任意环境；省略时固定使用 `local` |
 
 每次调用由服务端生成独立 task_id。存在真实 Workspace 根 `AGENTS.md` 时固定以它为第一层；缺少真实根时，才以 cwd 命中的 Project 入口或合成根为第一层。只返回入口在 `## 下级文档` 中显式声明的两级子孙，总高度最多三层。节点只含 `document_id`、`summary` 和 `children`，不返回正文，也不根据 task 内容搜索或排名。
 

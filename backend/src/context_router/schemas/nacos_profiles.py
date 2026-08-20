@@ -7,7 +7,7 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-NacosProfileKey = Literal["default", "test", "uat"]
+NacosProfileKey = str
 _IDENTIFIER_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
 _FIELD_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
 
@@ -123,7 +123,7 @@ class NacosProfileUpdate(BaseModel):
 
 class NacosProfileSummary(BaseModel):
     workspace_id: str
-    profile_key: NacosProfileKey
+    profile_key: NacosProfileKey = Field(pattern=r"^[a-z][a-z0-9_-]{0,31}$")
     base_url: str
     namespace_id: str
     username: str
@@ -158,7 +158,7 @@ class MiddlewareComponentContext(BaseModel):
 class ReadMiddlewareContextResult(BaseModel):
     task_id: int
     profile_key: NacosProfileKey
-    environment: Literal["test", "uat"] | None = None
+    environment: str | None = None
     provider: Literal["nacos"] = "nacos"
     fetched_at: datetime
     secrets_revealed: bool

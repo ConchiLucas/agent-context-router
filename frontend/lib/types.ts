@@ -1,5 +1,7 @@
 export type ProjectKind = "frontend" | "backend";
-export type DatabaseEnvironment = "test" | "uat";
+export type DatabaseEnvironment = string;
+export type LegacyDatabaseEnvironment = "test" | "uat";
+export type McpEnvironment = string;
 export type DatabaseEnvironmentSelection =
   | "workspace_default"
   | "task_explicit";
@@ -11,6 +13,63 @@ export type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue };
 export type EnvironmentJsonObject = Record<string, JsonValue>;
+
+export interface McpEnvironmentOption {
+  value: McpEnvironment;
+  label: string;
+}
+
+export interface McpEnvironmentToolDefault {
+  tool_name: string;
+  title: string;
+  description: string;
+  environments: McpEnvironmentOption[];
+  default_environment: McpEnvironment;
+  source: "configured" | "built_in";
+}
+
+export interface WorkspaceMcpEnvironmentDefaults {
+  workspace_id: string;
+  tools: McpEnvironmentToolDefault[];
+}
+
+export interface WorkspaceEnvironmentOption {
+  key: string;
+  display_name: string;
+  is_default: boolean;
+  sort_order: number;
+}
+
+export interface WorkspaceEnvironmentList {
+  workspace_id: string;
+  default_environment: string;
+  environments: WorkspaceEnvironmentOption[];
+}
+
+export interface NacosComponentRuleSummary {
+  id: string;
+  type: string;
+  sources: Array<{ data_id: string; group: string }>;
+  fields: Record<string, unknown>;
+}
+
+export interface NacosProfileSummary {
+  workspace_id: string;
+  profile_key: string;
+  base_url: string;
+  namespace_id: string;
+  username: string;
+  password_configured: boolean;
+  request_timeout_ms: number;
+  components: NacosComponentRuleSummary[];
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface WorkspaceNacosProfiles {
+  workspace_id: string;
+  profiles: NacosProfileSummary[];
+}
 export type SystemGuideDocument = Record<string, JsonValue>;
 
 export interface SystemGuideDetail {
@@ -174,7 +233,7 @@ export interface WorkspaceDatabaseEnvironmentProject {
   project_name: string;
   project_kind: ProjectKind;
   mappings: WorkspaceDatabaseEnvironmentMapping[];
-  candidates: Record<DatabaseEnvironment, DatabaseEnvironmentTarget[]>;
+  candidates: Record<LegacyDatabaseEnvironment, DatabaseEnvironmentTarget[]>;
 }
 
 export interface WorkspaceDatabaseEnvironmentSummary {
@@ -186,7 +245,7 @@ export interface WorkspaceDatabaseEnvironmentSummary {
 export interface WorkspaceDatabaseEnvironmentMappings {
   workspace_id: string;
   configured: boolean;
-  active_environment: DatabaseEnvironment | null;
+  active_environment: LegacyDatabaseEnvironment | null;
   revision: number;
   summary: WorkspaceDatabaseEnvironmentSummary;
   projects: WorkspaceDatabaseEnvironmentProject[];
@@ -195,9 +254,9 @@ export interface WorkspaceDatabaseEnvironmentMappings {
 export interface WorkspaceEnvironmentConfig {
   workspace_id: string;
   configured: boolean;
-  active_environment: DatabaseEnvironment | null;
+  active_environment: LegacyDatabaseEnvironment | null;
   revision: number;
-  environments: Record<DatabaseEnvironment, EnvironmentJsonObject>;
+  environments: Record<LegacyDatabaseEnvironment, EnvironmentJsonObject>;
   active_config: EnvironmentJsonObject | null;
 }
 
@@ -699,4 +758,297 @@ export interface DocumentReadTaskItem {
   created_at: string;
   read_count: number;
   sections: string[];
+}
+
+export type TableRelationEnvironment = "test" | "uat";
+
+export type TableRelationGenerationStatus =
+  | "building"
+  | "published"
+  | "superseded"
+  | "failed";
+
+/**
+ * `unknown` reaches the client rather than being filtered out: paired with the
+ * evidence that produced it, "nobody could measure this" is an answer, and for
+ * a domain that was never switched on it is the only honest one.
+ */
+export type TableRelationCardinality =
+  | "one_to_one"
+  | "one_to_many"
+  | "many_to_one"
+  | "unknown";
+
+/** What the write paths permit. */
+export type TableRelationCodeEvidence =
+  | "enforced"
+  | "single_write"
+  | "batch_allowed"
+  | "no_write_path"
+  | "conflicted";
+
+/** What the rows currently contain. */
+export type TableRelationDbEvidence =
+  | "measured"
+  | "low_sample"
+  | "never_written"
+  | "no_data";
+
+/** `self` is a column pointing at its own table, which is both ends at once. */
+export type TableRelationDirection = "outbound" | "inbound" | "self";
+
+/**
+ * Whether a key is counted as a number or as a string. It decides how an unset
+ * value is spelled — `0` or `''` — so the counts below cannot be read without it.
+ */
+export type TableRelationKeyKind = "numeric" | "text";
+
+export interface TableRelationEndpoint {
+  database_key: string;
+  schema_name: string;
+  table_name: string;
+  column_name?: string | null;
+}
+
+/**
+ * One row of the list. `relation_id` names the foreign key side and is the one
+ * thing about a relation that does not change with the table you arrived from;
+ * the two cardinalities do, because they are stated from that table's end.
+ */
+export interface TableRelationView {
+  edge_id: string;
+  relation_id: string;
+  references: string;
+  child: TableRelationEndpoint;
+  parent: TableRelationEndpoint;
+  direction: TableRelationDirection;
+  code_cardinality: TableRelationCardinality;
+  code_evidence: TableRelationCodeEvidence;
+  db_cardinality: TableRelationCardinality;
+  db_evidence: TableRelationDbEvidence;
+  code_checked_at?: string | null;
+  db_measured_at?: string | null;
+  cross_database: boolean;
+}
+
+export interface TableRelationGenerationSummary {
+  generation_id: string;
+  revision: number;
+  environment: TableRelationEnvironment;
+  status: TableRelationGenerationStatus;
+  edge_count: number;
+  relation_count: number;
+  hidden_count: number;
+  published_at?: string | null;
+}
+
+export interface TableRelationStatus {
+  workspace_id: string;
+  generation?: TableRelationGenerationSummary | null;
+  building?: TableRelationGenerationSummary | null;
+  database_keys: string[];
+  rebuild_command: string;
+}
+
+/** `hidden_count` is the dead columns held back from the list. */
+export interface TableRelationTableSummary {
+  database_key: string;
+  schema_name: string;
+  table_name: string;
+  relation_count: number;
+  hidden_count: number;
+}
+
+export interface TableRelationTableList {
+  workspace_id: string;
+  generation?: TableRelationGenerationSummary | null;
+  only_related: boolean;
+  total_count: number;
+  related_count: number;
+  returned_count: number;
+  tables: TableRelationTableSummary[];
+}
+
+export interface TableRelationTableIdentity {
+  database_key: string;
+  schema_name: string;
+  table_name: string;
+}
+
+export interface TableRelationTableDetail {
+  workspace_id: string;
+  generation: TableRelationGenerationSummary;
+  table: TableRelationTableIdentity;
+  relations: TableRelationView[];
+  relation_count: number;
+  /** Relations held back because the column has never been written. */
+  hidden_count: number;
+}
+
+/**
+ * The counts the data verdict was read off. Published so the verdict can be
+ * recomputed and contradicted rather than only accepted.
+ */
+export interface TableRelationMeasurement {
+  child_key_kind: TableRelationKeyKind;
+  parent_key_kind: TableRelationKeyKind;
+  child_table_rows: number;
+  child_rows_with_value: number;
+  child_distinct_keys: number;
+  parent_rows_with_value: number;
+  parent_distinct_keys: number;
+  orphan_keys: number;
+}
+
+export type TableRelationCheckKey =
+  | "cardinality"
+  | "parent_unique"
+  | "orphan"
+  | "key_kind";
+
+/**
+ * `inconclusive` is not a milder `attention`: one says the check ran and found
+ * nothing wrong, the other says there was nothing to run it against.
+ */
+export type TableRelationCheckOutcome =
+  | "confirmed"
+  | "attention"
+  | "inconclusive";
+
+export interface TableRelationCheck {
+  key: TableRelationCheckKey;
+  outcome: TableRelationCheckOutcome;
+  /** Derived from the endpoints on read, so it cannot describe stale ones. */
+  sql: string;
+}
+
+/**
+ * What a place in the source is doing that decides how many children a parent key
+ * gets. These name the deciding circumstance rather than the persistence call,
+ * because the same `batchInsert` appears under `fresh_key_per_row` and under
+ * `caller_key_reuse` — and reading the first as the second is how four relations
+ * came to carry a wrong code verdict.
+ */
+export type TableRelationCodeSiteKind =
+  | "fresh_key_per_row"
+  | "caller_key_reuse"
+  | "shared_key_fanout"
+  | "single_write"
+  | "unique_guard"
+  | "strict_to_map"
+  | "lossy_read"
+  | "grouping_by";
+
+/** A read cannot create a row, so it never settles a cardinality by itself. */
+export type TableRelationSiteRole = "write" | "read";
+
+/**
+ * One place in the source a code verdict was read off. `role` and `implies` are
+ * computed by the server from `kind`, so the client is never the thing deciding
+ * whether a `groupingBy` writes rows.
+ *
+ * There is no line number on purpose: it is the one coordinate that would keep
+ * looking exact after an edit moved the code. The method name and the snippet are
+ * what a reader searches for, and a snippet no longer in the file is how staleness
+ * becomes detectable rather than silent.
+ */
+export interface TableRelationCodeSite {
+  kind: TableRelationCodeSiteKind;
+  role: TableRelationSiteRole;
+  implies: TableRelationCardinality;
+  /** Relative to the workspace root. */
+  file_path: string;
+  method_name: string;
+  snippet: string;
+}
+
+/**
+ * One relation with the evidence behind both of its verdicts. `relation` is the
+ * same view the list row was built from, so opening a row cannot show a verdict
+ * that contradicts the row it was opened from.
+ *
+ * An empty `code_sites` is not the same as there being no write path: that is what
+ * `code_evidence` says. Empty beside a conclusive evidence value means only that
+ * nobody has written the places down yet.
+ */
+export interface TableRelationDetail {
+  workspace_id: string;
+  generation: TableRelationGenerationSummary;
+  table: TableRelationTableIdentity;
+  relation: TableRelationView;
+  measurement: TableRelationMeasurement;
+  checks: TableRelationCheck[];
+  code_sites: TableRelationCodeSite[];
+}
+
+/**
+ * How this table is persisted. Named after the call, not after the parent key:
+ * relation code sites cannot reuse this vocabulary, because the same `batchInsert`
+ * is 1:1 or 1:N depending on how the key is minted.
+ */
+export type TableRelationWriteKind =
+  | "batch_insert"
+  | "save_or_update"
+  | "insert";
+
+export type TableRelationUpdateKind =
+  | "batch_update"
+  | "save_or_update"
+  | "update";
+
+export type TableRelationPersistKind = TableRelationWriteKind | TableRelationUpdateKind;
+
+export interface TableRelationWriteSite {
+  kind: TableRelationWriteKind;
+  /** Relative to the workspace root. */
+  file_path: string;
+  method_name: string;
+  snippet: string;
+}
+
+/**
+ * Insert calls recorded for one table. An empty `writes` is not a claim that
+ * nothing inserts into the table — it means nobody has written the places down yet.
+ */
+export interface TableRelationTableWrites {
+  workspace_id: string;
+  generation: TableRelationGenerationSummary;
+  table: TableRelationTableIdentity;
+  writes: TableRelationWriteSite[];
+}
+
+export interface TableRelationUpdateSite {
+  kind: TableRelationUpdateKind;
+  file_path: string;
+  method_name: string;
+  snippet: string;
+}
+
+/**
+ * Update calls recorded for one table. An empty `updates` is not a claim that
+ * nothing updates the table — it means nobody has written the places down yet.
+ */
+export interface TableRelationTableUpdates {
+  workspace_id: string;
+  generation: TableRelationGenerationSummary;
+  table: TableRelationTableIdentity;
+  updates: TableRelationUpdateSite[];
+}
+
+/** What `read_table_relations` would return for one table, plus tool metadata. */
+export interface TableRelationMcpPreview {
+  tool: "read_table_relations";
+  arguments: {
+    task_id: string;
+    tables: string[];
+    database: string;
+    sections: string[];
+    include_evidence: boolean;
+  };
+  result: {
+    environment: DatabaseEnvironment;
+    generated_at: string | null;
+    workspace_root: string;
+    tables: unknown[];
+  };
 }

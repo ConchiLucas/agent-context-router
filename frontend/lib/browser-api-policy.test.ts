@@ -59,6 +59,13 @@ test("allows reads and the explicit safe browser POST allowlist", () => {
     true,
   );
   assert.equal(
+    isBrowserApiRequestAllowed(
+      "/api/workspaces/workspace-1/mcp-environment-defaults/read_middleware_context",
+      "PUT",
+    ),
+    false,
+  );
+  assert.equal(
     isBrowserApiRequestAllowed("/api/system-guides/guide-1", "PUT"),
     false,
   );

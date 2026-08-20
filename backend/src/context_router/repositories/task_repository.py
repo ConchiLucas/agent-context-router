@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, Protocol
@@ -7,6 +8,7 @@ from typing import Literal, Protocol
 import psycopg
 
 DatabaseEnvironmentSelection = Literal["workspace_default", "task_explicit"]
+_ENVIRONMENT_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 
 
 class TaskRepositoryError(RuntimeError):
@@ -160,8 +162,12 @@ class PostgresTaskRepository:
             raise TaskRepositoryError("活动项目类型必须是 frontend 或 backend")
         if (database_environment is None) != (database_environment_revision is None):
             raise TaskRepositoryError("数据库环境和版本必须同时提供")
-        if database_environment not in {None, "test", "uat"}:
-            raise TaskRepositoryError("数据库环境必须是 test 或 uat")
+        if database_environment is not None and not _ENVIRONMENT_PATTERN.fullmatch(
+            database_environment
+        ):
+            raise TaskRepositoryError(
+                "数据库环境必须以小写字母开头，且只能包含小写字母、数字、下划线或连字符"
+            )
         if database_environment_revision is not None and database_environment_revision < 1:
             raise TaskRepositoryError("数据库环境版本必须大于 0")
         if database_environment_selection not in {

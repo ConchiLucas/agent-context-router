@@ -11,7 +11,7 @@
 - 明确文件、符号或纯源码定位可以直接检索项目目录。
 - prepare 返回的文档树没有相关上下文时，继续使用正常源码与本地工具完成任务，不要阻塞。
 - 任务需要数据库别名或环境 JSON 时调用 `read_task_context(task_id, sections)`。`databases` 是当前 Workspace 下所有 Project 有效授权的并集；其中 `database` 字段就是后续调用的 Workspace 唯一 mcp_alias，不传 Host、DSN、账号、密码或远端数据库名。
-- 任务需要 Redis、MQ、ES、MinIO、任务调度或对象存储等中间件的实时连接、配置或故障排查信息时，必须优先调用 `read_middleware_context(task_id, components, reveal_secrets)`，不要先从 application 配置、源码或通用环境 JSON 推断运行值。prepare 未传环境时读取 `default/local` Nacos 配置档，显式传 `test/uat` 时读取同名配置档。本机工具默认返回明文，当前授权任务可以直接返回和使用这些值；需要脱敏视图时显式传 `reveal_secrets=false`。不要把实际值写入源码、Markdown、持久化日志、无关工具参数或提交记录。
+- 任务需要 Redis、MQ、ES、MinIO、任务调度或对象存储等中间件的实时连接、配置或故障排查信息时，必须优先调用 `read_middleware_context(task_id, environment?, components?, reveal_secrets?)`。显式环境读取该 Workspace 同名 Nacos 配置，省略时继承 task 环境。本机工具默认返回明文；需要脱敏视图时显式传 `reveal_secrets=false`。
 - `read_task_context` 只负责数据库别名和通用环境 JSON，不是 Nacos 中间件实时信息的权威来源。
 - Schema 不明确时先调用 `search_database_objects(task_id, database, object_type, pattern, detail, ...)`。优先使用 `names`，需要元数据时再升到 `summary`，只有确认目标后才用 `full`。
 - 查询数据时调用 `execute_database_query(task_id, database, sql)`；只提交一条必要的只读 SQL。即使 SQL 自带 LIMIT，仍以服务端行数、字节数、超时和安全策略为准，并检查返回的 `truncated`。
@@ -27,4 +27,4 @@
 | `context-router-trace-guide` | 需要理解 Tasks 页面记录了什么 |
 | `context-router-routing-guide` | 需要按 startup/database/frontend/backend/business/debugging 路由 |
 
-MCP 的 `tools/list` 固定为 `prepare_task_context`、`read_task_context`、`read_middleware_context`、`search_context_documents`、`read_context_document`、`search_database_objects`、`execute_database_query`、`apply_workspace_changes`、`start_workspace`、`get_workspace_operation`。某个 Workspace 当前没有有效数据库授权或 Nacos 配置档时，相关工具仍会存在，但只允许使用 task 绑定 Workspace 实际返回的能力，不能据此访问其他 Workspace 的资源。
+MCP 的 `tools/list` 固定为 12 个工具。直接带可选 `environment` 的只有 4 个：`prepare_task_context`、`read_middleware_context`、`read_table_relations`、`search_relation_tables`；后三个省略时继承 task 环境，prepare 省略时使用 `local`。`read_task_context`、`search_database_objects` 和 `execute_database_query` 虽不再接收环境参数，但也依赖环境，始终使用 task 快照。其余文档与运行编排工具不使用业务环境。

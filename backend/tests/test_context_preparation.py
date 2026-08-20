@@ -7,6 +7,9 @@ from context_router.config import Settings
 from context_router.repositories.database_environment_repository import (
     DatabaseEnvironmentConfigRecord,
 )
+from context_router.repositories.mcp_environment_default_repository import (
+    InMemoryMcpEnvironmentDefaultRepository,
+)
 from context_router.repositories.task_repository import TaskRecord
 from context_router.services.context_preparation import (
     ContextPreparationError,
@@ -260,24 +263,24 @@ def test_environment_and_database_context_are_loaded_only_when_requested(tmp_pat
 
     assert context["databases"] == []
     assert context["environment"]["selected"] == {
-        "key": "uat",
-        "name": "UAT",
+        "key": "local",
+        "name": "LOCAL",
         "revision": 8,
         "selection": "workspace_default",
     }
     assert context["environment"]["config"] == {
-        "mq": {"nameServer": "uat-mq:9876"},
-        "es": {"endpoint": "http://uat-es:9200"},
+        "mq": {"nameServer": "local-mq:9876"},
+        "es": {"endpoint": "http://local-es:9200"},
     }
-    assert repository.created[0]["database_environment"] == "uat"
+    assert repository.created[0]["database_environment"] == "local"
     assert repository.created[0]["database_environment_revision"] == 8
     assert repository.created[0]["database_environment_selection"] == "workspace_default"
     assert database_service.payload_calls == [
-        {"environment": "uat", "selection": "workspace_default"}
+        {"environment": "local", "selection": "workspace_default"}
     ]
     assert database_service.database_calls == [
         {
-            "database_environment": "uat",
+            "database_environment": "local",
             "database_environment_revision": 8,
             "database_environment_selection": "workspace_default",
         }
@@ -324,6 +327,55 @@ def test_prepare_can_select_task_environment_without_changing_workspace_default(
         ).active_environment
         == "uat"
     )
+
+
+def test_prepare_ignores_removed_per_tool_default_when_environment_is_omitted(
+    tmp_path: Path,
+) -> None:
+    registry, project_id = build_registry(tmp_path)
+    repository = FakeTaskRepository()
+    database_service = FakeDatabaseAccessService()
+    defaults = InMemoryMcpEnvironmentDefaultRepository()
+    workspace_id = registry.get_project_summary(project_id).workspace_id
+    assert workspace_id is not None
+    defaults.upsert_default(
+        workspace_id=workspace_id,
+        tool_name="prepare_task_context",
+        environment="test",
+    )
+    service = ContextPreparationService(
+        registry,
+        repository,
+        database_service,  # type: ignore[arg-type]
+        defaults,
+    )
+
+    prepared = service.prepare(
+        task="检查默认环境",
+        cwd=str(tmp_path / "project"),
+    )
+
+    assert prepared.task_id == 41
+    assert repository.created[0]["database_environment"] == "local"
+    assert repository.created[0]["database_environment_selection"] == "workspace_default"
+
+
+def test_prepare_uses_local_as_the_registered_initial_default(
+    tmp_path: Path,
+) -> None:
+    registry, _ = build_registry(tmp_path)
+    repository = FakeTaskRepository()
+    service = ContextPreparationService(
+        registry,
+        repository,
+        FakeDatabaseAccessService(),  # type: ignore[arg-type]
+        InMemoryMcpEnvironmentDefaultRepository(),
+    )
+
+    service.prepare(task="检查系统初始默认", cwd=str(tmp_path / "project"))
+
+    assert repository.created[0]["database_environment"] == "local"
+    assert repository.created[0]["database_environment_selection"] == "workspace_default"
 
 
 def test_prepare_rejects_explicit_environment_without_workspace_selector(

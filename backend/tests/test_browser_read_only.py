@@ -25,6 +25,10 @@ def _app() -> FastAPI:
     def update_workspace() -> dict[str, bool]:
         return {"written": True}
 
+    @app.put("/api/workspaces/workspace-1/mcp-environment-defaults/read_middleware_context")
+    def update_mcp_environment_default() -> dict[str, bool]:
+        return {"written": True}
+
     @app.post("/api/workspaces/workspace-1/refresh")
     def refresh_workspace() -> dict[str, bool]:
         return {"refreshed": True}
@@ -109,6 +113,13 @@ def test_browser_origin_can_read_and_run_allowlisted_actions() -> None:
                 headers=headers,
             ).status_code
             == 200
+        )
+        assert (
+            client.put(
+                "/api/workspaces/workspace-1/mcp-environment-defaults/read_middleware_context",
+                headers=headers,
+            ).status_code
+            == 405
         )
 
 

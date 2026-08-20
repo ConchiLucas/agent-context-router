@@ -100,5 +100,5 @@ summary: 项目导航。
     assert project_root["summary"] == "项目导航。"
     assert project_root["children"][0]["summary"] == "子文档"
     assert "content" not in str(payload["documents"])
-    assert environment_after_preview.json()["active_environment"] == "uat"
+    assert environment_after_preview.json()["active_environment"] == "local"
     assert removed_project_preview.status_code == 404

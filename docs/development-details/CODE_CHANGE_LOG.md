@@ -11,6 +11,13 @@
 
 ## 记录
 
+### 2026-08-20
+
+- 新增 migration `20260820_0040` 和 `workspace_environments`：每个 Workspace 独立维护动态环境，`local` 固定存在、不可删除且为默认；移除逐 MCP 默认环境表和 `tool_default` 运行语义。
+- Nacos 配置、通用环境 JSON、数据库目标、表关联版本和 task 快照统一引用 Workspace 环境键。一个环境最多一个 Nacos 配置；数据库实体不携带环境语义，多个环境允许复用同一条项目数据库授权。
+- `prepare_task_context` 省略环境时固定 `local`；`read_middleware_context`、`read_table_relations`、`search_relation_tables` 省略时继承 task 环境，显式环境始终优先。数据库上下文、对象搜索和只读查询始终使用 task 快照。
+- Workspace 环境详情页改为一个页头下拉框驱动全部内容；数据源汇总从工作空间项目页签移动到环境详情，并按所选环境过滤。页面已覆盖桌面、平板和窄屏布局。
+
 ### 2026-08-11
 
 - `prepare_task_context` 的文档导航改为确定性的任务局部三层投影：真实 Workspace 根 `AGENTS.md` 存在时固定作为第一层；缺少真实根时，才从活动 Project 入口或合成根开始。投影裁剪不改变 Workspace 范围的 `search_context_documents` 和 `read_context_document`。

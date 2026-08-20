@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol, cast
@@ -9,6 +10,8 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from context_router.schemas.nacos_profiles import NacosProfileKey
+
+_ENVIRONMENT_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 
 
 class NacosProfileRepositoryError(RuntimeError):
@@ -118,7 +121,7 @@ class PostgresNacosProfileRepository:
                     FROM workspace_nacos_profiles
                     WHERE workspace_id = %s
                     ORDER BY CASE profile_key
-                        WHEN 'default' THEN 0 WHEN 'test' THEN 1 ELSE 2 END,
+                        WHEN 'local' THEN 0 WHEN 'test' THEN 10 WHEN 'uat' THEN 20 ELSE 100 END,
                         profile_key
                     """,
                     (workspace_id,),
@@ -219,14 +222,14 @@ class PostgresNacosProfileRepository:
 
 def _record_from_row(row: tuple[object, ...]) -> NacosProfileRecord:
     profile_key = str(row[1])
-    if profile_key not in {"default", "test", "uat"}:
+    if not _ENVIRONMENT_PATTERN.fullmatch(profile_key):
         raise NacosProfileRepositoryError("Nacos profile 环境标识无效")
     components = row[7]
     if not isinstance(components, list):
         raise NacosProfileRepositoryError("Nacos profile 提取规则格式无效")
     return NacosProfileRecord(
         workspace_id=str(row[0]),
-        profile_key=cast(NacosProfileKey, profile_key),
+        profile_key=profile_key,
         base_url=str(row[2]),
         namespace_id=str(row[3]),
         username=str(row[4]),
@@ -254,7 +257,7 @@ def _copy_record(record: NacosProfileRecord) -> NacosProfileRecord:
 
 
 def _validate_write(profile: NacosProfileWrite) -> None:
-    if profile.profile_key not in {"default", "test", "uat"}:
+    if not _ENVIRONMENT_PATTERN.fullmatch(profile.profile_key):
         raise NacosProfileRepositoryError("Nacos profile 环境标识无效")
     if not profile.workspace_id or not profile.base_url or not profile.namespace_id:
         raise NacosProfileRepositoryError("Nacos profile 缺少必填字段")
@@ -265,4 +268,4 @@ def _validate_write(profile: NacosProfileWrite) -> None:
 
 
 def _profile_order(profile_key: NacosProfileKey) -> int:
-    return {"default": 0, "test": 1, "uat": 2}[profile_key]
+    return {"local": 0, "test": 10, "uat": 20}.get(profile_key, 100)

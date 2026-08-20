@@ -5,6 +5,9 @@ from types import SimpleNamespace
 
 import pytest
 
+from context_router.repositories.mcp_environment_default_repository import (
+    InMemoryMcpEnvironmentDefaultRepository,
+)
 from context_router.repositories.nacos_profile_repository import (
     InMemoryNacosProfileRepository,
     NacosProfileWrite,
@@ -198,9 +201,9 @@ def test_task_environment_selects_exact_profile_and_redacts_secrets() -> None:
     assert database_access.calls[0]["task_environment"] == "test"
 
 
-def test_explicit_reveal_returns_secret_and_single_environment_uses_default_profile() -> None:
+def test_explicit_reveal_returns_secret_and_single_environment_uses_local_profile() -> None:
     profiles = InMemoryNacosProfileRepository()
-    _profile(profiles, profile_key="default")
+    _profile(profiles, profile_key="local")
     reader = _reader()
     service = MiddlewareContextService(
         registry=StaticRegistry("workspace-1"),  # type: ignore[arg-type]
@@ -212,14 +215,14 @@ def test_explicit_reveal_returns_secret_and_single_environment_uses_default_prof
 
     result = service.read(task_id=41, components=["redis-main"], reveal_secrets=True)
 
-    assert result.profile_key == "default"
-    assert result.environment is None
+    assert result.profile_key == "local"
+    assert result.environment == "local"
     assert result.components[0].properties["password"] == "redis-secret"
 
 
-def test_omitted_environment_uses_default_profile_even_with_workspace_default() -> None:
+def test_omitted_environment_inherits_the_task_environment() -> None:
     profiles = InMemoryNacosProfileRepository()
-    _profile(profiles, profile_key="default")
+    _profile(profiles, profile_key="uat")
     reader = _reader()
     database_access = RecordingDatabaseAccess("uat")
     service = MiddlewareContextService(
@@ -232,14 +235,57 @@ def test_omitted_environment_uses_default_profile_even_with_workspace_default() 
 
     result = service.read(task_id=41, components=["redis-main"], reveal_secrets=False)
 
-    assert result.profile_key == "default"
-    assert result.environment is None
-    assert database_access.calls == []
+    assert result.profile_key == "uat"
+    assert result.environment == "uat"
+    assert len(database_access.calls) == 1
+
+
+def test_removed_middleware_tool_default_does_not_override_local_task_default() -> None:
+    profiles = InMemoryNacosProfileRepository()
+    _profile(profiles, profile_key="local")
+    defaults = InMemoryMcpEnvironmentDefaultRepository()
+    defaults.upsert_default(
+        workspace_id="workspace-1",
+        tool_name="read_middleware_context",
+        environment="test",
+    )
+    reader = _reader()
+    service = MiddlewareContextService(
+        registry=StaticRegistry("workspace-1"),  # type: ignore[arg-type]
+        task_repository=StaticTaskRepository(_task(environment=None)),
+        profile_repository=profiles,
+        database_access_service=RecordingDatabaseAccess(None),  # type: ignore[arg-type]
+        mcp_environment_defaults=defaults,
+        reader_factory=lambda _profile: reader,
+    )
+
+    result = service.read(task_id=41, components=["redis-main"], reveal_secrets=False)
+
+    assert result.profile_key == "local"
+    assert result.environment == "local"
+
+
+def test_empty_workspace_defaults_use_registered_local_middleware_default() -> None:
+    profiles = InMemoryNacosProfileRepository()
+    _profile(profiles, profile_key="test")
+    service = MiddlewareContextService(
+        registry=StaticRegistry("workspace-1"),  # type: ignore[arg-type]
+        task_repository=StaticTaskRepository(_task(environment="test")),
+        profile_repository=profiles,
+        database_access_service=RecordingDatabaseAccess("test"),  # type: ignore[arg-type]
+        mcp_environment_defaults=InMemoryMcpEnvironmentDefaultRepository(),
+        reader_factory=lambda _profile: _reader(),
+    )
+
+    result = service.read(task_id=41, components=["redis-main"], reveal_secrets=False)
+
+    assert result.profile_key == "test"
+    assert result.environment == "test"
 
 
 def test_unknown_component_and_document_reader_are_rejected_before_nacos_access() -> None:
     profiles = InMemoryNacosProfileRepository()
-    _profile(profiles, profile_key="default")
+    _profile(profiles, profile_key="local")
     reader = _reader()
     service = MiddlewareContextService(
         registry=StaticRegistry("workspace-1", access_mode="documents_only"),  # type: ignore[arg-type]

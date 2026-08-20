@@ -243,6 +243,24 @@ class DatabaseAccessService:
             )
         return config
 
+    def has_workspace_environment(self, workspace_id: str, environment: str) -> bool:
+        repository = self._database_environment_repository
+        if repository is None:
+            return environment == "local"
+        has_environment = getattr(repository, "has_environment", None)
+        if not callable(has_environment):
+            # Compatibility for repository adapters created before dynamic
+            # Workspace environments. Their saved task/config pair remains the
+            # source of truth until the adapter is upgraded.
+            return True
+        try:
+            return bool(has_environment(workspace_id, environment))
+        except DatabaseEnvironmentRepositoryError as exc:
+            raise DatabaseAccessError(
+                "database_environment_unavailable",
+                "工作空间环境配置暂时不可用",
+            ) from exc
+
     def get_active_environment_payload(
         self,
         workspace_id: str,
@@ -266,6 +284,7 @@ class DatabaseAccessService:
             ) from exc
         config = snapshot.config if snapshot.selector_configured else None
         selected_environment = self._validated_task_environment(
+            workspace_id,
             config,
             task_environment=environment,
             task_environment_revision=revision,
@@ -276,10 +295,10 @@ class DatabaseAccessService:
                 "environment_changed",
                 "任务缺少环境选择，请重新 prepare",
             )
-        if not snapshot.payloads.configured:
+        if selected_environment not in snapshot.payloads.environments:
             raise DatabaseAccessError(
                 "environment_config_not_configured",
-                "工作空间尚未维护通用环境 JSON",
+                "当前环境尚未维护通用环境 JSON",
             )
         return snapshot.payloads.environments[selected_environment]
 
@@ -294,6 +313,7 @@ class DatabaseAccessService:
         """Validate a task environment snapshot without reading any environment payload."""
         selector = self.get_active_workspace_environment(workspace_id)
         selected = self._validated_task_environment(
+            workspace_id,
             selector,
             task_environment=task_environment,
             task_environment_revision=task_environment_revision,
@@ -318,6 +338,7 @@ class DatabaseAccessService:
             return []
         selector = self.get_active_workspace_environment(workspace_id)
         selected_environment = self._validated_task_environment(
+            workspace_id,
             selector,
             task_environment=database_environment,
             task_environment_revision=database_environment_revision,
@@ -360,6 +381,7 @@ class DatabaseAccessService:
         """Resolve the physical database records authorized by a task environment snapshot."""
         selector = self.get_active_workspace_environment(workspace_id)
         selected_environment = self._validated_task_environment(
+            workspace_id,
             selector,
             task_environment=database_environment,
             task_environment_revision=database_environment_revision,
@@ -444,6 +466,7 @@ class DatabaseAccessService:
     ) -> ResolvedProjectDatabase:
         config = self.get_active_workspace_environment(workspace_id)
         selected_environment = self._validated_task_environment(
+            workspace_id,
             config,
             task_environment=task_environment,
             task_environment_revision=task_environment_revision,
@@ -552,8 +575,9 @@ class DatabaseAccessService:
             ) from exc
         return sorted(records, key=lambda item: (item.mcp_alias.casefold(), item.link_id))
 
-    @staticmethod
     def _validated_task_environment(
+        self,
+        workspace_id: str,
         selector: DatabaseEnvironmentConfigRecord | None,
         *,
         task_environment: str | None,
@@ -577,7 +601,7 @@ class DatabaseAccessService:
             )
 
         if (
-            task_environment not in {"test", "uat"}
+            task_environment is None
             or task_environment_revision is None
             or selector is None
             or selector.revision != task_environment_revision
@@ -590,6 +614,11 @@ class DatabaseAccessService:
             raise DatabaseAccessError(
                 "environment_changed",
                 "环境已切换或配置已更新，请重新 prepare",
+            )
+        if not self.has_workspace_environment(workspace_id, task_environment):
+            raise DatabaseAccessError(
+                "environment_changed",
+                "工作空间已删除该环境，请重新 prepare",
             )
         return cast(DatabaseEnvironment, task_environment)
 

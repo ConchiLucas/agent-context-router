@@ -122,13 +122,13 @@ CONTEXT_ROUTER_DATABASE_PAYLOAD_CLEANUP_INTERVAL_SECONDS=3600
 
 项目数据库关联自己的行数、字节数和超时限制会与查询全局值取更严格者。数据库 MCP 出入参详情默认自动采集，`DATABASE_PAYLOAD_*` 控制两个数据库 MCP 工具的本地详情快照：请求和最终 MCP 响应默认分别最多保存 1 MB，任何配置都不能超过 4 MB，默认保留 7 天，并在后端启动及调用期间按节流周期清理。授权记录归属 Project，但 `mcp_alias` 在 Workspace 内唯一，新 Workspace task 可以使用所有子项目在 prepare 中返回的 alias。修改这些值后重启 backend。
 
-配置了 Workspace 环境选择器后，`prepare_task_context` 可选传入 `environment='test'` 或 `environment='uat'`。显式传入只为本次 task 固化所选环境并记录 `task_explicit`，不会修改 Workspace 当前环境；省略参数时使用 Workspace 当前环境并记录 `workspace_default`。后续 `read_task_context` 和数据库工具都按 task 固化的环境解析。
+每个 Workspace 独立维护环境列表，`local` 固定存在且为默认；`test`、`uat` 或其他环境只在该项目确有需要时由本机 AI/运维登记。`prepare_task_context` 可选传入任一已登记环境，显式传入记录 `task_explicit`，省略时固化 `local` 并记录 `workspace_default`。后续 `read_task_context`、数据库工具以及未显式传环境的中间件/表关联工具都继承 task 环境。
 
-本机 AI 或运维通过受校验 API 保存环境映射、保存 TEST/UAT 通用 JSON 或切换 Workspace 当前环境时，都会递增同一个 revision；无论 task 使用 `workspace_default` 还是 `task_explicit`，revision 不一致时数据库调用都会返回 `environment_changed`，需要重新 prepare。浏览器环境详情只读取映射、JSON 和默认环境，不修改它们。没有配置环境选择器的单环境 Workspace 在省略 `environment` 时保持原有数据库授权行为；显式传参不会隐式创建选择器，而是返回 `environment_not_configured`。
+本机 AI 或运维通过受校验 API 调整环境与数据库关联时会递增共享 revision；task 快照 revision 不一致时数据库调用返回 `environment_changed`，需要重新 prepare。浏览器环境详情只读：页头下拉框选择查看环境，下面的 Nacos、MCP 流转和数据源汇总全部跟随切换。数据库记录自身不带环境名；环境只关联既有项目数据库授权，因此多个环境可以指向同一个数据库链接。
 
-Workspace 可以独立保存 TEST/UAT 两份 JSON 对象；首次保存默认选择 UAT，不要求先配置数据库映射，数据库会继续沿用原有 Workspace alias。两份 JSON 合计最多 256 KiB、最多嵌套 20 层，超出 JavaScript 安全整数范围的值请改用字符串。task 所选环境的 JSON 会作为 `environment_config` 只返回给可信本机 MCP 调用方。该字段可按明确业务需要保存 MQ、Redis、MinIO、ES 等组件的地址和访问凭据，内容以明文 JSONB 保存在本地；严禁把实际值写入日志、开发文档、链路摘要或示例输出。
+Workspace 可按任意已登记环境保存有界 JSON 对象，不要求先配置数据库关联；task 所选环境的 JSON 作为 `environment_config` 只返回给可信本机 MCP 调用方。全部环境 JSON 合计最多 256 KiB、最多嵌套 20 层，超出 JavaScript 安全整数范围的值请改用字符串。可按明确业务需要保存组件地址和访问凭据，但严禁把实际值写入日志、开发文档、链路摘要或示例输出。
 
-需要从 Nacos 实时定位中间件时，由本机 AI/运维通过 `/api/workspaces/{workspace_id}/nacos-profiles/{default|test|uat}` 配置连接和声明式组件抽取规则。prepare 不传环境时，`read_middleware_context` 固定读取 `default/local`；显式传 TEST/UAT 时必须存在同名配置档。由于 MCP 只绑定本机回环地址，工具默认返回账号、密码或 Token 等明文；只有明确传入 `reveal_secrets=false` 才脱敏。调用记录仍只保存组件数量、开关和警告数量，不保存响应值。后端运行在 Docker 中而 Nacos 运行在宿主机时，配置地址使用 `http://host.docker.internal:<port>`。
+需要从 Nacos 实时定位中间件时，由本机 AI/运维通过 `/api/workspaces/{workspace_id}/nacos-profiles/{environment}` 为已登记环境配置连接和声明式组件抽取规则。一个环境最多一个 Nacos 配置；`read_middleware_context` 显式环境优先，省略时继承 task 环境。由于 MCP 只绑定本机回环地址，工具默认返回账号、密码或 Token 等明文；只有明确传入 `reveal_secrets=false` 才脱敏。调用记录只保存数量、环境和警告，不保存响应值。
 
 ## PostgreSQL 与 migration
 
@@ -144,11 +144,21 @@ CONTEXT_ROUTER_DATABASE_URL=postgresql://USER:PASSWORD@host.docker.internal:5432
 docker compose exec backend uv run alembic upgrade head
 ```
 
-当前 migration head 为 `20260813_0035`。`0035` 增加带 LOCAL 默认值的白名单宿主机运行动作；`0029` 与 `0030` 保留为已回滚实验功能的兼容 revision 标记，以便既有本地数据库继续向前升级；`0028` 增加 Workspace Nacos 中间件配置档。
+当前 migration head 为 `20260820_0040`。`0040` 增加动态 Workspace 环境注册表、固定 `local` 默认，移除逐 MCP 默认环境，并将 Nacos、数据库目标、环境 JSON、表关联和 task 快照统一到动态环境键；`0038` 增加表级更新入口子表并把插入入口的 kind 收成 `batch_insert` / `save_or_update` / `insert`；`0037` 增加表级插入入口子表；`0036` 增加表关联的四张投影表（版本、表、边、中间表折叠）；`0035` 增加带 LOCAL 默认值的白名单宿主机运行动作；`0029` 与 `0030` 保留为已回滚实验功能的兼容 revision 标记。
+
+表关联页面的关联数据目前没有自动生成流水线，示例数据由可重复执行的种子脚本写入：
+
+```bash
+docker compose exec backend uv run python -m context_router.scripts.seed_table_relations \
+  --workspace <workspace_id>
+```
+
+脚本按 `(workspace_id, environment)` 覆盖式重写，只有一个工作空间时可省略 `--workspace`。
+用户给出表名要检查并补全时按 [按表名补全表关联](./development-details/table_relation_complete.md) 执行；字段对照见 [表关联种子怎么写](./development-details/table_relation_seed.md)。不要直接写投影表。
 
 MySQL Connector 会从服务端版本标识区分 MySQL、MariaDB 和 Doris。Doris 使用 MySQL 协议接入，但目录读取不会启动其不支持的只读事务，也不会读取尚未验证兼容的 MySQL 约束/索引目录。
 
-PostgreSQL 保存 Workspace、Project 类型、源码相对路径、文档入口相对路径、数据源、数据库清单、项目数据库关联及 Workspace 唯一 `mcp_alias`、可选 TEST/UAT 数据库映射与通用 JSON、带 scope/环境/revision/选择模式的 MCP task、read call、文档顺序、数据库调用审计元数据，以及可重建的文档搜索分块与索引状态。文档树和 Markdown 原文仍从磁盘重建，文档工具完整出入参不持久化；`search_database_objects` 和 `execute_database_query` 自动保存有界、可过期的详情快照，供本机链路页面按需查看。后端启动时恢复工作空间和全部项目配置，并从磁盘重建每个项目的内存树与匹配版本词法索引；路径失效的项目仍保留在页面并显示错误。
+PostgreSQL 保存 Workspace、Project 类型、源码相对路径、文档入口相对路径、动态环境列表、数据源、数据库清单、项目数据库授权、环境到授权的关联、环境 Nacos/通用 JSON、带 scope/环境/revision/选择模式的 MCP task、read call、文档顺序、数据库调用审计元数据，以及可重建的文档搜索分块与索引状态。文档树和 Markdown 原文仍从磁盘重建，文档工具完整出入参不持久化；`search_database_objects` 和 `execute_database_query` 自动保存有界、可过期的详情快照，供本机链路页面按需查看。后端启动时恢复工作空间和全部项目配置，并从磁盘重建每个项目的内存树与匹配版本词法索引；路径失效的项目仍保留在页面并显示错误。
 
 数据库未配置时后端和 `/health` 仍可启动，但不会自动创建默认 Workspace/Project，且 task_id 持久化、prepare/search/read 的完整 MCP 工作流、Workspace MCP JSON 预览和持久化调用记录不可用。文档搜索不会降级为进程内扫描。业务数据源离线不会阻止后端启动，也不会阻止 Workspace 文档 prepare/search/read；连接只在测试、同步、对象搜索或查询时延迟建立。
 

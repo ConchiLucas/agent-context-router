@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
+from context_router.repositories.database_environment_repository import (
+    DatabaseEnvironmentRepositoryError,
+    DatabaseEnvironmentStore,
+)
 from context_router.repositories.nacos_profile_repository import (
     NacosProfileRecord,
     NacosProfileRepositoryError,
@@ -29,6 +33,10 @@ def _profiles(request: Request) -> NacosProfileStore:
 
 def _workspaces(request: Request) -> WorkspaceStore:
     return request.app.state.workspace_repository
+
+
+def _environments(request: Request) -> DatabaseEnvironmentStore | None:
+    return getattr(request.app.state, "database_environment_repository", None)
 
 
 @router.get(
@@ -66,6 +74,11 @@ def upsert_nacos_profile(
     response.headers["Cache-Control"] = "no-store"
     try:
         _workspaces(request).get_workspace(workspace_id)
+        environments = _environments(request)
+        if environments is not None and not environments.has_environment(
+            workspace_id, profile_key
+        ):
+            raise DatabaseEnvironmentRepositoryError("工作空间没有配置所选环境")
         record = _profiles(request).upsert_profile(
             NacosProfileWrite(
                 workspace_id=workspace_id,
@@ -78,7 +91,11 @@ def upsert_nacos_profile(
                 components=[component.model_dump(mode="json") for component in payload.components],
             )
         )
-    except (WorkspaceRepositoryError, NacosProfileRepositoryError) as exc:
+    except (
+        WorkspaceRepositoryError,
+        NacosProfileRepositoryError,
+        DatabaseEnvironmentRepositoryError,
+    ) as exc:
         raise _http_error(exc) from exc
     return _summary(record)
 

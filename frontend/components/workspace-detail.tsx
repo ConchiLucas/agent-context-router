@@ -1,30 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useCallback, useRef, useState } from "react";
 
 import {
   ProjectDashboard,
   type ProjectDashboardHandle,
 } from "@/components/project-dashboard";
-import { WorkspaceDataSourceOverview } from "@/components/workspace-data-source-overview";
-import { WorkspaceEnvironmentMapping } from "@/components/workspace-environment-mapping";
 import { WorkspaceRuntimeSync } from "@/components/workspace-runtime-sync";
-import {
-  getWorkspaceDatabaseEnvironmentMappings,
-  getWorkspaceEnvironmentConfig,
-} from "@/lib/api";
-import type {
-  DatabaseEnvironment,
-  ProjectKind,
-  WorkspaceSummary,
-} from "@/lib/types";
+import type { ProjectKind, WorkspaceSummary } from "@/lib/types";
 
 interface WorkspaceDetailProps {
   workspace: WorkspaceSummary;
   onBack: () => void;
 }
 
-type WorkspaceDetailTab = ProjectKind | "data-sources";
+type WorkspaceDetailTab = ProjectKind;
 
 export function WorkspaceDetail({
   workspace,
@@ -36,9 +27,6 @@ export function WorkspaceDetail({
     frontend: 0,
     backend: 0,
   });
-  const [showEnvironmentMapping, setShowEnvironmentMapping] = useState(false);
-  const [activeDatabaseEnvironment, setActiveDatabaseEnvironment] =
-    useState<DatabaseEnvironment | null>(null);
   const projectDashboardRef = useRef<ProjectDashboardHandle>(null);
 
   const updateProjectCounts = useCallback(
@@ -47,31 +35,6 @@ export function WorkspaceDetail({
     },
     [],
   );
-
-  useEffect(() => {
-    let active = true;
-    void Promise.all([
-      getWorkspaceDatabaseEnvironmentMappings(workspace.id),
-      getWorkspaceEnvironmentConfig(workspace.id),
-    ])
-      .then(([configuration, environmentConfig]) => {
-        if (!active) return;
-        setActiveDatabaseEnvironment(
-          configuration.configured
-            ? configuration.active_environment
-            : environmentConfig.configured
-              ? environmentConfig.active_environment
-              : null,
-        );
-      })
-      .catch(() => {
-        // Environment mapping is optional. The detail panel will expose a
-        // retryable error if the user chooses to open it.
-      });
-    return () => {
-      active = false;
-    };
-  }, [workspace.id]);
 
   return (
     <section className="workspace-detail">
@@ -102,17 +65,13 @@ export function WorkspaceDetail({
         >
           MCP 接入
         </button>
-        <button
-          type="button"
+        <Link
           className="secondary-button workspace-environment-button"
-          data-environment={activeDatabaseEnvironment ?? "unconfigured"}
-          onClick={() => setShowEnvironmentMapping(true)}
+          data-environment="local"
+          href={`/workspaces/${encodeURIComponent(currentWorkspace.id)}/mcp-environments`}
         >
-          环境详情 ·{" "}
-          {activeDatabaseEnvironment
-            ? activeDatabaseEnvironment.toUpperCase()
-            : "未配置"}
-        </button>
+          环境详情
+        </Link>
         <button
           type="button"
           className="secondary-button"
@@ -165,35 +124,15 @@ export function WorkspaceDetail({
           <span>后端项目</span>
           <small>{projectCounts.backend}</small>
         </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "data-sources"}
-          data-active={tab === "data-sources"}
-          onClick={() => setTab("data-sources")}
-        >
-          <span>数据源汇总</span>
-          <small>{currentWorkspace.data_source_count}</small>
-        </button>
       </nav>
 
       <ProjectDashboard
         ref={projectDashboardRef}
         workspace={currentWorkspace}
-        projectKind={tab === "frontend" ? "frontend" : "backend"}
-        visible={tab !== "data-sources"}
+        projectKind={tab}
+        visible
         onProjectCountsChanged={updateProjectCounts}
       />
-      {tab === "data-sources" ? (
-        <WorkspaceDataSourceOverview workspaceId={currentWorkspace.id} />
-      ) : null}
-      {showEnvironmentMapping ? (
-        <WorkspaceEnvironmentMapping
-          workspace={currentWorkspace}
-          onClose={() => setShowEnvironmentMapping(false)}
-          onEnvironmentChanged={setActiveDatabaseEnvironment}
-        />
-      ) : null}
     </section>
   );
 }

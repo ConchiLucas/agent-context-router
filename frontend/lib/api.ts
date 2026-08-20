@@ -8,6 +8,8 @@ import type {
   DocumentReadTaskItem,
   DocumentTreeNode,
   McpIntegrationInfo,
+  McpEnvironment,
+  McpEnvironmentToolDefault,
   McpIntegrationTestResult,
   McpToolsListResult,
   McpTraceDetail,
@@ -25,13 +27,23 @@ import type {
   WorkspaceDatabaseEnvironmentMappings,
   WorkspaceDataSourceSummary,
   WorkspaceEnvironmentConfig,
+  WorkspaceEnvironmentList,
   WorkspaceContainer,
   WorkspaceContainerBulkAction,
   WorkspaceContainerBulkActionResult,
   WorkspaceSummary,
+  WorkspaceMcpEnvironmentDefaults,
+  WorkspaceNacosProfiles,
   WorkspaceSharedFilesResult,
   SystemGuideDetail,
   SystemGuideWrite,
+  TableRelationDetail,
+  TableRelationStatus,
+  TableRelationTableDetail,
+  TableRelationTableList,
+  TableRelationTableUpdates,
+  TableRelationTableWrites,
+  TableRelationMcpPreview,
 } from "@/lib/types";
 import {
   buildMcpTraceListPath,
@@ -159,9 +171,31 @@ export function listWorkspaceProjects(
 
 export function getWorkspaceDataSourceSummary(
   workspaceId: string,
+  environment?: string,
 ): Promise<WorkspaceDataSourceSummary> {
+  const query = environment
+    ? `?environment=${encodeURIComponent(environment)}`
+    : "";
   return request<WorkspaceDataSourceSummary>(
-    `/api/workspaces/${workspaceId}/data-source-summary`,
+    `/api/workspaces/${workspaceId}/data-source-summary${query}`,
+  );
+}
+
+export function getWorkspaceEnvironments(
+  workspaceId: string,
+): Promise<WorkspaceEnvironmentList> {
+  return request<WorkspaceEnvironmentList>(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/environments`,
+    { cache: "no-store" },
+  );
+}
+
+export function getWorkspaceNacosProfiles(
+  workspaceId: string,
+): Promise<WorkspaceNacosProfiles> {
+  return request<WorkspaceNacosProfiles>(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/nacos-profiles`,
+    { cache: "no-store" },
   );
 }
 
@@ -180,6 +214,29 @@ export function getWorkspaceEnvironmentConfig(
   return request<WorkspaceEnvironmentConfig>(
     `/api/workspaces/${workspaceId}/environment-config`,
     { cache: "no-store" },
+  );
+}
+
+export function getWorkspaceMcpEnvironmentDefaults(
+  workspaceId: string,
+): Promise<WorkspaceMcpEnvironmentDefaults> {
+  return request<WorkspaceMcpEnvironmentDefaults>(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/mcp-environment-defaults`,
+    { cache: "no-store" },
+  );
+}
+
+export function updateWorkspaceMcpEnvironmentDefault(
+  workspaceId: string,
+  toolName: string,
+  environment: McpEnvironment,
+): Promise<McpEnvironmentToolDefault> {
+  return request<McpEnvironmentToolDefault>(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/mcp-environment-defaults/${encodeURIComponent(toolName)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ environment }),
+    },
   );
 }
 
@@ -367,5 +424,113 @@ export function getProjectDataSourceOptions(
 ): Promise<ProjectDataSourceOptions> {
   return request<ProjectDataSourceOptions>(
     `/api/projects/${projectId}/data-source-options`,
+  );
+}
+
+export function getTableRelationStatus(
+  workspaceId: string,
+): Promise<TableRelationStatus> {
+  return request<TableRelationStatus>(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/table-relations/status`,
+  );
+}
+
+export function listTableRelationTables(
+  workspaceId: string,
+  options: { onlyRelated?: boolean; databaseKey?: string; limit?: number } = {},
+): Promise<TableRelationTableList> {
+  const params = new URLSearchParams({
+    only_related: String(options.onlyRelated ?? false),
+    limit: String(options.limit ?? 500),
+  });
+  if (options.databaseKey) params.set("database_key", options.databaseKey);
+  return request<TableRelationTableList>(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/table-relations/tables?${params.toString()}`,
+  );
+}
+
+export function getTableRelationDetail(
+  workspaceId: string,
+  table: { databaseKey: string; schemaName: string; tableName: string },
+): Promise<TableRelationTableDetail> {
+  const params = new URLSearchParams({
+    database_key: table.databaseKey,
+    schema_name: table.schemaName,
+    table_name: table.tableName,
+  });
+  return request<TableRelationTableDetail>(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/table-relations/table?${params.toString()}`,
+  );
+}
+
+/**
+ * The evidence behind one relation, fetched when a row is opened rather than with
+ * the table: the counts and queries behind a verdict are far larger than the row
+ * that summarises it, and most rows are never opened.
+ *
+ * The table travels with the request because the two cardinalities are stated
+ * from an end, and the panel has to state them from the end the row did.
+ */
+export function getTableRelationEvidence(
+  workspaceId: string,
+  relation: {
+    edgeId: string;
+    databaseKey: string;
+    schemaName: string;
+    tableName: string;
+  },
+): Promise<TableRelationDetail> {
+  const params = new URLSearchParams({
+    edge_id: relation.edgeId,
+    database_key: relation.databaseKey,
+    schema_name: relation.schemaName,
+    table_name: relation.tableName,
+  });
+  return request<TableRelationDetail>(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/table-relations/relation?${params.toString()}`,
+  );
+}
+
+export function getTableRelationWrites(
+  workspaceId: string,
+  table: { databaseKey: string; schemaName: string; tableName: string },
+): Promise<TableRelationTableWrites> {
+  const params = new URLSearchParams({
+    database_key: table.databaseKey,
+    schema_name: table.schemaName,
+    table_name: table.tableName,
+  });
+  return request<TableRelationTableWrites>(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/table-relations/table/writes?${params.toString()}`,
+  );
+}
+
+export function getTableRelationUpdates(
+  workspaceId: string,
+  table: { databaseKey: string; schemaName: string; tableName: string },
+): Promise<TableRelationTableUpdates> {
+  const params = new URLSearchParams({
+    database_key: table.databaseKey,
+    schema_name: table.schemaName,
+    table_name: table.tableName,
+  });
+  return request<TableRelationTableUpdates>(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/table-relations/table/updates?${params.toString()}`,
+  );
+}
+
+export function getTableRelationMcpPreview(
+  workspaceId: string,
+  table: { databaseKey: string; schemaName: string; tableName: string },
+  options?: { includeEvidence?: boolean },
+): Promise<TableRelationMcpPreview> {
+  const params = new URLSearchParams({
+    database_key: table.databaseKey,
+    schema_name: table.schemaName,
+    table_name: table.tableName,
+    include_evidence: String(options?.includeEvidence ?? true),
+  });
+  return request<TableRelationMcpPreview>(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/table-relations/table/mcp?${params.toString()}`,
   );
 }

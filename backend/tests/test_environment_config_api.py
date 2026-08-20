@@ -46,7 +46,7 @@ def test_environment_config_get_and_put_return_active_json() -> None:
         assert initial.json() == {
             "workspace_id": "workspace-1",
             "configured": False,
-            "active_environment": "uat",
+            "active_environment": "local",
             "revision": 1,
             "environments": {"test": {}, "uat": {}},
             "active_config": None,
@@ -75,11 +75,8 @@ def test_environment_config_get_and_put_return_active_json() -> None:
         assert saved.status_code == 200
         body = saved.json()
         assert body["revision"] == 2
-        assert body["active_environment"] == "uat"
-        assert body["active_config"] == {
-            "mq": {"nameServer": "uat-mq:9876"},
-            "minio": None,
-        }
+        assert body["active_environment"] == "local"
+        assert body["active_config"] is None
         assert body["environments"]["test"]["services"][0]["kind"] == "mq"
 
 
@@ -111,7 +108,7 @@ def test_environment_config_can_be_created_without_database_mappings() -> None:
         initial = client.get("/api/workspaces/workspace-1/environment-config")
         assert initial.status_code == 200
         assert initial.json()["configured"] is False
-        assert initial.json()["revision"] == 0
+        assert initial.json()["revision"] == 1
 
         saved = client.put(
             "/api/workspaces/workspace-1/environment-config",
@@ -126,9 +123,9 @@ def test_environment_config_can_be_created_without_database_mappings() -> None:
 
         assert saved.status_code == 200
         assert saved.json()["configured"] is True
-        assert saved.json()["active_environment"] == "uat"
+        assert saved.json()["active_environment"] == "local"
         assert saved.json()["revision"] == 1
-        assert saved.json()["active_config"] == {"minio": {"bucket": "uat"}}
+        assert saved.json()["active_config"] is None
 
 
 def test_environment_config_rejects_non_object_and_unsafe_payloads() -> None:

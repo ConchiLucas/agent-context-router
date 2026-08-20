@@ -1,4 +1,3 @@
-from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from fastapi.responses import StreamingResponse
@@ -128,11 +127,7 @@ def run_workspace_container_bulk_action(
         projects = service.list_projects(workspace_id)
         target_count, failures = request.app.state.workspace_container_service.bulk_action(
             workspace_id,
-            {
-                project.id
-                for project in projects
-                if project.project_kind == payload.project_kind
-            },
+            {project.id for project in projects if project.project_kind == payload.project_kind},
             action=payload.action,
         )
     except WorkspaceManagementError as exc:
@@ -175,9 +170,7 @@ def stream_workspace_container_logs(
         not_found = str(exc) in {"容器不存在", "容器不属于当前工作空间"}
         raise HTTPException(
             status_code=(
-                status.HTTP_404_NOT_FOUND
-                if not_found
-                else status.HTTP_503_SERVICE_UNAVAILABLE
+                status.HTTP_404_NOT_FOUND if not_found else status.HTTP_503_SERVICE_UNAVAILABLE
             ),
             detail=str(exc),
         ) from exc
@@ -341,7 +334,7 @@ def get_workspace_tree(
 def prepare_workspace_preview(
     workspace_id: str,
     request: Request,
-    environment: Literal["test", "uat"] | None = None,
+    environment: str | None = None,
 ) -> PrepareTaskContextResult:
     try:
         return _context_service(request).prepare_for_workspace(
@@ -393,8 +386,12 @@ def delete_workspace_project(
 def get_workspace_data_source_summary(
     workspace_id: str,
     request: Request,
+    environment: str | None = None,
 ) -> WorkspaceDataSourceSummary:
     try:
-        return _service(request).data_source_summary(workspace_id)
+        return _service(request).data_source_summary(
+            workspace_id,
+            environment=environment,
+        )
     except WorkspaceManagementError as exc:
         raise _http_error(exc) from exc

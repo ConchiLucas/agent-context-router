@@ -12,6 +12,9 @@ import httpx
 import yaml
 
 from context_router.database.errors import DatabaseAccessError
+from context_router.repositories.mcp_environment_default_repository import (
+    McpEnvironmentDefaultStore,
+)
 from context_router.repositories.nacos_profile_repository import (
     NacosProfileRecord,
     NacosProfileRepositoryError,
@@ -234,12 +237,14 @@ class MiddlewareContextService:
         task_repository: TaskReader,
         profile_repository: NacosProfileStore,
         database_access_service: DatabaseAccessService,
+        mcp_environment_defaults: McpEnvironmentDefaultStore | None = None,
         reader_factory: NacosReaderFactory | None = None,
     ) -> None:
         self._registry = registry
         self._tasks = task_repository
         self._profiles = profile_repository
         self._database_access = database_access_service
+        self._mcp_environment_defaults = mcp_environment_defaults
         self._reader_factory = reader_factory or HttpNacosConfigReader
 
     def read(
@@ -248,9 +253,14 @@ class MiddlewareContextService:
         task_id: int,
         components: list[str] | None,
         reveal_secrets: bool,
+        environment: str | None = None,
     ) -> ReadMiddlewareContextResult:
         task, workspace_id = self._resolve_task(task_id)
-        profile_key, environment = self._select_profile(task, workspace_id)
+        profile_key, selected_environment = self._select_profile(
+            task,
+            workspace_id,
+            requested_environment=environment,
+        )
         try:
             profile = self._profiles.get_profile(workspace_id, profile_key)
         except NacosProfileRepositoryError as exc:
@@ -313,7 +323,7 @@ class MiddlewareContextService:
         return ReadMiddlewareContextResult(
             task_id=task_id,
             profile_key=profile_key,
-            environment=environment,
+            environment=selected_environment,
             fetched_at=datetime.now(UTC),
             secrets_revealed=reveal_secrets,
             components=results,
@@ -372,17 +382,19 @@ class MiddlewareContextService:
         self,
         task: object,
         workspace_id: str,
+        *,
+        requested_environment: str | None,
     ) -> tuple[NacosProfileKey, str | None]:
-        selection = getattr(task, "database_environment_selection", None)
-        if selection != "task_explicit":
-            return "default", None
-        environment = self._validate_environment(task, workspace_id)
-        if environment not in {"test", "uat"}:
+        selected = requested_environment
+        if selected is None:
+            selected = self._validate_environment(task, workspace_id) or "local"
+        has_environment = getattr(self._database_access, "has_workspace_environment", None)
+        if callable(has_environment) and not has_environment(workspace_id, selected):
             raise MiddlewareContextError(
-                "task_environment_invalid",
-                "显式中间件环境必须是 test 或 uat，请重新 prepare",
+                "environment_not_configured",
+                "工作空间没有配置所选环境",
             )
-        return cast(NacosProfileKey, environment), environment
+        return selected, selected
 
 
 def _select_rules(

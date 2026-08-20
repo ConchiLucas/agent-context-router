@@ -25,6 +25,8 @@ from context_router.mcp_server import (
     PREPARE_TOOL_NAME,
     READ_MIDDLEWARE_CONTEXT_TOOL_DESCRIPTION,
     READ_MIDDLEWARE_CONTEXT_TOOL_NAME,
+    READ_TABLE_RELATIONS_TOOL_DESCRIPTION,
+    READ_TABLE_RELATIONS_TOOL_NAME,
     READ_TASK_CONTEXT_TOOL_DESCRIPTION,
     READ_TASK_CONTEXT_TOOL_NAME,
     READ_TOOL_DESCRIPTION,
@@ -33,6 +35,8 @@ from context_router.mcp_server import (
     SEARCH_CONTEXT_TOOL_NAME,
     SEARCH_DATABASE_TOOL_DESCRIPTION,
     SEARCH_DATABASE_TOOL_NAME,
+    SEARCH_RELATION_TABLES_TOOL_DESCRIPTION,
+    SEARCH_RELATION_TABLES_TOOL_NAME,
     START_WORKSPACE_TOOL_DESCRIPTION,
     START_WORKSPACE_TOOL_NAME,
 )
@@ -96,6 +100,14 @@ class McpIntegrationService:
                 McpToolInfo(
                     name=EXECUTE_DATABASE_TOOL_NAME,
                     description=EXECUTE_DATABASE_TOOL_DESCRIPTION,
+                ),
+                McpToolInfo(
+                    name=READ_TABLE_RELATIONS_TOOL_NAME,
+                    description=READ_TABLE_RELATIONS_TOOL_DESCRIPTION,
+                ),
+                McpToolInfo(
+                    name=SEARCH_RELATION_TABLES_TOOL_NAME,
+                    description=SEARCH_RELATION_TABLES_TOOL_DESCRIPTION,
                 ),
                 McpToolInfo(
                     name=APPLY_WORKSPACE_TOOL_NAME,

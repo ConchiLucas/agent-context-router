@@ -300,6 +300,7 @@ def test_all_seven_context_and_database_tools_are_traced_without_sensitive_paylo
         "environment_configured": True,
     }
     assert calls[2].request_summary == {
+        "environment": None,
         "component_count": 1,
         "all_components": False,
         "reveal_secrets": True,

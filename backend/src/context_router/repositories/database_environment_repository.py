@@ -6,13 +6,14 @@ import math
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Literal, Protocol, cast
+from typing import Any, Protocol, cast
 
 import psycopg
 from psycopg.types.json import Jsonb
 
-DatabaseEnvironment = Literal["test", "uat"]
-_ENVIRONMENTS: tuple[DatabaseEnvironment, ...] = ("test", "uat")
+DatabaseEnvironment = str
+_LEGACY_ENVIRONMENTS: tuple[DatabaseEnvironment, ...] = ("test", "uat")
+_ENVIRONMENT_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 _MCP_ALIAS_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
 _MAX_ENVIRONMENT_JSON_BYTES = 256 * 1024
 _MAX_ENVIRONMENT_JSON_DEPTH = 20
@@ -33,6 +34,15 @@ class DatabaseEnvironmentConfigRecord:
     revision: int
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspaceEnvironmentRecord:
+    workspace_id: str
+    key: str
+    display_name: str
+    sort_order: int
+    is_default: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +71,16 @@ class DatabaseEnvironmentMappingWrite:
 
 
 @dataclass(frozen=True, slots=True)
+class EnvironmentDatabaseTargetWrite:
+    id: str
+    workspace_id: str
+    project_id: str
+    logical_name: str
+    mcp_alias: str
+    link_id: str
+
+
+@dataclass(frozen=True, slots=True)
 class DatabaseEnvironmentMappingRecord:
     id: str
     workspace_id: str
@@ -84,6 +104,29 @@ class ResolvedEnvironmentMappingTarget:
 
 
 class DatabaseEnvironmentStore(Protocol):
+    def list_environments(self, workspace_id: str) -> list[WorkspaceEnvironmentRecord]: ...
+
+    def has_environment(self, workspace_id: str, environment: str) -> bool: ...
+
+    def upsert_environment(
+        self,
+        *,
+        workspace_id: str,
+        environment: str,
+        display_name: str,
+        sort_order: int,
+    ) -> WorkspaceEnvironmentRecord: ...
+
+    def delete_environment(self, *, workspace_id: str, environment: str) -> None: ...
+
+    def replace_environment_targets(
+        self,
+        *,
+        workspace_id: str,
+        environment: str,
+        targets: list[EnvironmentDatabaseTargetWrite],
+    ) -> None: ...
+
     def get_active_config(self, workspace_id: str) -> DatabaseEnvironmentConfigRecord: ...
 
     def get_environment_snapshot(
@@ -140,15 +183,133 @@ class InMemoryDatabaseEnvironmentRepository:
         self._configs: dict[str, DatabaseEnvironmentConfigRecord] = {}
         self._mappings: dict[str, DatabaseEnvironmentMappingRecord] = {}
         self._environment_payloads: dict[str, dict[DatabaseEnvironment, Any]] = {}
+        self._environments: dict[tuple[str, str], WorkspaceEnvironmentRecord] = {}
+
+    def list_environments(self, workspace_id: str) -> list[WorkspaceEnvironmentRecord]:
+        keys = {"local"}
+        keys.update(self._environment_payloads.get(workspace_id, {}))
+        keys.update(key for owner, key in self._environments if owner == workspace_id)
+        for mapping in self.list_mappings(workspace_id):
+            keys.update(mapping.targets)
+        return [
+            self._environments.get(
+                (workspace_id, key),
+                WorkspaceEnvironmentRecord(
+                    workspace_id=workspace_id,
+                    key=key,
+                    display_name=key.upper(),
+                    sort_order={"local": 0, "test": 10, "uat": 20}.get(key, 100),
+                    is_default=key == "local",
+                ),
+            )
+            for key in sorted(
+                keys,
+                key=lambda item: ({"local": 0, "test": 10, "uat": 20}.get(item, 100), item),
+            )
+        ]
+
+    def has_environment(self, workspace_id: str, environment: str) -> bool:
+        return any(item.key == environment for item in self.list_environments(workspace_id))
+
+    def upsert_environment(
+        self,
+        *,
+        workspace_id: str,
+        environment: str,
+        display_name: str,
+        sort_order: int,
+    ) -> WorkspaceEnvironmentRecord:
+        _ensure_environment(environment)
+        normalized_name = display_name.strip()
+        if not normalized_name:
+            raise DatabaseEnvironmentRepositoryError("环境名称不能为空")
+        record = WorkspaceEnvironmentRecord(
+            workspace_id=workspace_id,
+            key=environment,
+            display_name=normalized_name,
+            sort_order=sort_order,
+            is_default=environment == "local",
+        )
+        self._environments[(workspace_id, environment)] = record
+        return record
+
+    def delete_environment(self, *, workspace_id: str, environment: str) -> None:
+        if environment == "local":
+            raise DatabaseEnvironmentRepositoryError("local 是工作空间默认环境，不能删除")
+        if not self.has_environment(workspace_id, environment):
+            raise DatabaseEnvironmentRepositoryError("工作空间环境不存在")
+        self._environments.pop((workspace_id, environment), None)
+        self._environment_payloads.get(workspace_id, {}).pop(environment, None)
+        for mapping_id, mapping in list(self._mappings.items()):
+            if mapping.workspace_id != workspace_id or environment not in mapping.targets:
+                continue
+            targets = dict(mapping.targets)
+            targets.pop(environment, None)
+            self._mappings[mapping_id] = DatabaseEnvironmentMappingRecord(
+                id=mapping.id,
+                workspace_id=mapping.workspace_id,
+                project_id=mapping.project_id,
+                logical_name=mapping.logical_name,
+                mcp_alias=mapping.mcp_alias,
+                targets=targets,
+                created_at=mapping.created_at,
+                updated_at=datetime.now(UTC),
+            )
+
+    def replace_environment_targets(
+        self,
+        *,
+        workspace_id: str,
+        environment: str,
+        targets: list[EnvironmentDatabaseTargetWrite],
+    ) -> None:
+        _ensure_environment(environment)
+        if not self.has_environment(workspace_id, environment):
+            raise DatabaseEnvironmentRepositoryError("工作空间没有配置所选环境")
+        _validate_target_writes(workspace_id, targets)
+        wanted_ids = {target.id for target in targets}
+        now = datetime.now(UTC)
+        for mapping_id, mapping in list(self._mappings.items()):
+            if mapping.workspace_id != workspace_id or environment not in mapping.targets:
+                continue
+            values = dict(mapping.targets)
+            values.pop(environment, None)
+            if not values and mapping_id not in wanted_ids:
+                del self._mappings[mapping_id]
+            else:
+                self._mappings[mapping_id] = DatabaseEnvironmentMappingRecord(
+                    id=mapping.id,
+                    workspace_id=mapping.workspace_id,
+                    project_id=mapping.project_id,
+                    logical_name=mapping.logical_name,
+                    mcp_alias=mapping.mcp_alias,
+                    targets=values,
+                    created_at=mapping.created_at,
+                    updated_at=now,
+                )
+        for target in targets:
+            previous = self._mappings.get(target.id)
+            values = dict(previous.targets) if previous is not None else {}
+            values[environment] = target.link_id
+            self._mappings[target.id] = DatabaseEnvironmentMappingRecord(
+                id=target.id,
+                workspace_id=workspace_id,
+                project_id=target.project_id,
+                logical_name=target.logical_name,
+                mcp_alias=target.mcp_alias,
+                targets=values,
+                created_at=previous.created_at if previous is not None else now,
+                updated_at=now,
+            )
 
     def get_active_config(self, workspace_id: str) -> DatabaseEnvironmentConfigRecord:
-        return self._configs.get(workspace_id, _unconfigured_config(workspace_id))
+        return self._configs.get(workspace_id, _default_config(workspace_id))
 
     def get_environment_snapshot(
         self,
         workspace_id: str,
     ) -> EnvironmentConfigurationSnapshot:
-        configured = workspace_id in self._configs
+        configured = True
         return EnvironmentConfigurationSnapshot(
             config=self.get_active_config(workspace_id),
             selector_configured=configured,
@@ -159,7 +320,7 @@ class InMemoryDatabaseEnvironmentRepository:
         values = self._environment_payloads.get(workspace_id, _empty_environment_payloads())
         return EnvironmentPayloadsRecord(
             workspace_id=workspace_id,
-            configured=workspace_id in self._environment_payloads,
+            configured=bool(values),
             environments=copy.deepcopy(values),
         )
 
@@ -180,7 +341,14 @@ class InMemoryDatabaseEnvironmentRepository:
         expected_revision: int,
         mappings: list[DatabaseEnvironmentMappingWrite],
     ) -> DatabaseEnvironmentConfigRecord:
-        current = self.get_active_config(workspace_id)
+        current = self._configs.get(
+            workspace_id,
+            DatabaseEnvironmentConfigRecord(
+                workspace_id=workspace_id,
+                active_environment="local",
+                revision=0,
+            ),
+        )
         _ensure_revision(current.revision, expected_revision)
         _validate_mapping_writes(workspace_id, mappings)
         existing_ids = {
@@ -211,6 +379,7 @@ class InMemoryDatabaseEnvironmentRepository:
                 logical_name=mapping.logical_name,
                 mcp_alias=mapping.mcp_alias,
                 targets={
+                    "local": mapping.test_link_id,
                     "test": mapping.test_link_id,
                     "uat": mapping.uat_link_id,
                 },
@@ -220,7 +389,7 @@ class InMemoryDatabaseEnvironmentRepository:
 
         saved = DatabaseEnvironmentConfigRecord(
             workspace_id=workspace_id,
-            active_environment=current.active_environment or "uat",
+            active_environment=current.active_environment or "local",
             revision=current.revision + 1,
             created_at=current.created_at or now,
             updated_at=now,
@@ -237,7 +406,7 @@ class InMemoryDatabaseEnvironmentRepository:
     ) -> DatabaseEnvironmentConfigRecord:
         _ensure_environment(environment)
         current = self.get_active_config(workspace_id)
-        selector_configured = workspace_id in self._configs
+        selector_configured = True
         payloads_configured = workspace_id in self._environment_payloads
         if not selector_configured:
             raise DatabaseEnvironmentRepositoryError("工作空间尚未配置环境")
@@ -245,8 +414,8 @@ class InMemoryDatabaseEnvironmentRepository:
         mappings = self.list_mappings(workspace_id)
         if mappings:
             for mapping in mappings:
-                if set(mapping.targets) != set(_ENVIRONMENTS):
-                    raise DatabaseEnvironmentRepositoryError("数据库环境映射不完整，无法切换")
+                if environment not in mapping.targets:
+                    raise DatabaseEnvironmentRepositoryError("所选环境的数据库映射不完整，无法切换")
         elif not payloads_configured:
             raise DatabaseEnvironmentRepositoryError("工作空间环境配置不完整")
         now = datetime.now(UTC)
@@ -268,12 +437,19 @@ class InMemoryDatabaseEnvironmentRepository:
         environments: dict[DatabaseEnvironment, Any],
     ) -> DatabaseEnvironmentConfigRecord:
         _validate_environment_payloads(environments)
-        current = self.get_active_config(workspace_id)
+        current = self._configs.get(
+            workspace_id,
+            DatabaseEnvironmentConfigRecord(
+                workspace_id=workspace_id,
+                active_environment="local",
+                revision=0,
+            ),
+        )
         _ensure_revision(current.revision, expected_revision)
         now = datetime.now(UTC)
         saved = DatabaseEnvironmentConfigRecord(
             workspace_id=workspace_id,
-            active_environment=current.active_environment or "uat",
+            active_environment=current.active_environment or "local",
             revision=current.revision + 1,
             created_at=current.created_at or now,
             updated_at=now,
@@ -337,6 +513,256 @@ class PostgresDatabaseEnvironmentRepository:
     def get_active_config(self, workspace_id: str) -> DatabaseEnvironmentConfigRecord:
         return self.get_environment_snapshot(workspace_id).config
 
+    def list_environments(self, workspace_id: str) -> list[WorkspaceEnvironmentRecord]:
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                rows = connection.execute(
+                    """
+                    SELECT workspace_id, environment_key, display_name, sort_order, is_default
+                    FROM workspace_environments
+                    WHERE workspace_id = %s
+                    ORDER BY sort_order, lower(display_name), environment_key
+                    """,
+                    (workspace_id,),
+                ).fetchall()
+        except psycopg.Error as exc:
+            raise DatabaseEnvironmentRepositoryError("工作空间环境列表读取失败") from exc
+        return [
+            WorkspaceEnvironmentRecord(
+                workspace_id=str(row[0]),
+                key=str(row[1]),
+                display_name=str(row[2]),
+                sort_order=int(row[3]),
+                is_default=bool(row[4]),
+            )
+            for row in rows
+        ]
+
+    def has_environment(self, workspace_id: str, environment: str) -> bool:
+        _ensure_environment(environment)
+        return any(item.key == environment for item in self.list_environments(workspace_id))
+
+    def upsert_environment(
+        self,
+        *,
+        workspace_id: str,
+        environment: str,
+        display_name: str,
+        sort_order: int,
+    ) -> WorkspaceEnvironmentRecord:
+        _ensure_environment(environment)
+        normalized_name = display_name.strip()
+        if not normalized_name:
+            raise DatabaseEnvironmentRepositoryError("环境名称不能为空")
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                self._lock_workspace(connection, workspace_id)
+                row = connection.execute(
+                    """
+                    INSERT INTO workspace_environments (
+                        workspace_id, environment_key, display_name, sort_order, is_default
+                    ) VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (workspace_id, environment_key) DO UPDATE SET
+                        display_name = EXCLUDED.display_name,
+                        sort_order = EXCLUDED.sort_order,
+                        updated_at = CURRENT_TIMESTAMP
+                    RETURNING workspace_id, environment_key, display_name, sort_order, is_default
+                    """,
+                    (
+                        workspace_id,
+                        environment,
+                        normalized_name,
+                        sort_order,
+                        environment == "local",
+                    ),
+                ).fetchone()
+                connection.execute(
+                    """
+                    INSERT INTO workspace_database_environment_configs (
+                        workspace_id, active_environment, revision
+                    ) VALUES (%s, 'local', 1)
+                    ON CONFLICT (workspace_id) DO UPDATE SET
+                        revision = workspace_database_environment_configs.revision + 1,
+                        updated_at = CURRENT_TIMESTAMP
+                    """,
+                    (workspace_id,),
+                )
+        except psycopg.Error as exc:
+            raise DatabaseEnvironmentRepositoryError("工作空间环境保存失败") from exc
+        if row is None:
+            raise DatabaseEnvironmentRepositoryError("工作空间环境保存后没有返回记录")
+        return WorkspaceEnvironmentRecord(
+            workspace_id=str(row[0]),
+            key=str(row[1]),
+            display_name=str(row[2]),
+            sort_order=int(row[3]),
+            is_default=bool(row[4]),
+        )
+
+    def delete_environment(self, *, workspace_id: str, environment: str) -> None:
+        _ensure_environment(environment)
+        if environment == "local":
+            raise DatabaseEnvironmentRepositoryError("local 是工作空间默认环境，不能删除")
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                self._lock_workspace(connection, workspace_id)
+                connection.execute(
+                    """
+                    DELETE FROM project_database_environment_targets AS target
+                    USING project_database_environment_mappings AS mapping
+                    WHERE target.mapping_id = mapping.id
+                      AND mapping.workspace_id = %s
+                      AND target.environment = %s
+                    """,
+                    (workspace_id, environment),
+                )
+                cursor = connection.execute(
+                    """
+                    DELETE FROM workspace_environments
+                    WHERE workspace_id = %s AND environment_key = %s
+                    """,
+                    (workspace_id, environment),
+                )
+                if cursor.rowcount != 1:
+                    raise DatabaseEnvironmentRepositoryError("工作空间环境不存在")
+                connection.execute(
+                    """
+                    UPDATE workspace_database_environment_configs
+                    SET revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+                    WHERE workspace_id = %s
+                    """,
+                    (workspace_id,),
+                )
+        except DatabaseEnvironmentRepositoryError:
+            raise
+        except psycopg.Error as exc:
+            raise DatabaseEnvironmentRepositoryError("工作空间环境删除失败") from exc
+
+    def replace_environment_targets(
+        self,
+        *,
+        workspace_id: str,
+        environment: str,
+        targets: list[EnvironmentDatabaseTargetWrite],
+    ) -> None:
+        _ensure_environment(environment)
+        _validate_target_writes(workspace_id, targets)
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                self._lock_workspace(connection, workspace_id)
+                configured = connection.execute(
+                    """
+                    SELECT 1 FROM workspace_environments
+                    WHERE workspace_id = %s AND environment_key = %s
+                    """,
+                    (workspace_id, environment),
+                ).fetchone()
+                if configured is None:
+                    raise DatabaseEnvironmentRepositoryError("工作空间没有配置所选环境")
+                self._validate_dynamic_targets(connection, workspace_id, targets)
+                wanted_ids = [target.id for target in targets]
+                connection.execute(
+                    """
+                    DELETE FROM project_database_environment_targets AS target
+                    USING project_database_environment_mappings AS mapping
+                    WHERE target.mapping_id = mapping.id
+                      AND mapping.workspace_id = %s
+                      AND target.environment = %s
+                      AND NOT (target.mapping_id = ANY(%s))
+                    """,
+                    (workspace_id, environment, wanted_ids),
+                )
+                for target in targets:
+                    connection.execute(
+                        """
+                        INSERT INTO project_database_environment_mappings (
+                            id, workspace_id, project_id, logical_name, mcp_alias
+                        ) VALUES (%s, %s, %s, %s, %s)
+                        ON CONFLICT (id) DO UPDATE SET
+                            project_id = EXCLUDED.project_id,
+                            logical_name = EXCLUDED.logical_name,
+                            mcp_alias = EXCLUDED.mcp_alias,
+                            updated_at = CURRENT_TIMESTAMP
+                        """,
+                        (
+                            target.id,
+                            workspace_id,
+                            target.project_id,
+                            target.logical_name,
+                            target.mcp_alias,
+                        ),
+                    )
+                    connection.execute(
+                        """
+                        INSERT INTO project_database_environment_targets (
+                            mapping_id, environment, project_database_id
+                        ) VALUES (%s, %s, %s)
+                        ON CONFLICT (mapping_id, environment) DO UPDATE SET
+                            project_database_id = EXCLUDED.project_database_id,
+                            updated_at = CURRENT_TIMESTAMP
+                        """,
+                        (target.id, environment, target.link_id),
+                    )
+                connection.execute(
+                    """
+                    DELETE FROM project_database_environment_mappings AS mapping
+                    WHERE mapping.workspace_id = %s
+                      AND NOT EXISTS (
+                          SELECT 1 FROM project_database_environment_targets AS target
+                          WHERE target.mapping_id = mapping.id
+                      )
+                    """,
+                    (workspace_id,),
+                )
+                connection.execute(
+                    """
+                    UPDATE workspace_database_environment_configs
+                    SET revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+                    WHERE workspace_id = %s
+                    """,
+                    (workspace_id,),
+                )
+        except DatabaseEnvironmentRepositoryError:
+            raise
+        except psycopg.errors.UniqueViolation as exc:
+            raise DatabaseEnvironmentRepositoryError(
+                "工作空间内 MCP 别名或环境数据库关联重复"
+            ) from exc
+        except psycopg.Error as exc:
+            raise DatabaseEnvironmentRepositoryError("环境数据库关联保存失败") from exc
+
+    @staticmethod
+    def _validate_dynamic_targets(
+        connection: psycopg.Connection[Any],
+        workspace_id: str,
+        targets: list[EnvironmentDatabaseTargetWrite],
+    ) -> None:
+        if not targets:
+            return
+        rows = connection.execute(
+            """
+            SELECT link.id, link.workspace_id, link.project_id, project.project_kind,
+                   link.readonly, database.available, database.system_database
+            FROM project_databases AS link
+            JOIN document_projects AS project ON project.id = link.project_id
+            JOIN data_source_databases AS database ON database.id = link.database_id
+            WHERE link.id = ANY(%s)
+            FOR UPDATE OF link, project, database
+            """,
+            ([target.link_id for target in targets],),
+        ).fetchall()
+        by_id = {str(row[0]): row for row in rows}
+        if len(by_id) != len(targets):
+            raise DatabaseEnvironmentRepositoryError("环境关联包含不存在或重复的数据库授权")
+        for target in targets:
+            row = by_id[target.link_id]
+            if str(row[1]) != workspace_id or str(row[2]) != target.project_id:
+                raise DatabaseEnvironmentRepositoryError("数据库授权不属于当前工作空间项目")
+            if str(row[3]) != "backend" or not bool(row[4]):
+                raise DatabaseEnvironmentRepositoryError("环境数据库必须来自后端项目的只读授权")
+            if not bool(row[5]) or bool(row[6]):
+                raise DatabaseEnvironmentRepositoryError("环境数据库当前不可用")
+
     def get_environment_snapshot(
         self,
         workspace_id: str,
@@ -351,23 +777,22 @@ class PostgresDatabaseEnvironmentRepository:
                         config.revision,
                         config.created_at,
                         config.updated_at,
-                        config.workspace_id IS NOT NULL AS selector_configured,
-                        test.payload,
-                        test.workspace_id IS NOT NULL AS test_configured,
-                        uat.payload,
-                        uat.workspace_id IS NOT NULL AS uat_configured
+                        config.workspace_id IS NOT NULL AS selector_configured
                     FROM (VALUES (%s::varchar)) AS requested(workspace_id)
                     LEFT JOIN workspace_database_environment_configs AS config
                         ON config.workspace_id = requested.workspace_id
-                    LEFT JOIN workspace_environment_payloads AS test
-                        ON test.workspace_id = requested.workspace_id
-                       AND test.environment = 'test'
-                    LEFT JOIN workspace_environment_payloads AS uat
-                        ON uat.workspace_id = requested.workspace_id
-                       AND uat.environment = 'uat'
                     """,
                     (workspace_id,),
                 ).fetchone()
+                payload_rows = connection.execute(
+                    """
+                    SELECT environment, payload
+                    FROM workspace_environment_payloads
+                    WHERE workspace_id = %s
+                    ORDER BY environment
+                    """,
+                    (workspace_id,),
+                ).fetchall()
         except psycopg.Error as exc:
             raise DatabaseEnvironmentRepositoryError("数据库环境配置读取失败") from exc
         if row is None:
@@ -382,19 +807,15 @@ class PostgresDatabaseEnvironmentRepository:
                 updated_at=cast(datetime, row[4]),
             )
             if selector_configured
-            else _unconfigured_config(workspace_id)
+            else _default_config(workspace_id)
         )
-        environments = _empty_environment_payloads()
-        if bool(row[7]):
-            environments["test"] = row[6]
-        if bool(row[9]):
-            environments["uat"] = row[8]
+        environments = {str(payload_row[0]): payload_row[1] for payload_row in payload_rows}
         return EnvironmentConfigurationSnapshot(
             config=config,
             selector_configured=selector_configured,
             payloads=EnvironmentPayloadsRecord(
                 workspace_id=workspace_id,
-                configured=bool(row[7]) and bool(row[9]),
+                configured=bool(environments),
                 environments=environments,
             ),
         )
@@ -422,6 +843,7 @@ class PostgresDatabaseEnvironmentRepository:
                 self._lock_workspace(connection, workspace_id)
                 current = self._locked_config(connection, workspace_id)
                 _ensure_revision(current.revision, expected_revision)
+                self._ensure_environments(connection, workspace_id, ("local", "test", "uat"))
                 self._validate_physical_targets(connection, workspace_id, mappings)
                 self._ensure_mapping_ids_available(connection, workspace_id, mappings)
 
@@ -454,13 +876,14 @@ class PostgresDatabaseEnvironmentRepository:
                             VALUES (%s, %s, %s)
                             """,
                             (
+                                (mapping.id, "local", mapping.test_link_id),
                                 (mapping.id, "test", mapping.test_link_id),
                                 (mapping.id, "uat", mapping.uat_link_id),
                             ),
                         )
 
                 next_revision = current.revision + 1
-                active_environment = current.active_environment or "uat"
+                active_environment = current.active_environment or "local"
                 row = connection.execute(
                     """
                     INSERT INTO workspace_database_environment_configs (
@@ -508,9 +931,9 @@ class PostgresDatabaseEnvironmentRepository:
                         SELECT count(*)
                         FROM workspace_environment_payloads
                         WHERE workspace_id = %s
-                          AND environment IN ('test', 'uat')
+                          AND environment = %s
                         """,
-                        (workspace_id,),
+                        (workspace_id, environment),
                     ).fetchone()[0]
                 )
                 if current.active_environment is None:
@@ -520,7 +943,7 @@ class PostgresDatabaseEnvironmentRepository:
                 if mappings:
                     mappings = self._list_mapping_writes(connection, workspace_id)
                     self._validate_physical_targets(connection, workspace_id, mappings)
-                elif payload_count != len(_ENVIRONMENTS):
+                elif payload_count != 1:
                     raise DatabaseEnvironmentRepositoryError("工作空间环境配置不完整")
                 row = connection.execute(
                     """
@@ -555,8 +978,9 @@ class PostgresDatabaseEnvironmentRepository:
                 self._lock_workspace(connection, workspace_id)
                 current = self._locked_config(connection, workspace_id)
                 _ensure_revision(current.revision, expected_revision)
+                self._ensure_environments(connection, workspace_id, ("local", "test", "uat"))
                 next_revision = current.revision + 1
-                active_environment = current.active_environment or "uat"
+                active_environment = current.active_environment or "local"
                 row = connection.execute(
                     """
                     INSERT INTO workspace_database_environment_configs (
@@ -670,7 +1094,41 @@ class PostgresDatabaseEnvironmentRepository:
             """,
             (workspace_id,),
         ).fetchone()
-        return _config_record(row) if row is not None else _unconfigured_config(workspace_id)
+        return (
+            _config_record(row)
+            if row is not None
+            else DatabaseEnvironmentConfigRecord(
+                workspace_id=workspace_id,
+                active_environment="local",
+                revision=0,
+            )
+        )
+
+    @staticmethod
+    def _ensure_environments(
+        connection: psycopg.Connection[Any],
+        workspace_id: str,
+        environments: tuple[str, ...],
+    ) -> None:
+        with connection.cursor() as cursor:
+            cursor.executemany(
+                """
+                INSERT INTO workspace_environments (
+                    workspace_id, environment_key, display_name, sort_order, is_default
+                ) VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (workspace_id, environment_key) DO NOTHING
+                """,
+                [
+                    (
+                        workspace_id,
+                        environment,
+                        environment.upper(),
+                        {"local": 0, "test": 10, "uat": 20}.get(environment, 100),
+                        environment == "local",
+                    )
+                    for environment in environments
+                ],
+            )
 
     @staticmethod
     def _ensure_mapping_ids_available(
@@ -855,8 +1313,8 @@ class PostgresDatabaseEnvironmentRepository:
 
 
 def _ensure_environment(environment: str) -> None:
-    if environment not in _ENVIRONMENTS:
-        raise DatabaseEnvironmentRepositoryError("数据库环境必须是 test 或 uat")
+    if not _ENVIRONMENT_KEY_PATTERN.fullmatch(environment):
+        raise DatabaseEnvironmentRepositoryError("环境标识格式不正确")
 
 
 def _ensure_revision(current: int, expected: int) -> None:
@@ -868,13 +1326,13 @@ def _ensure_revision(current: int, expected: int) -> None:
 
 
 def _empty_environment_payloads() -> dict[DatabaseEnvironment, Any]:
-    return {"test": {}, "uat": {}}
+    return {}
 
 
 def _validate_environment_payloads(
     environments: dict[DatabaseEnvironment, Any],
 ) -> None:
-    if set(environments) != set(_ENVIRONMENTS):
+    if set(environments) != set(_LEGACY_ENVIRONMENTS):
         raise DatabaseEnvironmentRepositoryError("环境 JSON 必须同时包含 test 和 uat")
     total_bytes = 0
     try:
@@ -951,8 +1409,34 @@ def _validate_mapping_writes(
         aliases.add(alias.casefold())
         if not mapping.logical_name.strip():
             raise DatabaseEnvironmentRepositoryError("环境映射逻辑名称不能为空")
-        if mapping.test_link_id == mapping.uat_link_id:
-            raise DatabaseEnvironmentRepositoryError("Test 与 UAT 必须映射到不同数据库授权")
+        # Reusing one physical/project database authorization across environments
+        # is valid. The environment identity belongs to the association row.
+
+
+def _validate_target_writes(
+    workspace_id: str,
+    targets: list[EnvironmentDatabaseTargetWrite],
+) -> None:
+    ids: set[str] = set()
+    aliases: set[str] = set()
+    links: set[str] = set()
+    for target in targets:
+        if target.workspace_id != workspace_id:
+            raise DatabaseEnvironmentRepositoryError("环境数据库关联不属于当前工作空间")
+        if target.id in ids:
+            raise DatabaseEnvironmentRepositoryError("环境数据库关联 ID 不能重复")
+        ids.add(target.id)
+        alias = target.mcp_alias.strip()
+        if not _MCP_ALIAS_PATTERN.fullmatch(alias):
+            raise DatabaseEnvironmentRepositoryError("环境数据库 MCP 别名格式不正确")
+        if alias.casefold() in aliases:
+            raise DatabaseEnvironmentRepositoryError("同一环境的 MCP 别名不能重复")
+        aliases.add(alias.casefold())
+        if target.link_id in links:
+            raise DatabaseEnvironmentRepositoryError("同一环境不能重复关联数据库授权")
+        links.add(target.link_id)
+        if not target.logical_name.strip() or not target.project_id or not target.link_id:
+            raise DatabaseEnvironmentRepositoryError("环境数据库关联缺少必填字段")
 
 
 def _unconfigured_config(workspace_id: str) -> DatabaseEnvironmentConfigRecord:
@@ -960,6 +1444,14 @@ def _unconfigured_config(workspace_id: str) -> DatabaseEnvironmentConfigRecord:
         workspace_id=workspace_id,
         active_environment=None,
         revision=0,
+    )
+
+
+def _default_config(workspace_id: str) -> DatabaseEnvironmentConfigRecord:
+    return DatabaseEnvironmentConfigRecord(
+        workspace_id=workspace_id,
+        active_environment="local",
+        revision=1,
     )
 
 

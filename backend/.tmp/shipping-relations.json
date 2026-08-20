@@ -1,0 +1,1457 @@
+[
+  {
+    "table": "cs_dsly_shipping_attachment",
+    "column": "file_id",
+    "java_field": "fileId",
+    "target_tables": [
+      "cs_dsly_order_file",
+      "cs_file"
+    ],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "父行在别处已存在，父键从入参或查询取得，可被多次调用复用",
+      "存在返回单体的 finder，读取侧按一父一子处理",
+      "目标表命名存在歧义，候选 2 张，需人工确认"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/attachment/service/ShippingAttachmentAdminService.java",
+        "line": 136,
+        "method": "saveOrUpdate",
+        "receiver": "this",
+        "argument": "attachment",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "uploadAndSave"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 155,
+        "method": "batchInsert",
+        "receiver": "attachmentPortalService",
+        "argument": "dispatchAttachment",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "load"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 190,
+        "method": "batchInsert",
+        "receiver": "attachmentPortalService",
+        "argument": "dispatchAttachment",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "modifyLoadInfo"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 249,
+        "method": "batchInsert",
+        "receiver": "attachmentPortalService",
+        "argument": "dispatchAttachment",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "unload"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 286,
+        "method": "batchInsert",
+        "receiver": "attachmentPortalService",
+        "argument": "dispatchAttachment",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "modifyUnloadInfo"
+      }
+    ],
+    "evidence": [
+      {
+        "kind": "condition_pair",
+        "dto": "ShippingAttachment",
+        "accessor": "fileId",
+        "detail": "右值 fileId",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/attachment/service/ShippingAttachmentAdminService.java",
+        "line": 243
+      },
+      {
+        "kind": "finder_single",
+        "dto": "",
+        "accessor": "fileId",
+        "detail": "ShippingAttachment findByFileId(...)",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/attachment/service/ShippingAttachmentAdminService.java",
+        "line": 241
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_shipping_attachment",
+    "column": "source_id",
+    "java_field": "sourceId",
+    "target_tables": [],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "1 处批量写入的循环体内把 sourceId 赋成批内恒定值，一个父键对应整批子行",
+      "存在 groupingBy 分组，作者按一父多子处理"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/attachment/service/ShippingAttachmentAdminService.java",
+        "line": 136,
+        "method": "saveOrUpdate",
+        "receiver": "this",
+        "argument": "attachment",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "uploadAndSave"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 155,
+        "method": "batchInsert",
+        "receiver": "attachmentPortalService",
+        "argument": "dispatchAttachment",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "load"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 190,
+        "method": "batchInsert",
+        "receiver": "attachmentPortalService",
+        "argument": "dispatchAttachment",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "modifyLoadInfo"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 249,
+        "method": "batchInsert",
+        "receiver": "attachmentPortalService",
+        "argument": "dispatchAttachment",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "unload"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 286,
+        "method": "batchInsert",
+        "receiver": "attachmentPortalService",
+        "argument": "dispatchAttachment",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "modifyUnloadInfo"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderAdminService.java",
+        "line": 279,
+        "method": "batchInsert",
+        "receiver": "attachmentAdminService",
+        "argument": "allSignAttachments",
+        "is_batch": true,
+        "loop_shape": "single",
+        "enclosing_method": "sign"
+      }
+    ],
+    "evidence": [
+      {
+        "kind": "condition_pair",
+        "dto": "ShippingAttachment",
+        "accessor": "sourceId",
+        "detail": "右值 dispatchId",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/attachment/service/ShippingAttachmentAdminService.java",
+        "line": 215
+      },
+      {
+        "kind": "condition_pair",
+        "dto": "ShippingAttachment",
+        "accessor": "sourceId",
+        "detail": "右值 id",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/attachment/service/ShippingAttachmentAdminService.java",
+        "line": 363
+      },
+      {
+        "kind": "condition_pair",
+        "dto": "ShippingAttachment",
+        "accessor": "sourceId",
+        "detail": "右值 dispatchOrderId",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/attachment/service/ShippingAttachmentBasicService.java",
+        "line": 80
+      },
+      {
+        "kind": "condition_pair",
+        "dto": "ShippingAttachment",
+        "accessor": "sourceId",
+        "detail": "右值 dispatchOrderId",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/attachment/service/ShippingAttachmentBasicService.java",
+        "line": 93
+      },
+      {
+        "kind": "grouping_by",
+        "dto": "ShippingAttachment",
+        "accessor": "sourceId",
+        "detail": "按外键分组，作者认为可能一父多子",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderAdminService.java",
+        "line": 138
+      },
+      {
+        "kind": "condition_pair",
+        "dto": "ShippingAttachment",
+        "accessor": "sourceId",
+        "detail": "右值 dispatchId",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderPortalService.java",
+        "line": 361
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_shipping_cargo",
+    "column": "cargo_id",
+    "java_field": "cargoId",
+    "target_tables": [
+      "cs_dsly_basic_cargo",
+      "cs_dsly_declaration_order_cargo",
+      "cs_dsly_highway_cargo",
+      "cs_dsly_highway_inbound_order_cargo",
+      "cs_dsly_operation_entrusted_business_cargo",
+      "cs_dsly_operation_general_cargo",
+      "cs_dsly_order_entrusted_cargo",
+      "cs_dsly_railway_cargo"
+    ],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "父行在别处已存在，父键从入参或查询取得，可被多次调用复用",
+      "目标表命名存在歧义，候选 8 张，需人工确认"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderPortalService.java",
+        "line": 334,
+        "method": "saveOrUpdate",
+        "receiver": "cargoDao",
+        "argument": "dispatchCargo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "handleCreateDispatch"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderAdminService.java",
+        "line": 269,
+        "method": "saveOrUpdate",
+        "receiver": "cargoDao",
+        "argument": "cargo",
+        "is_batch": false,
+        "loop_shape": "per_parent_iteration",
+        "enclosing_method": "batchCreateCarrierOrder"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_shipping_cargo",
+    "column": "carrier_order_no",
+    "java_field": "carrierOrderNo",
+    "target_tables": [
+      "cs_dsly_shipping_carrier_order"
+    ],
+    "cardinality": "one_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "每处创建入口都在同一方法内新建父行，父键不可复用",
+      "全部 1 处创建入口均为单对象写入，且存在不带合并函数的 Collectors.toMap 在生产运行未崩，唯一性已被运行时验证",
+      "存在返回单体的 finder，读取侧按一父一子处理"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/cargo/service/ShippingCargoBasicService.java",
+        "line": 41,
+        "method": "update",
+        "receiver": "this",
+        "argument": "carrierCargo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "setLoadQuantity"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/cargo/service/ShippingCargoBasicService.java",
+        "line": 58,
+        "method": "update",
+        "receiver": "this",
+        "argument": "carrierCargo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "setCargoQuantity"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/cargo/service/ShippingCargoBasicService.java",
+        "line": 76,
+        "method": "update",
+        "receiver": "this",
+        "argument": "carrierCargo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "modifyCargoQuantity"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 232,
+        "method": "update",
+        "receiver": "cargoDao",
+        "argument": "cargoDaoByCarrierOrderNo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "unload"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 538,
+        "method": "update",
+        "receiver": "cargoDao",
+        "argument": "carrierCargo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "redispatch"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 543,
+        "method": "update",
+        "receiver": "cargoDao",
+        "argument": "dispatchCargo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "redispatch"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderPortalService.java",
+        "line": 232,
+        "method": "update",
+        "receiver": "cargoDao",
+        "argument": "carrierCargo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "batchDispatchOrder"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderAdminService.java",
+        "line": 269,
+        "method": "saveOrUpdate",
+        "receiver": "cargoDao",
+        "argument": "cargo",
+        "is_batch": false,
+        "loop_shape": "per_parent_iteration",
+        "enclosing_method": "batchCreateCarrierOrder"
+      }
+    ],
+    "evidence": [
+      {
+        "kind": "condition_pair",
+        "dto": "ShippingCargo",
+        "accessor": "carrierOrderNo",
+        "detail": "右值 carrierOrderNo",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/cargo/dao/ShippingCargoDao.java",
+        "line": 23
+      },
+      {
+        "kind": "condition_pair",
+        "dto": "ShippingCargo",
+        "accessor": "carrierOrderNo",
+        "detail": "右值 carrierOrderNo",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/cargo/dao/ShippingCargoDao.java",
+        "line": 34
+      },
+      {
+        "kind": "strict_to_map",
+        "dto": "ShippingCargoQuery",
+        "accessor": "carrierOrderNo",
+        "detail": "无合并函数，键重复必抛 IllegalStateException，生产未崩即数据已验证唯一",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/CarrierOrderBaseService.java",
+        "line": 94
+      },
+      {
+        "kind": "finder_single",
+        "dto": "",
+        "accessor": "carrierOrderNo",
+        "detail": "ShippingCargo findByCarrierOrderNo(...)",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/cargo/dao/ShippingCargoDao.java",
+        "line": 21
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_shipping_cargo",
+    "column": "category_id",
+    "java_field": "categoryId",
+    "target_tables": [
+      "cs_dsly_basic_cargo_category"
+    ],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "父行在别处已存在，父键从入参或查询取得，可被多次调用复用"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderPortalService.java",
+        "line": 334,
+        "method": "saveOrUpdate",
+        "receiver": "cargoDao",
+        "argument": "dispatchCargo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "handleCreateDispatch"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderAdminService.java",
+        "line": 269,
+        "method": "saveOrUpdate",
+        "receiver": "cargoDao",
+        "argument": "cargo",
+        "is_batch": false,
+        "loop_shape": "per_parent_iteration",
+        "enclosing_method": "batchCreateCarrierOrder"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_shipping_cargo",
+    "column": "dispatch_order_no",
+    "java_field": "dispatchOrderNo",
+    "target_tables": [
+      "cs_dsly_shipping_dispatch_order"
+    ],
+    "cardinality": "one_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "每处创建入口都在同一方法内新建父行，父键不可复用",
+      "全部 1 处创建入口均为单对象写入，且存在不带合并函数的 Collectors.toMap 在生产运行未崩，唯一性已被运行时验证",
+      "存在返回单体的 finder，读取侧按一父一子处理"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/cargo/service/ShippingCargoBasicService.java",
+        "line": 40,
+        "method": "update",
+        "receiver": "this",
+        "argument": "dispatchCargo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "setLoadQuantity"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/cargo/service/ShippingCargoBasicService.java",
+        "line": 57,
+        "method": "update",
+        "receiver": "this",
+        "argument": "dispatchCargo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "setCargoQuantity"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/cargo/service/ShippingCargoBasicService.java",
+        "line": 75,
+        "method": "update",
+        "receiver": "this",
+        "argument": "dispatchCargo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "modifyCargoQuantity"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 232,
+        "method": "update",
+        "receiver": "cargoDao",
+        "argument": "cargoDaoByCarrierOrderNo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "unload"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 538,
+        "method": "update",
+        "receiver": "cargoDao",
+        "argument": "carrierCargo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "redispatch"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 543,
+        "method": "update",
+        "receiver": "cargoDao",
+        "argument": "dispatchCargo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "redispatch"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderPortalService.java",
+        "line": 232,
+        "method": "update",
+        "receiver": "cargoDao",
+        "argument": "carrierCargo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "batchDispatchOrder"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderPortalService.java",
+        "line": 308,
+        "method": "update",
+        "receiver": "cargoDao",
+        "argument": "dispatchCargo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "updateDispatchCargo"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderPortalService.java",
+        "line": 334,
+        "method": "saveOrUpdate",
+        "receiver": "cargoDao",
+        "argument": "dispatchCargo",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "handleCreateDispatch"
+      }
+    ],
+    "evidence": [
+      {
+        "kind": "condition_pair",
+        "dto": "ShippingCargo",
+        "accessor": "dispatchOrderNo",
+        "detail": "右值 dispatchOrderNo",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/cargo/dao/ShippingCargoDao.java",
+        "line": 46
+      },
+      {
+        "kind": "condition_pair",
+        "dto": "ShippingCargo",
+        "accessor": "dispatchOrderNo",
+        "detail": "右值 dispatchOrderNo",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/cargo/dao/ShippingCargoDao.java",
+        "line": 77
+      },
+      {
+        "kind": "strict_to_map",
+        "dto": "ShippingCargo",
+        "accessor": "dispatchOrderNo",
+        "detail": "无合并函数，键重复必抛 IllegalStateException，生产未崩即数据已验证唯一",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderPortalService.java",
+        "line": 573
+      },
+      {
+        "kind": "finder_single",
+        "dto": "",
+        "accessor": "dispatchOrderNo",
+        "detail": "ShippingCargo findByDispatchOrderNo(...)",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/cargo/dao/ShippingCargoDao.java",
+        "line": 75
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_shipping_carrier_order",
+    "column": "address_id",
+    "java_field": "addressId",
+    "target_tables": [
+      "cs_dsly_basic_address"
+    ],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "父行在别处已存在，父键从入参或查询取得，可被多次调用复用"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderAdminService.java",
+        "line": 274,
+        "method": "saveOrUpdate",
+        "receiver": "this",
+        "argument": "carrierOrder",
+        "is_batch": false,
+        "loop_shape": "per_parent_iteration",
+        "enclosing_method": "batchCreateCarrierOrder"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderAdminService.java",
+        "line": 292,
+        "method": "update",
+        "receiver": "this",
+        "argument": "carrierOrder",
+        "is_batch": false,
+        "loop_shape": "per_parent_iteration",
+        "enclosing_method": "batchCreateCarrierOrder"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_shipping_carrier_order",
+    "column": "carrier_id",
+    "java_field": "carrierId",
+    "target_tables": [
+      "cs_dsly_line_route_carrier"
+    ],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "父行在别处已存在，父键从入参或查询取得，可被多次调用复用"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 556,
+        "method": "update",
+        "receiver": "carrierOrderDao",
+        "argument": "carrierOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "redispatch"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderAdminService.java",
+        "line": 208,
+        "method": "update",
+        "receiver": "this",
+        "argument": "carrierOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "changeCarrierOrderInfo"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderAdminService.java",
+        "line": 274,
+        "method": "saveOrUpdate",
+        "receiver": "this",
+        "argument": "carrierOrder",
+        "is_batch": false,
+        "loop_shape": "per_parent_iteration",
+        "enclosing_method": "batchCreateCarrierOrder"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderAdminService.java",
+        "line": 292,
+        "method": "update",
+        "receiver": "this",
+        "argument": "carrierOrder",
+        "is_batch": false,
+        "loop_shape": "per_parent_iteration",
+        "enclosing_method": "batchCreateCarrierOrder"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_shipping_carrier_order",
+    "column": "contract_no",
+    "java_field": "contractNo",
+    "target_tables": [],
+    "cardinality": "unknown",
+    "confidence": "low",
+    "reasons": [
+      "目标表未解析，无法判断父键来源"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderAdminService.java",
+        "line": 208,
+        "method": "update",
+        "receiver": "this",
+        "argument": "carrierOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "changeCarrierOrderInfo"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderAdminService.java",
+        "line": 274,
+        "method": "saveOrUpdate",
+        "receiver": "this",
+        "argument": "carrierOrder",
+        "is_batch": false,
+        "loop_shape": "per_parent_iteration",
+        "enclosing_method": "batchCreateCarrierOrder"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderAdminService.java",
+        "line": 292,
+        "method": "update",
+        "receiver": "this",
+        "argument": "carrierOrder",
+        "is_batch": false,
+        "loop_shape": "per_parent_iteration",
+        "enclosing_method": "batchCreateCarrierOrder"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_shipping_carrier_order",
+    "column": "entrusted_order_no",
+    "java_field": "entrustedOrderNo",
+    "target_tables": [
+      "cs_dsly_operation_entrusted_order",
+      "cs_dsly_order_entrusted_order"
+    ],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "父行在别处已存在，父键从入参或查询取得，可被多次调用复用",
+      "目标表命名存在歧义，候选 2 张，需人工确认"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderAdminService.java",
+        "line": 274,
+        "method": "saveOrUpdate",
+        "receiver": "this",
+        "argument": "carrierOrder",
+        "is_batch": false,
+        "loop_shape": "per_parent_iteration",
+        "enclosing_method": "batchCreateCarrierOrder"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderAdminService.java",
+        "line": 292,
+        "method": "update",
+        "receiver": "this",
+        "argument": "carrierOrder",
+        "is_batch": false,
+        "loop_shape": "per_parent_iteration",
+        "enclosing_method": "batchCreateCarrierOrder"
+      }
+    ],
+    "evidence": [
+      {
+        "kind": "condition_pair",
+        "dto": "ShippingCarrierOrder",
+        "accessor": "entrustedOrderNo",
+        "detail": "右值 entrustedOrderNo",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/manifest/service/ShippingDispatchManifestBasicService.java",
+        "line": 35
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_shipping_carrier_order",
+    "column": "route_no",
+    "java_field": "routeNo",
+    "target_tables": [
+      "cs_bt_route",
+      "cs_dsly_line_route"
+    ],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "父行在别处已存在，父键从入参或查询取得，可被多次调用复用",
+      "目标表命名存在歧义，候选 2 张，需人工确认"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderAdminService.java",
+        "line": 274,
+        "method": "saveOrUpdate",
+        "receiver": "this",
+        "argument": "carrierOrder",
+        "is_batch": false,
+        "loop_shape": "per_parent_iteration",
+        "enclosing_method": "batchCreateCarrierOrder"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderAdminService.java",
+        "line": 292,
+        "method": "update",
+        "receiver": "this",
+        "argument": "carrierOrder",
+        "is_batch": false,
+        "loop_shape": "per_parent_iteration",
+        "enclosing_method": "batchCreateCarrierOrder"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_shipping_carrier_order",
+    "column": "shipper_id",
+    "java_field": "shipperId",
+    "target_tables": [],
+    "cardinality": "unknown",
+    "confidence": "low",
+    "reasons": [
+      "目标表未解析，无法判断父键来源"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderAdminService.java",
+        "line": 274,
+        "method": "saveOrUpdate",
+        "receiver": "this",
+        "argument": "carrierOrder",
+        "is_batch": false,
+        "loop_shape": "per_parent_iteration",
+        "enclosing_method": "batchCreateCarrierOrder"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderAdminService.java",
+        "line": 292,
+        "method": "update",
+        "receiver": "this",
+        "argument": "carrierOrder",
+        "is_batch": false,
+        "loop_shape": "per_parent_iteration",
+        "enclosing_method": "batchCreateCarrierOrder"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_shipping_carrier_settlement",
+    "column": "shipping_carrier_no",
+    "java_field": "shippingCarrierNo",
+    "target_tables": [],
+    "cardinality": "unknown",
+    "confidence": "low",
+    "reasons": [
+      "目标表未解析，无法判断父键来源"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderAdminService.java",
+        "line": 281,
+        "method": "saveOrUpdate",
+        "receiver": "shippingCarrierSettlementAdminService",
+        "argument": "settlement",
+        "is_batch": false,
+        "loop_shape": "per_parent_iteration",
+        "enclosing_method": "batchCreateCarrierOrder"
+      }
+    ],
+    "evidence": [
+      {
+        "kind": "condition_pair",
+        "dto": "ShippingCarrierSettlement",
+        "accessor": "shippingCarrierNo",
+        "detail": "右值 carrierOrderNo",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/settlement/dao/ShippingCarrierSettlementDao.java",
+        "line": 16
+      },
+      {
+        "kind": "condition_pair",
+        "dto": "ShippingCarrierSettlement",
+        "accessor": "shippingCarrierNo",
+        "detail": "右值 carrierOrderNo",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/settlement/dao/ShippingCarrierSettlementDao.java",
+        "line": 22
+      },
+      {
+        "kind": "condition_pair",
+        "dto": "ShippingCarrierSettlement",
+        "accessor": "shippingCarrierNo",
+        "detail": "右值 carrierOrder.getCarrierOrderNo()",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderBasicService.java",
+        "line": 156
+      },
+      {
+        "kind": "condition_pair",
+        "dto": "ShippingCarrierSettlement",
+        "accessor": "shippingCarrierNo",
+        "detail": "右值 carrierOrder.getCarrierOrderNo()",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/CarrierOrderBaseService.java",
+        "line": 262
+      },
+      {
+        "kind": "condition_pair",
+        "dto": "ShippingCarrierSettlement",
+        "accessor": "shippingCarrierNo",
+        "detail": "右值 carrierOrder.getCarrierOrderNo()",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderPortalService.java",
+        "line": 453
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_shipping_container",
+    "column": "source_id",
+    "java_field": "sourceId",
+    "target_tables": [],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "1 处批量写入的循环体内把 sourceId 赋成批内恒定值，一个父键对应整批子行"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderAdminService.java",
+        "line": 277,
+        "method": "batchInsert",
+        "receiver": "containerAdminService",
+        "argument": "containerList",
+        "is_batch": true,
+        "loop_shape": "per_parent_iteration",
+        "enclosing_method": "batchCreateCarrierOrder"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_shipping_dispatch_manifest",
+    "column": "bill_no",
+    "java_field": "billNo",
+    "target_tables": [
+      "cs_dsly_settlement_payable_bill",
+      "cs_dsly_settlement_prepayment_bill",
+      "cs_dsly_settlement_receivable_bill"
+    ],
+    "cardinality": "unknown",
+    "confidence": "none",
+    "reasons": [
+      "该表 1 处写入入口都归属不到 billNo，赋值可能跨越多层构建器，改用读取侧证据判定",
+      "没有可用的基数证据",
+      "目标表命名存在歧义，候选 3 张，需人工确认"
+    ],
+    "write_sites": [],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_shipping_dispatch_manifest",
+    "column": "cargo_id",
+    "java_field": "cargoId",
+    "target_tables": [
+      "cs_dsly_shipping_cargo"
+    ],
+    "cardinality": "unknown",
+    "confidence": "none",
+    "reasons": [
+      "该表 1 处写入入口都归属不到 cargoId，赋值可能跨越多层构建器，改用读取侧证据判定",
+      "没有可用的基数证据"
+    ],
+    "write_sites": [],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_shipping_dispatch_manifest",
+    "column": "category_id",
+    "java_field": "categoryId",
+    "target_tables": [
+      "cs_dsly_basic_cargo_category"
+    ],
+    "cardinality": "unknown",
+    "confidence": "none",
+    "reasons": [
+      "该表 1 处写入入口都归属不到 categoryId，赋值可能跨越多层构建器，改用读取侧证据判定",
+      "没有可用的基数证据"
+    ],
+    "write_sites": [],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_shipping_dispatch_manifest",
+    "column": "container_no",
+    "java_field": "containerNo",
+    "target_tables": [
+      "cs_dsly_shipping_container"
+    ],
+    "cardinality": "unknown",
+    "confidence": "none",
+    "reasons": [
+      "该表 1 处写入入口都归属不到 containerNo，赋值可能跨越多层构建器，改用读取侧证据判定",
+      "没有可用的基数证据"
+    ],
+    "write_sites": [],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_shipping_dispatch_manifest",
+    "column": "dispatch_id",
+    "java_field": "dispatchId",
+    "target_tables": [],
+    "cardinality": "many_to_one",
+    "confidence": "intent",
+    "reasons": [
+      "该表 1 处写入入口都归属不到 dispatchId，赋值可能跨越多层构建器，改用读取侧证据判定",
+      "存在 groupingBy 或返回 List 的 finder，读取侧按一父多子处理"
+    ],
+    "write_sites": [],
+    "evidence": [
+      {
+        "kind": "grouping_by",
+        "dto": "ShippingDispatchManifest",
+        "accessor": "dispatchId",
+        "detail": "按外键分组，作者认为可能一父多子",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderAdminService.java",
+        "line": 442
+      },
+      {
+        "kind": "condition_pair",
+        "dto": "ShippingDispatchManifest",
+        "accessor": "dispatchId",
+        "detail": "右值 id",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderAdminService.java",
+        "line": 467
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_shipping_dispatch_manifest",
+    "column": "seal_no",
+    "java_field": "sealNo",
+    "target_tables": [],
+    "cardinality": "unknown",
+    "confidence": "none",
+    "reasons": [
+      "该表 1 处写入入口都归属不到 sealNo，赋值可能跨越多层构建器，改用读取侧证据判定",
+      "没有可用的基数证据"
+    ],
+    "write_sites": [],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_shipping_dispatch_order",
+    "column": "address_id",
+    "java_field": "addressId",
+    "target_tables": [
+      "cs_dsly_basic_address"
+    ],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "父行在别处已存在，父键从入参或查询取得，可被多次调用复用"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderPortalService.java",
+        "line": 330,
+        "method": "saveOrUpdate",
+        "receiver": "dispatchOrderDao",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "handleCreateDispatch"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_shipping_dispatch_order",
+    "column": "carrier_id",
+    "java_field": "carrierId",
+    "target_tables": [
+      "cs_dsly_line_route_carrier"
+    ],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "父行在别处已存在，父键从入参或查询取得，可被多次调用复用"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 133,
+        "method": "update",
+        "receiver": "this",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "load"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 177,
+        "method": "update",
+        "receiver": "this",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "modifyLoadInfo"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 228,
+        "method": "update",
+        "receiver": "this",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "unload"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 550,
+        "method": "update",
+        "receiver": "this",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "redispatch"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderPortalService.java",
+        "line": 330,
+        "method": "saveOrUpdate",
+        "receiver": "dispatchOrderDao",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "handleCreateDispatch"
+      }
+    ],
+    "evidence": []
+  },
+  {
+    "table": "cs_dsly_shipping_dispatch_order",
+    "column": "carrier_order_no",
+    "java_field": "carrierOrderNo",
+    "target_tables": [
+      "cs_dsly_shipping_carrier_order"
+    ],
+    "cardinality": "many_to_one",
+    "confidence": "confirmed",
+    "reasons": [
+      "父行在别处已存在，父键从入参或查询取得，可被多次调用复用",
+      "存在 groupingBy 分组，作者按一父多子处理",
+      "存在返回 List 的 finder，读取侧按一父多子处理"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 133,
+        "method": "update",
+        "receiver": "this",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "load"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 228,
+        "method": "update",
+        "receiver": "this",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "unload"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 550,
+        "method": "update",
+        "receiver": "this",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "redispatch"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderAdminService.java",
+        "line": 229,
+        "method": "update",
+        "receiver": "this",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "sign"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderPortalService.java",
+        "line": 330,
+        "method": "saveOrUpdate",
+        "receiver": "dispatchOrderDao",
+        "argument": "dispatchOrder",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "handleCreateDispatch"
+      }
+    ],
+    "evidence": [
+      {
+        "kind": "condition_pair",
+        "dto": "ShippingDispatchOrder",
+        "accessor": "carrierOrderNo",
+        "detail": "右值 carrierOrderNo",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/dao/ShippingDispatchOrderDao.java",
+        "line": 75
+      },
+      {
+        "kind": "grouping_by",
+        "dto": "ShippingDispatchOrder",
+        "accessor": "carrierOrderNo",
+        "detail": "按外键分组，作者认为可能一父多子",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/CarrierOrderBaseService.java",
+        "line": 100
+      },
+      {
+        "kind": "grouping_by",
+        "dto": "ShippingDispatchOrder",
+        "accessor": "carrierOrderNo",
+        "detail": "按外键分组，作者认为可能一父多子",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/CarrierOrderBaseService.java",
+        "line": 235
+      },
+      {
+        "kind": "condition_pair",
+        "dto": "ShippingDispatchOrder",
+        "accessor": "carrierOrderNo",
+        "detail": "右值 carrierOrderNo",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderPortalService.java",
+        "line": 203
+      },
+      {
+        "kind": "finder_list",
+        "dto": "",
+        "accessor": "carrierOrderNo",
+        "detail": "List<ShippingDispatchOrder> findByCarrierOrderNos(...)",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/dao/ShippingDispatchOrderDao.java",
+        "line": 62
+      },
+      {
+        "kind": "finder_list",
+        "dto": "",
+        "accessor": "carrierOrderNo",
+        "detail": "List<ShippingDispatchOrder> findByCarrierOrderNo(...)",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/dao/ShippingDispatchOrderDao.java",
+        "line": 73
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_shipping_dispatch_record",
+    "column": "dispatch_order_no",
+    "java_field": "dispatchOrderNo",
+    "target_tables": [
+      "cs_dsly_shipping_dispatch_order"
+    ],
+    "cardinality": "unknown",
+    "confidence": "low",
+    "reasons": [
+      "1/7 处创建入口父键是新生成的，其余可复用",
+      "存在 groupingBy 分组，作者按一父多子处理"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 146,
+        "method": "saveOrUpdate",
+        "receiver": "recordPortalService",
+        "argument": "record",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "load"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 203,
+        "method": "saveOrUpdate",
+        "receiver": "recordPortalService",
+        "argument": "record",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "modifyLoadInfo"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 241,
+        "method": "saveOrUpdate",
+        "receiver": "recordPortalService",
+        "argument": "record",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "unload"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 298,
+        "method": "saveOrUpdate",
+        "receiver": "recordPortalService",
+        "argument": "record",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "modifyUnloadInfo"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 549,
+        "method": "saveOrUpdate",
+        "receiver": "recordPortalService",
+        "argument": "record",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "redispatch"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderAdminService.java",
+        "line": 245,
+        "method": "saveOrUpdate",
+        "receiver": "routePortalService",
+        "argument": "record",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "sign"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderPortalService.java",
+        "line": 344,
+        "method": "saveOrUpdate",
+        "receiver": "routePortalService",
+        "argument": "record",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "handleCreateDispatch"
+      }
+    ],
+    "evidence": [
+      {
+        "kind": "condition_pair",
+        "dto": "ShippingRecord",
+        "accessor": "dispatchOrderNo",
+        "detail": "右值 dispatchOrderNo",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/record/dao/ShippingRecordDao.java",
+        "line": 42
+      },
+      {
+        "kind": "condition_pair",
+        "dto": "ShippingRecord",
+        "accessor": "dispatchOrderNo",
+        "detail": "右值 dispatchOrderNo",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/record/service/RecordBaseService.java",
+        "line": 71
+      },
+      {
+        "kind": "grouping_by",
+        "dto": "ShippingRecord",
+        "accessor": "dispatchOrderNo",
+        "detail": "按外键分组，作者认为可能一父多子",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/record/service/RecordBaseService.java",
+        "line": 121
+      },
+      {
+        "kind": "grouping_by",
+        "dto": "ShippingRecord",
+        "accessor": "dispatchOrderNo",
+        "detail": "按外键分组，作者认为可能一父多子",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/record/service/RecordBaseService.java",
+        "line": 171
+      },
+      {
+        "kind": "condition_pair",
+        "dto": "ShippingRecord",
+        "accessor": "dispatchOrderNo",
+        "detail": "右值 dispatchOrder.getDispatchOrderNo()",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 224
+      },
+      {
+        "kind": "grouping_by",
+        "dto": "ShippingRecord",
+        "accessor": "dispatchOrderNo",
+        "detail": "按外键分组，作者认为可能一父多子",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderBasicService.java",
+        "line": 110
+      },
+      {
+        "kind": "condition_pair",
+        "dto": "ShippingRecord",
+        "accessor": "dispatchOrderNo",
+        "detail": "右值 dispatchOrderNo",
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/mq/service/ShippingDispatchOrderTrackQueryEventConsumer.java",
+        "line": 94
+      }
+    ]
+  },
+  {
+    "table": "cs_dsly_shipping_dispatch_record",
+    "column": "operator_id",
+    "java_field": "operatorId",
+    "target_tables": [],
+    "cardinality": "unknown",
+    "confidence": "low",
+    "reasons": [
+      "目标表未解析，无法判断父键来源"
+    ],
+    "write_sites": [
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 146,
+        "method": "saveOrUpdate",
+        "receiver": "recordPortalService",
+        "argument": "record",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "load"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 203,
+        "method": "saveOrUpdate",
+        "receiver": "recordPortalService",
+        "argument": "record",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "modifyLoadInfo"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 241,
+        "method": "saveOrUpdate",
+        "receiver": "recordPortalService",
+        "argument": "record",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "unload"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 298,
+        "method": "saveOrUpdate",
+        "receiver": "recordPortalService",
+        "argument": "record",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "modifyUnloadInfo"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderPortalService.java",
+        "line": 549,
+        "method": "saveOrUpdate",
+        "receiver": "recordPortalService",
+        "argument": "record",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "redispatch"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/dispatch/service/ShippingDispatchOrderAdminService.java",
+        "line": 245,
+        "method": "saveOrUpdate",
+        "receiver": "routePortalService",
+        "argument": "record",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "sign"
+      },
+      {
+        "path": "/workspace/company_workforce/panzhihua_dev_workforce/backend/c12-mtp/c12-mtp-shipping-service/c12-mtp-shipping-biz/src/main/java/com/chinaservices/dsly/shipping/module/carrier/service/ShippingCarrierOrderPortalService.java",
+        "line": 344,
+        "method": "saveOrUpdate",
+        "receiver": "routePortalService",
+        "argument": "record",
+        "is_batch": false,
+        "loop_shape": "single",
+        "enclosing_method": "handleCreateDispatch"
+      }
+    ],
+    "evidence": []
+  }
+]

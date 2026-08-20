@@ -9,6 +9,8 @@
 - [数据库信息](./docs/DATABASE_INFO.md)：检查 bug、运行脚本、排查数据问题前先读取。
 - [业务功能说明](./docs/BUSINESS_FEATURES.md)：需要理解项目目标、业务模块和功能边界时读取。
 - [链路流转速查](./docs/FRONTEND_BACKEND_FLOW.md)：定位页面、接口、service、数据库链路时读取。
+- [按表名补全表关联](./docs/development-details/table_relation_complete.md)：用户给出表名时读取并执行；检查关系列表、关系详情、插入入口、更新入口，缺则自动补进种子并跑脚本。
+- [表关联种子怎么写](./docs/development-details/table_relation_seed.md)：字段和枚举对照；补数据时改种子脚本，不要直接写 PostgreSQL。
 
 ## 核心规则
 

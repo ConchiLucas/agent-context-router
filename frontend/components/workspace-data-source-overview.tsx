@@ -10,6 +10,7 @@ import type {
 
 interface WorkspaceDataSourceOverviewProps {
   workspaceId: string;
+  environment?: string;
 }
 
 function assignmentStatus(assignment: WorkspaceDataSourceAssignment): string {
@@ -25,6 +26,7 @@ function assignmentStatus(assignment: WorkspaceDataSourceAssignment): string {
 
 export function WorkspaceDataSourceOverview({
   workspaceId,
+  environment,
 }: WorkspaceDataSourceOverviewProps) {
   const [summary, setSummary] =
     useState<WorkspaceDataSourceSummary | null>(null);
@@ -34,14 +36,14 @@ export function WorkspaceDataSourceOverview({
   const loadSummary = useCallback(async () => {
     setLoading(true);
     try {
-      setSummary(await getWorkspaceDataSourceSummary(workspaceId));
+      setSummary(await getWorkspaceDataSourceSummary(workspaceId, environment));
       setError(null);
     } catch (requestError) {
       setError((requestError as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [workspaceId]);
+  }, [environment, workspaceId]);
 
   useEffect(() => {
     void loadSummary();
@@ -72,8 +74,12 @@ export function WorkspaceDataSourceOverview({
     return (
       <div className="empty-state workspace-data-source-empty">
         <span className="empty-database-icon">◎</span>
-        <h2>这个工作空间还没有数据源授权</h2>
-        <p>当前没有可查看的项目数据库授权记录。</p>
+        <h2>当前环境没有数据源关联</h2>
+        <p>
+          {environment
+            ? `${environment.toUpperCase()} 尚未关联项目数据库授权。`
+            : "当前没有可查看的项目数据库授权记录。"}
+        </p>
       </div>
     );
   }

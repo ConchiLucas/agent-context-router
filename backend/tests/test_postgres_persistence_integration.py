@@ -51,7 +51,7 @@ _REVISION_0020 = "20260730_0020"
 _REVISION_0022 = "20260730_0022"
 _REVISION_0023 = "20260802_0023"
 _REVISION_0024 = "20260808_0024"
-_REVISION_HEAD = "20260813_0035"
+_REVISION_HEAD = "20260820_0040"
 
 _PROJECT_A = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 _PROJECT_B = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -217,7 +217,7 @@ def test_migration_and_postgres_repositories_preserve_legacy_data(
     saved_profile = nacos_profiles.upsert_profile(
         NacosProfileWrite(
             workspace_id=_PROJECT_A,
-            profile_key="default",
+            profile_key="local",
             base_url="http://nacos.internal:8848",
             namespace_id="public",
             username="nacos",
@@ -227,9 +227,7 @@ def test_migration_and_postgres_repositories_preserve_legacy_data(
                 {
                     "id": "redis-main",
                     "type": "redis",
-                    "sources": [
-                        {"data_id": "application.yaml", "group": "DEFAULT_GROUP"}
-                    ],
+                    "sources": [{"data_id": "application.yaml", "group": "DEFAULT_GROUP"}],
                     "fields": {
                         "password": {
                             "paths": ["spring.data.redis.password"],
@@ -241,7 +239,7 @@ def test_migration_and_postgres_repositories_preserve_legacy_data(
         )
     )
     assert saved_profile.password == "private"
-    assert nacos_profiles.get_profile(_PROJECT_A, "default") == saved_profile
+    assert nacos_profiles.get_profile(_PROJECT_A, "local") == saved_profile
 
     data_sources = PostgresDataSourceRepository(database_url)
     resolved = data_sources.get_workspace_database_by_alias(
@@ -597,7 +595,7 @@ def test_postgres_environment_json_can_switch_without_database_mappings(
     )
     snapshot = repository.get_environment_snapshot(workspace_id)
 
-    assert saved.active_environment == "uat"
+    assert saved.active_environment == "local"
     assert snapshot.selector_configured is True
     assert snapshot.payloads.configured is True
     assert snapshot.payloads.environments == environments

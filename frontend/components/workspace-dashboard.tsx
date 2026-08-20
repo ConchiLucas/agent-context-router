@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 
 import { WorkspaceDetail } from "@/components/workspace-detail";
 import { WorkspaceContainersModal } from "@/components/workspace-containers-modal";
@@ -273,6 +274,12 @@ export function WorkspaceDashboard() {
             </p>
             <div className="workspace-card-actions">
               <WorkspaceContainersModal workspace={workspace} />
+              <Link
+                className="secondary-button workspace-environment-defaults-link"
+                href={`/workspaces/${encodeURIComponent(workspace.id)}/mcp-environments`}
+              >
+                环境详情
+              </Link>
               <button
                 type="button"
                 className="primary-button"
