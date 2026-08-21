@@ -160,6 +160,7 @@ prepare 和文档搜索不建立业务数据库连接。业务数据库离线时
 | 测试当前连接 | `data-source-dashboard.tsx` | 安全 `POST /api/data-sources/{id}/test`，返回状态、耗时和短错误码 |
 | 加载表关联版本与表清单 | `table-relation-explorer.tsx`、`table-relations.ts` | `GET /api/workspaces/{id}/table-relations/status`、`GET /api/workspaces/{id}/table-relations/tables` |
 | 查看单表关联 | `table-relation-detail.tsx`、`table-relation-edge-row.tsx` | `GET /api/workspaces/{id}/table-relations/table` |
+| 按关联字段关键词查看一层关联记录 | `relation-record-explorer.tsx` | 安全只读 `POST /api/workspaces/{id}/relation-records/search` |
 | 查看单表插入入口 | `table-relation-write-modal.tsx` | `GET /api/workspaces/{id}/table-relations/table/writes` |
 | 查看单表更新入口 | `table-relation-write-modal.tsx` | `GET /api/workspaces/{id}/table-relations/table/updates` |
 | 搜索表名、只看有关联的表、折叠多对多 | `table-relation-table-list.tsx`、`table-relations.ts` | 无请求，复用已加载数据在前端过滤 |

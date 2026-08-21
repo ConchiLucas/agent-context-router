@@ -262,6 +262,13 @@ export function TableRelationExplorer() {
     [workspaceId],
   );
 
+  useEffect(() => {
+    if (loading || !status?.generation || selectedKey !== null || visible.length === 0) {
+      return;
+    }
+    void selectTable(visible[0]);
+  }, [loading, selectedKey, selectTable, status?.generation, visible]);
+
   return (
     <section className="table-relation-explorer" aria-labelledby="table-relation-title">
       <header className="table-relation-header">

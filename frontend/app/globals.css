@@ -80,28 +80,34 @@ code {
 }
 
 .app-shell {
-  display: grid;
+  --app-header-height: 72px;
+  --app-content-inline: 24px;
+
+  display: flex;
   min-height: 100vh;
-  grid-template-columns: 244px minmax(0, 1fr);
+  flex-direction: column;
 }
 
-.app-sidebar {
-  display: flex;
+.app-header {
+  display: grid;
   position: sticky;
+  z-index: 50;
   top: 0;
-  height: 100vh;
-  border-right: 1px solid var(--border);
-  padding: 28px 18px 22px;
-  flex-direction: column;
+  min-height: var(--app-header-height);
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  padding: 10px 24px;
   background: color-mix(in srgb, var(--surface) 92%, transparent);
   backdrop-filter: blur(18px);
+  gap: 24px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
 }
 
 .app-brand {
   display: flex;
   gap: 12px;
   align-items: center;
-  padding: 0 8px 30px;
+  padding: 0;
 }
 
 .app-brand-mark {
@@ -132,38 +138,43 @@ code {
   font-size: 0.72rem;
 }
 
-.app-sidebar nav {
-  display: grid;
-  gap: 7px;
+.app-header nav {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
 }
 
-.app-sidebar nav button {
+.app-header nav button {
   display: flex;
-  width: 100%;
-  min-height: 48px;
-  gap: 12px;
+  min-height: 44px;
+  flex: 0 0 auto;
+  gap: 8px;
   align-items: center;
   border: 0;
-  border-radius: 12px;
-  padding: 0 14px;
+  border-radius: 10px;
+  padding: 0 12px;
   color: var(--muted);
   background: transparent;
-  text-align: left;
+  white-space: nowrap;
   font-weight: 650;
 }
 
-.app-sidebar nav button:hover {
+.app-header nav button:hover {
   color: var(--foreground);
   background: var(--surface-soft);
 }
 
-.app-sidebar nav button[data-active="true"] {
+.app-header nav button[data-active="true"] {
   color: var(--accent);
   background: var(--accent-soft);
 }
 
-.app-sidebar nav svg {
+.app-header nav svg {
   width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
   fill: none;
   stroke: currentcolor;
   stroke-linecap: round;
@@ -171,24 +182,23 @@ code {
   stroke-width: 1.6;
 }
 
-.app-sidebar-note {
-  margin: auto 8px 0;
+.app-header-note {
+  margin: 0;
   color: var(--muted);
   font-size: 0.7rem;
   line-height: 1.5;
+  white-space: nowrap;
 }
 
 .app-content {
-  width: min(1240px, calc(100% - 72px));
-  margin: 0 auto;
-  padding: 56px 0 72px;
+  width: 100%;
+  margin: 0;
+  padding: 56px var(--app-content-inline) 72px;
 }
 
 .app-content--traces {
-  width: 100%;
-  min-height: 100vh;
-  margin: 0;
-  padding: 0;
+  min-height: calc(100vh - var(--app-header-height));
+  padding: 24px var(--app-content-inline);
 }
 
 .section-heading {
@@ -3099,14 +3109,14 @@ p {
 }
 
 .trace-explorer {
-  min-height: 100vh;
+  min-height: 0;
   min-width: 0;
 }
 
 .trace-workspace {
   display: grid;
-  height: 100vh;
-  min-height: 100vh;
+  height: calc(100vh - var(--app-header-height) - 48px);
+  min-height: calc(100vh - var(--app-header-height) - 48px);
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 0;
@@ -3304,7 +3314,7 @@ p {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 24px;
+  padding: 0;
 }
 
 .doc-stats-card {
@@ -5854,7 +5864,7 @@ p.workspace-runtime-runner-status {
 
 .system-guide-page {
   display: flex;
-  height: 100vh;
+  height: calc(100vh - var(--app-header-height) - 48px);
   min-height: 0;
   overflow: hidden;
   flex-direction: column;
@@ -5897,7 +5907,7 @@ p.workspace-runtime-runner-status {
 
 .system-guide-workspace {
   display: grid;
-  height: 100vh;
+  height: calc(100vh - var(--app-header-height) - 48px);
   min-height: 0;
   grid-template-columns: 310px minmax(0, 1fr);
 }
@@ -6248,28 +6258,39 @@ p.workspace-runtime-runner-status {
   white-space: nowrap;
 }
 
-@media (max-width: 900px) {
-  .app-shell {
-    display: block;
+@media (max-width: 1180px) {
+  .app-header {
+    gap: 16px;
   }
 
-  .app-sidebar {
-    position: sticky;
-    z-index: 20;
-    height: auto;
-    border-right: 0;
-    border-bottom: 1px solid var(--border);
-    padding: 12px 14px;
-    flex-direction: row;
-    align-items: center;
+  .app-header nav {
+    justify-content: flex-end;
+  }
+
+  .app-header-note {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    --app-header-height: 120px;
+    --app-content-inline: 16px;
+  }
+
+  .app-header {
+    min-height: var(--app-header-height);
+    padding: 10px 14px;
+    gap: 8px 12px;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .app-brand {
     padding: 0;
   }
 
-  .app-brand div,
-  .app-sidebar-note {
+  .app-brand div span,
+  .app-header-note {
     display: none;
   }
 
@@ -6278,39 +6299,34 @@ p.workspace-runtime-runner-status {
     height: 38px;
   }
 
-  .app-sidebar nav {
+  .app-header nav {
     display: flex;
-    margin-left: auto;
+    width: 100%;
+    overflow-x: auto;
+    justify-content: flex-start;
+    padding-bottom: 2px;
+    scrollbar-width: thin;
   }
 
-  .app-sidebar nav button {
+  .app-header nav button {
     width: auto;
     min-height: 40px;
-    padding: 0 11px;
-  }
-
-  .app-sidebar nav button span {
-    display: none;
+    padding: 0 10px;
+    font-size: 0.78rem;
   }
 
   .app-content {
-    width: min(100% - 28px, 720px);
-    padding: 34px 0 48px;
+    padding: 34px var(--app-content-inline) 48px;
   }
 
   .app-content--traces {
-    width: 100%;
     min-height: auto;
-    padding: 0;
-  }
-
-  .trace-explorer,
-  .trace-workspace {
-    min-height: calc(100vh - 72px);
+    padding: 16px var(--app-content-inline);
   }
 
   .trace-workspace {
-    height: calc(100vh - 72px);
+    height: auto;
+    min-height: calc(100vh - var(--app-header-height) - 32px);
   }
 
   .data-source-grid {
@@ -6327,7 +6343,7 @@ p.workspace-runtime-runner-status {
   }
 
   .doc-stats-container {
-    padding: 16px;
+    padding: 0;
   }
 
   .doc-stats-card {
@@ -6764,7 +6780,7 @@ p.workspace-runtime-runner-status {
 @media (max-width: 900px) {
   .system-guide-page {
     height: auto;
-    min-height: 100vh;
+    min-height: calc(100vh - var(--app-header-height) - 32px);
     overflow: visible;
   }
 
@@ -6830,11 +6846,338 @@ p.workspace-runtime-runner-status {
 
 /* ---------- 表关联 ---------- */
 
+/* ---------- 关联数据 ---------- */
+
+.relation-record-explorer {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  padding: 4px 0 16px;
+  gap: 18px;
+}
+
+.relation-record-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.relation-record-header h1 {
+  margin: 0 0 6px;
+  font-size: 32px;
+  line-height: 40px;
+}
+
+.relation-record-header p,
+.relation-record-card header p,
+.relation-record-summary,
+.relation-record-state,
+.relation-record-card footer,
+.relation-record-empty p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.relation-record-context {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.relation-record-context label,
+.relation-record-toolbar label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.relation-record-context label > span,
+.relation-record-toolbar label > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.relation-record-context select,
+.relation-record-toolbar select,
+.relation-record-toolbar input {
+  min-height: 40px;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  padding: 8px 10px;
+  color: var(--foreground);
+  background: var(--surface);
+}
+
+.relation-record-context select {
+  min-width: 180px;
+}
+
+.relation-record-toolbar {
+  display: grid;
+  align-items: end;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+  gap: 12px;
+  grid-template-columns: minmax(160px, 0.7fr) minmax(240px, 1.3fr) minmax(240px, 1.5fr) auto;
+}
+
+.relation-record-table-picker {
+  display: flex !important;
+}
+
+.relation-record-toolbar .primary-button {
+  min-height: 40px;
+  padding-inline: 20px;
+}
+
+.relation-record-error,
+.relation-record-warning {
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--danger);
+  border-radius: 9px;
+  color: var(--danger);
+  background: var(--danger-soft);
+  font-size: 13px;
+}
+
+.relation-record-results {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.relation-record-empty {
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+}
+
+.relation-record-empty h2 {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+
+.relation-record-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+}
+
+.relation-record-card > header,
+.relation-record-card > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  gap: 16px;
+}
+
+.relation-record-card > header {
+  border-bottom: 1px solid var(--border);
+}
+
+.relation-record-card > header > div:first-child {
+  min-width: 0;
+}
+
+.relation-record-card > header p {
+  overflow-wrap: anywhere;
+}
+
+.relation-record-card > footer {
+  min-height: 50px;
+  border-top: 1px solid var(--border);
+}
+
+.relation-record-card h2 {
+  margin: 0 0 4px;
+  font-family: SFMono-Regular, Consolas, monospace;
+  font-size: 16px;
+}
+
+.relation-record-card-meta {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.relation-record-card-meta span {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--muted);
+  background: var(--surface-soft);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.relation-record-warning {
+  margin: 10px 16px 0;
+  border-color: var(--warning);
+  color: var(--warning);
+  background: var(--surface-soft);
+}
+
+.relation-record-grid {
+  width: 100%;
+  overflow-x: auto;
+  outline-offset: -3px;
+  scrollbar-width: thin;
+}
+
+.relation-record-grid--scroll {
+  max-height: 244px;
+  overflow: auto;
+}
+
+.relation-record-grid table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+}
+
+.relation-record-grid th,
+.relation-record-grid td {
+  min-width: 160px;
+  max-width: 280px;
+  padding: 10px 12px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relation-record-grid th {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  background: var(--surface-soft);
+}
+
+.relation-record-grid th strong,
+.relation-record-grid th span {
+  display: block;
+}
+
+.relation-record-grid th strong {
+  font-family: SFMono-Regular, Consolas, monospace;
+  font-size: 13px;
+}
+
+.relation-record-grid th span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.relation-record-grid td {
+  font-size: 13px;
+}
+
+.relation-record-grid tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.relation-record-pager {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.relation-record-pager button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 11px;
+}
+
+.relation-record-pager button:hover:not(:disabled) {
+  color: var(--foreground);
+  background: var(--surface-soft);
+}
+
+.relation-record-pager button:disabled {
+  cursor: default;
+}
+
+.relation-record-pager input {
+  width: 54px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--foreground);
+  background: var(--surface-soft);
+  text-align: center;
+}
+
+.relation-record-pager > span {
+  padding: 0 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+@media (max-width: 900px) {
+  .relation-record-toolbar {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .relation-record-toolbar .primary-button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 600px) {
+  .relation-record-header,
+  .relation-record-card > header,
+  .relation-record-card > footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .relation-record-context,
+  .relation-record-context label,
+  .relation-record-context select {
+    width: 100%;
+  }
+
+  .relation-record-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .relation-record-pager {
+    justify-content: center;
+  }
+
+  .relation-record-pager button {
+    width: 40px;
+    height: 40px;
+  }
+}
+
 .table-relation-explorer {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  padding: 28px 32px 40px;
+  padding: 4px 0 16px;
   gap: 18px;
 }
 
@@ -7257,7 +7600,7 @@ p.workspace-runtime-runner-status {
 
 @media (max-width: 720px) {
   .table-relation-explorer {
-    padding: 20px 16px 32px;
+    padding: 0 0 16px;
   }
 
   /* 窄屏放不下并排两列，判定换行到标识下面。 */

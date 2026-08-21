@@ -572,6 +572,7 @@ def create_app(
     app.state.database_access_service = database_access_service
     app.state.database_catalog_service = database_catalog_service
     app.state.database_query_service = database_query_service
+    app.state.database_result_formatter = result_formatter
     app.state.mcp_tool_call_repository = resolved_mcp_tool_call_repository
     app.state.database_payload_repository = resolved_database_payload_repository
     app.state.database_payload_service = database_payload_service

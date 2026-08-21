@@ -7,12 +7,14 @@ import { DocumentReadStats } from "@/components/document-read-stats";
 import { TraceExplorer } from "@/components/trace-explorer";
 import { SystemGuideManager } from "@/components/system-guide-manager";
 import { TableRelationExplorer } from "@/components/table-relation-explorer";
+import { RelationRecordExplorer } from "@/components/relation-record-explorer";
 import { WorkspaceDashboard } from "@/components/workspace-dashboard";
 
 type Section =
   | "workspaces"
   | "data-sources"
   | "table-relations"
+  | "relation-records"
   | "traces"
   | "system-guides"
   | "doc-stats";
@@ -42,6 +44,16 @@ function NavIcon({ kind }: { kind: Section }) {
         <rect x="14" y="15" width="7" height="5" rx="1" />
         <path d="M6.5 9v5.5a2 2 0 0 0 2 2H14" />
         <path d="M11.5 14.5 14 17l-2.5 2.5" />
+      </svg>
+    );
+  }
+  if (kind === "relation-records") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3" y="4" width="7" height="5" rx="1" />
+        <rect x="14" y="15" width="7" height="5" rx="1" />
+        <path d="M6.5 9v5.5a2 2 0 0 0 2 2H14" />
+        <path d="M14 6h6M17 3v6M4 20h7" />
       </svg>
     );
   }
@@ -75,7 +87,7 @@ export function AppShell() {
 
   return (
     <div className="app-shell">
-      <aside className="app-sidebar">
+      <header className="app-header">
         <div className="app-brand">
           <span className="app-brand-mark">AC</span>
           <div>
@@ -113,6 +125,15 @@ export function AppShell() {
           </button>
           <button
             type="button"
+            aria-label="关联数据"
+            data-active={section === "relation-records"}
+            onClick={() => setSection("relation-records")}
+          >
+            <NavIcon kind="relation-records" />
+            <span>关联数据</span>
+          </button>
+          <button
+            type="button"
             aria-label="调用链路"
             data-active={section === "traces"}
             onClick={() => setSection("traces")}
@@ -139,14 +160,15 @@ export function AppShell() {
             <span>文档统计</span>
           </button>
         </nav>
-        <p className="app-sidebar-note">工作空间只读 · 系统文档可维护</p>
-      </aside>
+        <p className="app-header-note">工作空间只读 · 系统文档可维护</p>
+      </header>
       <main
         className={
           section === "traces" ||
           section === "system-guides" ||
           section === "doc-stats" ||
-          section === "table-relations"
+          section === "table-relations" ||
+          section === "relation-records"
             ? "app-content app-content--traces"
             : "app-content"
         }
@@ -154,6 +176,7 @@ export function AppShell() {
         {section === "workspaces" ? <WorkspaceDashboard /> : null}
         {section === "data-sources" ? <DataSourceDashboard /> : null}
         {section === "table-relations" ? <TableRelationExplorer /> : null}
+        {section === "relation-records" ? <RelationRecordExplorer /> : null}
         {section === "traces" ? <TraceExplorer /> : null}
         {section === "system-guides" ? <SystemGuideManager /> : null}
         {section === "doc-stats" ? <DocumentReadStats /> : null}

@@ -44,6 +44,13 @@ test("allows reads and the explicit safe browser POST allowlist", () => {
     ),
     true,
   );
+  assert.equal(
+    isBrowserApiRequestAllowed(
+      "/api/workspaces/workspace-1/relation-records/search",
+      "POST",
+    ),
+    true,
+  );
   for (const mode of ["fast", "full"]) {
     assert.equal(
       isBrowserApiRequestAllowed(

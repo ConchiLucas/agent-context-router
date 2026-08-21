@@ -761,7 +761,51 @@ export interface DocumentReadTaskItem {
   sections: string[];
 }
 
-export type TableRelationEnvironment = "test" | "uat";
+export type TableRelationEnvironment = string;
+
+export interface RelationRecordTable {
+  database_key: string;
+  schema_name: string;
+  table_name: string;
+}
+
+export interface RelationRecordColumn {
+  name: string;
+  type: string;
+  comment: string;
+  relation_key: boolean;
+}
+
+export interface RelationRecordPage {
+  page: number;
+  page_size: number;
+  total_rows: number;
+  total_pages: number;
+}
+
+export interface RelationRecordCard {
+  edge_id: string;
+  relation_id: string;
+  cardinality: TableRelationCardinality;
+  source_column: string;
+  target: RelationRecordTable;
+  target_column: string;
+  columns: RelationRecordColumn[];
+  rows: unknown[][];
+  page: RelationRecordPage;
+  matched_key_count: number;
+  matched_keys_truncated: boolean;
+  warning?: string | null;
+}
+
+export interface RelationRecordSearchResult {
+  workspace_id: string;
+  environment: string;
+  table: RelationRecordTable;
+  keyword: string;
+  scanned_columns: string[];
+  cards: RelationRecordCard[];
+}
 
 export type TableRelationGenerationStatus =
   | "building"

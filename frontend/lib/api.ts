@@ -44,6 +44,8 @@ import type {
   TableRelationTableUpdates,
   TableRelationTableWrites,
   TableRelationMcpPreview,
+  RelationRecordSearchResult,
+  RelationRecordTable,
 } from "@/lib/types";
 import {
   buildMcpTraceListPath,
@@ -429,21 +431,24 @@ export function getProjectDataSourceOptions(
 
 export function getTableRelationStatus(
   workspaceId: string,
+  environment?: string,
 ): Promise<TableRelationStatus> {
+  const query = environment ? `?environment=${encodeURIComponent(environment)}` : "";
   return request<TableRelationStatus>(
-    `/api/workspaces/${encodeURIComponent(workspaceId)}/table-relations/status`,
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/table-relations/status${query}`,
   );
 }
 
 export function listTableRelationTables(
   workspaceId: string,
-  options: { onlyRelated?: boolean; databaseKey?: string; limit?: number } = {},
+  options: { onlyRelated?: boolean; databaseKey?: string; environment?: string; limit?: number } = {},
 ): Promise<TableRelationTableList> {
   const params = new URLSearchParams({
     only_related: String(options.onlyRelated ?? false),
     limit: String(options.limit ?? 500),
   });
   if (options.databaseKey) params.set("database_key", options.databaseKey);
+  if (options.environment) params.set("environment", options.environment);
   return request<TableRelationTableList>(
     `/api/workspaces/${encodeURIComponent(workspaceId)}/table-relations/tables?${params.toString()}`,
   );
@@ -532,5 +537,30 @@ export function getTableRelationMcpPreview(
   });
   return request<TableRelationMcpPreview>(
     `/api/workspaces/${encodeURIComponent(workspaceId)}/table-relations/table/mcp?${params.toString()}`,
+  );
+}
+
+export function searchRelationRecords(
+  workspaceId: string,
+  input: {
+    environment: string;
+    table: RelationRecordTable;
+    keyword: string;
+    edgeId?: string;
+    page?: number;
+  },
+): Promise<RelationRecordSearchResult> {
+  return request<RelationRecordSearchResult>(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/relation-records/search`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        environment: input.environment,
+        table: input.table,
+        keyword: input.keyword,
+        edge_id: input.edgeId,
+        page: input.page ?? 1,
+      }),
+    },
   );
 }

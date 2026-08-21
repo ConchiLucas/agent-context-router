@@ -15,6 +15,10 @@ from context_router.repositories.workspace_repository import (
     WorkspaceRepositoryError,
     WorkspaceStore,
 )
+from context_router.schemas.relation_records import (
+    RelationRecordSearchInput,
+    RelationRecordSearchResult,
+)
 from context_router.schemas.table_relations import (
     TableRelationDetail,
     TableRelationEnvironment,
@@ -23,6 +27,10 @@ from context_router.schemas.table_relations import (
     TableRelationTableList,
     TableRelationTableUpdates,
     TableRelationTableWrites,
+)
+from context_router.services.relation_record_explorer import (
+    RelationRecordExplorerError,
+    RelationRecordExplorerService,
 )
 from context_router.services.table_relation_context import (
     TableRelationContextError,
@@ -51,6 +59,15 @@ def _service(request: Request) -> TableRelationQueryService:
 
 def _context_service(request: Request) -> TableRelationContextService:
     return request.app.state.table_relation_context_service
+
+
+def _record_service(request: Request) -> RelationRecordExplorerService:
+    return RelationRecordExplorerService(
+        relation_query=_service(request),
+        database_access=request.app.state.database_access_service,
+        connector_manager=request.app.state.connector_manager,
+        result_formatter=request.app.state.database_result_formatter,
+    )
 
 
 def _context_http_error(exc: TableRelationContextError) -> HTTPException:
@@ -93,6 +110,36 @@ def _http_error(exc: Exception) -> HTTPException:
             detail=str(exc),
         )
     return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.post(
+    "/{workspace_id}/relation-records/search",
+    response_model=RelationRecordSearchResult,
+)
+def search_relation_records(
+    workspace_id: str,
+    payload: RelationRecordSearchInput,
+    request: Request,
+) -> RelationRecordSearchResult:
+    """Search only relation-key columns and return direct related table rows."""
+    try:
+        _require_workspace(request, workspace_id, payload.environment)
+        return _record_service(request).search(workspace_id=workspace_id, request=payload)
+    except RelationRecordExplorerError as exc:
+        code = (
+            status.HTTP_404_NOT_FOUND
+            if exc.code in {"relation_not_found"}
+            else status.HTTP_400_BAD_REQUEST
+        )
+        if exc.code in {"connection_failed", "query_timeout"}:
+            code = status.HTTP_503_SERVICE_UNAVAILABLE
+        raise HTTPException(status_code=code, detail=str(exc)) from exc
+    except (
+        TableRelationNotFoundError,
+        TableRelationRepositoryError,
+        WorkspaceRepositoryError,
+    ) as exc:
+        raise _http_error(exc) from exc
 
 
 @router.get("/{workspace_id}/table-relations/status", response_model=TableRelationStatus)

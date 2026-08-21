@@ -197,6 +197,78 @@ class DatabaseAccessService:
             capabilities=capabilities,
         )
 
+    def resolve_workspace_database(
+        self,
+        *,
+        workspace_id: str,
+        environment: str,
+        mcp_alias: str,
+        object_type: DatabaseObjectType | None = None,
+        require_query: bool = False,
+    ) -> ResolvedDatabaseAccess:
+        """Resolve a browser read against an explicit Workspace environment.
+
+        Unlike MCP database calls this path has no task snapshot.  It is only
+        used by constrained, server-generated read views, so the caller must
+        provide the environment explicitly and still receives the same
+        availability, capability, and hard-limit policy checks as an MCP call.
+        """
+        if not self._settings.database_tools_enabled:
+            raise DatabaseAccessError("database_tools_disabled", "数据库工具当前已关闭")
+        alias = mcp_alias.strip().casefold()
+        selected_environment = environment.strip().casefold()
+        if not alias:
+            raise DatabaseAccessError("database_not_found", "当前工作空间没有这个数据库别名")
+        if not selected_environment or not self.has_workspace_environment(
+            workspace_id, selected_environment
+        ):
+            raise DatabaseAccessError("environment_changed", "工作空间没有配置所选环境")
+
+        selector = self.get_active_workspace_environment(workspace_id)
+        database = self._resolve_workspace_database(
+            workspace_id=workspace_id,
+            mcp_alias=alias,
+            task_environment=selected_environment if selector is not None else None,
+            task_environment_revision=selector.revision if selector is not None else None,
+            database_environment_selection="task_explicit" if selector is not None else None,
+        )
+        self._ensure_available(database)
+        try:
+            capabilities = self._connector_registry.capabilities(database.engine)
+        except ConnectorRegistryError as exc:
+            raise DatabaseAccessError(exc.code, "这个数据库类型暂不支持只读查询") from exc
+        if require_query and not capabilities.execute_readonly_query:
+            raise DatabaseAccessError("engine_not_supported", "这个数据库暂不支持只读查询")
+        if object_type is not None and not capabilities.supports_object_type(object_type):
+            raise DatabaseAccessError("engine_not_supported", "这个数据库暂不支持所请求的对象类型")
+        try:
+            policy = build_effective_policy(
+                engine=database.engine,
+                current_database=database.database_remote_name,
+                readonly=database.readonly,
+                allowed_schemas=database.allowed_schemas,
+                max_rows=database.max_rows,
+                max_result_bytes=database.max_result_bytes,
+                query_timeout_ms=database.query_timeout_ms,
+                hard_limits=self._hard_limits,
+            )
+        except QueryPolicyError as exc:
+            raise DatabaseAccessError(exc.code, str(exc)) from exc
+        return ResolvedDatabaseAccess(
+            database=database,
+            spec=ConnectorSpec(
+                data_source_id=database.data_source_id,
+                config_version=database.config_version,
+                database_id=database.database_id,
+                database_updated_at=database.database_updated_at,
+                engine=database.engine,
+                remote_name=database.database_remote_name,
+                connection_config=database.connection_config,
+            ),
+            policy=policy,
+            capabilities=capabilities,
+        )
+
     def list_prepared_databases(self, project_id: str) -> list[PreparedDatabase]:
         if not self._settings.database_tools_enabled:
             return []

@@ -107,7 +107,7 @@ Agent Context is a local developer console. Its primary users inspect workspace 
 
 ### Design principles
 
-1. Keep the current console hierarchy: sidebar, compact toolbar, two-column workspace cards, and focused detail views.
+1. Keep the current console hierarchy: sticky top application header, compact horizontal primary navigation, two-column workspace cards, and focused detail views.
 2. Prefer direct actions and short confirmations over multi-step state machines. Show only state required to recover from an error.
 3. Treat local paths and file replacement as operational data: render paths in monospace, name the exact affected directories, and never rely on color alone.
 4. Preserve keyboard access, visible focus, Chinese readability, and responsive single-column behavior.
@@ -166,7 +166,11 @@ Use the existing legal system stack. Chinese UI copy must use natural phrases an
 |---|---:|---|
 | Narrow mobile | 375px | Single-column cards; toolbar actions wrap; dialogs use the available viewport; buttons remain at least 40px tall. |
 | Tablet | 768px | Single-column cards and stacked detail headers; no horizontal page overflow. |
-| Desktop | 1440px | Existing sidebar and two-column workspace grid; dialogs remain bounded and centered. |
+| Desktop | 1440px | Sticky top application header with the brand at left and the complete primary navigation in one horizontal row; two-column workspace grid; dialogs remain bounded and centered. |
+
+The seven primary destinations live in the top application header on every page; do not restore a permanent left rail. At narrow widths the brand occupies the first row and the labelled navigation occupies a second, horizontally scrollable row. Keep labels visible, preserve the DOM/menu order, and never allow the navigation to create page-level horizontal overflow.
+
+Every primary destination uses the Document Statistics page as the outer-content gutter reference: 24px from each viewport edge on desktop, 16px on tablet and narrow mobile. This gutter belongs to the shared application content shell; page roots must not add a second horizontal outer padding. Internal card, panel, table, and dialog padding remains component-specific.
 
 At 200% zoom the interface must collapse without hiding the primary or cancel action. Long paths wrap and never force horizontal page scrolling.
 
@@ -183,6 +187,7 @@ At 200% zoom the interface must collapse without hiding the primary or cancel ac
 | Error banner | `.error-banner` | Use `role=alert`, preserve the error until the user retries or closes the containing dialog. |
 | System guide manager | `.system-guide-*` | Use the existing sidebar and list/editor split. Render one fixed read-only menu item per tool from the live FastMCP `tools/list` registry; selecting an item shows only that tool definition in source/tree views and exposes no save action. Use concise project-owned Chinese descriptions in this human-facing view while leaving the MCP registry’s original English descriptions unchanged for AI clients. Persisted system-guide JSON remains editable in source mode with one “保存内容” action only—no browser create, delete, key, ordering, prepare policy, enabled, or publishing controls. |
 | Workspace environment details | `/workspaces/[workspaceId]/mcp-environments` | Open from the Workspace card’s environment action. The Workspace owns a dynamic environment list and always starts with `local`; do not render globally hard-coded TEST/UAT options. Put one labelled environment select in the page header’s upper-right and use its value as the single view context for every section below. Show the selected environment’s Nacos mapping, generic environment content status, environment-aware MCP flow, and data-source summary. Data sources belong to physical connections and databases; the environment section only shows which existing project database links are associated with the selected environment. A one-environment Workspace keeps the select visible but disabled. Preserve loading, empty, recoverable error, long Chinese text, and 40px target states at narrow widths. |
+| Relation record explorer | `.relation-record-*` | Use one full-width card per directly related table. Search only columns already present on published relation edges. Tables retain all columns inside a card-local horizontal scroller; 1:N and N:1 cards show three rows per server page with a compact first/previous/page/next/last pager, while 1:1 cards omit pagination and use a bounded vertical scroller when needed. Column comments must be available by hover and keyboard focus. Never allow the grid to create page-level horizontal overflow. |
 
 Buttons cover default, hover, focus, disabled, and loading. Critical replacement results use an inline persistent success or error message, not a transient toast. Dialogs trap focus, close on Escape only while idle, and restore focus to the trigger.
 
