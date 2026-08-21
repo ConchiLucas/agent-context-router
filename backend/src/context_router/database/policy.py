@@ -11,6 +11,7 @@ from .models import EffectiveQueryPolicy
 
 _DIALECTS = {
     "clickhouse": "clickhouse",
+    "doris": "mysql",
     "mariadb": "mysql",
     "mysql": "mysql",
     "oracle": "oracle",
@@ -394,7 +395,7 @@ class SqlSafetyPolicy:
                     "cross-database table references are not allowed",
                 )
 
-            if context.engine in {"mysql", "mariadb", "clickhouse"}:
+            if context.engine in {"mysql", "mariadb", "doris", "clickhouse"}:
                 if namespace and namespace.casefold() != current_database:
                     raise QueryPolicyError(
                         "query_rejected",

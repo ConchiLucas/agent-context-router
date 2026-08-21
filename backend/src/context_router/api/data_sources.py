@@ -160,7 +160,16 @@ def list_data_sources(request: Request) -> list[DataSourceSummary]:
 
 @router.get("/data-source-engines", response_model=list[DataSourceEngineCapability])
 def list_data_source_engine_capabilities(request: Request) -> list[DataSourceEngineCapability]:
-    engines = ("mysql", "mariadb", "postgresql", "sqlserver", "sqlite", "oracle", "clickhouse")
+    engines = (
+        "mysql",
+        "mariadb",
+        "doris",
+        "postgresql",
+        "sqlserver",
+        "sqlite",
+        "oracle",
+        "clickhouse",
+    )
     result: list[DataSourceEngineCapability] = []
     registry = _connector_registry(request)
     for engine in engines:
@@ -339,7 +348,7 @@ def _connection_test_database(source: DataSourceRecord) -> str:
         return str(config.get("bootstrap_database") or "default")
     if source.engine == "postgresql":
         return str(config.get("database") or config.get("dbname") or "postgres")
-    if source.engine in {"mysql", "mariadb"}:
+    if source.engine in {"mysql", "mariadb", "doris"}:
         return str(config.get("database") or "information_schema")
     return "connection_test"
 

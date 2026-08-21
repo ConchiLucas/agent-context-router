@@ -23,7 +23,7 @@ docker compose exec backend uv run alembic upgrade head
 docker compose exec backend uv run alembic current
 ```
 
-当前 head 为 `20260820_0040`。`0040 -> 0039` 会删除动态环境注册表并恢复旧的固定 TEST/UAT 与逐 MCP 默认结构，只能用于一次性测试数据库；`0038 -> 0037` 会删除表级更新入口子表；`0037 -> 0036` 会删除表级插入入口子表；`0036 -> 0035` 会删除表关联的四张投影表及其中的示例数据。若要验证 downgrade/upgrade，使用一次性测试数据库，不要在保存真实数据的控制面库上直接 downgrade。
+当前 head 为 `20260821_0041`。`0041 -> 0040` 会移除 Doris 数据源引擎枚举（已有 Doris 数据源时不能降级）；`0040 -> 0039` 会删除动态环境注册表并恢复旧的固定 TEST/UAT 与逐 MCP 默认结构，只能用于一次性测试数据库；`0038 -> 0037` 会删除表级更新入口子表；`0037 -> 0036` 会删除表级插入入口子表；`0036 -> 0035` 会删除表关联的四张投影表及其中的示例数据。若要验证 downgrade/upgrade，使用一次性测试数据库，不要在保存真实数据的控制面库上直接 downgrade。
 
 `system_guides` 保存 `guide_key`、JSONB 正文、菜单顺序和时间戳，没有 `enabled` 字段。历史 `include_in_prepare` 字段不再影响 MCP prepare；记录只进入系统文档菜单。
 
@@ -93,7 +93,7 @@ task_id、tool_call_id 和 read_call_id 都由 PostgreSQL identity 自动生成�
 
 本机 AI/运维通过受校验 API 创建、编辑、调整类型、启停和删除工作空间时写入 `workspaces`；在工作空间内创建、编辑和删除项目时写入 `document_projects`。浏览器只读取这些记录。源码根由 `workspaces.root_path + document_projects.relative_path` 定位，文档入口由 `workspaces.root_path + document_projects.document_relative_path` 定位；兼容 `agents_path` 和 `project_type` 仍由 Repository 同步维护，供旧 API 和旧代码路径平滑过渡。
 
-数据源以全局物理连接为单位保存在 `data_sources`，拥有与工作空间类型完全独立的分类字段，未显式指定时默认归入“本机电脑”；一个连接可包含多个库。授权记录仍归属具体项目，并由 `project_databases` 持久化；alias 唯一约束和 MCP 解析范围都是 Workspace。浏览器连接详情和项目数据源详情只读展示这些记录，实际维护由 AI/运维调用既有 API。工作空间汇总 API 只 JOIN 其项目的现有授权，按物理数据源/数据库去重并返回每条授权的当前状态，不复制授权或改变 MCP 策略。批量保存会在一个事务中替换指定项目的关联，同时校验同 Workspace 其他项目已经占用的 alias；保留仍被选中的既有查询策略，新关联使用默认只读限制。当前版本不加密本地连接参数，列表 API 会过滤所有口令；只有用户在只读详情点击眼睛时才通过 `POST /api/data-sources/{id}/reveal-password` 按需读取，并明确禁止缓存响应。MySQL/MariaDB/PostgreSQL/ClickHouse 的数据库清单可由 AI/运维从远端同步，已不存在或当前账号不可见的旧库只标记 `available=false`，不直接删除项目关联。ClickHouse 使用官方 `clickhouse-connect` HTTP/HTTPS Client；后端容器访问宿主机服务时 Host 使用 `host.docker.internal`。
+数据源以全局物理连接为单位保存在 `data_sources`，拥有与工作空间类型完全独立的分类字段，未显式指定时默认归入“本机电脑”；一个连接可包含多个库。授权记录仍归属具体项目，并由 `project_databases` 持久化；alias 唯一约束和 MCP 解析范围都是 Workspace。浏览器连接详情和项目数据源详情只读展示这些记录，实际维护由 AI/运维调用既有 API。工作空间汇总 API 只 JOIN 其项目的现有授权，按物理数据源/数据库去重并返回每条授权的当前状态，不复制授权或改变 MCP 策略。批量保存会在一个事务中替换指定项目的关联，同时校验同 Workspace 其他项目已经占用的 alias；保留仍被选中的既有查询策略，新关联使用默认只读限制。当前版本不加密本地连接参数，列表 API 会过滤所有口令；只有用户在只读详情点击眼睛时才通过 `POST /api/data-sources/{id}/reveal-password` 按需读取，并明确禁止缓存响应。MySQL/MariaDB/Doris/PostgreSQL/ClickHouse 的数据库清单可由 AI/运维从远端同步，已不存在或当前账号不可见的旧库只标记 `available=false`，不直接删除项目关联。Doris 通过其 MySQL 协议查询端口使用只读连接；ClickHouse 使用官方 `clickhouse-connect` HTTP/HTTPS Client；后端容器访问宿主机服务时 Host 使用 `host.docker.internal`。
 
 每个 Workspace 至少有 `local`。省略 prepare 的 `environment` 时把 `local` 与当前 revision 固化为 `workspace_default`，显式已登记环境固化为 `task_explicit`；未登记环境返回 `environment_not_configured`。同一稳定 alias 按 task 环境解析目标授权；数据库实体本身不区分环境，多个环境可指向同一授权。调用先比对共享 revision，关联变化后返回 `environment_changed`，要求客户端重新 prepare。数据库链路始终重新校验当前工作空间、授权、连接和只读策略。
 

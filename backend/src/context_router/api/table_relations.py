@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException, Query, Request, status
 
 from context_router.repositories.database_environment_repository import (
@@ -278,7 +280,7 @@ def get_table_relation_mcp_preview(
     schema_name: str = Query(min_length=1, max_length=255),
     table_name: str = Query(min_length=1, max_length=255),
     environment: TableRelationEnvironment | None = None,
-    include_evidence: bool = Query(default=True),
+    mode: Literal["default", "full"] = Query(default="default"),
 ) -> dict[str, object]:
     try:
         _require_workspace(request, workspace_id, environment)
@@ -288,7 +290,7 @@ def get_table_relation_mcp_preview(
             schema_name=schema_name,
             table_name=table_name,
             environment=environment,
-            include_evidence=include_evidence,
+            mode=mode,
         )
     except TableRelationContextError as exc:
         raise _context_http_error(exc) from exc

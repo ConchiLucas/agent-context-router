@@ -54,7 +54,7 @@ class MySQLConnector:
     )
 
     def __init__(self, spec: ConnectorSpec) -> None:
-        if spec.engine not in {"mysql", "mariadb"}:
+        if spec.engine not in {"mysql", "mariadb", "doris"}:
             raise DatabaseConnectorError("invalid_connection_config", "MySQL 类型不匹配")
         values = dict(spec.connection_config)
         values.setdefault("username", values.get("user"))
@@ -66,7 +66,9 @@ class MySQLConnector:
         self._spec = spec
         self._engine = spec.engine
         self._server_flavor: str | None = (
-            None if self._config.server_flavor == "auto" else self._config.server_flavor
+            "doris"
+            if spec.engine == "doris"
+            else (None if self._config.server_flavor == "auto" else self._config.server_flavor)
         )
         self._closed = False
 

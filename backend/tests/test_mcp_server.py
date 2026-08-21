@@ -218,8 +218,9 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "environment",
         "sections",
         "database",
-        "include_evidence",
+        "evidence",
     }
+    assert relation_schema["properties"]["evidence"]["default"] == "none"
     relation_search_schema = tools[8].inputSchema
     assert relation_search_schema["required"] == ["task_id"]
     assert set(relation_search_schema["properties"]) == {

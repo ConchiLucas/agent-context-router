@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { TableRelationDetail } from "@/components/table-relation-detail";
 import { TableRelationEvidenceModal } from "@/components/table-relation-evidence-modal";
@@ -37,6 +37,7 @@ import type {
 } from "@/lib/types";
 
 export function TableRelationExplorer() {
+  const mcpTriggerRef = useRef<HTMLElement | null>(null);
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [status, setStatus] = useState<TableRelationStatus | null>(null);
@@ -207,6 +208,9 @@ export function TableRelationExplorer() {
 
   const openMcp = useCallback(async () => {
     if (!workspaceId || !detail) return;
+    mcpTriggerRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
     setMcpBusy(true);
     setMcpError(null);
     setWrites(null);
@@ -362,10 +366,12 @@ export function TableRelationExplorer() {
           onClose={() => setUpdates(null)}
         />
       ) : null}
-      {mcpPreview && detail ? (
+      {mcpPreview && detail && workspaceId ? (
         <TableRelationMcpModal
+          workspaceId={workspaceId}
           table={detail.table}
           preview={mcpPreview}
+          returnFocusTo={mcpTriggerRef.current}
           onClose={() => setMcpPreview(null)}
         />
       ) : null}

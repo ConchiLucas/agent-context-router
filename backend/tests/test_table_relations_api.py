@@ -377,7 +377,7 @@ def test_mcp_preview_returns_the_agent_projection_for_one_table() -> None:
     with _client() as client:
         response = client.get(
             f"/api/workspaces/{WORKSPACE}/table-relations/table/mcp",
-            params={**MTP, "table_name": "cs_bt_departure_plan", "include_evidence": "true"},
+            params={**MTP, "table_name": "cs_bt_departure_plan", "mode": "full"},
         )
 
     assert response.status_code == 200
@@ -390,3 +390,24 @@ def test_mcp_preview_returns_the_agent_projection_for_one_table() -> None:
     assert entry["updates"]
     assert entry["relations"]
     assert entry["relations"][0]["evidence"]["checks"]
+
+
+def test_mcp_preview_defaults_to_relations_without_optional_arguments() -> None:
+    with _client() as client:
+        response = client.get(
+            f"/api/workspaces/{WORKSPACE}/table-relations/table/mcp",
+            params={**MTP, "table_name": "cs_bt_departure_plan"},
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["arguments"] == {
+        "task_id": "<from prepare_task_context>",
+        "tables": ["cs_bt_departure_plan"],
+        "database": "c12_mtp_db",
+    }
+    entry = payload["result"]["tables"][0]
+    assert entry["relations"]
+    assert "evidence" not in entry["relations"][0]
+    assert "writes" not in entry
+    assert "updates" not in entry

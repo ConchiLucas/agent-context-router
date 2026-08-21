@@ -16,9 +16,6 @@ import pytest
 from mcp.server.fastmcp.exceptions import ToolError
 
 from context_router.mcp_server import create_context_router_mcp
-from context_router.repositories.mcp_environment_default_repository import (
-    InMemoryMcpEnvironmentDefaultRepository,
-)
 from context_router.repositories.table_relation_repository import (
     InMemoryTableRelationRepository,
     TableRelationGenerationRecord,
@@ -119,31 +116,10 @@ def single_entry(result: dict[str, object]) -> dict[str, object]:
 
 def test_read_inherits_the_task_environment_after_tool_defaults_are_removed() -> None:
     projection = build_seed_projection(workspace_id=WORKSPACE, generation_id="generation-default")
-    defaults = InMemoryMcpEnvironmentDefaultRepository()
-    defaults.upsert_default(
-        workspace_id=WORKSPACE,
-        tool_name="read_table_relations",
-        environment="uat",
-    )
     configured = TableRelationContextService(
         registry=StubRegistry(),  # type: ignore[arg-type]
         task_repository=StubTaskStore(task_record(database_environment="uat")),  # type: ignore[arg-type]
         reader=load_into_memory(projection),
-        mcp_environment_defaults=defaults,
-    )
-
-    result = configured.read(task_id=7, tables=["cs_portal_cockpit_city_flow"])
-
-    assert result["environment"] == "uat"
-
-
-def test_empty_workspace_defaults_do_not_override_the_task_environment() -> None:
-    projection = build_seed_projection(workspace_id=WORKSPACE, generation_id="generation-default")
-    configured = TableRelationContextService(
-        registry=StubRegistry(),  # type: ignore[arg-type]
-        task_repository=StubTaskStore(task_record(database_environment="uat")),  # type: ignore[arg-type]
-        reader=load_into_memory(projection),
-        mcp_environment_defaults=InMemoryMcpEnvironmentDefaultRepository(),
     )
 
     result = configured.read(task_id=7, tables=["cs_portal_cockpit_city_flow"])
@@ -157,12 +133,13 @@ def test_read_for_workspace_wraps_the_mcp_projection(service: TableRelationConte
         database_key="c12_portal_db",
         schema_name="uat_portal",
         table_name="cs_portal_cockpit_city_flow",
-        include_evidence=True,
+        mode="full",
     )
 
     assert preview["tool"] == "read_table_relations"
     assert preview["arguments"]["tables"] == ["cs_portal_cockpit_city_flow"]
-    assert preview["arguments"]["include_evidence"] is True
+    assert preview["arguments"]["sections"] == ["relations", "writes", "updates"]
+    assert preview["arguments"]["evidence"] == "all"
     result = preview["result"]
     assert isinstance(result, dict)
     assert result["environment"] == "uat"
@@ -171,7 +148,29 @@ def test_read_for_workspace_wraps_the_mcp_projection(service: TableRelationConte
     assert entry["relations"][0]["evidence"]["checks"]
 
 
-def test_reads_all_three_sections_by_bare_table_name(
+def test_read_for_workspace_defaults_to_the_real_compact_call(
+    service: TableRelationContextService,
+) -> None:
+    preview = service.read_for_workspace(
+        workspace_id=WORKSPACE,
+        database_key="c12_portal_db",
+        schema_name="uat_portal",
+        table_name="cs_portal_cockpit_city_flow",
+    )
+
+    assert preview["arguments"] == {
+        "task_id": "<from prepare_task_context>",
+        "tables": ["cs_portal_cockpit_city_flow"],
+        "database": "c12_portal_db",
+    }
+    entry = preview["result"]["tables"][0]
+    assert entry["relations"]
+    assert "evidence" not in entry["relations"][0]
+    assert "writes" not in entry
+    assert "updates" not in entry
+
+
+def test_default_read_returns_only_structured_relations_by_bare_table_name(
     service: TableRelationContextService,
 ) -> None:
     result = service.read(task_id=7, tables=["cs_portal_cockpit_city_flow"])
@@ -186,27 +185,13 @@ def test_reads_all_three_sections_by_bare_table_name(
 
     relations = entry["relations"]
     assert isinstance(relations, list)
-    assert [row["relation"] for row in relations] == [
-        "cs_portal_cockpit_city_flow_cargo.flow_id -> cs_portal_cockpit_city_flow.id"
-    ]
+    assert relations[0]["child"].endswith("cs_portal_cockpit_city_flow_cargo.flow_id")
+    assert relations[0]["parent"].endswith("cs_portal_cockpit_city_flow.id")
     assert relations[0]["role"] == "parent"
-    assert entry["relation_count"] == 1
-
-    writes = entry["writes"]
-    assert isinstance(writes, list)
-    by_class = {group["class"]: group for group in writes}
-    assert "saveCityFlow" in {
-        method["name"] for method in by_class["CockpitDataService"]["methods"]
-    }
-    for group in writes:
-        assert group["file"].endswith(".java")
-        assert not group["file"].startswith("/")
-        assert "snippet" not in group
-
-    updates = entry["updates"]
-    assert isinstance(updates, list)
-    update_classes = {group["class"] for group in updates}
-    assert "CockpitCityFlowController" in update_classes
+    assert "relation_count" not in entry
+    assert "writes" not in entry
+    assert "updates" not in entry
+    assert result["generation"]["revision"] > 0
 
 
 def test_entry_points_are_grouped_by_file_under_one_workspace_root(
@@ -222,11 +207,12 @@ def test_entry_points_are_grouped_by_file_under_one_workspace_root(
     # workspace-relative file, so an agent joins the two rather than reading the
     # same absolute prefix once per method.
     assert result["workspace_root"] == str(JAVA_ROOT)
-    groups = {group["class"]: group for group in single_entry(result)["writes"]}
-    assert groups["CockpitDataService"]["file"] == COCKPIT_DATA_SERVICE
-    assert str(JAVA_ROOT / groups["CockpitDataService"]["file"]) == str(
+    groups = {group["file"]: group for group in single_entry(result)["writes"]}
+    assert COCKPIT_DATA_SERVICE in groups
+    assert str(JAVA_ROOT / groups[COCKPIT_DATA_SERVICE]["file"]) == str(
         JAVA_ROOT / COCKPIT_DATA_SERVICE
     )
+    assert "class" not in groups[COCKPIT_DATA_SERVICE]
 
 
 def test_several_methods_of_one_file_share_a_single_group() -> None:
@@ -249,7 +235,9 @@ def test_several_methods_of_one_file_share_a_single_group() -> None:
     # One group per file even though this table is updated from many methods of
     # the same service, which is the whole point of grouping.
     assert len(files) == len(set(files))
-    service_group = next(group for group in groups if group["class"] == "BtDeparturePlanService")
+    service_group = next(
+        group for group in groups if group["file"].endswith("/BtDeparturePlanService.java")
+    )
     assert len(service_group["methods"]) > 1
     assert {"publish", "cancel"} <= {method["name"] for method in service_group["methods"]}
 
@@ -297,14 +285,14 @@ def test_agreeing_readings_leave_no_uncertain_flag() -> None:
         assert row["cardinality"] in {"1:1", "1:N", "N:1"}
 
 
-def test_include_evidence_adds_measurement_checks_and_code_sites(
+def test_evidence_all_adds_measurement_checks_and_code_sites(
     service: TableRelationContextService,
 ) -> None:
     result = service.read(
         task_id=7,
         tables=["cs_portal_cockpit_city_flow"],
         sections=["relations"],
-        include_evidence=True,
+        evidence="all",
     )
 
     row = single_entry(result)["relations"][0]
@@ -331,10 +319,44 @@ def test_include_evidence_adds_measurement_checks_and_code_sites(
         assert check["outcome"] in {"confirmed", "attention", "inconclusive"}
         assert isinstance(check["sql"], str) and "SELECT" in check["sql"].upper()
     for site in evidence["code_sites"]:
-        assert site["class"] and site["method"]
+        assert site["method"]
+        assert "class" not in site
         assert not site["file"].startswith("/")
         assert site["implies"] in {"1:1", "1:N", "N:1", "unknown"}
         assert "snippet" not in site
+
+
+def test_evidence_uncertain_expands_only_soft_verdicts(
+    service: TableRelationContextService,
+) -> None:
+    result = service.read(
+        task_id=7,
+        tables=["cs_bt_departure_plan"],
+        database="c12_mtp_db",
+        evidence="uncertain",
+    )
+
+    rows = single_entry(result)["relations"]
+    expanded = [row for row in rows if "evidence" in row]
+    compact = [row for row in rows if "evidence" not in row]
+    assert expanded, "至少一条软结论应展开证据"
+    assert compact, "已确认的关系应保持精简"
+    assert all(row.get("uncertain") is True for row in expanded)
+    assert all("uncertain" not in row for row in compact)
+
+
+def test_unresolved_relations_are_reported_as_a_nonzero_warning(
+    service: TableRelationContextService,
+) -> None:
+    result = service.read(
+        task_id=7,
+        tables=["cs_dsly_order_entrusted_order_relate"],
+        database="c12_mtp_db",
+    )
+
+    entry = single_entry(result)
+    assert entry["warnings"] == [{"code": "unresolved_relations", "count": 1}]
+    assert "hidden_count" not in entry
 
 
 def test_batch_read_isolates_per_table_failures(
@@ -383,6 +405,14 @@ def test_invalid_section_and_empty_tables_are_rejected(
     assert excinfo.value.code == "invalid_relation_section"
 
     with pytest.raises(TableRelationContextError) as excinfo:
+        service.read(
+            task_id=7,
+            tables=["cs_portal_cockpit_city_flow"],
+            evidence="verbose",  # type: ignore[arg-type]
+        )
+    assert excinfo.value.code == "invalid_relation_evidence"
+
+    with pytest.raises(TableRelationContextError) as excinfo:
         service.read(task_id=7, tables=["  ", ""])
     assert excinfo.value.code == "invalid_relation_tables"
 
@@ -421,8 +451,8 @@ def test_same_table_name_in_two_databases_requires_database() -> None:
     entry = single_entry(service.read(task_id=7, tables=["cs_shared"], database="db_a"))
     assert entry["table"] == {"database": "db_a", "schema": "schema_a", "name": "cs_shared"}
     assert entry["relations"] == []
-    assert entry["writes"] == []
-    assert entry["updates"] == []
+    assert "writes" not in entry
+    assert "updates" not in entry
 
 
 def test_search_matches_substring_and_sorts_by_relation_count(
@@ -444,7 +474,7 @@ def test_search_matches_substring_and_sorts_by_relation_count(
 
     everything = service.search(task_id=7, query="cockpit", only_related=False)
     assert "cs_portal_cockpit_kpi" in [item["name"] for item in everything["tables"]]
-    assert everything["total_count"] >= everything["related_count"]
+    assert everything["truncated"] is False
 
 
 def test_search_scopes_to_database_and_respects_limit(
@@ -452,8 +482,8 @@ def test_search_scopes_to_database_and_respects_limit(
 ) -> None:
     result = service.search(task_id=7, database="c12_portal_db", only_related=False, limit=3)
 
-    assert result["returned_count"] == 3
     assert len(result["tables"]) == 3
+    assert result["truncated"] is True
     assert all(item["database"] == "c12_portal_db" for item in result["tables"])
 
 
@@ -503,15 +533,13 @@ class RecordingTableRelationContextService:
 
     def read(self, **arguments: object) -> dict[str, object]:
         self.read_arguments = arguments
-        return {"task_id": arguments["task_id"], "tables": []}
+        return {"environment": "local", "tables": []}
 
     def search(self, **arguments: object) -> dict[str, object]:
         self.search_arguments = arguments
         return {
-            "task_id": arguments["task_id"],
-            "total_count": 0,
-            "related_count": 0,
-            "returned_count": 0,
+            "environment": "local",
+            "truncated": False,
             "tables": [],
         }
 
@@ -540,7 +568,7 @@ def test_mcp_tools_forward_only_task_scoped_arguments() -> None:
                 "task_id": 7,
                 "tables": ["cs_portal_cockpit_city_flow"],
                 "sections": ["writes"],
-                "include_evidence": True,
+                "evidence": "all",
             },
         )
     )
@@ -550,7 +578,7 @@ def test_mcp_tools_forward_only_task_scoped_arguments() -> None:
         "tables": ["cs_portal_cockpit_city_flow"],
         "sections": ["writes"],
         "database": None,
-        "include_evidence": True,
+        "evidence": "all",
     }
 
     asyncio.run(

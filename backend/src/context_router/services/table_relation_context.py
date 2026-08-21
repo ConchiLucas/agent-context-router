@@ -6,20 +6,18 @@ database environment. Resolving them here is what keeps the MCP tools from ever
 answering for a different environment than the one ``prepare_task_context``
 selected.
 
-The returned rows are deliberately narrower than the page models, and narrower
-than the page needs. The page exists so a person can see that two dimensions
-disagree; an agent about to write an insert cannot act on that, so it receives
-one settled ``cardinality`` — the code reading, which states what the write
-paths permit — plus an ``uncertain`` flag when the two readings differ. The
-per-dimension breakdown moves behind ``include_evidence`` rather than being
-dropped.
+The returned rows are deliberately narrower than the page models. An agent gets
+structured child/parent endpoints, one settled ``cardinality`` and an
+``uncertain`` flag when the code and data readings differ. Evidence is opt-in:
+``none`` returns no evidence, ``uncertain`` expands only soft verdicts, and
+``all`` expands every relation.
 
 Insert and update entry points are grouped by the file they live in and carry
 method names only: several methods of one service persist the same table, and a
 path repeated once per method was the largest thing in the payload. Paths stay
 workspace-relative with the root stated once. No line numbers and no snippets —
-a class and a method survive edits that move code, where a line number goes on
-looking exact after it has stopped being right.
+a file and method name survive most edits that move code, where a line number
+goes on looking exact after it has stopped being right.
 
 ``read`` takes several table names at once because an agent task rarely stops
 at one table: writing table A means looking at its parent B and its child C in
@@ -31,12 +29,8 @@ must not cost the agent the two tables that were spelled right.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from pathlib import PurePosixPath
 from typing import Literal
 
-from context_router.repositories.mcp_environment_default_repository import (
-    McpEnvironmentDefaultStore,
-)
 from context_router.repositories.table_relation_repository import TableRelationReader
 from context_router.repositories.task_repository import (
     TaskRecord,
@@ -45,6 +39,7 @@ from context_router.repositories.task_repository import (
 )
 from context_router.schemas.table_relations import (
     TableRelationDetail,
+    TableRelationEndpoint,
     TableRelationEnvironment,
     TableRelationGenerationSummary,
     TableRelationTableSummary,
@@ -63,6 +58,7 @@ from context_router.services.table_relation_query import (
 )
 
 TableRelationContextSection = Literal["relations", "writes", "updates"]
+TableRelationEvidenceMode = Literal["none", "uncertain", "all"]
 
 _ALL_SECTIONS: tuple[TableRelationContextSection, ...] = (
     "relations",
@@ -109,12 +105,10 @@ class TableRelationContextService:
         registry: ProjectRegistry,
         task_repository: TaskStore,
         reader: TableRelationReader,
-        mcp_environment_defaults: McpEnvironmentDefaultStore | None = None,
     ) -> None:
         self._registry = registry
         self._task_repository = task_repository
         self._query = TableRelationQueryService(reader=reader)
-        self._mcp_environment_defaults = mcp_environment_defaults
 
     def read(
         self,
@@ -123,26 +117,31 @@ class TableRelationContextService:
         tables: list[str],
         sections: list[str] | None = None,
         database: str | None = None,
-        include_evidence: bool = False,
+        evidence: TableRelationEvidenceMode = "none",
         environment: TableRelationEnvironment | None = None,
     ) -> dict[str, object]:
+        if evidence not in {"none", "uncertain", "all"}:
+            raise TableRelationContextError(
+                "evidence 只能是 none、uncertain 或 all",
+                code="invalid_relation_evidence",
+            )
         normalized_sections = self._normalize_sections(sections)
         requested = self._normalize_tables(tables)
         task = self._task(task_id)
         workspace = self._workspace(task)
         selected_environment = self._resolve_environment(
-            workspace.id,
-            "read_table_relations",
             task,
             environment,
         )
         generation = self._generation(workspace.id, selected_environment)
         return {
-            "task_id": task_id,
             "environment": generation.environment,
-            "generated_at": (
-                generation.published_at.isoformat() if generation.published_at else None
-            ),
+            "generation": {
+                "revision": generation.revision,
+                "generated_at": (
+                    generation.published_at.isoformat() if generation.published_at else None
+                ),
+            },
             "workspace_root": workspace.root_path,
             "tables": [
                 self._table_entry(
@@ -151,7 +150,7 @@ class TableRelationContextService:
                     requested_table=name,
                     database=database,
                     sections=normalized_sections,
-                    include_evidence=include_evidence,
+                    evidence=evidence,
                 )
                 for name in requested
             ],
@@ -165,7 +164,7 @@ class TableRelationContextService:
         schema_name: str,
         table_name: str,
         environment: TableRelationEnvironment | None = None,
-        include_evidence: bool = True,
+        mode: Literal["default", "full"] = "default",
     ) -> dict[str, object]:
         """The MCP ``read_table_relations`` payload for one known table identity.
 
@@ -181,14 +180,16 @@ class TableRelationContextService:
                 code="workspace_not_found",
             ) from exc
         generation = self._generation(workspace_id, environment)
+        sections = _ALL_SECTIONS if mode == "full" else ("relations",)
+        evidence: TableRelationEvidenceMode = "all" if mode == "full" else "none"
         entry = self._table_entry_with_identity(
             workspace=workspace,
-            environment=environment,
+            environment=generation.environment,
             database_key=database_key,
             schema_name=schema_name,
             table_name=table_name,
-            sections=_ALL_SECTIONS,
-            include_evidence=include_evidence,
+            sections=sections,
+            evidence=evidence,
         )
         if "error" in entry:
             error = entry["error"]
@@ -199,21 +200,26 @@ class TableRelationContextService:
             )
         result = {
             "environment": generation.environment,
-            "generated_at": (
-                generation.published_at.isoformat() if generation.published_at else None
-            ),
+            "generation": {
+                "revision": generation.revision,
+                "generated_at": (
+                    generation.published_at.isoformat() if generation.published_at else None
+                ),
+            },
             "workspace_root": workspace.root_path,
             "tables": [entry],
         }
+        arguments: dict[str, object] = {
+            "task_id": "<from prepare_task_context>",
+            "tables": [table_name],
+            "database": database_key,
+        }
+        if mode == "full":
+            arguments["sections"] = list(_ALL_SECTIONS)
+            arguments["evidence"] = "all"
         return {
             "tool": "read_table_relations",
-            "arguments": {
-                "task_id": "<from prepare_task_context>",
-                "tables": [table_name],
-                "database": database_key,
-                "sections": list(_ALL_SECTIONS),
-                "include_evidence": include_evidence,
-            },
+            "arguments": arguments,
             "result": result,
         }
 
@@ -230,8 +236,6 @@ class TableRelationContextService:
         task = self._task(task_id)
         workspace = self._workspace(task)
         selected_environment = self._resolve_environment(
-            workspace.id,
-            "search_relation_tables",
             task,
             environment,
         )
@@ -241,24 +245,22 @@ class TableRelationContextService:
             database_key=database,
             only_related=only_related,
             search=query.strip() if query else None,
-            limit=limit,
+            limit=limit + 1,
         )
         if listing.generation is None:
             raise TableRelationContextError(
                 "这个工作空间还没有已发布的表关联数据",
                 code="table_relation_generation_missing",
             )
+        tables = listing.tables[:limit]
         return {
-            "task_id": task_id,
             "environment": listing.generation.environment,
             "generated_at": (
                 listing.generation.published_at.isoformat()
                 if listing.generation.published_at
                 else None
             ),
-            "total_count": listing.total_count,
-            "related_count": listing.related_count,
-            "returned_count": listing.returned_count,
+            "truncated": len(listing.tables) > limit,
             "tables": [
                 {
                     "database": item.database_key,
@@ -266,7 +268,7 @@ class TableRelationContextService:
                     "name": item.table_name,
                     "relation_count": item.relation_count,
                 }
-                for item in listing.tables
+                for item in tables
             ],
         }
 
@@ -278,7 +280,7 @@ class TableRelationContextService:
         requested_table: str,
         database: str | None,
         sections: tuple[TableRelationContextSection, ...],
-        include_evidence: bool,
+        evidence: TableRelationEvidenceMode,
     ) -> dict[str, object]:
         try:
             identity = self._resolve_table(
@@ -301,7 +303,7 @@ class TableRelationContextService:
             schema_name=identity.schema_name,
             table_name=identity.table_name,
             sections=sections,
-            include_evidence=include_evidence,
+            evidence=evidence,
         )
 
     def _table_entry_with_identity(
@@ -313,7 +315,7 @@ class TableRelationContextService:
         schema_name: str,
         table_name: str,
         sections: tuple[TableRelationContextSection, ...],
-        include_evidence: bool,
+        evidence: TableRelationEvidenceMode,
     ) -> dict[str, object]:
         identity = TableRelationTableSummary(
             database_key=database_key,
@@ -342,12 +344,17 @@ class TableRelationContextService:
                         workspace=workspace,
                         environment=environment,
                         identity=identity,
-                        include_evidence=include_evidence,
+                        evidence=evidence,
                     )
                     for view in detail.relations
                 ]
-                entry["relation_count"] = detail.relation_count
-                entry["hidden_count"] = detail.hidden_count
+                if detail.hidden_count > 0:
+                    entry["warnings"] = [
+                        {
+                            "code": "unresolved_relations",
+                            "count": detail.hidden_count,
+                        }
+                    ]
             if "writes" in sections:
                 writes = self._query.get_table_writes(workspace.id, **common)
                 entry["writes"] = _entry_groups(writes.writes)
@@ -368,10 +375,10 @@ class TableRelationContextService:
         workspace: WorkspaceSnapshot,
         environment: TableRelationEnvironment | None,
         identity: TableRelationTableSummary,
-        include_evidence: bool,
+        evidence: TableRelationEvidenceMode,
     ) -> dict[str, object]:
         row = _relation_view_row(view)
-        if not include_evidence:
+        if evidence == "none" or (evidence == "uncertain" and "uncertain" not in row):
             return row
         detail = self._query.get_relation_detail(
             workspace.id,
@@ -389,7 +396,7 @@ class TableRelationContextService:
         sections: list[str] | None,
     ) -> tuple[TableRelationContextSection, ...]:
         if sections is None:
-            return _ALL_SECTIONS
+            return ("relations",)
         normalized = tuple(dict.fromkeys(sections))
         if not normalized or any(section not in _ALL_SECTIONS for section in normalized):
             raise TableRelationContextError(
@@ -440,8 +447,6 @@ class TableRelationContextService:
 
     def _resolve_environment(
         self,
-        workspace_id: str,
-        tool_name: str,
         task: TaskRecord,
         requested: TableRelationEnvironment | None,
     ) -> TableRelationEnvironment | None:
@@ -512,17 +517,25 @@ def _relation_view_row(view: TableRelationView) -> dict[str, object]:
     # states what the write paths permit, which is the question a caller is about
     # to face, where the data reading only reports what one snapshot contained.
     row: dict[str, object] = {
-        "relation": f"{view.relation_id} -> {view.references}",
+        "child": _endpoint_reference(view.child),
+        "parent": _endpoint_reference(view.parent),
         "role": _ROLE_BY_DIRECTION[view.direction],
         "cardinality": code if view.code_cardinality != "unknown" else db,
     }
     if code != db or view.code_cardinality == "unknown":
         # Why the two readings differ is a data-quality question. Answering it
         # inline would charge every row for evidence keys that almost no row acts
-        # on, so the flag says only that the verdict is soft; include_evidence
-        # carries the breakdown for whoever wants it.
+        # on, so the flag says only that the verdict is soft; evidence=uncertain
+        # or evidence=all carries the breakdown for whoever wants it.
         row["uncertain"] = True
     return row
+
+
+def _endpoint_reference(endpoint: TableRelationEndpoint) -> str:
+    parts = [endpoint.database_key, endpoint.schema_name, endpoint.table_name]
+    if endpoint.column_name:
+        parts.append(endpoint.column_name)
+    return ".".join(str(part) for part in parts)
 
 
 def _evidence(detail: TableRelationDetail) -> dict[str, object]:
@@ -558,7 +571,6 @@ def _evidence(detail: TableRelationDetail) -> dict[str, object]:
         ],
         "code_sites": [
             {
-                "class": PurePosixPath(site.file_path).stem,
                 "method": site.method_name,
                 "kind": site.kind,
                 "implies": _CARDINALITY_LABELS[site.implies],
@@ -576,8 +588,8 @@ def _entry_groups(
 
     Several methods of one service persist the same table, and repeating that
     service's path once per method was the largest single thing in this payload.
-    Java keeps one public class per file, so the file is also the class an agent
-    would open, which makes it the natural place to hang the method list.
+    The file is the artifact an agent opens and the stable grouping key, which
+    makes it the natural place to hang the method list.
 
     Paths stay workspace-relative and the root is stated once per response. An
     absolute path per method was the same string prefix copied a dozen times.
@@ -587,7 +599,6 @@ def _entry_groups(
         grouped.setdefault(site.file_path, []).append({"name": site.method_name, "kind": site.kind})
     return [
         {
-            "class": PurePosixPath(file_path).stem,
             "file": file_path,
             "methods": methods,
         }

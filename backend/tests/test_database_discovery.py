@@ -108,6 +108,35 @@ def test_mysql_discovery_lists_visible_databases_and_marks_system_names(monkeypa
     assert databases[2].system_database is False
 
 
+def test_doris_discovery_marks_internal_schema_as_system_database(monkeypatch) -> None:
+    connection = FakeConnection()
+    connection.cursor_instance.fetchall = lambda: [
+        ("__internal_schema",),
+        ("pre_ods",),
+    ]
+    monkeypatch.setattr("pymysql.connect", lambda **_kwargs: connection)
+    now = datetime.now(UTC)
+    source = DataSourceRecord(
+        id="source-doris",
+        name="Doris",
+        category="公司内网服务器",
+        engine="doris",
+        description="",
+        connection_config={"host": "doris.example.com", "username": "reader"},
+        config_version=1,
+        database_count=0,
+        project_count=0,
+        created_at=now,
+        updated_at=now,
+    )
+
+    databases = discover_databases(source)
+
+    assert [database.name for database in databases] == ["__internal_schema", "pre_ods"]
+    assert databases[0].system_database is True
+    assert databases[1].system_database is False
+
+
 def test_postgresql_discovery_lists_non_template_databases(monkeypatch) -> None:
     connection = FakeConnection()
     connection.cursor_instance.fetchall = lambda: [

@@ -522,13 +522,13 @@ export function getTableRelationUpdates(
 export function getTableRelationMcpPreview(
   workspaceId: string,
   table: { databaseKey: string; schemaName: string; tableName: string },
-  options?: { includeEvidence?: boolean },
+  options?: { mode?: "default" | "full" },
 ): Promise<TableRelationMcpPreview> {
   const params = new URLSearchParams({
     database_key: table.databaseKey,
     schema_name: table.schemaName,
     table_name: table.tableName,
-    include_evidence: String(options?.includeEvidence ?? true),
+    mode: options?.mode ?? "default",
   });
   return request<TableRelationMcpPreview>(
     `/api/workspaces/${encodeURIComponent(workspaceId)}/table-relations/table/mcp?${params.toString()}`,

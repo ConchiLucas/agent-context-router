@@ -471,7 +471,6 @@ def create_app(
         registry=registry,
         task_repository=resolved_task_repository,
         reader=resolved_table_relation_repository,
-        mcp_environment_defaults=resolved_mcp_environment_default_repository,
     )
     mcp_server = create_context_router_mcp(
         context_service,
@@ -628,4 +627,5 @@ def _create_connector_registry() -> ConnectorRegistry:
     registry.register("postgresql", PostgreSQLConnector, PostgreSQLConnector.capabilities)
     registry.register("mysql", MySQLConnector, MySQLConnector.capabilities)
     registry.register("mariadb", MySQLConnector, MySQLConnector.capabilities)
+    registry.register("doris", MySQLConnector, MySQLConnector.capabilities)
     return registry

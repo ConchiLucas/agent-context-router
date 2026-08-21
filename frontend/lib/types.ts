@@ -284,6 +284,7 @@ export interface DocumentDetail {
 export type DatabaseEngine =
   | "mysql"
   | "mariadb"
+  | "doris"
   | "postgresql"
   | "sqlserver"
   | "sqlite"
@@ -1042,12 +1043,15 @@ export interface TableRelationMcpPreview {
     task_id: string;
     tables: string[];
     database: string;
-    sections: string[];
-    include_evidence: boolean;
+    sections?: string[];
+    evidence?: "all";
   };
   result: {
     environment: DatabaseEnvironment;
-    generated_at: string | null;
+    generation: {
+      revision: number;
+      generated_at: string | null;
+    };
     workspace_root: string;
     tables: unknown[];
   };

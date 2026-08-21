@@ -416,11 +416,11 @@ docker compose exec backend uv run python -m context_router.scripts.seed_table_r
 
 表关联三块内容（关系列表、插入入口、更新入口）通过 MCP 暴露给 agent，一查一读两个工具，实现分工：
 
-- `services/table_relation_context.py`：task 作用域投影。`read` 入参 `task_id` + `tables`（1~10 个裸表名，批量；同名多库时补 `database`）+ 可选 `sections`（`relations`/`writes`/`updates`，缺省全取）+ `include_evidence`。返回顶层带 `workspace_root`，其下所有 `file` 都是相对它的路径。从 task 解析 workspace 与环境，不接受 workspace_id；表名先做子串检索再精确匹配。单个表名解析失败（查无此表、同名歧义）落为该条目的 `table_request` + `error`，不影响同批其他表；无已发布数据仍整体报错。
-- `search` 入参 `task_id` + 可选 `query`（子串）、`database`、`only_related`（默认 true）、`limit`。返回按 relation_count 降序的表清单和 total/related/returned 三个计数，用于业务词→确切表名的解析。工具描述写明：查不到只说明快照里没有，表本身是否存在要问 `search_database_objects`。
-- `include_evidence=true` 时每条关系附 `evidence`：两维结论（`code_cardinality`/`code_evidence`/`db_cardinality`/`db_evidence`）、六个实测数字、可重跑的体检 SQL（agent 可直接投给 `execute_database_query` 用当下数据复核）、以及边上的代码点位（`class`/`method`/`kind`/`implies`/`file`，implies 已按视角翻转）。
-- 关系行只给一个 `cardinality`，取代码侧结论——它说明写入路径允许什么，正是调用方要面对的问题；数据侧只说明某次快照里恰好有什么。两维不一致或代码侧不可测时加 `uncertain: true`，不解释原因：两维为什么不一致是数据质量问题，页面上看得到，agent 无法据此决策，把四个 key 摊到每一行不值得。想要拆解就开 `include_evidence`。方向用 `role`（child/parent/self）表述。
-- 入口按文件归并：每组给 `class`、`file`（Workspace 相对路径）、`methods`（`name` + `kind`）。同一个 service 常有多个方法写同一张表，逐方法重复一遍完整路径是这个返回体里最大的一块；根路径改为整个响应只给一次 `workspace_root`，由 agent 拼接。`kind` 保留在方法级而没有上提到组级，因为同一个类里 `batch_insert` 和 `update` 可以并存。故意不返回行号与 snippet：类名 + 方法名能扛住挪动代码的改动，行号在失效之后仍然看起来很精确。
+- `services/table_relation_context.py`：task 作用域投影。`read` 入参 `task_id` + `tables`（1~10 个裸表名，批量；同名多库时补 `database`）+ 可选 `sections`（缺省只取 `relations`）+ `evidence=none|uncertain|all`。返回顶层带环境、生成 revision/时间和 `workspace_root`。单个表名解析失败落为该条目的 `table_request` + `error`，不影响同批其他表。
+- `search` 入参 `task_id` + 可选 `query`、`database`、`only_related`、`limit`。只返回按 relation_count 降序的轻量表清单、生成时间和 `truncated`；不再回显 task_id 或 total/related/returned 三个重复统计。
+- 关系行使用结构化 `child`、`parent` 完整端点，并给出 `role`、一个代码侧优先的 `cardinality` 以及按需出现的 `uncertain`。不再要求 agent 拆解 `a.b -> c.d` 字符串，也不返回可由数组长度推导的 relation_count。
+- `evidence=uncertain` 只为软结论附证据，`evidence=all` 为全部关系附证据；内容包括两维结论、六个实测数字、可重跑体检 SQL 和代码点位。默认 `none` 不消耗这部分上下文。
+- 入口按文件归并：每组只给 `file`（Workspace 相对路径）与 `methods`（`name` + `kind`），删除可由文件名推导的 `class`。未解析关系数量转换成仅在非零时出现的 `warnings[{code:'unresolved_relations', count}]`。故意不返回行号与 snippet，避免代码移动后继续展示失效的精确位置。
 - 精简前后（`cs_bt_departure_plan`，14 条关系 / 14 个入口，紧凑序列化）：关系段 2380 → 1910，入口段 3947 → 2050，合计省 37%。
 - `mcp_server.py` 注册两个工具与 trace 摘要；`mcp_contract.py` 的 `CONTEXT_ROUTER_TABLE_RELATION_TOOL_NAMES` 进入追踪白名单；`main.py` 注入 `TableRelationContextService`；`mcp_integration.py` 的接入页工具清单同步。
 - 语义约束写死在工具描述里：`writes`/`updates` 为空只代表未登记入口，不代表没人写这张表；结构查询归 `search_database_objects`，关系与写入口归本工具。

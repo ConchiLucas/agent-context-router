@@ -75,18 +75,20 @@ MCP_SERVER_INSTRUCTIONS = (
     "For Redis, MQ, Elasticsearch, MinIO, job scheduler, object storage, or other live "
     "middleware connection or diagnosis tasks, call read_middleware_context with "
     "the current task_id. For every environment-aware tool, an explicit environment argument "
-    "wins; when it is omitted, the tool uses its saved Workspace default. prepare_task_context, "
-    "read_table_relations, and search_relation_tables support test/uat; "
-    "read_middleware_context also supports local. This local-only "
+    "wins; when prepare_task_context omits it, local is used, and later tools inherit the task "
+    "environment when they omit it. Environment names come from the selected Workspace. "
+    "This local-only "
     "tool returns plaintext by default. Set reveal_secrets=false only when a redacted view is "
     "preferred. Returning and using connection values in the current authorized task is allowed; "
     "never persist them in logs, source code, documentation, unrelated tool arguments, or commits. "
     "When a task involves how a database table relates to other tables, or where in the "
     "source code its rows are inserted or updated, call read_table_relations with the current "
     "task_id and up to 10 table names instead of scanning source code. It returns curated "
-    "relations plus insert and update entry points grouped by source file, with paths relative "
-    "to the workspace_root stated once per response; include_evidence=true adds per-dimension "
-    "verdicts, measurements, re-runnable check SQL, and relation code sites. "
+    "relations by default. Request writes or updates through sections when code entry points are "
+    "needed; paths are relative to the workspace_root stated once per response. evidence=uncertain "
+    "expands only soft verdicts and evidence=all expands every relation with per-dimension "
+    "verdicts, "
+    "measurements, re-runnable check SQL, and relation code sites. "
     "Empty writes or updates only mean no entry points are recorded yet. When only a business "
     "term is known, find exact table names first with search_relation_tables. "
     "When the user asks to start services, call start_workspace: start always means every "
@@ -129,8 +131,8 @@ PREPARE_TOOL_DESCRIPTION = (
     "at most two explicit descendant levels. Nodes contain only document_id, summary, and "
     "children. Unrelated documents and deeper descendants are omitted from prepare but remain "
     "available through workspace-wide search_context_documents and read_context_document. "
-    "Omit environment to use this tool's Workspace default, or pass test/uat for this task only "
-    "without changing the workspace active environment. access states which task capabilities "
+    "Omit environment to use local, or pass any environment registered by the Workspace for "
+    "this task only. access states which task capabilities "
     "are available. Database aliases and environment config are intentionally omitted; request "
     "them only when needed with read_task_context. access includes middleware when live Nacos "
     "middleware context may be requested with read_middleware_context."
@@ -146,8 +148,8 @@ READ_MIDDLEWARE_CONTEXT_TOOL_DESCRIPTION = (
     "Authoritative live source for Redis, MQ, Elasticsearch, MinIO, job scheduler, object "
     "storage, and other Nacos-managed middleware connection or diagnosis tasks. Call this after "
     "prepare_task_context with the current task_id instead of inferring runtime values from "
-    "application files or generic environment JSON. Pass environment to select local, test, or "
-    "uat for this call; omit it to use this tool's Workspace default. "
+    "application files or generic environment JSON. Pass any environment registered by the "
+    "Workspace for this call; omit it to inherit the task environment. "
     "Omit components to read every configured component, or pass configured component IDs. The "
     "server derives Workspace, environment, Nacos address, namespace, dataIds, and extraction "
     "paths; callers cannot supply them. This local-only tool returns plaintext fields by default; "
@@ -175,19 +177,21 @@ EXECUTE_DATABASE_TOOL_DESCRIPTION = (
     "by read_task_context. Connection details and query limits are enforced server-side."
 )
 READ_TABLE_RELATIONS_TOOL_DESCRIPTION = (
-    "Read the curated relation list plus insert and update entry points for up to 10 database "
-    "tables in the current task's workspace. Pass environment to select test or uat for this "
-    "call; omit it to use this tool's Workspace default. Pass task_id and bare table "
+    "Read the curated relation list for up to 10 database tables in the current task's "
+    "Workspace. Pass an environment registered by that Workspace, or omit it to inherit the "
+    "task environment. Pass task_id and bare table "
     "names; add database only when a table name exists in several databases. A name that "
     "cannot be resolved fails as one entry of the answer with close-name suggestions, without "
     "failing the other tables. sections selects any of relations, writes, updates and defaults "
-    "to all three. Relations state the table's role (child/parent/self) and one cardinality, "
+    "to relations only. Relations return structured child and parent endpoints, the inspected "
+    "table's role (child/parent/self), and one cardinality, "
     "read from the code side because it states what the write paths permit; uncertain=true "
-    "marks a relation whose code and data readings differ. Set include_evidence=true to also "
-    "get, per relation, both per-dimension verdicts, the stored measurement numbers, "
+    "marks a relation whose code and data readings differ. evidence=uncertain expands only "
+    "soft verdicts; evidence=all expands every relation with per-dimension verdicts, stored "
+    "measurements, "
     "re-runnable check SQL for execute_database_query, and the code sites behind the code "
-    "verdict. Entry points are grouped by source file: each group carries the class, a "
-    "workspace-relative file path, and the methods that persist the table. Join file paths "
+    "verdict. Entry points are grouped by workspace-relative source file and list the methods "
+    "that persist the table. Join file paths "
     "onto workspace_root, which is stated once per response. Locate a method by name; line "
     "numbers are intentionally not provided. An empty writes or updates list means no entry "
     "points are recorded yet, never that nothing writes the table. Use search_relation_tables "
@@ -198,8 +202,8 @@ SEARCH_RELATION_TABLES_TOOL_DESCRIPTION = (
     "this when only a business term or entity name is known, or to list which tables of a "
     "database have recorded relations; results are sorted by relation count and resolve into "
     "exact names for read_table_relations. only_related=false includes tables without any "
-    "recorded relation. Pass environment to select test or uat for this call; omit it to use "
-    "this tool's Workspace default. This searches the curated relation snapshot only; a table "
+    "recorded relation. Pass an environment registered by the Workspace, or omit it to inherit "
+    "the task environment. This searches the curated relation snapshot only; a table "
     "missing "
     "here may still exist in the database — check search_database_objects before concluding "
     "it does not exist."
@@ -649,7 +653,10 @@ def create_context_router_mcp(
             str | None,
             Field(max_length=64, pattern=r"^[a-z][a-z0-9_-]{0,63}$"),
         ] = None,
-        include_evidence: Annotated[bool, Field(strict=True)] = False,
+        evidence: Annotated[
+            Literal["none", "uncertain", "all"],
+            Field(description="Evidence expansion mode; defaults to no evidence."),
+        ] = "none",
     ) -> dict[str, object]:
         if table_relation_context_service is None:
             raise ToolError("table_relations_disabled: 表关联上下文工具当前不可用")
@@ -660,7 +667,7 @@ def create_context_router_mcp(
                 tables=tables,
                 sections=sections,
                 database=database,
-                include_evidence=include_evidence,
+                evidence=evidence,
             )
         except TableRelationContextError as exc:
             raise ToolError(f"{exc.code}: {exc}") from exc
@@ -788,7 +795,7 @@ def _request_summary(name: str, arguments: dict[str, Any]) -> dict[str, object] 
         return {
             "task_characters": len(task) if isinstance(task, str) else 0,
             "agent_name": agent_name if isinstance(agent_name, str) else None,
-            "environment": _safe_string(arguments.get("environment"), 16),
+            "environment": _safe_string(arguments.get("environment"), 32),
         }
     if name == READ_TASK_CONTEXT_TOOL_NAME:
         sections = arguments.get("sections")
@@ -862,13 +869,13 @@ def _request_summary(name: str, arguments: dict[str, Any]) -> dict[str, object] 
                 if isinstance(sections, list)
                 else None
             ),
-            "include_evidence": arguments.get("include_evidence", False) is True,
+            "evidence": _safe_string(arguments.get("evidence"), 16) or "none",
         }
     if name == SEARCH_RELATION_TABLES_TOOL_NAME:
         return {
             "query": _safe_string(arguments.get("query"), 255),
             "database": _safe_string(arguments.get("database"), 64),
-            "environment": _safe_string(arguments.get("environment"), 16),
+            "environment": _safe_string(arguments.get("environment"), 32),
             "only_related": arguments.get("only_related", True) is True,
             "limit": arguments.get("limit") if isinstance(arguments.get("limit"), int) else None,
         }
@@ -975,9 +982,9 @@ def _result_summary(name: str, payload: dict[str, Any]) -> dict[str, object] | N
             "table_count": len(entries),
             "error_count": len(entries) - len(resolved),
             "relation_count": sum(
-                entry["relation_count"]
+                len(entry["relations"])
                 for entry in resolved
-                if isinstance(entry.get("relation_count"), int)
+                if isinstance(entry.get("relations"), list)
             ),
             "write_count": sum(
                 len(entry["writes"]) for entry in resolved if isinstance(entry.get("writes"), list)
@@ -989,20 +996,10 @@ def _result_summary(name: str, payload: dict[str, Any]) -> dict[str, object] | N
             ),
         }
     if name == SEARCH_RELATION_TABLES_TOOL_NAME:
+        tables = payload.get("tables")
         return {
-            "returned_count": (
-                payload.get("returned_count")
-                if isinstance(payload.get("returned_count"), int)
-                else None
-            ),
-            "related_count": (
-                payload.get("related_count")
-                if isinstance(payload.get("related_count"), int)
-                else None
-            ),
-            "total_count": (
-                payload.get("total_count") if isinstance(payload.get("total_count"), int) else None
-            ),
+            "returned_count": len(tables) if isinstance(tables, list) else 0,
+            "truncated": payload.get("truncated") is True,
         }
     if name in {
         APPLY_WORKSPACE_TOOL_NAME,

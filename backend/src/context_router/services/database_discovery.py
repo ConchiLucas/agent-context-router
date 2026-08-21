@@ -11,6 +11,7 @@ from context_router.repositories.data_source_repository import (
 )
 
 _MYSQL_SYSTEM_DATABASES = {
+    "__internal_schema",
     "information_schema",
     "mysql",
     "performance_schema",
@@ -29,7 +30,7 @@ class DiscoveredDatabase:
 
 
 def discover_databases(source: DataSourceRecord) -> list[DiscoveredDatabase]:
-    if source.engine in {"mysql", "mariadb"}:
+    if source.engine in {"mysql", "mariadb", "doris"}:
         return _discover_mysql_databases(source.connection_config)
     if source.engine == "postgresql":
         return _discover_postgresql_databases(source.connection_config)

@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 DatabaseEngine = Literal[
     "mysql",
     "mariadb",
+    "doris",
     "postgresql",
     "sqlserver",
     "sqlite",

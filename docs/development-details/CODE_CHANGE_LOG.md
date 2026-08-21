@@ -13,6 +13,7 @@
 
 ### 2026-08-20
 
+- 表关联 MCP 改为 AI 两阶段读取：`search_relation_tables` 只返回轻量候选表和截断标记；`read_table_relations` 默认只返回结构化 child/parent 关系，写入/更新入口由 sections 按需请求，证据改为 `none/uncertain/all` 三档。删除重复 task/count/class 字段，未解析关系改为显式 warning。
 - 新增 migration `20260820_0040` 和 `workspace_environments`：每个 Workspace 独立维护动态环境，`local` 固定存在、不可删除且为默认；移除逐 MCP 默认环境表和 `tool_default` 运行语义。
 - Nacos 配置、通用环境 JSON、数据库目标、表关联版本和 task 快照统一引用 Workspace 环境键。一个环境最多一个 Nacos 配置；数据库实体不携带环境语义，多个环境允许复用同一条项目数据库授权。
 - `prepare_task_context` 省略环境时固定 `local`；`read_middleware_context`、`read_table_relations`、`search_relation_tables` 省略时继承 task 环境，显式环境始终优先。数据库上下文、对象搜索和只读查询始终使用 task 快照。

@@ -7612,6 +7612,59 @@ p.workspace-runtime-runner-status {
   align-items: center;
 }
 
+.table-relation-mcp-mode-row {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 10px;
+}
+
+.table-relation-mcp-mode-row > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.table-relation-mcp-modes {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  align-self: flex-start;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 3px;
+  background: var(--surface-soft);
+  gap: 3px;
+}
+
+.table-relation-mcp-modes button {
+  min-height: 32px;
+  border: 0;
+  border-radius: 6px;
+  padding: 6px 12px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.table-relation-mcp-modes button[data-active="true"] {
+  color: var(--foreground);
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgb(32 33 31 / 8%);
+}
+
+.table-relation-mcp-modes button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.table-relation-mcp-modes button:disabled {
+  cursor: progress;
+  opacity: 0.65;
+}
+
 .table-relation-mcp-json {
   max-height: min(62vh, 720px);
   overflow: auto;

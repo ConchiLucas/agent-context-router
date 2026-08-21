@@ -20,6 +20,7 @@ import { supportsConnectionTest } from "@/lib/database-access";
 const ENGINES: { value: DatabaseEngine; label: string }[] = [
   { value: "mysql", label: "MySQL" },
   { value: "mariadb", label: "MariaDB" },
+  { value: "doris", label: "Apache Doris" },
   { value: "postgresql", label: "PostgreSQL" },
   { value: "sqlserver", label: "SQL Server" },
   { value: "oracle", label: "Oracle" },

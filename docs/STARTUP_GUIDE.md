@@ -144,7 +144,7 @@ CONTEXT_ROUTER_DATABASE_URL=postgresql://USER:PASSWORD@host.docker.internal:5432
 docker compose exec backend uv run alembic upgrade head
 ```
 
-当前 migration head 为 `20260820_0040`。`0040` 增加动态 Workspace 环境注册表、固定 `local` 默认，移除逐 MCP 默认环境，并将 Nacos、数据库目标、环境 JSON、表关联和 task 快照统一到动态环境键；`0038` 增加表级更新入口子表并把插入入口的 kind 收成 `batch_insert` / `save_or_update` / `insert`；`0037` 增加表级插入入口子表；`0036` 增加表关联的四张投影表（版本、表、边、中间表折叠）；`0035` 增加带 LOCAL 默认值的白名单宿主机运行动作；`0029` 与 `0030` 保留为已回滚实验功能的兼容 revision 标记。
+当前 migration head 为 `20260821_0041`。`0041` 将 Apache Doris 加入数据源引擎枚举，并经 MySQL 协议执行只读查询；`0040` 增加动态 Workspace 环境注册表、固定 `local` 默认，移除逐 MCP 默认环境，并将 Nacos、数据库目标、环境 JSON、表关联和 task 快照统一到动态环境键；`0038` 增加表级更新入口子表并把插入入口的 kind 收成 `batch_insert` / `save_or_update` / `insert`；`0037` 增加表级插入入口子表；`0036` 增加表关联的四张投影表（版本、表、边、中间表折叠）；`0035` 增加带 LOCAL 默认值的白名单宿主机运行动作；`0029` 与 `0030` 保留为已回滚实验功能的兼容 revision 标记。
 
 表关联页面的关联数据目前没有自动生成流水线，示例数据由可重复执行的种子脚本写入：
 
