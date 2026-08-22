@@ -100,7 +100,6 @@ def evidence(
         schema_name=schema_name,
         table_name=table_name,
         edge_id=edge_id,
-        environment=None,
     )
 
 

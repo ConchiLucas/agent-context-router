@@ -29,6 +29,16 @@ const MCP_TOOL_DESCRIPTIONS_ZH: Readonly<Record<string, string>> = {
     "在当前任务已授权的数据库中搜索 Schema、表、视图、字段或索引。",
   execute_database_query:
     "使用 read_task_context 返回的数据库别名执行一条受限制的只读 SQL。",
+  read_table_relations:
+    "读取当前 Workspace 已发布的表关联、写入入口和更新入口。",
+  search_relation_tables:
+    "按业务词或表名搜索当前 Workspace 已发布的表关联目录。",
+  search_forwarding_interfaces:
+    "在当前任务环境中搜索已导入接口，并显示是否具备可调用路由。",
+  prepare_forwarding_request:
+    "结合接口契约、历史参数、转发地址和账号角色生成短期只读执行计划。",
+  execute_forwarding_request:
+    "校验计划摘要后单次执行只读接口，请求头由服务端安全注入。",
   apply_workspace_changes:
     "根据 Workspace 相对变更路径定位受影响项目，并选择快速或完整更新。",
   start_workspace:

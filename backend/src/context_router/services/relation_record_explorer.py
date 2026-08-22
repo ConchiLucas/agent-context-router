@@ -27,7 +27,6 @@ from context_router.services.database_access import DatabaseAccessService, Resol
 from context_router.services.table_relation_query import TableRelationQueryService
 
 _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
-_MAX_MATCHED_KEYS = 500
 _MAX_RELATED_TABLES = 40
 _PAGE_SIZE = 3
 _ONE_TO_ONE_LIMIT = 20
@@ -65,13 +64,12 @@ class RelationRecordExplorerService:
         identity = request.table
         detail = self._relations.get_table_detail(
             workspace_id,
-            environment=request.environment,
             database_key=identity.database_key,
             schema_name=identity.schema_name,
             table_name=identity.table_name,
         )
         relations = detail.relations
-        if request.edge_id is not None:
+        if request.edge_id not in (None, "source"):
             relations = [item for item in relations if item.edge_id == request.edge_id]
             if not relations:
                 raise RelationRecordExplorerError(
@@ -93,11 +91,31 @@ class RelationRecordExplorerService:
                 scanned_columns.append(source.column_name)
             prepared.append((relation, source, target))
 
-        key_cache, keys_truncated = self._matching_keys_by_column(
-            source_access,
-            [item[1] for item in prepared],
-            request.keyword,
-        )
+        source_card: RelationRecordCard | None = None
+        if request.source_keys is not None:
+            key_cache = {
+                column: [request.source_keys[column]]
+                for column in scanned_columns
+                if column in request.source_keys and request.source_keys[column] is not None
+            }
+        else:
+            source_card, key_cache = self._source_card_and_keys(
+                access=source_access,
+                identity=identity,
+                endpoints=[item[1] for item in prepared],
+                keyword=request.keyword,
+            )
+        if request.edge_id == "source":
+            return RelationRecordSearchResult(
+                workspace_id=workspace_id,
+                environment=request.environment,
+                table=identity,
+                keyword=request.keyword,
+                scanned_columns=scanned_columns,
+                source_keys=_plain_source_keys(key_cache),
+                cards=[source_card] if source_card and source_card.page.total_rows else [],
+            )
+
         matched = [
             item
             for item in prepared
@@ -113,12 +131,18 @@ class RelationRecordExplorerService:
                     source=source,
                     target=target,
                     keys=key_cache.get(source.column_name or "", []),
-                    keys_truncated=keys_truncated,
                     requested_page=request.page,
                 )
                 for relation, source, target in matched
             ]
-            cards = [future.result() for future in futures]
+            related_cards = [
+                card for card in (future.result() for future in futures)
+                if card.page.total_rows
+            ]
+
+        cards = related_cards
+        if request.edge_id is None and source_card and source_card.page.total_rows:
+            cards = [source_card, *related_cards]
 
         return RelationRecordSearchResult(
             workspace_id=workspace_id,
@@ -126,8 +150,89 @@ class RelationRecordExplorerService:
             table=identity,
             keyword=request.keyword,
             scanned_columns=scanned_columns,
+            source_keys=_plain_source_keys(key_cache),
             cards=cards,
         )
+
+    def _source_card_and_keys(
+        self,
+        *,
+        access: ResolvedDatabaseAccess,
+        identity: RelationRecordTable,
+        endpoints: list[TableRelationEndpoint],
+        keyword: str,
+    ) -> tuple[RelationRecordCard, dict[str, list[Any]]]:
+        unique: dict[str, TableRelationEndpoint] = {}
+        for endpoint in endpoints:
+            if endpoint.column_name:
+                unique.setdefault(endpoint.column_name, endpoint)
+        if not unique:
+            return _empty_source_card(identity), {}
+
+        endpoint = next(iter(unique.values()))
+        predicates = [
+            (
+                f"({column} IS NOT NULL AND "
+                f"{_exact_keyword_predicate(column, keyword, access.policy.engine)})"
+            )
+            for column in (_quote(name, access.policy.engine) for name in unique)
+        ]
+        where = " OR ".join(predicates)
+        table_sql = _table_reference(endpoint, access)
+        result = self._execute(
+            access,
+            (
+                f"SELECT * FROM {table_sql} WHERE {where} "
+                f"ORDER BY {_random_function(access.policy.engine)} LIMIT 1"
+            ),
+        )
+        formatted = self._result_formatter.format_query(result, access.policy)
+        payload = formatted.as_dict()
+        rows = payload["rows"]
+        if not rows:
+            return _empty_source_card(identity), {}
+        metadata_columns = self._columns(access, endpoint, set(unique))
+        metadata = {item.name: item for item in metadata_columns}
+        query_columns = [str(item["name"]) for item in payload["columns"]]
+        selected_row = rows[0]
+        row_by_column = dict(zip(query_columns, selected_row, strict=False))
+        matched_columns = [
+            name for name in unique
+            if name in row_by_column and str(row_by_column[name]) == keyword
+        ]
+        key_cache = {
+            name: [row_by_column[name]]
+            for name in unique
+            if name in row_by_column and row_by_column[name] is not None
+        }
+        rendered_columns = [
+            RelationRecordColumn(
+                name=name,
+                type=metadata.get(name).type if name in metadata else "",
+                comment=metadata.get(name).comment if name in metadata else "",
+                relation_key=name in unique,
+            )
+            for name in query_columns
+        ]
+        return RelationRecordCard(
+            kind="source",
+            edge_id="source",
+            relation_id="source",
+            cardinality="unknown",
+            source_column="",
+            target=identity,
+            target_column="",
+            matched_columns=matched_columns,
+            columns=rendered_columns,
+            rows=[selected_row],
+            page=RelationRecordPage(
+                page=1,
+                page_size=1,
+                total_rows=1,
+                total_pages=1,
+            ),
+            matched_key_count=1,
+        ), key_cache
 
     def _card(
         self,
@@ -138,13 +243,12 @@ class RelationRecordExplorerService:
         source: TableRelationEndpoint,
         target: TableRelationEndpoint,
         keys: list[Any],
-        keys_truncated: bool,
         requested_page: int,
     ) -> RelationRecordCard:
         target_access = self._resolve(
             workspace_id, environment, target.database_key, require_query=True
         )
-        columns = self._columns(target_access, target)
+        columns = self._columns(target_access, target, {target.column_name})
         if not keys:
             return _empty_card(relation, source, target, columns)
 
@@ -185,9 +289,7 @@ class RelationRecordExplorerService:
             for name in query_columns
         ]
         warning = None
-        if keys_truncated:
-            warning = f"匹配键超过 {_MAX_MATCHED_KEYS} 个，仅查询前 {_MAX_MATCHED_KEYS} 个"
-        elif not paged and total_rows > _ONE_TO_ONE_LIMIT:
+        if not paged and total_rows > _ONE_TO_ONE_LIMIT:
             warning = f"1:1 关系不分页，仅展示前 {_ONE_TO_ONE_LIMIT} 条"
         return RelationRecordCard(
             edge_id=relation.edge_id,
@@ -209,58 +311,14 @@ class RelationRecordExplorerService:
                 total_pages=total_pages,
             ),
             matched_key_count=len(keys),
-            matched_keys_truncated=keys_truncated,
             warning=warning,
         )
-
-    def _matching_keys_by_column(
-        self,
-        access: ResolvedDatabaseAccess,
-        endpoints: list[TableRelationEndpoint],
-        keyword: str,
-    ) -> tuple[dict[str, list[Any]], bool]:
-        unique: dict[str, TableRelationEndpoint] = {}
-        for endpoint in endpoints:
-            if endpoint.column_name:
-                unique.setdefault(endpoint.column_name, endpoint)
-        if not unique:
-            return {}, False
-        select_columns: list[str] = []
-        predicates: list[str] = []
-        table = ""
-        for column_name, endpoint in unique.items():
-            column = _quote(column_name, access.policy.engine)
-            table = _table_reference(endpoint, access)
-            select_columns.append(column)
-            predicates.append(
-                f"({column} IS NOT NULL AND "
-                f"{_keyword_predicate(column, keyword, access.policy.engine)})"
-            )
-        result = self._execute(
-            access,
-            (
-                f"SELECT {', '.join(select_columns)} FROM {table} "
-                f"WHERE {' OR '.join(predicates)} LIMIT {_MAX_MATCHED_KEYS + 1}"
-            ),
-        )
-        rows = list(result.rows)
-        truncated = len(rows) > _MAX_MATCHED_KEYS
-        grouped: dict[str, list[Any]] = {}
-        needle = keyword.casefold()
-        column_names = list(unique)
-        for row in rows[:_MAX_MATCHED_KEYS]:
-            for index, key in enumerate(row):
-                if key is None or needle not in str(key).casefold():
-                    continue
-                bucket = grouped.setdefault(column_names[index], [])
-                if key not in bucket:
-                    bucket.append(key)
-        return grouped, truncated
 
     def _columns(
         self,
         access: ResolvedDatabaseAccess,
         endpoint: TableRelationEndpoint,
+        relation_columns: set[str],
     ) -> list[RelationRecordColumn]:
         try:
             with self._connector_manager.lease(access.spec) as connector:
@@ -283,7 +341,7 @@ class RelationRecordExplorerService:
                     name=str(item.get("name", "")),
                     type=str(item.get("type", "")),
                     comment=str(item.get("comment", "") or ""),
-                    relation_key=str(item.get("name", "")) == endpoint.column_name,
+                    relation_key=str(item.get("name", "")) in relation_columns,
                 )
                 for item in raw_columns
                 if item.get("name")
@@ -363,6 +421,19 @@ def _empty_card(
     )
 
 
+def _empty_source_card(identity: RelationRecordTable) -> RelationRecordCard:
+    return RelationRecordCard(
+        kind="source",
+        edge_id="source",
+        relation_id="source",
+        cardinality="unknown",
+        source_column="",
+        target=identity,
+        target_column="",
+        page=RelationRecordPage(),
+    )
+
+
 def _table_reference(endpoint: TableRelationEndpoint, access: ResolvedDatabaseAccess) -> str:
     engine = access.policy.engine
     table = _quote(endpoint.table_name, engine)
@@ -389,10 +460,26 @@ def _literal(value: Any, engine: str) -> str:
     return f"'{text}'"
 
 
-def _keyword_predicate(column: str, keyword: str, engine: str) -> str:
+def _exact_keyword_predicate(column: str, keyword: str, engine: str) -> str:
     literal = _literal(keyword, engine)
     if engine == "clickhouse":
-        return f"positionCaseInsensitive(toString({column}), {literal}) > 0"
+        return f"toString({column}) = {literal}"
     if engine == "postgresql":
-        return f"CAST({column} AS TEXT) ILIKE '%' || {literal} || '%'"
-    return f"CAST({column} AS CHAR) LIKE CONCAT('%', {literal}, '%')"
+        return f"CAST({column} AS TEXT) = {literal}"
+    return f"CAST({column} AS CHAR) = {literal}"
+
+
+def _random_function(engine: str) -> str:
+    if engine == "mysql":
+        return "RAND()"
+    if engine == "clickhouse":
+        return "rand()"
+    return "RANDOM()"
+
+
+def _plain_source_keys(key_cache: dict[str, list[Any]]) -> dict[str, Any]:
+    return {
+        column: values[0]
+        for column, values in key_cache.items()
+        if values
+    }

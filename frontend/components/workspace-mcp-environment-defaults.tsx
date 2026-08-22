@@ -77,7 +77,7 @@ export function WorkspaceMcpEnvironmentDefaults({
             <h1>工作空间环境</h1>
             <p>
               环境属于当前工作空间；新任务未传 <code>environment</code> 时使用
-              <code> local</code>，任务后续的数据库、中间件和表关联调用继承同一环境。
+              <code> local</code>，任务后续的数据库和中间件调用继承同一环境；表关联固定读取工作空间唯一发布版本。
             </p>
           </div>
           <div className="workspace-environment-header-actions">
@@ -159,9 +159,9 @@ export function WorkspaceMcpEnvironmentDefaults({
                 <strong>显式环境优先，省略时继承任务环境</strong>
                 <p>
                   <code>prepare_task_context</code> 创建任务环境；
-                  <code>read_middleware_context</code>、<code>read_table_relations</code> 和
-                  <code>search_relation_tables</code> 可显式覆盖。数据库搜索、只读查询和
+                  <code>read_middleware_context</code> 可显式覆盖。数据库搜索、只读查询和
                   <code>read_task_context</code> 始终使用任务快照，避免中途静默换库。
+                  表关联由工作空间唯一发布版本决定，不随任务环境切换。
                 </p>
               </article>
             </section>

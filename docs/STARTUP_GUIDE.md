@@ -26,7 +26,7 @@ docker compose up -d --force-recreate backend frontend
 
 Compose 的前端和后端宿主机端口都显式绑定 `127.0.0.1`，不会默认监听局域网网卡。后端 CORS 只允许 `http://127.0.0.1:49175` 和 `http://localhost:49175`；本项目当前定位为本机工具，不提供应用层鉴权。若未来需要远程访问，应先补 HTTPS、鉴权和新的 Origin 配置，而不是直接改成公网绑定。
 
-携带任意 `Origin` 或浏览器 Fetch Metadata（`Sec-Fetch-Mode` / `Sec-Fetch-Site`）的请求由后端中间件限制为读取、既有安全操作、按 Workspace/项目类型受限的容器批量重启或停止，以及系统文档 JSON 正文的受校验保存。浏览器不能新建或删除系统文档，也不能修改 key、顺序或 prepare 策略；其他控制面配置写请求返回 `405 management_read_only`。本机 AI 或运维调用方不携带这些浏览器请求头，仍可使用既有受 Schema、Service 和 Repository 校验的本地 API 维护配置；这只是回环单用户部署下的调用边界，不替代身份认证。
+携带任意 `Origin` 或浏览器 Fetch Metadata（`Sec-Fetch-Mode` / `Sec-Fetch-Site`）的请求由后端中间件限制为读取、既有安全操作、按 Workspace/项目类型受限的容器批量重启或停止、接口转发专用管理/执行接口，以及系统文档 JSON 正文的受校验保存。浏览器不能新建或删除系统文档，也不能修改 key、顺序或 prepare 策略；其他控制面配置写请求返回 `405 management_read_only`。本机 AI 或运维调用方不携带这些浏览器请求头，仍可使用既有受 Schema、Service 和 Repository 校验的本地 API 维护配置；这只是回环单用户部署下的调用边界，不替代身份认证。
 
 ## Docker Desktop 与 Host Runner
 
@@ -55,7 +55,11 @@ Docker 网络、数据库 TCP 转发/代理和宿主机 Nginx 网关；不会构
 
 Runner 会把后端重启期间的连接拒绝、连接重置和请求超时视为可重试错误，控制面恢复
 后继续心跳和领取任务。Runner 是“所有项目都在 Docker Compose 内运行”规则的唯一
-宿主机例外：它只执行不可变运行快照或白名单宿主机动作。Token 默认位于
+宿主机例外：它只执行不可变运行快照、白名单宿主机动作，或服务端签发的只读接口
+转发计划。接口转发只支持 GET/POST，Runner 不接收 AI 提供的任意 URL；目标地址、
+查询参数、请求体和账号请求头均由控制面按单次短租约组装，请求头不会写入任务表或
+返回给 MCP 客户端。响应正文最多回传 1 MiB，禁止自动重定向，并最终写入统一接口日志。
+Token 默认位于
 `.runtime-runner/runner.token`，目录权限为 `0700`、文件权限为 `0600`；PID 和日志位于
 同一目录。控制面 URL 必须是 loopback 地址，Token 不得写入 Git、日志或命令参数。
 
@@ -122,7 +126,7 @@ CONTEXT_ROUTER_DATABASE_PAYLOAD_CLEANUP_INTERVAL_SECONDS=3600
 
 项目数据库关联自己的行数、字节数和超时限制会与查询全局值取更严格者。数据库 MCP 出入参详情默认自动采集，`DATABASE_PAYLOAD_*` 控制两个数据库 MCP 工具的本地详情快照：请求和最终 MCP 响应默认分别最多保存 1 MB，任何配置都不能超过 4 MB，默认保留 7 天，并在后端启动及调用期间按节流周期清理。授权记录归属 Project，但 `mcp_alias` 在 Workspace 内唯一，新 Workspace task 可以使用所有子项目在 prepare 中返回的 alias。修改这些值后重启 backend。
 
-每个 Workspace 独立维护环境列表，`local` 固定存在且为默认；`test`、`uat` 或其他环境只在该项目确有需要时由本机 AI/运维登记。`prepare_task_context` 可选传入任一已登记环境，显式传入记录 `task_explicit`，省略时固化 `local` 并记录 `workspace_default`。后续 `read_task_context`、数据库工具以及未显式传环境的中间件/表关联工具都继承 task 环境。
+每个 Workspace 独立维护环境列表，`local` 固定存在且为默认；`test`、`uat` 或其他环境只在该项目确有需要时由本机 AI/运维登记。`prepare_task_context` 可选传入任一已登记环境，显式传入记录 `task_explicit`，省略时固化 `local` 并记录 `workspace_default`。后续 `read_task_context` 和数据库工具继承 task 环境，中间件允许显式覆盖。表关联不继承 task 环境：每个 Workspace 只读取一个已发布基准快照；关联数据页面仍用当前页面环境解析实际数据库。
 
 本机 AI 或运维通过受校验 API 调整环境与数据库关联时会递增共享 revision；task 快照 revision 不一致时数据库调用返回 `environment_changed`，需要重新 prepare。浏览器环境详情只读：页头下拉框选择查看环境，下面的 Nacos、MCP 流转和数据源汇总全部跟随切换。数据库记录自身不带环境名；环境只关联既有项目数据库授权，因此多个环境可以指向同一个数据库链接。
 
@@ -144,7 +148,7 @@ CONTEXT_ROUTER_DATABASE_URL=postgresql://USER:PASSWORD@host.docker.internal:5432
 docker compose exec backend uv run alembic upgrade head
 ```
 
-当前 migration head 为 `20260821_0041`。`0041` 将 Apache Doris 加入数据源引擎枚举，并经 MySQL 协议执行只读查询；`0040` 增加动态 Workspace 环境注册表、固定 `local` 默认，移除逐 MCP 默认环境，并将 Nacos、数据库目标、环境 JSON、表关联和 task 快照统一到动态环境键；`0038` 增加表级更新入口子表并把插入入口的 kind 收成 `batch_insert` / `save_or_update` / `insert`；`0037` 增加表级插入入口子表；`0036` 增加表关联的四张投影表（版本、表、边、中间表折叠）；`0035` 增加带 LOCAL 默认值的白名单宿主机运行动作；`0029` 与 `0030` 保留为已回滚实验功能的兼容 revision 标记。
+当前 migration head 为 `20260822_0055`。`0055` 为接口转发执行计划持久化逐字段参数证据；`0054` 禁止直接执行 c12-data 原始 Controller 路径，待登记明确的 MTP 包装接口后再开放；`0053` 增加 Host Runner 单次租约接口转发任务；`0052` 补充导入接口源码契约；`0051` 增加接口转发 MCP 计划。更早迁移继续保留既有接口服务、地址、身份、角色、Controller 元数据和 Workspace 环境模型。
 
 表关联页面的关联数据目前没有自动生成流水线，示例数据由可重复执行的种子脚本写入：
 

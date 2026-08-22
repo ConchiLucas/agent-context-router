@@ -27,20 +27,6 @@ MCP_ENVIRONMENT_SPECS: tuple[McpEnvironmentSpec, ...] = (
         environments=("local", "test", "uat"),
         built_in_default="local",
     ),
-    McpEnvironmentSpec(
-        tool_name="read_table_relations",
-        title="读取表关联",
-        description="决定未显式指定环境时读取哪套已发布的表关联、插入入口和更新入口。",
-        environments=("test", "uat"),
-        built_in_default="uat",
-    ),
-    McpEnvironmentSpec(
-        tool_name="search_relation_tables",
-        title="搜索表关联目录",
-        description="决定未显式指定环境时在哪套表关联快照中搜索表名。",
-        environments=("test", "uat"),
-        built_in_default="uat",
-    ),
 )
 
 MCP_ENVIRONMENT_SPEC_BY_TOOL = {spec.tool_name: spec for spec in MCP_ENVIRONMENT_SPECS}

@@ -38,7 +38,9 @@ class RuntimeRunnerStore(Protocol):
 
     def heartbeat(self, runner_id: str) -> RuntimeRunnerRecord: ...
     def get(self, runner_id: str) -> RuntimeRunnerRecord | None: ...
-    def is_available(self, ttl_seconds: int) -> bool: ...
+    def is_available(
+        self, ttl_seconds: int, required_capability: str | None = None
+    ) -> bool: ...
 
 
 class InMemoryRuntimeRunnerRepository:
@@ -83,11 +85,17 @@ class InMemoryRuntimeRunnerRepository:
         with self._lock:
             return self._runners.get(runner_id)
 
-    def is_available(self, ttl_seconds: int) -> bool:
+    def is_available(
+        self, ttl_seconds: int, required_capability: str | None = None
+    ) -> bool:
         threshold = datetime.now(UTC) - timedelta(seconds=ttl_seconds)
         with self._lock:
             return any(
                 item.status == "online" and item.last_heartbeat_at >= threshold
+                and (
+                    required_capability is None
+                    or required_capability in item.capabilities
+                )
                 for item in self._runners.values()
             )
 
@@ -164,7 +172,9 @@ class PostgresRuntimeRunnerRepository:
         except psycopg.Error as exc:
             raise RuntimeRunnerRepositoryError("宿主机 Runner 数据库当前不可用") from exc
 
-    def is_available(self, ttl_seconds: int) -> bool:
+    def is_available(
+        self, ttl_seconds: int, required_capability: str | None = None
+    ) -> bool:
         try:
             with psycopg.connect(self._database_url) as connection:
                 row = connection.execute(
@@ -173,8 +183,9 @@ class PostgresRuntimeRunnerRepository:
                          WHERE status = 'online'
                            AND last_heartbeat_at >= CURRENT_TIMESTAMP
                                - (%s * INTERVAL '1 second')
+                           AND (%s::text IS NULL OR capabilities ? %s)
                        )""",
-                    (ttl_seconds,),
+                    (ttl_seconds, required_capability, required_capability),
                 ).fetchone()
             return bool(row and row[0])
         except psycopg.Error as exc:

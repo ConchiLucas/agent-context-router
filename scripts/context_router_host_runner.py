@@ -21,7 +21,7 @@ import urllib.request
 from pathlib import Path, PurePosixPath
 from typing import Protocol
 
-RUNNER_VERSION = "1"
+RUNNER_VERSION = "2"
 MANIFEST_FILE = ".runtime-manifest.json"
 ENTRY_FILE = "deploy.sh"
 EXIT_VALIDATION_FAILED = 126
@@ -39,6 +39,21 @@ HOST_ACTIONS: dict[str, tuple[Path, str, int]] = {
         120,
     ),
 }
+SAFE_RESPONSE_HEADERS = {"content-type", "x-request-id", "trace-id", "x-trace-id"}
+FORBIDDEN_REQUEST_HEADERS = {
+    "connection",
+    "content-length",
+    "forwarded",
+    "host",
+    "proxy-authorization",
+    "te",
+    "transfer-encoding",
+    "upgrade",
+    "via",
+    "x-forwarded-for",
+    "x-forwarded-host",
+    "x-forwarded-proto",
+}
 
 
 class RunnerError(RuntimeError):
@@ -47,6 +62,11 @@ class RunnerError(RuntimeError):
 
 class RunnerSecurityError(RunnerError):
     pass
+
+
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
 
 
 class RunnerApi(Protocol):
@@ -65,6 +85,13 @@ class RunnerApi(Protocol):
     def submit_host_action(
         self, workspace_id: str, action: str, environment: str
     ) -> dict[str, object]: ...
+    def complete_forwarding_job(
+        self,
+        job_id: str,
+        runner_id: str,
+        lease_token: str,
+        result: dict[str, object],
+    ) -> None: ...
 
 
 class RunnerApiClient:
@@ -87,7 +114,7 @@ class RunnerApiClient:
                 "hostname": socket.gethostname(),
                 "platform": platform.system().lower(),
                 "version": RUNNER_VERSION,
-                "capabilities": ["docker", "posix-shell"],
+                "capabilities": ["docker", "posix-shell", "interface-forwarding"],
             },
         )
 
@@ -96,6 +123,23 @@ class RunnerApiClient:
 
     def lease(self, runner_id: str) -> dict[str, object]:
         return self._post("/api/runtime-runner/lease", {"runner_id": runner_id})
+
+    def lease_forwarding(self, runner_id: str) -> dict[str, object]:
+        return self._post(
+            "/api/runtime-runner/forwarding/lease", {"runner_id": runner_id}
+        )
+
+    def complete_forwarding_job(
+        self,
+        job_id: str,
+        runner_id: str,
+        lease_token: str,
+        result: dict[str, object],
+    ) -> None:
+        self._post(
+            f"/api/runtime-runner/forwarding/jobs/{job_id}/complete",
+            {"runner_id": runner_id, "lease_token": lease_token, **result},
+        )
 
     def submit_host_action(
         self, workspace_id: str, action: str, environment: str
@@ -243,6 +287,139 @@ class HostRuntimeRunner:
             )
             if exit_code != 0:
                 return
+
+    def execute_forwarding_job(
+        self, payload: dict[str, object], *, runner_id: str
+    ) -> None:
+        job_id = _required_string(payload, "job_id")
+        lease_token = _required_string(payload, "lease_token")
+        request_payload = _required_dict(payload, "request")
+        started = time.perf_counter()
+        status_code: int | None = None
+        response_body = ""
+        response_headers: dict[str, str] = {}
+        response_bytes = 0
+        response_truncated = False
+        error_type: str | None = None
+        try:
+            request, timeout_seconds, max_response_bytes = self._forwarding_request(
+                request_payload
+            )
+            opener = urllib.request.build_opener(_NoRedirectHandler())
+            try:
+                response = opener.open(request, timeout=timeout_seconds)
+            except urllib.error.HTTPError as exc:
+                response = exc
+            with response:
+                status_code = int(response.status)
+                response_headers = {
+                    key.lower(): value
+                    for key, value in response.headers.items()
+                    if key.lower() in SAFE_RESPONSE_HEADERS
+                }
+                chunks: list[bytes] = []
+                retained = 0
+                while True:
+                    chunk = response.read(65_536)
+                    if not chunk:
+                        break
+                    response_bytes += len(chunk)
+                    if retained < max_response_bytes:
+                        piece = chunk[: max_response_bytes - retained]
+                        chunks.append(piece)
+                        retained += len(piece)
+                    if response_bytes > max_response_bytes:
+                        response_truncated = True
+                        break
+                response_body = b"".join(chunks).decode("utf-8", errors="replace")
+        except (
+            RunnerError,
+            urllib.error.URLError,
+            http.client.HTTPException,
+            TimeoutError,
+            OSError,
+        ) as exc:
+            error_type = exc.__class__.__name__
+            response_body = f"请求失败：{error_type}"
+        duration_ms = max(0, round((time.perf_counter() - started) * 1000))
+        self._api.complete_forwarding_job(
+            job_id,
+            runner_id,
+            lease_token,
+            {
+                "status_code": status_code,
+                "response_body": response_body,
+                "response_headers": response_headers,
+                "response_bytes": response_bytes,
+                "response_truncated": response_truncated,
+                "error_type": error_type,
+                "duration_ms": duration_ms,
+            },
+        )
+
+    @staticmethod
+    def _forwarding_request(
+        payload: dict[str, object],
+    ) -> tuple[urllib.request.Request, int, int]:
+        method = _required_string(payload, "method").upper()
+        if method not in {"GET", "POST"}:
+            raise RunnerSecurityError("宿主机接口转发只允许 GET 或 POST")
+        url = _required_string(payload, "url")
+        parsed = urllib.parse.urlsplit(url)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.fragment
+        ):
+            raise RunnerSecurityError("宿主机接口转发地址无效")
+        query = payload.get("query") or {}
+        body = payload.get("body") or {}
+        headers = payload.get("headers") or {}
+        if (
+            not isinstance(query, dict)
+            or not isinstance(body, dict)
+            or not isinstance(headers, dict)
+        ):
+            raise RunnerSecurityError("宿主机接口转发参数格式无效")
+        encoded_query = urllib.parse.urlencode(query, doseq=True)
+        if encoded_query:
+            url += ("&" if parsed.query else "?") + encoded_query
+        request_headers: dict[str, str] = {}
+        for raw_name, raw_value in headers.items():
+            if not isinstance(raw_name, str) or not isinstance(raw_value, str):
+                raise RunnerSecurityError("宿主机接口转发请求头格式无效")
+            name = raw_name.strip()
+            if (
+                not name
+                or name.lower() in FORBIDDEN_REQUEST_HEADERS
+                or any(character in name or character in raw_value for character in ("\r", "\n"))
+            ):
+                raise RunnerSecurityError("宿主机接口转发请求头不安全")
+            request_headers[name] = raw_value
+        data: bytes | None = None
+        if method == "POST":
+            data = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode()
+            if len(data) > 262_144:
+                raise RunnerSecurityError("宿主机接口转发请求体超过限制")
+            request_headers.setdefault("Content-Type", "application/json")
+        timeout_seconds = payload.get("timeout_seconds")
+        max_response_bytes = payload.get("max_response_bytes")
+        if not isinstance(timeout_seconds, int) or not 1 <= timeout_seconds <= 30:
+            raise RunnerSecurityError("宿主机接口转发超时范围无效")
+        if (
+            not isinstance(max_response_bytes, int)
+            or not 1 <= max_response_bytes <= 1_048_576
+        ):
+            raise RunnerSecurityError("宿主机接口转发响应上限无效")
+        return (
+            urllib.request.Request(
+                url, data=data, headers=request_headers, method=method
+            ),
+            timeout_seconds,
+            max_response_bytes,
+        )
 
     def _validate_step(
         self,
@@ -611,36 +788,76 @@ def run_forever(
     print(f"[runner] registered id={runner_id}", flush=True)
     startup_pending = startup_workspace_id is not None and startup_action is not None
     next_startup_attempt = 0.0
-    while not stopped.is_set():
-        try:
-            api.heartbeat_runner(runner_id)
-            if startup_pending and time.monotonic() >= next_startup_attempt:
-                try:
-                    result = api.submit_host_action(
-                        startup_workspace_id,
-                        startup_action,
-                        startup_environment,
-                    )
-                    print(
-                        "[runner] startup host action queued "
-                        f"action={startup_action} environment={startup_environment} "
-                        f"operation={result.get('id', 'unknown')}",
-                        flush=True,
-                    )
-                    startup_pending = False
-                except RunnerError as exc:
-                    print(f"[runner] 启动保障任务提交失败：{exc}", file=sys.stderr, flush=True)
-                    next_startup_attempt = time.monotonic() + 15
-            lease = api.lease(runner_id)
-            if lease.get("operation") is not None:
-                runner.execute_lease(lease)
-                if once:
+
+    def poll_forwarding() -> bool:
+        forwarding_lease = api.lease_forwarding(runner_id)
+        forwarding_job = forwarding_lease.get("job")
+        if forwarding_job is None:
+            return False
+        if not isinstance(forwarding_job, dict):
+            raise RunnerError("宿主机接口转发租约格式无效")
+        runner.execute_forwarding_job(forwarding_job, runner_id=runner_id)
+        return True
+
+    def forwarding_loop() -> None:
+        while not stopped.is_set():
+            try:
+                # 部署步骤可能持续数分钟；独立心跳和租约线程保证接口转发不会被阻塞。
+                api.heartbeat_runner(runner_id)
+                poll_forwarding()
+            except RunnerError as exc:
+                print(f"[runner] {exc}", file=sys.stderr, flush=True)
+            stopped.wait(poll_seconds)
+
+    forwarding_thread: threading.Thread | None = None
+    if not once:
+        forwarding_thread = threading.Thread(
+            target=forwarding_loop,
+            name="context-router-forwarding",
+            daemon=True,
+        )
+        forwarding_thread.start()
+    try:
+        while not stopped.is_set():
+            try:
+                api.heartbeat_runner(runner_id)
+                if startup_pending and time.monotonic() >= next_startup_attempt:
+                    try:
+                        result = api.submit_host_action(
+                            startup_workspace_id,
+                            startup_action,
+                            startup_environment,
+                        )
+                        print(
+                            "[runner] startup host action queued "
+                            f"action={startup_action} environment={startup_environment} "
+                            f"operation={result.get('id', 'unknown')}",
+                            flush=True,
+                        )
+                        startup_pending = False
+                    except RunnerError as exc:
+                        print(
+                            f"[runner] 启动保障任务提交失败：{exc}",
+                            file=sys.stderr,
+                            flush=True,
+                        )
+                        next_startup_attempt = time.monotonic() + 15
+                if once and poll_forwarding():
                     return
-        except RunnerError as exc:
-            print(f"[runner] {exc}", file=sys.stderr, flush=True)
-        if once:
-            return
-        stopped.wait(poll_seconds)
+                lease = api.lease(runner_id)
+                if lease.get("operation") is not None:
+                    runner.execute_lease(lease)
+                    if once:
+                        return
+            except RunnerError as exc:
+                print(f"[runner] {exc}", file=sys.stderr, flush=True)
+            if once:
+                return
+            stopped.wait(poll_seconds)
+    finally:
+        stopped.set()
+        if forwarding_thread is not None and forwarding_thread.is_alive():
+            forwarding_thread.join(timeout=poll_seconds + 1)
 
 
 def load_private_token(path: Path) -> str:

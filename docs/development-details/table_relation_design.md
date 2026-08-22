@@ -35,8 +35,8 @@
 
 ### 2.1 原子发布
 
-`generations` 按 `(workspace_id, environment, revision)` 唯一，并有两个部分唯一索引：
-同一 Workspace 同一环境最多一个 `published`、最多一个 `building`。
+`generations` 保留 `environment` 记录这份快照取样、核对时使用的基准环境，但读取不按任务环境切换。
+两个部分唯一索引保证同一 Workspace 全局最多一个 `published`、最多一个 `building`。
 生成流水线（尚未实现）应当在 `building` 版本下写完全部子表，再在一个事务里把旧 `published` 置为 `superseded`、把新版本置为 `published`。
 读取侧只认 `published`，因此发布过程对页面不可见，也不会出现读到半份数据的情况。
 子表全部对 `generation_id` 级联删除，废弃版本一行删除即可回收。
@@ -240,6 +240,8 @@ suspect 中间档（命中率介于 `suspect_ceiling` 和 `confirm_floor` 之间
 | `GET /api/workspaces/{id}/table-relations/table/writes` | 单表插入入口，按当前选中表返回插入调用；空列表表示还没录入 |
 | `GET /api/workspaces/{id}/table-relations/table/updates` | 单表更新入口，按当前选中表返回更新调用；空列表表示还没录入 |
 | `GET /api/workspaces/{id}/table-relations/relation` | 单条关系的代码点位与体检项 |
+
+这些接口不接收运行环境。攀枝花当前唯一发布版本的基准环境是 `uat`；关联数据页选择 TEST、PRE 或 LOCAL 时仍复用这份结构，但实际记录查询通过所选环境的数据库映射执行。
 
 **没有 rebuild POST 接口。** 没有构建流水线就不需要它，因此 `browser-api-policy.ts` 和 `middleware/browser_read_only.py` 都不需要改动，
 `task_repository` 的系统任务过滤也不需要新增探测任务类型。空状态卡片直接给出种子脚本命令，让用户知道怎么手动造数据。

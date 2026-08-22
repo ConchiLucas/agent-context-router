@@ -132,6 +132,30 @@ class RunnerStepResultRequest(RunnerOperationRequest):
     error_message: str | None = Field(default=None, max_length=2000)
 
 
+class RunnerForwardingResultRequest(RunnerOperationRequest):
+    runner_id: str = Field(min_length=1, max_length=64)
+    status_code: int | None = Field(default=None, ge=100, le=599)
+    response_body: str = Field(default="", max_length=1_048_576)
+    response_headers: dict[str, str] = Field(default_factory=dict)
+    response_bytes: int = Field(default=0, ge=0, le=100_000_000)
+    response_truncated: bool = False
+    error_type: str | None = Field(default=None, max_length=120)
+    duration_ms: int = Field(default=0, ge=0, le=300_000)
+
+    @field_validator("response_headers")
+    @classmethod
+    def validate_response_headers(cls, value: dict[str, str]) -> dict[str, str]:
+        if len(value) > 20:
+            raise ValueError("响应头数量超过限制")
+        normalized: dict[str, str] = {}
+        for raw_name, raw_value in value.items():
+            name = raw_name.strip().lower()
+            if not name or len(name) > 100 or len(raw_value) > 2_000:
+                raise ValueError("响应头格式无效")
+            normalized[name] = raw_value
+        return normalized
+
+
 class HostRuntimeActionRequest(BaseModel):
     action: HostRuntimeAction = "pzh.ensure-host-runtime"
     environment: HostRuntimeEnvironment = "local"

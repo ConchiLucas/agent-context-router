@@ -21,7 +21,6 @@ from context_router.schemas.relation_records import (
 )
 from context_router.schemas.table_relations import (
     TableRelationDetail,
-    TableRelationEnvironment,
     TableRelationStatus,
     TableRelationTableDetail,
     TableRelationTableList,
@@ -146,11 +145,10 @@ def search_relation_records(
 def get_table_relation_status(
     workspace_id: str,
     request: Request,
-    environment: TableRelationEnvironment | None = None,
 ) -> TableRelationStatus:
     try:
-        _require_workspace(request, workspace_id, environment)
-        return _service(request).get_status(workspace_id, environment=environment)
+        _require_workspace(request, workspace_id, None)
+        return _service(request).get_status(workspace_id)
     except (
         TableRelationNotFoundError,
         TableRelationRepositoryError,
@@ -166,7 +164,6 @@ def get_table_relation_status(
 def list_table_relation_tables(
     workspace_id: str,
     request: Request,
-    environment: TableRelationEnvironment | None = None,
     database_key: str | None = None,
     only_related: bool = True,
     search: str | None = None,
@@ -174,10 +171,9 @@ def list_table_relation_tables(
     offset: int = Query(default=0, ge=0),
 ) -> TableRelationTableList:
     try:
-        _require_workspace(request, workspace_id, environment)
+        _require_workspace(request, workspace_id, None)
         return _service(request).list_tables(
             workspace_id,
-            environment=environment,
             database_key=database_key,
             only_related=only_related,
             search=search,
@@ -202,16 +198,14 @@ def get_table_relation_detail(
     database_key: str = Query(min_length=1, max_length=64),
     schema_name: str = Query(min_length=1, max_length=255),
     table_name: str = Query(min_length=1, max_length=255),
-    environment: TableRelationEnvironment | None = None,
 ) -> TableRelationTableDetail:
     try:
-        _require_workspace(request, workspace_id, environment)
+        _require_workspace(request, workspace_id, None)
         return _service(request).get_table_detail(
             workspace_id,
             database_key=database_key,
             schema_name=schema_name,
             table_name=table_name,
-            environment=environment,
         )
     except (
         TableRelationNotFoundError,
@@ -234,16 +228,14 @@ def get_table_relation_writes(
     database_key: str = Query(min_length=1, max_length=64),
     schema_name: str = Query(min_length=1, max_length=255),
     table_name: str = Query(min_length=1, max_length=255),
-    environment: TableRelationEnvironment | None = None,
 ) -> TableRelationTableWrites:
     try:
-        _require_workspace(request, workspace_id, environment)
+        _require_workspace(request, workspace_id, None)
         return _service(request).get_table_writes(
             workspace_id,
             database_key=database_key,
             schema_name=schema_name,
             table_name=table_name,
-            environment=environment,
         )
     except (
         TableRelationNotFoundError,
@@ -266,16 +258,14 @@ def get_table_relation_updates(
     database_key: str = Query(min_length=1, max_length=64),
     schema_name: str = Query(min_length=1, max_length=255),
     table_name: str = Query(min_length=1, max_length=255),
-    environment: TableRelationEnvironment | None = None,
 ) -> TableRelationTableUpdates:
     try:
-        _require_workspace(request, workspace_id, environment)
+        _require_workspace(request, workspace_id, None)
         return _service(request).get_table_updates(
             workspace_id,
             database_key=database_key,
             schema_name=schema_name,
             table_name=table_name,
-            environment=environment,
         )
     except (
         TableRelationNotFoundError,
@@ -299,17 +289,15 @@ def get_table_relation_evidence(
     database_key: str = Query(min_length=1, max_length=64),
     schema_name: str = Query(min_length=1, max_length=255),
     table_name: str = Query(min_length=1, max_length=255),
-    environment: TableRelationEnvironment | None = None,
 ) -> TableRelationDetail:
     try:
-        _require_workspace(request, workspace_id, environment)
+        _require_workspace(request, workspace_id, None)
         return _service(request).get_relation_detail(
             workspace_id,
             database_key=database_key,
             schema_name=schema_name,
             table_name=table_name,
             edge_id=edge_id,
-            environment=environment,
         )
     except (
         TableRelationNotFoundError,
@@ -326,17 +314,15 @@ def get_table_relation_mcp_preview(
     database_key: str = Query(min_length=1, max_length=64),
     schema_name: str = Query(min_length=1, max_length=255),
     table_name: str = Query(min_length=1, max_length=255),
-    environment: TableRelationEnvironment | None = None,
     mode: Literal["default", "full"] = Query(default="default"),
 ) -> dict[str, object]:
     try:
-        _require_workspace(request, workspace_id, environment)
+        _require_workspace(request, workspace_id, None)
         return _context_service(request).read_for_workspace(
             workspace_id=workspace_id,
             database_key=database_key,
             schema_name=schema_name,
             table_name=table_name,
-            environment=environment,
             mode=mode,
         )
     except TableRelationContextError as exc:

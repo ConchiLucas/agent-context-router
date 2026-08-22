@@ -4,7 +4,7 @@
 
 PostgreSQL 控制面数据库与 MCP 查询的业务数据库是两个概念。业务数据库目前可执行的 Connector 为 ClickHouse、PostgreSQL、MySQL 和 MariaDB；SQL Server、SQLite、Oracle 的配置仍可由本机 AI/运维 API 维护，但能力接口会明确标记为不可搜索、不可查询。
 
-浏览器页面以读取控制面数据为主，只允许通过专用接口保存已有 `system_guides` 的 JSON 正文，不能新建、删除或修改记录元数据。Workspace、Project、数据源、授权、环境和运行配置仍保持浏览器只读；其他配置写请求由后端返回 `405 management_read_only`。不携带浏览器识别头的本机 AI/运维调用方仍可使用既有受 Schema、Service 和 Repository 校验的 API，避免直接写表而绕过环境 revision、文档缓存或 Connector 失效处理。
+浏览器页面以读取控制面数据为主；系统文档只允许保存已有 JSON 正文。接口转发是独立的可维护业务面，浏览器可通过专用接口导入接口文档、维护转发环境/身份、执行请求和清理记录。Workspace、Project、通用数据源、授权、MCP 环境和运行配置仍保持浏览器只读；其他配置写请求由后端返回 `405 management_read_only`。
 
 ## 连接配置
 
@@ -23,7 +23,7 @@ docker compose exec backend uv run alembic upgrade head
 docker compose exec backend uv run alembic current
 ```
 
-当前 head 为 `20260821_0041`。`0041 -> 0040` 会移除 Doris 数据源引擎枚举（已有 Doris 数据源时不能降级）；`0040 -> 0039` 会删除动态环境注册表并恢复旧的固定 TEST/UAT 与逐 MCP 默认结构，只能用于一次性测试数据库；`0038 -> 0037` 会删除表级更新入口子表；`0037 -> 0036` 会删除表级插入入口子表；`0036 -> 0035` 会删除表关联的四张投影表及其中的示例数据。若要验证 downgrade/upgrade，使用一次性测试数据库，不要在保存真实数据的控制面库上直接 downgrade。
+当前 head 为 `20260822_0050`。`0050` 为接口转发请求日志增加执行时的身份角色快照；`0049` 允许同一转发地址下的相同登录账号保存多个不同角色；`0048` 为接口转发登录账号增加精简的角色标识；`0047` 将转发地址映射到具体接口服务；`0046` 为接口转发记录补充 Controller 名称和简要职责；`0045` 将接口转发配置扩展为每个 Workspace 环境下多个具名地址，每个地址独立关联账号；`0044` 将接口转发环境收敛为 Workspace 环境注册表的配置投影，并删除身份名称、密码和旧角色字段；`0043 -> 0042` 会删除接口转发的全部服务、接口、环境、身份、参数和日志；`0042 -> 0041` 会恢复同一 Workspace 按环境各自发布表关联版本的旧索引，但不会恢复升级时已收敛的重复活动版本。若要验证 downgrade/upgrade，使用一次性测试数据库，不要在保存真实数据的控制面库上直接 downgrade。
 
 `system_guides` 保存 `guide_key`、JSONB 正文、菜单顺序和时间戳，没有 `enabled` 字段。历史 `include_in_prepare` 字段不再影响 MCP prepare；记录只进入系统文档菜单。
 
@@ -43,7 +43,10 @@ docker compose exec backend uv run alembic current
 | `workspace_nacos_profiles` | 按 Workspace 与已登记环境保存唯一 Nacos 地址、命名空间、登录凭据、超时及组件抽取规则；一个环境最多一条，列表 API 不返回密码 |
 | `project_database_environment_mappings` | 保存 Project 逻辑数据库、跨环境稳定 `mcp_alias` 和 Workspace 归属 |
 | `project_database_environment_targets` | 把每条逻辑映射的动态环境目标绑定到既有 `project_databases` 授权；不复制连接和查询策略，多个环境可以复用同一条授权 |
-| `workspace_table_relation_generations` | 保存一次表关联生成的版本头、环境、状态、revision 和展示口径的计数；`relation_count` 只统计页面展示的关系，`hidden_count` 是测不出基数、不展示的边，CHECK 约束钉住 `edge_count = relation_count + hidden_count`；部分唯一索引保证同一 Workspace 同一环境最多一个 `published` 和一个 `building`，用于原子发布 |
+| `workspace_table_relation_generations` | 保存一次表关联生成的版本头、基准来源环境、状态、revision 和展示口径的计数；部分唯一索引保证同一 Workspace 全局最多一个 `published` 和一个 `building`。表关联读取不随 task 环境切换 |
+| `interface_forwarding_services` / `interface_forwarding_interfaces` | 按 Workspace 保存 Swagger/OpenAPI 服务树、接口方法/路径和入参/出参结构 |
+| `interface_forwarding_environments` / `interface_forwarding_identities` | 为 Workspace 环境注册表中的环境保存多个具名接口转发地址，并按地址保存多个登录账号、角色标识和请求头；地址名称可不同但基础 URL 可相同，不能在此新增 Workspace 环境 |
+| `interface_forwarding_params` / `interface_forwarding_logs` | 保存每个接口最后一次测试参数/响应及有界列表使用的请求日志 |
 | `workspace_table_relation_tables` | 保存该版本覆盖到的表和四类基数计数（`one_to_one_count`、`one_to_many_count`、`many_to_one_count`、`many_to_many_count`），CHECK 约束要求 `relation_count` 等于四者之和；另有 `folded_*_count` 四列记录其中有几行是已并入多对多的中间表腿，供前端按折叠开关做减法，CHECK 约束要求每个 `folded_*` 落在 0 到对应计数之间。计数单位是渲染出的行（一条边在两端各算一次），与 `generations` 的边数口径不同；`relation_count` 为 0 的表被左栏默认过滤 |
 | `workspace_table_relation_edges` | 保存关联边，一条关系一行。两端按 C 排序规则规范化为左右对并有 CHECK 约束，`pair_fingerprint` 保证同一关系不重复；`orientation` 记录哪端持有键，`cardinality` 统一按父到子存储，另存是否跨库。`cardinality = 'unknown'` 的边会被存下来但查询层不返回给页面 |
 | `workspace_table_relation_code_sites` | 保存关系代码点位，挂在边上，说明父键如何被赋值；`kind` 命名决定基数的情形而不是持久化调用 |

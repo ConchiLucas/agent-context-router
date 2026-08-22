@@ -43,7 +43,6 @@ from context_router.schemas.table_relations import (
     TableRelationDetail,
     TableRelationDirection,
     TableRelationEndpoint,
-    TableRelationEnvironment,
     TableRelationGenerationStatus,
     TableRelationGenerationSummary,
     TableRelationMeasurement,
@@ -136,14 +135,11 @@ class TableRelationQueryService:
     def get_status(
         self,
         workspace_id: str,
-        *,
-        environment: TableRelationEnvironment | None = None,
     ) -> TableRelationStatus:
-        published = self._published(workspace_id, environment)
+        published = self._published(workspace_id)
         building = self._reader.get_generation(
             workspace_id=workspace_id,
             status="building",
-            environment=environment,
         )
         database_keys = (
             self._reader.list_database_keys(published.id) if published is not None else []
@@ -160,14 +156,13 @@ class TableRelationQueryService:
         self,
         workspace_id: str,
         *,
-        environment: TableRelationEnvironment | None = None,
         database_key: str | None = None,
         only_related: bool = True,
         search: str | None = None,
         limit: int = 200,
         offset: int = 0,
     ) -> TableRelationTableList:
-        published = self._published(workspace_id, environment)
+        published = self._published(workspace_id)
         if published is None:
             return TableRelationTableList(workspace_id=workspace_id, only_related=only_related)
         page = self._reader.list_tables(
@@ -195,9 +190,8 @@ class TableRelationQueryService:
         database_key: str,
         schema_name: str,
         table_name: str,
-        environment: TableRelationEnvironment | None = None,
     ) -> TableRelationTableDetail:
-        published = self._published(workspace_id, environment)
+        published = self._published(workspace_id)
         if published is None:
             raise TableRelationNotFoundError(
                 "这个工作空间还没有已发布的表关联数据",
@@ -248,7 +242,6 @@ class TableRelationQueryService:
         database_key: str,
         schema_name: str,
         table_name: str,
-        environment: TableRelationEnvironment | None = None,
     ) -> TableRelationTableWrites:
         """The persist calls recorded against this table, not against its edges.
 
@@ -256,7 +249,7 @@ class TableRelationQueryService:
         relation evidence is: most tables are never opened this far, and folding
         the snippets into the list payload would make every table pay for them.
         """
-        published = self._published(workspace_id, environment)
+        published = self._published(workspace_id)
         if published is None:
             raise TableRelationNotFoundError(
                 "这个工作空间还没有已发布的表关联数据",
@@ -296,10 +289,9 @@ class TableRelationQueryService:
         database_key: str,
         schema_name: str,
         table_name: str,
-        environment: TableRelationEnvironment | None = None,
     ) -> TableRelationTableUpdates:
         """The update calls recorded against this table, not against its edges."""
-        published = self._published(workspace_id, environment)
+        published = self._published(workspace_id)
         if published is None:
             raise TableRelationNotFoundError(
                 "这个工作空间还没有已发布的表关联数据",
@@ -340,7 +332,6 @@ class TableRelationQueryService:
         schema_name: str,
         table_name: str,
         edge_id: str,
-        environment: TableRelationEnvironment | None = None,
     ) -> TableRelationDetail:
         """One relation with the evidence behind its data verdict.
 
@@ -353,7 +344,7 @@ class TableRelationQueryService:
         is about not filling a list with rows that answer nothing, and this is the
         one place where "the table has rows and this column has none" is the answer.
         """
-        published = self._published(workspace_id, environment)
+        published = self._published(workspace_id)
         if published is None:
             raise TableRelationNotFoundError(
                 "这个工作空间还没有已发布的表关联数据",
@@ -385,12 +376,10 @@ class TableRelationQueryService:
     def _published(
         self,
         workspace_id: str,
-        environment: TableRelationEnvironment | None,
     ) -> TableRelationGenerationRecord | None:
         return self._reader.get_generation(
             workspace_id=workspace_id,
             status="published",
-            environment=environment,
         )
 
 

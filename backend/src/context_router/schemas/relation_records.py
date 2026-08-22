@@ -16,6 +16,7 @@ class RelationRecordSearchInput(BaseModel):
     table: RelationRecordTable
     keyword: str = Field(min_length=1, max_length=200)
     edge_id: str | None = Field(default=None, min_length=1, max_length=32)
+    source_keys: dict[str, str | int | float | bool | None] | None = None
     page: int = Field(default=1, ge=1, le=100_000)
 
     @field_validator("keyword")
@@ -25,6 +26,22 @@ class RelationRecordSearchInput(BaseModel):
         if not normalized:
             raise ValueError("关键词不能为空")
         return normalized
+
+    @field_validator("source_keys")
+    @classmethod
+    def validate_source_keys(
+        cls,
+        value: dict[str, str | int | float | bool | None] | None,
+    ) -> dict[str, str | int | float | bool | None] | None:
+        if value is None:
+            return None
+        if len(value) > 64:
+            raise ValueError("起点记录关联键过多")
+        if any(not key or len(key) > 255 for key in value):
+            raise ValueError("起点记录关联键名称无效")
+        if any(isinstance(item, str) and len(item) > 1000 for item in value.values()):
+            raise ValueError("起点记录关联键值过长")
+        return value
 
 
 class RelationRecordColumn(BaseModel):
@@ -42,12 +59,14 @@ class RelationRecordPage(BaseModel):
 
 
 class RelationRecordCard(BaseModel):
+    kind: Literal["source", "related"] = "related"
     edge_id: str
     relation_id: str
     cardinality: Literal["one_to_one", "one_to_many", "many_to_one", "unknown"]
     source_column: str
     target: RelationRecordTable
     target_column: str
+    matched_columns: list[str] = Field(default_factory=list)
     columns: list[RelationRecordColumn] = Field(default_factory=list)
     rows: list[list[Any]] = Field(default_factory=list)
     page: RelationRecordPage
@@ -62,4 +81,5 @@ class RelationRecordSearchResult(BaseModel):
     table: RelationRecordTable
     keyword: str
     scanned_columns: list[str] = Field(default_factory=list)
+    source_keys: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
     cards: list[RelationRecordCard] = Field(default_factory=list)

@@ -61,6 +61,14 @@ def _app() -> FastAPI:
     def reveal_password() -> dict[str, bool]:
         return {"read": True}
 
+    @app.post("/api/interface-forwarding/interfaces/interface-1/execute")
+    def execute_forwarding() -> dict[str, bool]:
+        return {"forwarded": True}
+
+    @app.delete("/api/interface-forwarding/interfaces/interface-1")
+    def delete_forwarding_interface() -> dict[str, bool]:
+        return {"deleted": True}
+
     return app
 
 
@@ -131,6 +139,18 @@ def test_browser_origin_can_read_and_run_allowlisted_actions() -> None:
                 headers=headers,
             ).status_code
             == 405
+        )
+        assert (
+            client.post(
+                "/api/interface-forwarding/interfaces/interface-1/execute", headers=headers
+            ).status_code
+            == 200
+        )
+        assert (
+            client.delete(
+                "/api/interface-forwarding/interfaces/interface-1", headers=headers
+            ).status_code
+            == 200
         )
 
 

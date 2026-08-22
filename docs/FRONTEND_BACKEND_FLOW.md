@@ -117,6 +117,10 @@ Codex / Antigravity
 
 `start_workspace` 不接收 Project 参数，任何“启动”语义都执行 Workspace 完整启动。`apply_workspace_changes` 一次接收本轮全部改动路径；跨项目、Workspace 级路径、`.env.local` 或无法唯一归属时选择完整更新。`.env.local` 只存在目标机器磁盘，不进入控制面数据库和快照。Context Router 负责决策与状态，Host Runner 负责宿主机执行，目标仓库脚本负责 Docker 和依赖配置。
 
+接口转发 MCP 的执行也优先使用具备 `interface-forwarding` 能力的在线 Host Runner：控制面先完成计划、只读分类、配置指纹和单次使用校验，再创建短租约任务；Runner 只执行服务端组装的 HTTP(S) GET/POST 请求并回传有界结果。账号请求头不落任务表、不进入 MCP 响应；Runner 不可用时保留容器内直连兼容路径。c12-data 的原始 Controller 路径不直接开放，只有登记为 MTP 可调用接口的明确包装路径才能执行。
+
+`prepare_forwarding_request` 按同接口、同环境、同转发地址、同身份选择最近一条成功日志，并在合并前移除验证码、临时令牌、时间戳等易失字段，把历史页码重置为 1、历史分页大小限制到 20。调用方参数优先级最高；返回的 `parameter_evidence` 为每个顶层字段标记 `caller`、`successful_history`、Schema 默认/示例或安全分页默认及可信度。历史 ID 在没有明确数据库字段映射时只标记为未验证并给出 warning，AI 应通过数据库或表关联工具获得当前值后重新 prepare，不得把历史 ID 描述成已经验证。
+
 ```text
 Codex / Antigravity
   -> POST /mcp tools/call
@@ -161,6 +165,7 @@ prepare 和文档搜索不建立业务数据库连接。业务数据库离线时
 | 加载表关联版本与表清单 | `table-relation-explorer.tsx`、`table-relations.ts` | `GET /api/workspaces/{id}/table-relations/status`、`GET /api/workspaces/{id}/table-relations/tables` |
 | 查看单表关联 | `table-relation-detail.tsx`、`table-relation-edge-row.tsx` | `GET /api/workspaces/{id}/table-relations/table` |
 | 按关联字段关键词查看一层关联记录 | `relation-record-explorer.tsx` | 安全只读 `POST /api/workspaces/{id}/relation-records/search` |
+| 管理并测试接口转发 | `interface-forwarding-manager.tsx` | 浏览器使用 `GET /api/interface-forwarding/overview` 只读展示 Workspace 环境下“接口服务 + 具名基础 URL”映射及每个地址的登录账号、角色标识和请求头；overview 聚合接口最近请求时间，有请求记录的接口优先按时间倒序，未请求接口按路径和请求方式稳定排序；前端对当前服务或全部接口的实际展示集合复用同一排序；写入接口保留给 AI/运维调用；execute 同时校验接口与地址的服务归属，测试下拉只显示同服务地址；MCP 执行优先经 Host Runner 单次租约访问宿主机 VPN 网络并统一落日志；接口 state/logs/schema |
 | 查看单表插入入口 | `table-relation-write-modal.tsx` | `GET /api/workspaces/{id}/table-relations/table/writes` |
 | 查看单表更新入口 | `table-relation-write-modal.tsx` | `GET /api/workspaces/{id}/table-relations/table/updates` |
 | 搜索表名、只看有关联的表、折叠多对多 | `table-relation-table-list.tsx`、`table-relations.ts` | 无请求，复用已加载数据在前端过滤 |
@@ -291,7 +296,7 @@ Workspace 调用记录通过 `task-history.ts` 保留文档读取批次和单批
 
 全局调用链路页由 `trace-explorer.tsx` 读取统一 Trace API，服务端直接返回 `sequence`、调用状态、完整性和关联 artifacts。页面提供任务、Agent、十二个当前工具、三个历史工具和状态筛选，只保留调用树与调用列表；“调用树”只对显式 `parent_tool_call_id` 绘制父子含义，普通调用按稳定顺序纵向排列。文档搜索节点只展示返回文档数量等脱敏摘要，文档工具不请求文档树或 Markdown；数据库工具通过 `database-call-payload-modal.tsx` 点击后懒加载全屏出入参详情。中间件工具只展示组件数量、是否显式 reveal 和警告数量。列表和详情会把链路标记为“完整 / 运行中 / 可能不完整”，并把 prepare 缺失、历史、重启中断或未关联明细转换为中文提示。
 
-表关联页由 `table-relation-explorer.tsx` 拉取版本、表清单和单表详情。后端已按当前选中的表完成基数视角翻转、四组分组、过滤和折叠标记，前端只负责呈现：徽章只有四种真实基数字形，每行行内标出参与的列名和方向箭头，白话主语句、排序、搜索、只看有关联的表和多对多折叠都是 `lib/table-relations.ts` 的纯函数，由 `lib/table-relations.test.ts` 覆盖（仓库前端测试只跑 `lib/*.test.ts`，没有组件渲染环境）。搜索和两个开关不重新请求，只在已加载数据上过滤。折叠开关是**页面级视图偏好**，放在左栏和「只看有关联的表」并列，同时决定左栏每张表卡片的计数、排序、是否被「只看有关联的表」隐藏，以及右侧详情画哪些行；顶部版本行的展示总数由左栏计数逐表相加得到，所以三处数字在两种折叠状态下都对得上。关联数据的生成尚未实现，示例数据由后端种子脚本写入。
+表关联页由 `table-relation-explorer.tsx` 拉取 Workspace 唯一发布版本、表清单和单表详情，不接收任务或页面环境。后端按当前选中的表完成基数视角翻转、过滤和折叠标记，前端只负责呈现。关联数据页另外携带页面环境：关系结构仍取唯一发布版本，实际数据连接由该环境映射解析。关联数据的生成尚未实现，示例数据由后端种子脚本写入。
 
 ClickHouse 连接详情展示 secure、verify、bootstrap database、connect timeout 和 send/receive timeout；项目数据源详情展示 `mcp_alias` 和只读策略。AI/运维通过既有批量 API 维护时，后端仍校验同 Workspace 其他项目的别名占用，因此支持合法的别名互换且不会部分保存。历史非只读关联会明确提示不暴露给 MCP。
 

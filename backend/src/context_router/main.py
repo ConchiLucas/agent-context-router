@@ -14,6 +14,7 @@ from context_router.api.document_chain_analytics import (
     router as document_chain_analytics_router,
 )
 from context_router.api.document_read_stats import router as document_read_stats_router
+from context_router.api.interface_forwarding import router as interface_forwarding_router
 from context_router.api.mcp_integration import router as mcp_integration_router
 from context_router.api.mcp_traces import router as mcp_traces_router
 from context_router.api.nacos_profiles import router as nacos_profiles_router
@@ -156,6 +157,8 @@ from context_router.services.database_tool_payload import DatabaseToolPayloadSer
 from context_router.services.document_chain_analytics import DocumentChainAnalyticsService
 from context_router.services.document_read_stats import DocumentReadStatsService
 from context_router.services.document_search_index import DocumentSearchIndexer
+from context_router.services.interface_forwarding import InterfaceForwardingService
+from context_router.services.interface_forwarding_context import InterfaceForwardingContextService
 from context_router.services.local_workspace_mapping import LocalWorkspaceMappingService
 from context_router.services.mcp_integration import McpIntegrationService
 from context_router.services.mcp_trace import McpTraceService
@@ -290,12 +293,27 @@ def create_app(
     resolved_task_repository = task_repository or PostgresTaskRepository(
         resolved_settings.database_url
     )
+    resolved_runtime_runner_repository = runtime_runner_repository or (
+        PostgresRuntimeRunnerRepository(resolved_settings.database_url)
+        if resolved_settings.database_url
+        else InMemoryRuntimeRunnerRepository()
+    )
     resolved_system_guide_repository = system_guide_repository or (
         PostgresSystemGuideRepository(resolved_settings.database_url)
         if resolved_settings.database_url
         else InMemorySystemGuideRepository()
     )
     system_guide_service = SystemGuideService(resolved_system_guide_repository)
+    interface_forwarding_service = InterfaceForwardingService(resolved_settings.database_url)
+    interface_forwarding_context_service = InterfaceForwardingContextService(
+        database_url=resolved_settings.database_url,
+        task_repository=resolved_task_repository,
+        database_environment_repository=resolved_database_environment_repository,
+        host_runner_available=lambda: resolved_runtime_runner_repository.is_available(
+            resolved_settings.runtime_runner_heartbeat_ttl_seconds,
+            "interface-forwarding",
+        ),
+    )
     resolved_workspace_runtime_repository = workspace_runtime_repository or (
         PostgresWorkspaceRuntimeRepository(resolved_settings.database_url)
         if resolved_settings.database_url
@@ -337,11 +355,6 @@ def create_app(
         PostgresRuntimeOperationRepository(resolved_settings.database_url)
         if resolved_settings.database_url
         else InMemoryRuntimeOperationRepository()
-    )
-    resolved_runtime_runner_repository = runtime_runner_repository or (
-        PostgresRuntimeRunnerRepository(resolved_settings.database_url)
-        if resolved_settings.database_url
-        else InMemoryRuntimeRunnerRepository()
     )
     workspace_runtime_orchestration_service = WorkspaceRuntimeOrchestrationService(
         task_repository=resolved_task_repository,
@@ -483,6 +496,7 @@ def create_app(
         workspace_runtime_service=workspace_runtime_orchestration_service,
         middleware_context_service=middleware_context_service,
         table_relation_context_service=table_relation_context_service,
+        interface_forwarding_context_service=interface_forwarding_context_service,
     )
     mcp_app = mcp_server.streamable_http_app()
 
@@ -579,6 +593,8 @@ def create_app(
     app.state.mcp_trace_service = mcp_trace_service
     app.state.system_guide_repository = resolved_system_guide_repository
     app.state.system_guide_service = system_guide_service
+    app.state.interface_forwarding_service = interface_forwarding_service
+    app.state.interface_forwarding_context_service = interface_forwarding_context_service
     app.state.document_read_stats_repository = resolved_document_read_stats_repository
     app.state.document_read_stats_service = document_read_stats_service
     app.state.document_chain_analytics_repository = resolved_document_chain_analytics_repository
@@ -612,6 +628,7 @@ def create_app(
     app.include_router(document_read_stats_router, prefix=resolved_settings.api_prefix)
     app.include_router(document_chain_analytics_router, prefix=resolved_settings.api_prefix)
     app.include_router(system_guides_router, prefix=resolved_settings.api_prefix)
+    app.include_router(interface_forwarding_router, prefix=resolved_settings.api_prefix)
 
     @app.get("/health")
     def health() -> dict[str, str]:

@@ -61,6 +61,13 @@ test("allows reads and the explicit safe browser POST allowlist", () => {
     );
   }
   assert.equal(isBrowserApiRequestAllowed("/api/system-guides", "POST"), false);
+  assert.equal(isBrowserApiRequestAllowed("/api/interface-forwarding/import", "POST"), true);
+  assert.equal(isBrowserApiRequestAllowed("/api/interface-forwarding/environments", "POST"), true);
+  assert.equal(isBrowserApiRequestAllowed("/api/interface-forwarding/environments/local", "PUT"), true);
+  assert.equal(isBrowserApiRequestAllowed("/api/interface-forwarding/environments/address-1", "DELETE"), true);
+  assert.equal(isBrowserApiRequestAllowed("/api/interface-forwarding/interfaces/api-1/execute", "POST"), true);
+  assert.equal(isBrowserApiRequestAllowed("/api/interface-forwarding/services/service-1", "PUT"), true);
+  assert.equal(isBrowserApiRequestAllowed("/api/interface-forwarding/interfaces/api-1", "DELETE"), true);
   assert.equal(
     isBrowserApiRequestAllowed("/api/system-guides/guide-1/content", "PUT"),
     true,

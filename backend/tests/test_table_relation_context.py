@@ -114,11 +114,11 @@ def single_entry(result: dict[str, object]) -> dict[str, object]:
     return entries[0]
 
 
-def test_read_inherits_the_task_environment_after_tool_defaults_are_removed() -> None:
+def test_read_uses_the_workspace_snapshot_instead_of_the_task_environment() -> None:
     projection = build_seed_projection(workspace_id=WORKSPACE, generation_id="generation-default")
     configured = TableRelationContextService(
         registry=StubRegistry(),  # type: ignore[arg-type]
-        task_repository=StubTaskStore(task_record(database_environment="uat")),  # type: ignore[arg-type]
+        task_repository=StubTaskStore(task_record(database_environment="test")),  # type: ignore[arg-type]
         reader=load_into_memory(projection),
     )
 
@@ -574,7 +574,6 @@ def test_mcp_tools_forward_only_task_scoped_arguments() -> None:
     )
     assert relations.read_arguments == {
         "task_id": 7,
-        "environment": None,
         "tables": ["cs_portal_cockpit_city_flow"],
         "sections": ["writes"],
         "database": None,
@@ -589,7 +588,6 @@ def test_mcp_tools_forward_only_task_scoped_arguments() -> None:
     )
     assert relations.search_arguments == {
         "task_id": 7,
-        "environment": None,
         "query": "cockpit",
         "database": None,
         "only_related": True,

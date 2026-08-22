@@ -137,6 +137,9 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "execute_database_query",
         "read_table_relations",
         "search_relation_tables",
+        "search_forwarding_interfaces",
+        "prepare_forwarding_request",
+        "execute_forwarding_request",
         "apply_workspace_changes",
         "start_workspace",
         "get_workspace_operation",
@@ -146,18 +149,25 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
     assert tools[0].annotations.destructiveHint is False
     assert tools[0].annotations.idempotentHint is False
     assert tools[0].annotations.openWorldHint is False
-    for tool in tools[1:9]:
+    for tool in tools[1:10]:
         assert tool.annotations is not None
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
         assert tool.annotations.idempotentHint is True
         assert tool.annotations.openWorldHint is False
-    for tool in (tools[9], tools[10]):
+    assert tools[10].annotations is not None
+    assert tools[10].annotations.readOnlyHint is True
+    assert tools[10].annotations.idempotentHint is False
+    assert tools[11].annotations is not None
+    assert tools[11].annotations.readOnlyHint is False
+    assert tools[11].annotations.destructiveHint is False
+    assert tools[11].annotations.openWorldHint is True
+    for tool in (tools[12], tools[13]):
         assert tool.annotations is not None
         assert tool.annotations.readOnlyHint is False
         assert tool.annotations.destructiveHint is True
         assert tool.annotations.idempotentHint is False
-    for tool in (tools[11],):
+    for tool in (tools[14],):
         assert tool.annotations is not None
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
@@ -215,7 +225,6 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
     assert set(relation_schema["properties"]) == {
         "task_id",
         "tables",
-        "environment",
         "sections",
         "database",
         "evidence",
@@ -225,7 +234,6 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
     assert relation_search_schema["required"] == ["task_id"]
     assert set(relation_search_schema["properties"]) == {
         "task_id",
-        "environment",
         "query",
         "database",
         "only_related",

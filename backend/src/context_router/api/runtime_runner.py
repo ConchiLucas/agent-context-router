@@ -14,10 +14,14 @@ from context_router.repositories.runtime_runner_repository import (
     RuntimeRunnerRepositoryError,
 )
 from context_router.schemas.workspace_runtime import (
+    RunnerForwardingResultRequest,
     RunnerLeaseRequest,
     RunnerOperationRequest,
     RunnerRegistration,
     RunnerStepResultRequest,
+)
+from context_router.services.interface_forwarding_context import (
+    InterfaceForwardingContextError,
 )
 
 router = APIRouter(prefix="/runtime-runner", tags=["runtime-runner"])
@@ -113,6 +117,51 @@ def lease_operation(payload: RunnerLeaseRequest, request: Request) -> dict[str, 
         },
         "lease_token": lease.lease_token,
     }
+
+
+@router.post("/forwarding/lease")
+def lease_forwarding_job(
+    payload: RunnerLeaseRequest, request: Request
+) -> dict[str, object]:
+    _authorize(request)
+    runner = request.app.state.runtime_runner_repository.get(payload.runner_id)
+    if runner is None:
+        raise HTTPException(status_code=409, detail="host_runner_not_registered")
+    if "interface-forwarding" not in runner.capabilities:
+        raise HTTPException(status_code=409, detail="host_runner_capability_missing")
+    try:
+        job = request.app.state.interface_forwarding_context_service.lease_host_job(
+            runner_id=payload.runner_id,
+            lease_seconds=request.app.state.settings.runtime_runner_lease_seconds,
+        )
+    except InterfaceForwardingContextError as exc:
+        raise HTTPException(status_code=409, detail=f"{exc.code}: {exc}") from exc
+    return {"job": job}
+
+
+@router.post("/forwarding/jobs/{job_id}/complete")
+def complete_forwarding_job(
+    job_id: str,
+    payload: RunnerForwardingResultRequest,
+    request: Request,
+) -> dict[str, object]:
+    _authorize(request)
+    try:
+        request.app.state.interface_forwarding_context_service.complete_host_job(
+            job_id=job_id,
+            runner_id=payload.runner_id,
+            lease_token=payload.lease_token,
+            status_code=payload.status_code,
+            response_body=payload.response_body,
+            response_headers=payload.response_headers,
+            response_bytes=payload.response_bytes,
+            response_truncated=payload.response_truncated,
+            error_type=payload.error_type,
+            duration_ms=payload.duration_ms,
+        )
+    except InterfaceForwardingContextError as exc:
+        raise HTTPException(status_code=409, detail=f"{exc.code}: {exc}") from exc
+    return {"status": "accepted"}
 
 
 @router.post("/operations/{operation_id}/started")

@@ -15,6 +15,29 @@ from context_router.repositories.runtime_runner_repository import (
 )
 
 
+class FakeForwardingContextService:
+    def __init__(self) -> None:
+        self.completed: list[dict[str, object]] = []
+
+    def lease_host_job(self, *, runner_id: str, lease_seconds: int):
+        return {
+            "job_id": "job-1",
+            "lease_token": "l" * 48,
+            "request": {
+                "method": "POST",
+                "url": "http://127.0.0.1:9000/read/page",
+                "headers": {"X-System-Code": "mtp"},
+                "query": {},
+                "body": {"pageNumber": 1},
+                "timeout_seconds": 30,
+                "max_response_bytes": 1_048_576,
+            },
+        }
+
+    def complete_host_job(self, **payload) -> None:
+        self.completed.append(payload)
+
+
 def build_app(tmp_path: Path) -> tuple[FastAPI, str]:
     runtime_root = tmp_path / "runtime"
     runtime_root.mkdir(mode=0o700)
@@ -30,6 +53,7 @@ def build_app(tmp_path: Path) -> tuple[FastAPI, str]:
     )
     app.state.runtime_runner_repository = InMemoryRuntimeRunnerRepository()
     app.state.runtime_operation_repository = InMemoryRuntimeOperationRepository()
+    app.state.interface_forwarding_context_service = FakeForwardingContextService()
     app.include_router(router, prefix="/api")
     return app, token
 
@@ -137,3 +161,48 @@ def test_runner_can_register_lease_and_complete_operation(tmp_path: Path) -> Non
         )
         assert completed.status_code == 200
         assert completed.json()["status"] == "succeeded"
+
+
+def test_runner_can_lease_and_complete_forwarding_job(tmp_path: Path) -> None:
+    app, token = build_app(tmp_path)
+    headers = authorize(token)
+    with TestClient(app) as client:
+        registered = client.post(
+            "/api/runtime-runner/register",
+            json={
+                "runner_id": "runner-forwarding",
+                "hostname": "mac",
+                "platform": "darwin",
+                "version": "1",
+                "capabilities": ["interface-forwarding"],
+            },
+            headers=headers,
+        )
+        assert registered.status_code == 200
+
+        leased = client.post(
+            "/api/runtime-runner/forwarding/lease",
+            json={"runner_id": "runner-forwarding"},
+            headers=headers,
+        )
+        assert leased.status_code == 200
+        assert leased.json()["job"]["job_id"] == "job-1"
+
+        completed = client.post(
+            "/api/runtime-runner/forwarding/jobs/job-1/complete",
+            json={
+                "runner_id": "runner-forwarding",
+                "lease_token": "l" * 48,
+                "status_code": 200,
+                "response_body": '{"code":0}',
+                "response_headers": {"content-type": "application/json"},
+                "response_bytes": 10,
+                "response_truncated": False,
+                "duration_ms": 12,
+            },
+            headers=headers,
+        )
+        assert completed.status_code == 200
+        saved = app.state.interface_forwarding_context_service.completed[0]
+        assert saved["runner_id"] == "runner-forwarding"
+        assert saved["status_code"] == 200

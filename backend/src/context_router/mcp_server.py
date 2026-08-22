@@ -16,6 +16,7 @@ from pydantic import Field
 from context_router.database.errors import DatabaseAccessError
 from context_router.mcp_contract import (
     CONTEXT_ROUTER_CORE_TOOL_NAMES,
+    CONTEXT_ROUTER_INTERFACE_FORWARDING_TOOL_NAMES,
     CONTEXT_ROUTER_TABLE_RELATION_TOOL_NAMES,
 )
 from context_router.mcp_contract import (
@@ -38,6 +39,10 @@ from context_router.services.context_preparation import (
 from context_router.services.database_catalog import DatabaseCatalogService
 from context_router.services.database_query import DatabaseQueryService
 from context_router.services.database_tool_payload import DatabaseToolPayloadService
+from context_router.services.interface_forwarding_context import (
+    InterfaceForwardingContextError,
+    InterfaceForwardingContextService,
+)
 from context_router.services.mcp_trace import McpTraceService
 from context_router.services.nacos_middleware import (
     MiddlewareContextError,
@@ -91,6 +96,16 @@ MCP_SERVER_INSTRUCTIONS = (
     "measurements, re-runnable check SQL, and relation code sites. "
     "Empty writes or updates only mean no entry points are recorded yet. When only a business "
     "term is known, find exact table names first with search_relation_tables. "
+    "When the user wants to call an imported business interface, first use "
+    "search_forwarding_interfaces, then prepare_forwarding_request. Execute only a ready "
+    "short-lived plan with execute_forwarding_request and its exact request_sha256. The server "
+    "selects the task Workspace/environment, route, and saved account headers; never ask the "
+    "user to provide a raw URL or copy saved headers. The first release executes only interfaces "
+    "classified as read operations. A needs_selection or needs_parameters result is a normal "
+    "request for an explicit address, account role, or missing business value. Never invent "
+    "business IDs: inspect parameter_evidence and warnings, use successful history already "
+    "merged by prepare, and validate historical IDs with the database/table-relation tools when "
+    "current records are needed. Re-run prepare with the verified value as a caller parameter. "
     "When the user asks to start services, call start_workspace: start always means every "
     "registered project in the task Workspace. After modifying registered Workspace code, "
     "call apply_workspace_changes once with task_id and actual Workspace-relative changed "
@@ -109,6 +124,11 @@ MCP_SERVER_INSTRUCTIONS = (
     READ_TABLE_RELATIONS_TOOL_NAME,
     SEARCH_RELATION_TABLES_TOOL_NAME,
 ) = CONTEXT_ROUTER_TABLE_RELATION_TOOL_NAMES
+(
+    SEARCH_FORWARDING_INTERFACES_TOOL_NAME,
+    PREPARE_FORWARDING_REQUEST_TOOL_NAME,
+    EXECUTE_FORWARDING_REQUEST_TOOL_NAME,
+) = CONTEXT_ROUTER_INTERFACE_FORWARDING_TOOL_NAMES
 APPLY_WORKSPACE_TOOL_NAME = "apply_workspace_changes"
 START_WORKSPACE_TOOL_NAME = "start_workspace"
 GET_WORKSPACE_OPERATION_TOOL_NAME = "get_workspace_operation"
@@ -178,8 +198,8 @@ EXECUTE_DATABASE_TOOL_DESCRIPTION = (
 )
 READ_TABLE_RELATIONS_TOOL_DESCRIPTION = (
     "Read the curated relation list for up to 10 database tables in the current task's "
-    "Workspace. Pass an environment registered by that Workspace, or omit it to inherit the "
-    "task environment. Pass task_id and bare table "
+    "Workspace. Each Workspace has one published relation snapshot; it does not follow or "
+    "override the task database environment. Pass task_id and bare table "
     "names; add database only when a table name exists in several databases. A name that "
     "cannot be resolved fails as one entry of the answer with close-name suggestions, without "
     "failing the other tables. sections selects any of relations, writes, updates and defaults "
@@ -202,11 +222,28 @@ SEARCH_RELATION_TABLES_TOOL_DESCRIPTION = (
     "this when only a business term or entity name is known, or to list which tables of a "
     "database have recorded relations; results are sorted by relation count and resolve into "
     "exact names for read_table_relations. only_related=false includes tables without any "
-    "recorded relation. Pass an environment registered by the Workspace, or omit it to inherit "
-    "the task environment. This searches the curated relation snapshot only; a table "
+    "recorded relation. Each Workspace has one published relation snapshot, independent of the "
+    "task database environment. This searches the curated relation snapshot only; a table "
     "missing "
     "here may still exist in the database — check search_database_objects before concluding "
     "it does not exist."
+)
+SEARCH_FORWARDING_INTERFACES_TOOL_DESCRIPTION = (
+    "Search imported interfaces in the task Workspace and report whether each is callable in "
+    "the task environment. Prefer an exact Chinese business meaning, path fragment, or Controller."
+)
+PREPARE_FORWARDING_REQUEST_TOOL_DESCRIPTION = (
+    "Resolve one imported interface to the task environment, forwarding address, saved account "
+    "role, latest successful request history, and OpenAPI contract. Historical pagination is "
+    "safely normalized and volatile values are removed. Every proposed field includes source, "
+    "evidence, and confidence; historical IDs not backed by an explicit database mapping are "
+    "reported in warnings. Returns a short-lived immutable plan only when all required values "
+    "are present. Saved request-header values are never returned."
+)
+EXECUTE_FORWARDING_REQUEST_TOOL_DESCRIPTION = (
+    "Execute exactly one prepared, unexpired, read-only forwarding plan. The caller must echo the "
+    "plan request_sha256; raw URLs, methods, request headers, and arbitrary overrides are "
+    "forbidden."
 )
 PREPARE_TOOL_ANNOTATIONS = ToolAnnotations(
     readOnlyHint=True,
@@ -237,6 +274,18 @@ RUNTIME_READ_TOOL_ANNOTATIONS = ToolAnnotations(
     destructiveHint=False,
     idempotentHint=True,
     openWorldHint=False,
+)
+FORWARDING_PREPARE_TOOL_ANNOTATIONS = ToolAnnotations(
+    readOnlyHint=True,
+    destructiveHint=False,
+    idempotentHint=False,
+    openWorldHint=False,
+)
+FORWARDING_EXECUTE_TOOL_ANNOTATIONS = ToolAnnotations(
+    readOnlyHint=False,
+    destructiveHint=False,
+    idempotentHint=False,
+    openWorldHint=True,
 )
 
 
@@ -424,6 +473,7 @@ def create_context_router_mcp(
     workspace_runtime_service: WorkspaceRuntimeOrchestrationService | None = None,
     middleware_context_service: MiddlewareContextService | None = None,
     table_relation_context_service: TableRelationContextService | None = None,
+    interface_forwarding_context_service: InterfaceForwardingContextService | None = None,
 ) -> FastMCP:
     server = ContextRouterMCP(
         name=MCP_SERVER_NAME,
@@ -637,14 +687,6 @@ def create_context_router_mcp(
             list[Annotated[str, Field(min_length=1, max_length=255)]],
             Field(min_length=1, max_length=10),
         ],
-        environment: Annotated[
-            str | None,
-            Field(
-                max_length=32,
-                pattern=r"^[a-z][a-z0-9_-]{0,31}$",
-                description="Optional call environment. Omit to inherit the task environment.",
-            ),
-        ] = None,
         sections: Annotated[
             list[Literal["relations", "writes", "updates"]] | None,
             Field(default=None, min_length=1, max_length=3),
@@ -663,7 +705,6 @@ def create_context_router_mcp(
         try:
             return table_relation_context_service.read(
                 task_id=task_id,
-                environment=environment,
                 tables=tables,
                 sections=sections,
                 database=database,
@@ -679,14 +720,6 @@ def create_context_router_mcp(
     )
     def search_relation_tables(
         task_id: Annotated[int, Field(ge=1, strict=True)],
-        environment: Annotated[
-            str | None,
-            Field(
-                max_length=32,
-                pattern=r"^[a-z][a-z0-9_-]{0,31}$",
-                description="Optional call environment. Omit to inherit the task environment.",
-            ),
-        ] = None,
         query: Annotated[str | None, Field(min_length=1, max_length=255)] = None,
         database: Annotated[
             str | None,
@@ -700,13 +733,96 @@ def create_context_router_mcp(
         try:
             return table_relation_context_service.search(
                 task_id=task_id,
-                environment=environment,
                 query=query,
                 database=database,
                 only_related=only_related,
                 limit=limit,
             )
         except TableRelationContextError as exc:
+            raise ToolError(f"{exc.code}: {exc}") from exc
+
+    @server.tool(
+        name=SEARCH_FORWARDING_INTERFACES_TOOL_NAME,
+        description=SEARCH_FORWARDING_INTERFACES_TOOL_DESCRIPTION,
+        annotations=READ_TOOL_ANNOTATIONS,
+    )
+    def search_forwarding_interfaces(
+        task_id: Annotated[int, Field(ge=1, strict=True)],
+        query: Annotated[str, Field(min_length=1, max_length=240)],
+        service: Annotated[str | None, Field(max_length=160)] = None,
+        role: Annotated[str | None, Field(max_length=160)] = None,
+        limit: Annotated[int, Field(ge=1, le=50, strict=True)] = 10,
+    ) -> dict[str, object]:
+        if interface_forwarding_context_service is None:
+            raise ToolError("interface_forwarding_disabled: 接口转发 MCP 当前不可用")
+        try:
+            return interface_forwarding_context_service.search(
+                task_id=task_id,
+                query=query,
+                service=service,
+                role=role,
+                limit=limit,
+            )
+        except InterfaceForwardingContextError as exc:
+            raise ToolError(f"{exc.code}: {exc}") from exc
+
+    @server.tool(
+        name=PREPARE_FORWARDING_REQUEST_TOOL_NAME,
+        description=PREPARE_FORWARDING_REQUEST_TOOL_DESCRIPTION,
+        annotations=FORWARDING_PREPARE_TOOL_ANNOTATIONS,
+    )
+    def prepare_forwarding_request(
+        task_id: Annotated[int, Field(ge=1, strict=True)],
+        interface_id: Annotated[str, Field(min_length=1, max_length=36)],
+        environment: Annotated[
+            str | None,
+            Field(max_length=32, pattern=r"^[a-z][a-z0-9_-]{0,31}$"),
+        ] = None,
+        address_id: Annotated[str | None, Field(max_length=36)] = None,
+        login_account: Annotated[str | None, Field(max_length=240)] = None,
+        role_name: Annotated[str | None, Field(max_length=160)] = None,
+        path: Annotated[dict[str, Any] | None, Field(default=None)] = None,
+        query: Annotated[dict[str, Any] | None, Field(default=None)] = None,
+        body: Annotated[dict[str, Any] | None, Field(default=None)] = None,
+        use_history: Annotated[bool, Field(strict=True)] = True,
+    ) -> dict[str, object]:
+        if interface_forwarding_context_service is None:
+            raise ToolError("interface_forwarding_disabled: 接口转发 MCP 当前不可用")
+        try:
+            return interface_forwarding_context_service.prepare(
+                task_id=task_id,
+                interface_id=interface_id,
+                environment=environment,
+                address_id=address_id,
+                login_account=login_account,
+                role_name=role_name,
+                path=path,
+                query=query,
+                body=body,
+                use_history=use_history,
+            )
+        except InterfaceForwardingContextError as exc:
+            raise ToolError(f"{exc.code}: {exc}") from exc
+
+    @server.tool(
+        name=EXECUTE_FORWARDING_REQUEST_TOOL_NAME,
+        description=EXECUTE_FORWARDING_REQUEST_TOOL_DESCRIPTION,
+        annotations=FORWARDING_EXECUTE_TOOL_ANNOTATIONS,
+    )
+    def execute_forwarding_request(
+        task_id: Annotated[int, Field(ge=1, strict=True)],
+        plan_id: Annotated[str, Field(min_length=1, max_length=36)],
+        request_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")],
+    ) -> dict[str, object]:
+        if interface_forwarding_context_service is None:
+            raise ToolError("interface_forwarding_disabled: 接口转发 MCP 当前不可用")
+        try:
+            return interface_forwarding_context_service.execute(
+                task_id=task_id,
+                plan_id=plan_id,
+                request_sha256=request_sha256,
+            )
+        except InterfaceForwardingContextError as exc:
             raise ToolError(f"{exc.code}: {exc}") from exc
 
     @server.tool(
@@ -879,6 +995,39 @@ def _request_summary(name: str, arguments: dict[str, Any]) -> dict[str, object] 
             "only_related": arguments.get("only_related", True) is True,
             "limit": arguments.get("limit") if isinstance(arguments.get("limit"), int) else None,
         }
+    if name == SEARCH_FORWARDING_INTERFACES_TOOL_NAME:
+        raw_query = arguments.get("query")
+        return {
+            "query_sha256": (
+                hashlib.sha256(raw_query.strip().encode("utf-8")).hexdigest()
+                if isinstance(raw_query, str)
+                else None
+            ),
+            "service": _safe_string(arguments.get("service"), 160),
+            "role": _safe_string(arguments.get("role"), 160),
+            "limit": arguments.get("limit") if isinstance(arguments.get("limit"), int) else None,
+        }
+    if name == PREPARE_FORWARDING_REQUEST_TOOL_NAME:
+        supplied = {
+            location: len(arguments.get(location, {}))
+            if isinstance(arguments.get(location), dict)
+            else 0
+            for location in ("path", "query", "body")
+        }
+        return {
+            "interface_id": _safe_string(arguments.get("interface_id"), 36),
+            "environment": _safe_string(arguments.get("environment"), 32),
+            "address_selected": isinstance(arguments.get("address_id"), str),
+            "account_selected": isinstance(arguments.get("login_account"), str),
+            "role_selected": isinstance(arguments.get("role_name"), str),
+            "supplied_value_counts": supplied,
+            "use_history": arguments.get("use_history", True) is True,
+        }
+    if name == EXECUTE_FORWARDING_REQUEST_TOOL_NAME:
+        return {
+            "plan_id": _safe_string(arguments.get("plan_id"), 36),
+            "request_sha256": _safe_string(arguments.get("request_sha256"), 64),
+        }
     if name == APPLY_WORKSPACE_TOOL_NAME:
         changed_files = arguments.get("changed_files")
         return {"changed_file_count": len(changed_files) if isinstance(changed_files, list) else 0}
@@ -999,6 +1148,29 @@ def _result_summary(name: str, payload: dict[str, Any]) -> dict[str, object] | N
         tables = payload.get("tables")
         return {
             "returned_count": len(tables) if isinstance(tables, list) else 0,
+            "truncated": payload.get("truncated") is True,
+        }
+    if name == SEARCH_FORWARDING_INTERFACES_TOOL_NAME:
+        return {
+            "returned_count": payload.get("returned_count", 0),
+            "environment": _safe_string(payload.get("environment"), 32),
+        }
+    if name == PREPARE_FORWARDING_REQUEST_TOOL_NAME:
+        candidates = payload.get("candidates")
+        missing = payload.get("missing")
+        return {
+            "status": _safe_string(payload.get("status"), 32),
+            "candidate_count": len(candidates) if isinstance(candidates, list) else 0,
+            "missing_count": len(missing) if isinstance(missing, list) else 0,
+            "plan_id": _safe_string(payload.get("plan_id"), 36),
+        }
+    if name == EXECUTE_FORWARDING_REQUEST_TOOL_NAME:
+        return {
+            "status": _safe_string(payload.get("status"), 32),
+            "success": payload.get("success") is True,
+            "status_code": payload.get("status_code"),
+            "duration_ms": payload.get("duration_ms"),
+            "response_bytes": payload.get("response_bytes"),
             "truncated": payload.get("truncated") is True,
         }
     if name in {

@@ -514,6 +514,11 @@ export type InternalMcpToolName =
   | "read_context_document"
   | "search_database_objects"
   | "execute_database_query"
+  | "read_table_relations"
+  | "search_relation_tables"
+  | "search_forwarding_interfaces"
+  | "prepare_forwarding_request"
+  | "execute_forwarding_request"
   | "apply_workspace_changes"
   | "start_workspace"
   | "get_workspace_operation"
@@ -784,12 +789,14 @@ export interface RelationRecordPage {
 }
 
 export interface RelationRecordCard {
+  kind: "source" | "related";
   edge_id: string;
   relation_id: string;
   cardinality: TableRelationCardinality;
   source_column: string;
   target: RelationRecordTable;
   target_column: string;
+  matched_columns: string[];
   columns: RelationRecordColumn[];
   rows: unknown[][];
   page: RelationRecordPage;
@@ -804,6 +811,7 @@ export interface RelationRecordSearchResult {
   table: RelationRecordTable;
   keyword: string;
   scanned_columns: string[];
+  source_keys: Record<string, string | number | boolean | null>;
   cards: RelationRecordCard[];
 }
 
@@ -1099,4 +1107,99 @@ export interface TableRelationMcpPreview {
     workspace_root: string;
     tables: unknown[];
   };
+}
+
+export interface InterfaceForwardingInterface {
+  id: string;
+  service_id: string;
+  name: string;
+  path: string;
+  method: string;
+  description: string;
+  controller_name: string;
+  controller_description: string;
+  request_schema: Record<string, unknown>;
+  response_schema: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  last_requested_at: string | null;
+}
+
+export interface InterfaceForwardingService {
+  id: string;
+  name: string;
+  interface_count: number;
+  interfaces: InterfaceForwardingInterface[];
+}
+
+export interface InterfaceForwardingEnvironment {
+  workspace_id: string;
+  environment_key: string;
+  display_name: string;
+  sort_order: number;
+  is_default: boolean;
+  addresses: InterfaceForwardingAddress[];
+}
+
+export interface InterfaceForwardingAddress {
+  id: string;
+  workspace_id: string;
+  environment_key: string;
+  service_id: string | null;
+  service_name: string | null;
+  name: string;
+  base_url: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InterfaceForwardingIdentity {
+  id: string;
+  workspace_id: string;
+  environment_id: string;
+  environment_key: string;
+  environment_name?: string;
+  login_account: string;
+  role_name: string;
+  request_header: string;
+}
+
+export interface InterfaceForwardingOverview {
+  workspace_id: string;
+  services: InterfaceForwardingService[];
+  environments: InterfaceForwardingEnvironment[];
+}
+
+export interface InterfaceForwardingState {
+  interface: InterfaceForwardingInterface & { workspace_id: string };
+  last_params: {
+    environment_id: string | null;
+    environment_key: string | null;
+    identity_id: string | null;
+    request_body: string;
+    response_body: string;
+    updated_at: string;
+  } | null;
+}
+
+export interface InterfaceForwardingLog {
+  id: string;
+  environment_name: string;
+  identity_name: string | null;
+  identity_role: string;
+  request_url: string;
+  request_body: string;
+  response_body: string;
+  status_code: number | null;
+  success: boolean;
+  duration_ms: number;
+  created_at: string;
+}
+
+export interface InterfaceForwardingExecuteResult {
+  success: boolean;
+  status_code: number | null;
+  duration_ms: number;
+  response_body: string;
+  response_headers: Record<string, string>;
 }

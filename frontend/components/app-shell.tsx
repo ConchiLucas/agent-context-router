@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { DataSourceDashboard } from "@/components/data-source-dashboard";
 import { DocumentReadStats } from "@/components/document-read-stats";
@@ -9,17 +9,30 @@ import { SystemGuideManager } from "@/components/system-guide-manager";
 import { TableRelationExplorer } from "@/components/table-relation-explorer";
 import { RelationRecordExplorer } from "@/components/relation-record-explorer";
 import { WorkspaceDashboard } from "@/components/workspace-dashboard";
+import { InterfaceForwardingManager } from "@/components/interface-forwarding-manager";
 
 type Section =
   | "workspaces"
   | "data-sources"
   | "table-relations"
   | "relation-records"
+  | "interface-forwarding"
+  | "interface-visualization"
+  | "data-visualization"
+  | "log-visualization"
   | "traces"
   | "system-guides"
   | "doc-stats";
 
-function NavIcon({ kind }: { kind: Section }) {
+type NavKind = Section | "ai-visualization";
+
+const visualizationSections: Section[] = [
+  "interface-visualization",
+  "data-visualization",
+  "log-visualization",
+];
+
+function NavIcon({ kind }: { kind: NavKind }) {
   if (kind === "workspaces") {
     return (
       <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -65,10 +78,24 @@ function NavIcon({ kind }: { kind: Section }) {
       </svg>
     );
   }
+  if (kind === "interface-forwarding") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 7h11M12 4l3 3-3 3M20 17H9M12 14l-3 3 3 3" />
+      </svg>
+    );
+  }
   if (kind === "doc-stats") {
     return (
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M4 19.5h16M6 16v-4M10 16V9M14 16v-7M18 16V5" />
+      </svg>
+    );
+  }
+  if (kind === "ai-visualization") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 19.5h16M6.5 16v-4M11 16V7.5M15.5 16v-6M20 6.5v-2M19 5.5h2" />
       </svg>
     );
   }
@@ -84,6 +111,65 @@ function NavIcon({ kind }: { kind: Section }) {
 
 export function AppShell() {
   const [section, setSection] = useState<Section>("workspaces");
+  const [visualizationOpen, setVisualizationOpen] = useState(false);
+  const [visualizationMenuPosition, setVisualizationMenuPosition] = useState({
+    left: 0,
+    top: 0,
+  });
+  const visualizationMenuRef = useRef<HTMLDivElement>(null);
+  const visualizationTriggerRef = useRef<HTMLButtonElement>(null);
+  const firstVisualizationItemRef = useRef<HTMLButtonElement>(null);
+  const visualizationActive = visualizationSections.includes(section);
+
+  useEffect(() => {
+    if (!visualizationOpen) {
+      return;
+    }
+
+    firstVisualizationItemRef.current?.focus();
+
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (!visualizationMenuRef.current?.contains(event.target as Node)) {
+        setVisualizationOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setVisualizationOpen(false);
+        visualizationTriggerRef.current?.focus();
+      }
+    };
+    const closeOnViewportChange = () => setVisualizationOpen(false);
+
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("resize", closeOnViewportChange);
+    window.addEventListener("scroll", closeOnViewportChange, true);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("resize", closeOnViewportChange);
+      window.removeEventListener("scroll", closeOnViewportChange, true);
+    };
+  }, [visualizationOpen]);
+
+  const toggleVisualizationMenu = () => {
+    if (!visualizationOpen && visualizationTriggerRef.current) {
+      const triggerRect = visualizationTriggerRef.current.getBoundingClientRect();
+      const menuWidth = 176;
+      setVisualizationMenuPosition({
+        left: Math.max(12, Math.min(triggerRect.left, window.innerWidth - menuWidth - 12)),
+        top: triggerRect.bottom + 8,
+      });
+    }
+    setVisualizationOpen((current) => !current);
+  };
+
+  const selectVisualizationSection = (nextSection: Section) => {
+    setSection(nextSection);
+    setVisualizationOpen(false);
+    visualizationTriggerRef.current?.focus();
+  };
 
   return (
     <div className="app-shell">
@@ -96,6 +182,15 @@ export function AppShell() {
           </div>
         </div>
         <nav aria-label="主菜单">
+          <button
+            type="button"
+            aria-label="接口转发"
+            data-active={section === "interface-forwarding"}
+            onClick={() => setSection("interface-forwarding")}
+          >
+            <NavIcon kind="interface-forwarding" />
+            <span>接口转发</span>
+          </button>
           <button
             type="button"
             aria-label="工作空间"
@@ -141,6 +236,59 @@ export function AppShell() {
             <NavIcon kind="traces" />
             <span>调用链路</span>
           </button>
+          <div className="app-nav-dropdown" ref={visualizationMenuRef}>
+            <button
+              ref={visualizationTriggerRef}
+              type="button"
+              aria-label="AI可视化"
+              aria-controls="ai-visualization-menu"
+              aria-expanded={visualizationOpen}
+              aria-haspopup="menu"
+              data-active={visualizationActive}
+              onClick={toggleVisualizationMenu}
+            >
+              <NavIcon kind="ai-visualization" />
+              <span>AI可视化</span>
+              <span className="app-nav-dropdown-chevron" aria-hidden="true">
+                ▾
+              </span>
+            </button>
+            {visualizationOpen ? (
+              <div
+                id="ai-visualization-menu"
+                className="app-nav-dropdown-menu"
+                role="menu"
+                aria-label="AI可视化子菜单"
+                style={visualizationMenuPosition}
+              >
+                <button
+                  ref={firstVisualizationItemRef}
+                  type="button"
+                  role="menuitem"
+                  data-active={section === "interface-visualization"}
+                  onClick={() => selectVisualizationSection("interface-visualization")}
+                >
+                  接口可视化
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-active={section === "data-visualization"}
+                  onClick={() => selectVisualizationSection("data-visualization")}
+                >
+                  数据可视化
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-active={section === "log-visualization"}
+                  onClick={() => selectVisualizationSection("log-visualization")}
+                >
+                  日志可视化
+                </button>
+              </div>
+            ) : null}
+          </div>
           <button
             type="button"
             aria-label="系统文档"
@@ -160,7 +308,6 @@ export function AppShell() {
             <span>文档统计</span>
           </button>
         </nav>
-        <p className="app-header-note">工作空间只读 · 系统文档可维护</p>
       </header>
       <main
         className={
@@ -168,7 +315,9 @@ export function AppShell() {
           section === "system-guides" ||
           section === "doc-stats" ||
           section === "table-relations" ||
-          section === "relation-records"
+          section === "relation-records" ||
+          section === "interface-forwarding" ||
+          visualizationActive
             ? "app-content app-content--traces"
             : "app-content"
         }
@@ -177,6 +326,7 @@ export function AppShell() {
         {section === "data-sources" ? <DataSourceDashboard /> : null}
         {section === "table-relations" ? <TableRelationExplorer /> : null}
         {section === "relation-records" ? <RelationRecordExplorer /> : null}
+        {section === "interface-forwarding" ? <InterfaceForwardingManager /> : null}
         {section === "traces" ? <TraceExplorer /> : null}
         {section === "system-guides" ? <SystemGuideManager /> : null}
         {section === "doc-stats" ? <DocumentReadStats /> : null}

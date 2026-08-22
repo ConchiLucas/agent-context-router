@@ -154,7 +154,7 @@ export function TableRelationMcpModal({
               <code className="table-relation-row-id">{table.table_name}</code>
             </p>
             <p className="relation-evidence-context">
-              {table.database_key}.{table.schema_name} · {currentPreview.result.environment.toUpperCase()} · read_table_relations
+              {table.database_key}.{table.schema_name} · 基准环境 {currentPreview.result.environment.toUpperCase()} · read_table_relations
             </p>
           </div>
           <div className="table-relation-mcp-actions">
@@ -217,7 +217,7 @@ export function TableRelationMcpModal({
             这是 agent 调用 MCP 工具{" "}
             <code>read_table_relations</code> 时收到的结构化内容。{" "}
             <code>arguments.task_id</code> 需来自{" "}
-            <code>prepare_task_context</code>。未传 <code>environment</code> 时继承任务环境；
+            <code>prepare_task_context</code>。表关联固定读取工作空间唯一发布版本，不继承任务环境；
             {mode === "default" ? (
               <>当前是默认调用，只返回关系，不展开证据。</>
             ) : (

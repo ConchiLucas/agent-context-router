@@ -3,7 +3,8 @@
 v1 has no build pipeline: nothing discovers relations yet. This script writes one
 published generation by hand, and every row in it is a real measurement taken
 against the 攀枝花 UAT ``c12_mtp_db``, not an invention. Running it again replaces
-the generation for the same workspace and environment, so it is safe to repeat.
+the single generation for the workspace, so it is safe to repeat. ``environment``
+records which environment supplied the snapshot; it does not create parallel graphs.
 
 Real data is the point rather than a nicety. The whole reason a relation carries
 two verdicts is that the code and the rows can disagree, and a disagreement is
@@ -10587,7 +10588,7 @@ def build_seed_projection(
     generation = TableRelationGenerationRecord(
         id=resolved_generation_id,
         workspace_id=workspace_id,
-        environment="test" if environment == "test" else "uat",
+        environment=environment,
         status="published",
         revision=1,
         edge_count=len(edges),
@@ -10628,9 +10629,9 @@ def insert_projection(
     connection.execute(
         """
         DELETE FROM workspace_table_relation_generations
-        WHERE workspace_id = %s AND environment = %s
+        WHERE workspace_id = %s
         """,
-        (generation.workspace_id, generation.environment),
+        (generation.workspace_id,),
     )
     connection.execute(
         """
@@ -10808,8 +10809,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--environment",
         default="uat",
-        choices=("test", "uat"),
-        help="示例数据归属的环境，默认 uat",
+        help="产生这份唯一表关联快照的环境，默认 uat",
     )
     args = parser.parse_args(argv)
 

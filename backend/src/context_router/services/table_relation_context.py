@@ -40,7 +40,6 @@ from context_router.repositories.task_repository import (
 from context_router.schemas.table_relations import (
     TableRelationDetail,
     TableRelationEndpoint,
-    TableRelationEnvironment,
     TableRelationGenerationSummary,
     TableRelationTableSummary,
     TableRelationUpdateSite,
@@ -118,7 +117,6 @@ class TableRelationContextService:
         sections: list[str] | None = None,
         database: str | None = None,
         evidence: TableRelationEvidenceMode = "none",
-        environment: TableRelationEnvironment | None = None,
     ) -> dict[str, object]:
         if evidence not in {"none", "uncertain", "all"}:
             raise TableRelationContextError(
@@ -129,11 +127,7 @@ class TableRelationContextService:
         requested = self._normalize_tables(tables)
         task = self._task(task_id)
         workspace = self._workspace(task)
-        selected_environment = self._resolve_environment(
-            task,
-            environment,
-        )
-        generation = self._generation(workspace.id, selected_environment)
+        generation = self._generation(workspace.id)
         return {
             "environment": generation.environment,
             "generation": {
@@ -146,7 +140,6 @@ class TableRelationContextService:
             "tables": [
                 self._table_entry(
                     workspace=workspace,
-                    environment=selected_environment,
                     requested_table=name,
                     database=database,
                     sections=normalized_sections,
@@ -163,7 +156,6 @@ class TableRelationContextService:
         database_key: str,
         schema_name: str,
         table_name: str,
-        environment: TableRelationEnvironment | None = None,
         mode: Literal["default", "full"] = "default",
     ) -> dict[str, object]:
         """The MCP ``read_table_relations`` payload for one known table identity.
@@ -179,12 +171,11 @@ class TableRelationContextService:
                 "工作空间不存在",
                 code="workspace_not_found",
             ) from exc
-        generation = self._generation(workspace_id, environment)
+        generation = self._generation(workspace_id)
         sections = _ALL_SECTIONS if mode == "full" else ("relations",)
         evidence: TableRelationEvidenceMode = "all" if mode == "full" else "none"
         entry = self._table_entry_with_identity(
             workspace=workspace,
-            environment=generation.environment,
             database_key=database_key,
             schema_name=schema_name,
             table_name=table_name,
@@ -231,17 +222,11 @@ class TableRelationContextService:
         database: str | None = None,
         only_related: bool = True,
         limit: int = 50,
-        environment: TableRelationEnvironment | None = None,
     ) -> dict[str, object]:
         task = self._task(task_id)
         workspace = self._workspace(task)
-        selected_environment = self._resolve_environment(
-            task,
-            environment,
-        )
         listing = self._query.list_tables(
             workspace.id,
-            environment=selected_environment,
             database_key=database,
             only_related=only_related,
             search=query.strip() if query else None,
@@ -276,7 +261,6 @@ class TableRelationContextService:
         self,
         *,
         workspace: WorkspaceSnapshot,
-        environment: TableRelationEnvironment | None,
         requested_table: str,
         database: str | None,
         sections: tuple[TableRelationContextSection, ...],
@@ -285,7 +269,6 @@ class TableRelationContextService:
         try:
             identity = self._resolve_table(
                 workspace_id=workspace.id,
-                environment=environment,
                 table=requested_table,
                 database=database,
             )
@@ -298,7 +281,6 @@ class TableRelationContextService:
             }
         return self._table_entry_with_identity(
             workspace=workspace,
-            environment=environment,
             database_key=identity.database_key,
             schema_name=identity.schema_name,
             table_name=identity.table_name,
@@ -310,7 +292,6 @@ class TableRelationContextService:
         self,
         *,
         workspace: WorkspaceSnapshot,
-        environment: TableRelationEnvironment | None,
         database_key: str,
         schema_name: str,
         table_name: str,
@@ -333,7 +314,6 @@ class TableRelationContextService:
             "database_key": identity.database_key,
             "schema_name": identity.schema_name,
             "table_name": identity.table_name,
-            "environment": environment,
         }
         try:
             if "relations" in sections:
@@ -342,7 +322,6 @@ class TableRelationContextService:
                     self._relation_row(
                         view,
                         workspace=workspace,
-                        environment=environment,
                         identity=identity,
                         evidence=evidence,
                     )
@@ -373,7 +352,6 @@ class TableRelationContextService:
         view: TableRelationView,
         *,
         workspace: WorkspaceSnapshot,
-        environment: TableRelationEnvironment | None,
         identity: TableRelationTableSummary,
         evidence: TableRelationEvidenceMode,
     ) -> dict[str, object]:
@@ -386,7 +364,6 @@ class TableRelationContextService:
             schema_name=identity.schema_name,
             table_name=identity.table_name,
             edge_id=view.edge_id,
-            environment=environment,
         )
         row["evidence"] = _evidence(detail)
         return row
@@ -441,25 +418,11 @@ class TableRelationContextService:
                 code="workspace_unavailable",
             ) from exc
 
-    @staticmethod
-    def _environment(task: TaskRecord) -> TableRelationEnvironment | None:
-        return task.database_environment
-
-    def _resolve_environment(
-        self,
-        task: TaskRecord,
-        requested: TableRelationEnvironment | None,
-    ) -> TableRelationEnvironment | None:
-        if requested is not None:
-            return requested
-        return self._environment(task) or "local"
-
     def _generation(
         self,
         workspace_id: str,
-        environment: TableRelationEnvironment | None,
     ) -> TableRelationGenerationSummary:
-        status = self._query.get_status(workspace_id, environment=environment)
+        status = self._query.get_status(workspace_id)
         if status.generation is None:
             raise TableRelationContextError(
                 "这个工作空间还没有已发布的表关联数据",
@@ -471,14 +434,12 @@ class TableRelationContextService:
         self,
         *,
         workspace_id: str,
-        environment: TableRelationEnvironment | None,
         table: str,
         database: str | None,
     ) -> TableRelationTableSummary:
         wanted = table.strip()
         listing = self._query.list_tables(
             workspace_id,
-            environment=environment,
             database_key=database,
             only_related=False,
             search=wanted,

@@ -19,6 +19,7 @@ class FakeApi:
     def __init__(self) -> None:
         self.started: list[tuple[str, str]] = []
         self.completed: list[tuple[str, str, int]] = []
+        self.completed_forwarding: list[tuple[str, str, str, dict[str, object]]] = []
 
     def started_operation(self, operation_id: str, lease_token: str) -> None:
         self.started.append((operation_id, lease_token))
@@ -36,6 +37,15 @@ class FakeApi:
         error_message: str | None = None,
     ) -> None:
         self.completed.append((operation_id, step_id, exit_code))
+
+    def complete_forwarding_job(
+        self,
+        job_id: str,
+        runner_id: str,
+        lease_token: str,
+        result: dict[str, object],
+    ) -> None:
+        self.completed_forwarding.append((job_id, runner_id, lease_token, result))
 
 
 def create_snapshot(runtime_root: Path, content: str) -> Path:
@@ -198,6 +208,64 @@ def test_runner_api_treats_connection_reset_as_recoverable(monkeypatch) -> None:
 
     with pytest.raises(module.RunnerError, match="控制面请求失败"):
         client.heartbeat_runner("runner-1")
+
+
+def test_runner_executes_server_leased_forwarding_request(monkeypatch, tmp_path: Path) -> None:
+    module = load_runner_module()
+
+    class FakeResponse:
+        status = 200
+        headers = {"Content-Type": "application/json", "Set-Cookie": "secret"}
+
+        def __init__(self) -> None:
+            self._chunks = [b'{"code":0}', b""]
+
+        def read(self, _size: int) -> bytes:
+            return self._chunks.pop(0)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args) -> None:
+            return None
+
+    class FakeOpener:
+        def open(self, request, timeout: int):
+            assert request.full_url == "http://127.0.0.1:9000/read/page?pageNumber=1"
+            assert request.method == "POST"
+            assert timeout == 30
+            assert request.headers["X-system-code"] == "mtp"
+            return FakeResponse()
+
+    monkeypatch.setattr(module.urllib.request, "build_opener", lambda *_args: FakeOpener())
+    api = FakeApi()
+    runner = module.HostRuntimeRunner(
+        api=api,
+        allowed_workspace_root=tmp_path,
+        runtime_root=tmp_path,
+    )
+    runner.execute_forwarding_job(
+        {
+            "job_id": "job-1",
+            "lease_token": "l" * 48,
+            "request": {
+                "method": "POST",
+                "url": "http://127.0.0.1:9000/read/page",
+                "headers": {"x-system-code": "mtp"},
+                "query": {"pageNumber": 1},
+                "body": {"pageSize": 10},
+                "timeout_seconds": 30,
+                "max_response_bytes": 1_048_576,
+            },
+        },
+        runner_id="runner-1",
+    )
+
+    result = api.completed_forwarding[0]
+    assert result[:3] == ("job-1", "runner-1", "l" * 48)
+    assert result[3]["status_code"] == 200
+    assert result[3]["response_body"] == '{"code":0}'
+    assert result[3]["response_headers"] == {"content-type": "application/json"}
 
 
 def test_runner_executes_allowlisted_host_action_with_default_local(

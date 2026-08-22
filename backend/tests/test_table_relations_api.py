@@ -331,14 +331,15 @@ def test_table_updates_serialise_the_persist_calls_of_the_selected_table() -> No
     ]
 
 
-def test_unknown_environment_is_rejected_before_reaching_the_repository() -> None:
+def test_runtime_environment_query_does_not_change_the_workspace_snapshot() -> None:
     with _client() as client:
         response = client.get(
             f"/api/workspaces/{WORKSPACE}/table-relations/tables",
             params={"environment": "prod"},
         )
 
-    assert response.status_code == 400
+    assert response.status_code == 200
+    assert response.json()["generation"]["environment"] == "uat"
 
 
 def test_unknown_workspace_is_reported_as_missing() -> None:

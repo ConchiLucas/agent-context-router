@@ -46,6 +46,12 @@ import type {
   TableRelationMcpPreview,
   RelationRecordSearchResult,
   RelationRecordTable,
+  InterfaceForwardingOverview,
+  InterfaceForwardingAddress,
+  InterfaceForwardingIdentity,
+  InterfaceForwardingState,
+  InterfaceForwardingLog,
+  InterfaceForwardingExecuteResult,
 } from "@/lib/types";
 import {
   buildMcpTraceListPath,
@@ -431,24 +437,21 @@ export function getProjectDataSourceOptions(
 
 export function getTableRelationStatus(
   workspaceId: string,
-  environment?: string,
 ): Promise<TableRelationStatus> {
-  const query = environment ? `?environment=${encodeURIComponent(environment)}` : "";
   return request<TableRelationStatus>(
-    `/api/workspaces/${encodeURIComponent(workspaceId)}/table-relations/status${query}`,
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/table-relations/status`,
   );
 }
 
 export function listTableRelationTables(
   workspaceId: string,
-  options: { onlyRelated?: boolean; databaseKey?: string; environment?: string; limit?: number } = {},
+  options: { onlyRelated?: boolean; databaseKey?: string; limit?: number } = {},
 ): Promise<TableRelationTableList> {
   const params = new URLSearchParams({
     only_related: String(options.onlyRelated ?? false),
     limit: String(options.limit ?? 500),
   });
   if (options.databaseKey) params.set("database_key", options.databaseKey);
-  if (options.environment) params.set("environment", options.environment);
   return request<TableRelationTableList>(
     `/api/workspaces/${encodeURIComponent(workspaceId)}/table-relations/tables?${params.toString()}`,
   );
@@ -547,6 +550,7 @@ export function searchRelationRecords(
     table: RelationRecordTable;
     keyword: string;
     edgeId?: string;
+    sourceKeys?: Record<string, string | number | boolean | null>;
     page?: number;
   },
 ): Promise<RelationRecordSearchResult> {
@@ -559,8 +563,70 @@ export function searchRelationRecords(
         table: input.table,
         keyword: input.keyword,
         edge_id: input.edgeId,
+        source_keys: input.sourceKeys,
         page: input.page ?? 1,
       }),
     },
   );
+}
+
+export function getInterfaceForwardingOverview(workspaceId: string, keyword = ""): Promise<InterfaceForwardingOverview> {
+  const params = new URLSearchParams({ workspace_id: workspaceId });
+  if (keyword.trim()) params.set("keyword", keyword.trim());
+  return request<InterfaceForwardingOverview>(`/api/interface-forwarding/overview?${params.toString()}`, { cache: "no-store" });
+}
+
+export function importInterfaceForwardingSpec(input: { workspace_id: string; service_name: string; spec: Record<string, unknown> }): Promise<{ imported_count: number; service_id: string }> {
+  return request("/api/interface-forwarding/import", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function renameInterfaceForwardingService(serviceId: string, name: string): Promise<unknown> {
+  return request(`/api/interface-forwarding/services/${serviceId}`, { method: "PUT", body: JSON.stringify({ name }) });
+}
+
+export function deleteInterfaceForwardingService(serviceId: string): Promise<void> {
+  return request(`/api/interface-forwarding/services/${serviceId}`, { method: "DELETE" });
+}
+
+export function deleteInterfaceForwardingInterface(interfaceId: string): Promise<void> {
+  return request(`/api/interface-forwarding/interfaces/${interfaceId}`, { method: "DELETE" });
+}
+
+export function createInterfaceForwardingEnvironment(input: { workspace_id: string; environment_key: string; service_id: string; name: string; base_url: string }): Promise<InterfaceForwardingAddress> {
+  return request("/api/interface-forwarding/environments", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function updateInterfaceForwardingEnvironment(environmentId: string, input: { workspace_id: string; environment_key: string; service_id: string; name: string; base_url: string }): Promise<InterfaceForwardingAddress> {
+  return request(`/api/interface-forwarding/environments/${encodeURIComponent(environmentId)}`, { method: "PUT", body: JSON.stringify(input) });
+}
+
+export function deleteInterfaceForwardingEnvironment(environmentId: string): Promise<void> {
+  return request(`/api/interface-forwarding/environments/${encodeURIComponent(environmentId)}`, { method: "DELETE" });
+}
+
+export function listInterfaceForwardingIdentities(workspaceId: string, environmentId?: string): Promise<InterfaceForwardingIdentity[]> {
+  const params = new URLSearchParams({ workspace_id: workspaceId });
+  if (environmentId) params.set("environment_id", environmentId);
+  return request(`/api/interface-forwarding/identities?${params.toString()}`, { cache: "no-store" });
+}
+
+export function saveInterfaceForwardingIdentity(input: { id?: string; workspace_id: string; environment_id: string; login_account: string; role_name?: string; request_header: string }): Promise<InterfaceForwardingIdentity> {
+  const path = input.id ? `/api/interface-forwarding/identities/${input.id}` : "/api/interface-forwarding/identities";
+  return request(path, { method: input.id ? "PUT" : "POST", body: JSON.stringify(input) });
+}
+
+export function deleteInterfaceForwardingIdentity(id: string): Promise<void> {
+  return request(`/api/interface-forwarding/identities/${id}`, { method: "DELETE" });
+}
+
+export function getInterfaceForwardingState(interfaceId: string): Promise<InterfaceForwardingState> {
+  return request(`/api/interface-forwarding/interfaces/${interfaceId}/state`, { cache: "no-store" });
+}
+
+export function executeInterfaceForwarding(interfaceId: string, input: { environment_id: string; identity_id?: string; request_body: string }): Promise<InterfaceForwardingExecuteResult> {
+  return request(`/api/interface-forwarding/interfaces/${interfaceId}/execute`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function listInterfaceForwardingLogs(interfaceId: string): Promise<InterfaceForwardingLog[]> {
+  return request(`/api/interface-forwarding/interfaces/${interfaceId}/logs`, { cache: "no-store" });
 }
