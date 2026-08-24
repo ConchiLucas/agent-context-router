@@ -1,4 +1,87 @@
 export type ProjectKind = "frontend" | "backend";
+
+export interface SharedAiProvider {
+  id: string;
+  label: string;
+  type: string;
+  base_url: string;
+  api_key: string;
+  model: string;
+  max_tokens: number;
+  voice: string;
+  capabilities: string[];
+  options: Record<string, unknown>;
+  enabled: boolean;
+  active: boolean;
+}
+
+export interface SharedAiCatalog {
+  configured_default_provider_id: string;
+  center_active_provider_id: string;
+  active_provider_id: string;
+  default_source: string;
+  default_recovered: boolean;
+  notice: string | null;
+  revision: number;
+  providers: SharedAiProvider[];
+}
+
+export interface SharedDatabaseConnection {
+  id: string;
+  name: string;
+  type: string;
+  environment: string;
+  host: string;
+  port: number;
+  database: string;
+  username: string;
+  password: string;
+  parameters: Record<string, string>;
+}
+
+export interface SharedLocalCliItem {
+  id: string;
+  label: string;
+  enabled: boolean;
+  command: string;
+  default_args: string[];
+  model: string;
+  reasoning_effort: string;
+  working_directory: string;
+  timeout_seconds: number;
+  capabilities: string[];
+  active: boolean;
+}
+
+export interface SharedLocalCliConfiguration {
+  active_config_id: string;
+  configs: SharedLocalCliItem[];
+}
+
+export interface SharedObjectStorageConfiguration {
+  configured: boolean;
+  enabled: boolean;
+  endpoint: string;
+  access_key_id: string;
+  secret_access_key: string;
+  use_ssl: boolean;
+  bucket_name: string;
+  base_path: string;
+}
+
+export interface SharedImageModelCatalog {
+  active_provider_id: string;
+  providers: SharedAiProvider[];
+}
+
+export interface SharedConfigurationCatalog {
+  ai: SharedAiCatalog;
+  databases: SharedDatabaseConnection[];
+  local_cli: SharedLocalCliConfiguration;
+  object_storage: SharedObjectStorageConfiguration;
+  image_models: SharedImageModelCatalog;
+  runtime: Record<string, unknown>;
+}
 export type DatabaseEnvironment = string;
 export type LegacyDatabaseEnvironment = "test" | "uat";
 export type McpEnvironment = string;
@@ -516,6 +599,8 @@ export type InternalMcpToolName =
   | "execute_database_query"
   | "read_table_relations"
   | "search_relation_tables"
+  | "search_value_mappings"
+  | "resolve_value_candidates"
   | "search_forwarding_interfaces"
   | "prepare_forwarding_request"
   | "execute_forwarding_request"
@@ -1202,4 +1287,114 @@ export interface InterfaceForwardingExecuteResult {
   duration_ms: number;
   response_body: string;
   response_headers: Record<string, string>;
+}
+
+export type ValueMappingStatus = "draft" | "published";
+export type ValueMappingParameterLocation = "path" | "query" | "body";
+
+export interface ValueMappingBinding {
+  id?: string;
+  interface_id: string;
+  location: ValueMappingParameterLocation;
+  parameter_path: string;
+  required: boolean;
+  interface_name?: string;
+  interface_path?: string;
+  method?: string;
+  controller_name?: string;
+  service_name?: string;
+}
+
+export interface ValueMapping {
+  id: string;
+  workspace_id: string;
+  value_key: string;
+  name: string;
+  description: string;
+  status: ValueMappingStatus;
+  resolver_type: "database_column";
+  database_alias: string;
+  schema_name: string | null;
+  table_name: string;
+  value_column: string;
+  search_columns: string[];
+  display_columns: string[];
+  filters: Record<string, JsonValue>;
+  aliases: string[];
+  bindings: ValueMappingBinding[];
+  binding_count: number;
+  version: number;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface ValueMappingDatabaseAlias {
+  value: string;
+  label: string;
+}
+
+export interface ValueMappingOverview {
+  workspace_id: string;
+  mappings: ValueMapping[];
+  database_aliases: ValueMappingDatabaseAlias[];
+}
+
+export interface ValueMappingParameter {
+  location: ValueMappingParameterLocation;
+  parameter_path: string;
+  required: boolean;
+  type: string;
+  description: string;
+}
+
+export interface ValueMappingInterfaceCandidate {
+  id: string;
+  name: string;
+  controller_name: string;
+  path: string;
+  method: string;
+  service_name: string;
+  parameters: ValueMappingParameter[];
+}
+
+export interface ValueMappingInterfaceSearchResult {
+  workspace_id: string;
+  keyword: string;
+  returned_count: number;
+  interfaces: ValueMappingInterfaceCandidate[];
+}
+
+export interface ValueMappingWrite {
+  workspace_id: string;
+  value_key: string;
+  name: string;
+  description: string;
+  status: ValueMappingStatus;
+  database_alias: string;
+  schema_name: string | null;
+  table_name: string;
+  value_column: string;
+  search_columns: string[];
+  display_columns: string[];
+  filters: Record<string, JsonValue>;
+  aliases: string[];
+  bindings: Array<Omit<ValueMappingBinding, "id" | "interface_name" | "interface_path" | "method" | "controller_name" | "service_name">>;
+}
+
+export interface ValueMappingPreviewCandidate {
+  value: JsonValue;
+  label: string;
+  labels: Record<string, JsonValue>;
+}
+
+export interface ValueMappingPreviewResult {
+  mapping_id: string;
+  value_key: string;
+  environment: string;
+  database_alias: string;
+  keyword: string;
+  candidates: ValueMappingPreviewCandidate[];
+  returned_count: number;
+  elapsed_ms: number;
+  truncated: boolean;
 }

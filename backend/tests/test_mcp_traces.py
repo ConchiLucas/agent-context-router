@@ -170,6 +170,27 @@ class RecordingMiddleware:
         )
 
 
+class RecordingValueMappings:
+    def search_for_task(self, **_: object) -> dict[str, object]:
+        return {
+            "task_id": 77,
+            "environment": "local",
+            "mappings": [{"mapping_id": "mapping-1"}],
+            "returned_count": 1,
+            "truncated": False,
+        }
+
+    def resolve_for_task(self, mapping_id: str, **_: object) -> dict[str, object]:
+        return {
+            "task_id": 77,
+            "mapping_id": mapping_id,
+            "environment": "local",
+            "candidates": [{"value": "secret-id", "label": "secret-label"}],
+            "returned_count": 1,
+            "truncated": False,
+        }
+
+
 class FailingQuery:
     def execute(self, **_: object) -> dict[str, object]:
         raise DatabaseAccessError("connection_failed", "数据库当前无法连接")
@@ -357,6 +378,62 @@ def test_failed_mcp_tool_finishes_error_without_hiding_original_tool_error() -> 
     call = repository.list_calls(77)[0]
     assert call.status == "error"
     assert call.error_code == "connection_failed"
+
+
+def test_value_mapping_tools_trace_only_hashed_keywords_and_bounded_metadata() -> None:
+    repository = InMemoryMcpToolCallRepository()
+    server = create_context_router_mcp(
+        RecordingPreparation(),  # type: ignore[arg-type]
+        RecordingRead(),  # type: ignore[arg-type]
+        trace_service=_tracking_service(repository),
+        value_mapping_service=RecordingValueMappings(),  # type: ignore[arg-type]
+    )
+
+    async def invoke_tools() -> None:
+        await server.call_tool(
+            "search_value_mappings",
+            {"task_id": 77, "query": "货主ID", "limit": 5},
+        )
+        await server.call_tool(
+            "resolve_value_candidates",
+            {
+                "task_id": 77,
+                "mapping_id": "mapping-1",
+                "keyword": "攀枝花公司",
+                "limit": 3,
+            },
+        )
+
+    asyncio.run(invoke_tools())
+    calls = repository.list_calls(77)
+
+    assert [call.tool_name for call in calls] == [
+        "search_value_mappings",
+        "resolve_value_candidates",
+    ]
+    serialized = repr([(call.request_summary, call.result_summary) for call in calls])
+    assert "货主ID" not in serialized
+    assert "攀枝花公司" not in serialized
+    assert "secret-id" not in serialized
+    assert "secret-label" not in serialized
+    assert calls[0].request_summary == {
+        "query_sha256": "35ebb1becfdd94b5eb5773f09ac0fa0072c9e098790c20f072cc59cff41b4b5a",
+        "interface_id": None,
+        "location": None,
+        "parameter_path": None,
+        "limit": 5,
+    }
+    assert calls[0].result_summary == {
+        "returned_count": 1,
+        "environment": "local",
+        "truncated": False,
+    }
+    assert calls[1].result_summary == {
+        "mapping_id": "mapping-1",
+        "returned_count": 1,
+        "environment": "local",
+        "truncated": False,
+    }
 
 
 def test_workspace_runtime_tools_are_traced_and_operation_query_resolves_task() -> None:

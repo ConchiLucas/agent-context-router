@@ -21,9 +21,11 @@ from context_router.api.nacos_profiles import router as nacos_profiles_router
 from context_router.api.projects import router as projects_router
 from context_router.api.runtime_configs import router as runtime_configs_router
 from context_router.api.runtime_runner import router as runtime_runner_router
+from context_router.api.shared_config import router as shared_config_router
 from context_router.api.system_guides import router as system_guides_router
 from context_router.api.table_relations import router as table_relations_router
 from context_router.api.tasks import router as tasks_router
+from context_router.api.value_mappings import router as value_mappings_router
 from context_router.api.workspace_runtime import router as workspace_runtime_router
 from context_router.api.workspaces import router as workspaces_router
 from context_router.config import Settings
@@ -83,6 +85,11 @@ from context_router.repositories.mcp_tool_call_repository import (
     InMemoryMcpToolCallRepository,
     McpToolCallStore,
     PostgresMcpToolCallRepository,
+)
+from context_router.repositories.shared_ai_default_repository import (
+    InMemorySharedAiDefaultRepository,
+    PostgresSharedAiDefaultRepository,
+    SharedAiDefaultStore,
 )
 from context_router.repositories.nacos_profile_repository import (
     InMemoryNacosProfileRepository,
@@ -167,7 +174,10 @@ from context_router.services.project_registry import ProjectRegistry, ProjectReg
 from context_router.services.runtime_execution import RuntimeExecutionService
 from context_router.services.runtime_materialization import RuntimeMaterializationService
 from context_router.services.system_guides import SystemGuideService
+from context_router.services.shared_ai_config import SharedAiConfigService
+from context_router.services.shared_config_client import SharedConfigCenterClient
 from context_router.services.table_relation_context import TableRelationContextService
+from context_router.services.value_mapping import ValueMappingService
 from context_router.services.workspace_containers import WorkspaceContainerService
 from context_router.services.workspace_deploy_sync import WorkspaceDeploySyncService
 from context_router.services.workspace_management import WorkspaceManagementService
@@ -206,6 +216,7 @@ def create_app(
     system_guide_repository: SystemGuideStore | None = None,
     nacos_profile_repository: NacosProfileStore | None = None,
     mcp_environment_default_repository: McpEnvironmentDefaultStore | None = None,
+    shared_ai_default_repository: SharedAiDefaultStore | None = None,
 ) -> FastAPI:
     resolved_settings = settings or Settings()
     if workspace_repository is not None:
@@ -270,6 +281,11 @@ def create_app(
         if resolved_settings.database_url
         else InMemoryMcpEnvironmentDefaultRepository()
     )
+    resolved_shared_ai_default_repository = shared_ai_default_repository or (
+        PostgresSharedAiDefaultRepository(resolved_settings.database_url)
+        if resolved_settings.database_url
+        else InMemorySharedAiDefaultRepository()
+    )
     resolved_runtime_config_repository = runtime_config_repository or (
         PostgresRuntimeConfigRepository(resolved_settings.database_url)
         if resolved_settings.database_url
@@ -304,16 +320,14 @@ def create_app(
         else InMemorySystemGuideRepository()
     )
     system_guide_service = SystemGuideService(resolved_system_guide_repository)
-    interface_forwarding_service = InterfaceForwardingService(resolved_settings.database_url)
-    interface_forwarding_context_service = InterfaceForwardingContextService(
-        database_url=resolved_settings.database_url,
-        task_repository=resolved_task_repository,
-        database_environment_repository=resolved_database_environment_repository,
-        host_runner_available=lambda: resolved_runtime_runner_repository.is_available(
-            resolved_settings.runtime_runner_heartbeat_ttl_seconds,
-            "interface-forwarding",
+    shared_ai_config_service = SharedAiConfigService(
+        SharedConfigCenterClient(
+            resolved_settings.shared_config_center_base_url,
+            resolved_settings.shared_config_center_timeout_seconds,
         ),
+        resolved_shared_ai_default_repository,
     )
+    interface_forwarding_service = InterfaceForwardingService(resolved_settings.database_url)
     resolved_workspace_runtime_repository = workspace_runtime_repository or (
         PostgresWorkspaceRuntimeRepository(resolved_settings.database_url)
         if resolved_settings.database_url
@@ -433,6 +447,23 @@ def create_app(
         result_formatter=result_formatter,
         call_repository=resolved_database_call_repository,
     )
+    value_mapping_service = ValueMappingService(
+        database_url=resolved_settings.database_url,
+        database_access_service=database_access_service,
+        connector_manager=resolved_connector_manager,
+        sql_policy=SqlSafetyPolicy(),
+        task_repository=resolved_task_repository,
+    )
+    interface_forwarding_context_service = InterfaceForwardingContextService(
+        database_url=resolved_settings.database_url,
+        task_repository=resolved_task_repository,
+        database_environment_repository=resolved_database_environment_repository,
+        value_mapping_service=value_mapping_service,
+        host_runner_available=lambda: resolved_runtime_runner_repository.is_available(
+            resolved_settings.runtime_runner_heartbeat_ttl_seconds,
+            "interface-forwarding",
+        ),
+    )
     context_service = ContextPreparationService(
         registry,
         resolved_task_repository,
@@ -497,6 +528,7 @@ def create_app(
         middleware_context_service=middleware_context_service,
         table_relation_context_service=table_relation_context_service,
         interface_forwarding_context_service=interface_forwarding_context_service,
+        value_mapping_service=value_mapping_service,
     )
     mcp_app = mcp_server.streamable_http_app()
 
@@ -593,8 +625,10 @@ def create_app(
     app.state.mcp_trace_service = mcp_trace_service
     app.state.system_guide_repository = resolved_system_guide_repository
     app.state.system_guide_service = system_guide_service
+    app.state.shared_ai_config_service = shared_ai_config_service
     app.state.interface_forwarding_service = interface_forwarding_service
     app.state.interface_forwarding_context_service = interface_forwarding_context_service
+    app.state.value_mapping_service = value_mapping_service
     app.state.document_read_stats_repository = resolved_document_read_stats_repository
     app.state.document_read_stats_service = document_read_stats_service
     app.state.document_chain_analytics_repository = resolved_document_chain_analytics_repository
@@ -628,7 +662,9 @@ def create_app(
     app.include_router(document_read_stats_router, prefix=resolved_settings.api_prefix)
     app.include_router(document_chain_analytics_router, prefix=resolved_settings.api_prefix)
     app.include_router(system_guides_router, prefix=resolved_settings.api_prefix)
+    app.include_router(shared_config_router, prefix=resolved_settings.api_prefix)
     app.include_router(interface_forwarding_router, prefix=resolved_settings.api_prefix)
+    app.include_router(value_mappings_router, prefix=resolved_settings.api_prefix)
 
     @app.get("/health")
     def health() -> dict[str, str]:

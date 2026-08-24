@@ -24,6 +24,9 @@ def _safe_browser_post_patterns(api_prefix: str) -> tuple[re.Pattern[str], ...]:
         re.compile(rf"^{prefix}/projects/[^/]+/runtime-config/(fast|full)/execute$"),
         re.compile(rf"^{prefix}/interface-forwarding/(import|environments|identities)$"),
         re.compile(rf"^{prefix}/interface-forwarding/interfaces/[^/]+/execute$"),
+        re.compile(rf"^{prefix}/value-mappings$"),
+        re.compile(rf"^{prefix}/value-mappings/[^/]+/preview$"),
+        re.compile(rf"^{prefix}/shared-config/ai/refresh$"),
     )
 
 
@@ -45,13 +48,19 @@ def browser_request_allowed(
             path,
         ):
             return True
+        if re.fullmatch(rf"{prefix}/value-mappings/[^/]+", path):
+            return True
+        if re.fullmatch(rf"{prefix}/shared-config/ai/default", path):
+            return True
         return re.fullmatch(rf"{prefix}/system-guides/[^/]+/content", path) is not None
     if normalized_method == "DELETE":
         prefix = re.escape(api_prefix.rstrip("/"))
-        return re.fullmatch(
+        if re.fullmatch(
             rf"{prefix}/interface-forwarding/(services|interfaces|environments|identities)/[^/]+",
             path,
-        ) is not None
+        ):
+            return True
+        return re.fullmatch(rf"{prefix}/value-mappings/[^/]+", path) is not None
     return False
 
 

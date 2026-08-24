@@ -12,6 +12,8 @@ services:
       CONTEXT_ROUTER_DATABASE_URL: postgresql+psycopg://context_router:context_router@agent-context-router-postgres-1:5432/context_router
       CONTEXT_ROUTER_WORKSPACE_HOST_ROOT: /Users/conchi/workforce
       CONTEXT_ROUTER_WORKSPACE_CONTAINER_ROOT: /workspace
+      CONTEXT_ROUTER_SHARED_CONFIG_CENTER_BASE_URL: ${CONTEXT_ROUTER_SHARED_CONFIG_CENTER_BASE_URL:-http://shared-config-center-api:8080}
+      CONTEXT_ROUTER_SHARED_CONFIG_CENTER_TIMEOUT_SECONDS: ${CONTEXT_ROUTER_SHARED_CONFIG_CENTER_TIMEOUT_SECONDS:-10}
     volumes:
       - /Users/conchi/workforce:/workspace:ro
 

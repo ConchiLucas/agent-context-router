@@ -148,7 +148,7 @@ CONTEXT_ROUTER_DATABASE_URL=postgresql://USER:PASSWORD@host.docker.internal:5432
 docker compose exec backend uv run alembic upgrade head
 ```
 
-当前 migration head 为 `20260822_0055`。`0055` 为接口转发执行计划持久化逐字段参数证据；`0054` 禁止直接执行 c12-data 原始 Controller 路径，待登记明确的 MTP 包装接口后再开放；`0053` 增加 Host Runner 单次租约接口转发任务；`0052` 补充导入接口源码契约；`0051` 增加接口转发 MCP 计划。更早迁移继续保留既有接口服务、地址、身份、角色、Controller 元数据和 Workspace 环境模型。
+当前 migration head 为 `20260824_0057`。`0057` 增加本机 AI 默认项，初次获得有效配置中心默认 Provider 时自动初始化；本机默认 Provider 被配置中心删除时自动回退并提示。配置中心地址由 `CONTEXT_ROUTER_SHARED_CONFIG_CENTER_BASE_URL` 指定（Compose 默认 `http://shared-config-center-api:8080`），超时由 `CONTEXT_ROUTER_SHARED_CONFIG_CENTER_TIMEOUT_SECONDS` 指定。配置中心必须先有一个有效 `activeProviderId`，本项目不会猜测或生成真实的 Provider 密钥。`0056` 增加 Workspace 业务值映射、关键词别名和接口参数绑定；本机 AI/运维取值预览按显式环境解析稳定数据库别名，只生成受 SQL 安全策略校验的有界只读查询，浏览器页面不展示预览控件。更早迁移继续保留既有接口服务、地址、身份、角色、Controller 元数据和 Workspace 环境模型。
 
 表关联页面的关联数据目前没有自动生成流水线，示例数据由可重复执行的种子脚本写入：
 

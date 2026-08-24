@@ -11,6 +11,22 @@
 
 ## 记录
 
+### 2026-08-24
+
+- 配置管理左侧补齐数据库配置、AI 配置、本地 CLI 配置、MinIO 配置、图片模型配置、Runtime Contract 六个菜单，并对齐共享配置中心的语义图标、柔和背景和贴左选中竖线。六类配置均由本应用通过配置中心 API 自行绘制只读详情；只有 AI 默认项写入本地，数据库密码、AI/API Key、MinIO 凭据及 Runtime Contract 密钥默认遮罩。
+- 新增“配置管理 → AI 配置”页面及 `/api/shared-config/ai` 读取、刷新、默认项保存接口。Provider、模型、地址和明文密钥仅从 `ai_share_config` 配置中心实时读取；页面默认脱敏展示密钥，按眼睛按钮才临时显示明文。本机只持久化默认 Provider ID，首次有效读取自动初始化；本机默认已被配置中心删除时自动回退中心 `activeProviderId` 并提示。新增 migration `20260824_0057` 和 `shared_ai_defaults` 单例表。
+
+### 2026-08-23
+
+- 接口转发 MCP 在调用方未传地址和身份时，自动复用当前环境内最近一次成功且仍有效的配置；无历史时自动选择唯一候选，多个候选无法判定才返回 `needs_selection`。显式账号/角色先缩小地址范围，响应和 MCP 摘要新增不含敏感值的 `selection_evidence` 来源。
+- 映射管理的关键词输入框与搜索按钮在所有断点保持同一行，搜索按钮固定不收缩且文字不换行。
+- 映射管理页面改为纯只读展示，移除新增、编辑、保存、删除及接口参数解绑操作；写入与预览能力继续保留在 AI/运维接口。
+- 顶部导航收敛为“工作空间、数据管理、接口管理、AI可视化、系统中心”五组；数据管理位于接口管理之前，其余页面按业务域进入四个统一交互的下拉菜单，并补齐方向键、Esc、点击外部关闭和焦点恢复。
+- 新增顶部“映射管理”页面：按 Workspace 展示和维护业务值名称、稳定 `value_key`、关键词别名、结构化数据库取值规则及现有接口参数绑定。页面省略状态、可选 Schema、手动接口搜索/绑定和候选值预览；新建记录直接发布，完整维护与预览能力继续由本机 AI/运维接口提供。
+- 新增 `ValueMappingService` 与 `/api/value-mappings` 管理/预览接口。取值规则只保存只读数据库 `mcp_alias`、表、字段和标量等值过滤，预览由服务端生成 SQL、执行标识符校验并复用现有数据库环境解析、Connector 和 `SqlSafetyPolicy`，不开放任意 SQL。
+- 新增 migration `20260823_0056` 和 `interface_value_mappings`、`interface_value_mapping_aliases`、`interface_value_mapping_bindings`；关键词在 Workspace 内唯一，一个接口参数只能绑定一个业务值。新增 `search_value_mappings` 与 `resolve_value_candidates` MCP：前者按业务词或接口参数查找已发布映射，后者继承任务环境并执行结构化有界只读规则，最多返回 10 条候选且不接受任意 SQL。
+- `prepare_forwarding_request` 用 `value_strategy` 替代布尔历史开关：默认 `reuse_successful`；`refresh_selected` 只刷新 `refresh_value_keys`，`refresh_mapped` 刷新接口全部映射值，`ignore_history` 放弃历史重建。调用方字段跳过映射查询；刷新候选优先排除历史旧值，失败返回 `needs_value_resolution` 且不生成执行计划。MCP 调用摘要只记录策略和刷新 key 数量。
+
 ### 2026-08-22
 
 - 接口转发 prepare 增加参数证据引擎：只复用同接口、同环境、同地址、同身份的最近成功日志，移除验证码、临时令牌、时间戳等易失历史值，历史页码重置为 1、分页大小上限为 20；调用方值保持最高优先级。MCP 返回逐字段来源、证据和可信度，并明确提示未绑定数据库字段的历史 ID 尚未验证；计划持久化证据用于后续审计。新增 migration `20260822_0055`。

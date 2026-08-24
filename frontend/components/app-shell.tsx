@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { DataSourceDashboard } from "@/components/data-source-dashboard";
 import { DocumentReadStats } from "@/components/document-read-stats";
@@ -10,6 +15,8 @@ import { TableRelationExplorer } from "@/components/table-relation-explorer";
 import { RelationRecordExplorer } from "@/components/relation-record-explorer";
 import { WorkspaceDashboard } from "@/components/workspace-dashboard";
 import { InterfaceForwardingManager } from "@/components/interface-forwarding-manager";
+import { ValueMappingManager } from "@/components/value-mapping-manager";
+import { SharedAiConfigManager } from "@/components/shared-ai-config-manager";
 
 type Section =
   | "workspaces"
@@ -17,6 +24,8 @@ type Section =
   | "table-relations"
   | "relation-records"
   | "interface-forwarding"
+  | "value-mappings"
+  | "shared-ai-config"
   | "interface-visualization"
   | "data-visualization"
   | "log-visualization"
@@ -24,13 +33,47 @@ type Section =
   | "system-guides"
   | "doc-stats";
 
-type NavKind = Section | "ai-visualization";
+type NavKind =
+  | Section
+  | "data-management"
+  | "interface-management"
+  | "configuration-management"
+  | "ai-visualization"
+  | "system-center";
 
-const visualizationSections: Section[] = [
-  "interface-visualization",
-  "data-visualization",
-  "log-visualization",
+interface NavMenuItem {
+  section: Section;
+  label: string;
+}
+
+const dataManagementItems: NavMenuItem[] = [
+  { section: "data-sources", label: "数据源" },
+  { section: "table-relations", label: "表关联" },
+  { section: "relation-records", label: "关联数据" },
 ];
+
+const interfaceManagementItems: NavMenuItem[] = [
+  { section: "interface-forwarding", label: "接口转发" },
+  { section: "value-mappings", label: "映射管理" },
+];
+
+const configurationManagementItems: NavMenuItem[] = [
+  { section: "shared-ai-config", label: "AI 配置" },
+];
+
+const visualizationItems: NavMenuItem[] = [
+  { section: "interface-visualization", label: "接口可视化" },
+  { section: "data-visualization", label: "数据可视化" },
+  { section: "log-visualization", label: "日志可视化" },
+];
+
+const systemCenterItems: NavMenuItem[] = [
+  { section: "traces", label: "调用链路" },
+  { section: "system-guides", label: "系统文档" },
+  { section: "doc-stats", label: "文档统计" },
+];
+
+const visualizationSections = visualizationItems.map((item) => item.section);
 
 function NavIcon({ kind }: { kind: NavKind }) {
   if (kind === "workspaces") {
@@ -41,7 +84,7 @@ function NavIcon({ kind }: { kind: NavKind }) {
       </svg>
     );
   }
-  if (kind === "data-sources") {
+  if (kind === "data-sources" || kind === "data-management") {
     return (
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <ellipse cx="12" cy="5.5" rx="7.5" ry="3" />
@@ -70,7 +113,7 @@ function NavIcon({ kind }: { kind: NavKind }) {
       </svg>
     );
   }
-  if (kind === "system-guides") {
+  if (kind === "system-guides" || kind === "system-center") {
     return (
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M6 3.5h9l3 3V20.5H6z" />
@@ -78,10 +121,20 @@ function NavIcon({ kind }: { kind: NavKind }) {
       </svg>
     );
   }
-  if (kind === "interface-forwarding") {
+  if (kind === "interface-forwarding" || kind === "interface-management") {
     return (
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M4 7h11M12 4l3 3-3 3M20 17H9M12 14l-3 3 3 3" />
+      </svg>
+    );
+  }
+  if (kind === "value-mappings") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M8 7h8M8 17h8" />
+        <circle cx="5" cy="7" r="2" />
+        <circle cx="19" cy="17" r="2" />
+        <path d="M7 8.5 17 15.5" />
       </svg>
     );
   }
@@ -99,6 +152,14 @@ function NavIcon({ kind }: { kind: NavKind }) {
       </svg>
     );
   }
+  if (kind === "configuration-management" || kind === "shared-ai-config") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="4" y="4" width="16" height="16" rx="3" />
+        <path d="M8 9h8M8 13h8M8 17h5" />
+      </svg>
+    );
+  }
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <circle cx="6" cy="6" r="2" />
@@ -109,37 +170,42 @@ function NavIcon({ kind }: { kind: NavKind }) {
   );
 }
 
-export function AppShell() {
-  const [section, setSection] = useState<Section>("workspaces");
-  const [visualizationOpen, setVisualizationOpen] = useState(false);
-  const [visualizationMenuPosition, setVisualizationMenuPosition] = useState({
-    left: 0,
-    top: 0,
-  });
-  const visualizationMenuRef = useRef<HTMLDivElement>(null);
-  const visualizationTriggerRef = useRef<HTMLButtonElement>(null);
-  const firstVisualizationItemRef = useRef<HTMLButtonElement>(null);
-  const visualizationActive = visualizationSections.includes(section);
+function NavDropdown({
+  kind,
+  label,
+  menuId,
+  items,
+  section,
+  onSelect,
+}: {
+  kind: NavKind;
+  label: string;
+  menuId: string;
+  items: NavMenuItem[];
+  section: Section;
+  onSelect: (section: Section) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ left: 0, top: 0 });
+  const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const firstItemRef = useRef<HTMLButtonElement>(null);
+  const active = items.some((item) => item.section === section);
 
   useEffect(() => {
-    if (!visualizationOpen) {
-      return;
-    }
-
-    firstVisualizationItemRef.current?.focus();
+    if (!open) return;
+    firstItemRef.current?.focus();
 
     const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (!visualizationMenuRef.current?.contains(event.target as Node)) {
-        setVisualizationOpen(false);
-      }
+      if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
     };
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setVisualizationOpen(false);
-        visualizationTriggerRef.current?.focus();
+        setOpen(false);
+        window.requestAnimationFrame(() => triggerRef.current?.focus());
       }
     };
-    const closeOnViewportChange = () => setVisualizationOpen(false);
+    const closeOnViewportChange = () => setOpen(false);
 
     document.addEventListener("pointerdown", closeOnOutsidePointer);
     document.addEventListener("keydown", closeOnEscape);
@@ -151,25 +217,90 @@ export function AppShell() {
       window.removeEventListener("resize", closeOnViewportChange);
       window.removeEventListener("scroll", closeOnViewportChange, true);
     };
-  }, [visualizationOpen]);
+  }, [open]);
 
-  const toggleVisualizationMenu = () => {
-    if (!visualizationOpen && visualizationTriggerRef.current) {
-      const triggerRect = visualizationTriggerRef.current.getBoundingClientRect();
+  const openMenu = () => {
+    const triggerRect = triggerRef.current?.getBoundingClientRect();
+    if (triggerRect) {
       const menuWidth = 176;
-      setVisualizationMenuPosition({
+      setMenuPosition({
         left: Math.max(12, Math.min(triggerRect.left, window.innerWidth - menuWidth - 12)),
         top: triggerRect.bottom + 8,
       });
     }
-    setVisualizationOpen((current) => !current);
+    setOpen(true);
   };
 
-  const selectVisualizationSection = (nextSection: Section) => {
-    setSection(nextSection);
-    setVisualizationOpen(false);
-    visualizationTriggerRef.current?.focus();
+  const handleMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    const buttons = Array.from(
+      event.currentTarget.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]'),
+    );
+    if (!buttons.length) return;
+    event.preventDefault();
+    const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    if (event.key === "Home") buttons[0]?.focus();
+    else if (event.key === "End") buttons.at(-1)?.focus();
+    else if (event.key === "ArrowDown") buttons[(current + 1 + buttons.length) % buttons.length]?.focus();
+    else buttons[(current - 1 + buttons.length) % buttons.length]?.focus();
   };
+
+  return (
+    <div className="app-nav-dropdown" ref={menuRef}>
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-label={label}
+        aria-controls={menuId}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        data-active={active}
+        onClick={() => (open ? setOpen(false) : openMenu())}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown" && !open) {
+            event.preventDefault();
+            openMenu();
+          }
+        }}
+      >
+        <NavIcon kind={kind} />
+        <span>{label}</span>
+        <span className="app-nav-dropdown-chevron" aria-hidden="true">▾</span>
+      </button>
+      {open ? (
+        <div
+          id={menuId}
+          className="app-nav-dropdown-menu"
+          role="menu"
+          aria-label={`${label}子菜单`}
+          style={menuPosition}
+          onKeyDown={handleMenuKeyDown}
+        >
+          {items.map((item, index) => (
+            <button
+              ref={index === 0 ? firstItemRef : undefined}
+              key={item.section}
+              type="button"
+              role="menuitem"
+              data-active={section === item.section}
+              onClick={() => {
+                onSelect(item.section);
+                setOpen(false);
+                window.requestAnimationFrame(() => triggerRef.current?.focus());
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function AppShell() {
+  const [section, setSection] = useState<Section>("workspaces");
+  const visualizationActive = visualizationSections.includes(section);
 
   return (
     <div className="app-shell">
@@ -184,15 +315,6 @@ export function AppShell() {
         <nav aria-label="主菜单">
           <button
             type="button"
-            aria-label="接口转发"
-            data-active={section === "interface-forwarding"}
-            onClick={() => setSection("interface-forwarding")}
-          >
-            <NavIcon kind="interface-forwarding" />
-            <span>接口转发</span>
-          </button>
-          <button
-            type="button"
             aria-label="工作空间"
             data-active={section === "workspaces"}
             onClick={() => setSection("workspaces")}
@@ -200,113 +322,46 @@ export function AppShell() {
             <NavIcon kind="workspaces" />
             <span>工作空间</span>
           </button>
-          <button
-            type="button"
-            aria-label="数据源"
-            data-active={section === "data-sources"}
-            onClick={() => setSection("data-sources")}
-          >
-            <NavIcon kind="data-sources" />
-            <span>数据源</span>
-          </button>
-          <button
-            type="button"
-            aria-label="表关联"
-            data-active={section === "table-relations"}
-            onClick={() => setSection("table-relations")}
-          >
-            <NavIcon kind="table-relations" />
-            <span>表关联</span>
-          </button>
-          <button
-            type="button"
-            aria-label="关联数据"
-            data-active={section === "relation-records"}
-            onClick={() => setSection("relation-records")}
-          >
-            <NavIcon kind="relation-records" />
-            <span>关联数据</span>
-          </button>
-          <button
-            type="button"
-            aria-label="调用链路"
-            data-active={section === "traces"}
-            onClick={() => setSection("traces")}
-          >
-            <NavIcon kind="traces" />
-            <span>调用链路</span>
-          </button>
-          <div className="app-nav-dropdown" ref={visualizationMenuRef}>
-            <button
-              ref={visualizationTriggerRef}
-              type="button"
-              aria-label="AI可视化"
-              aria-controls="ai-visualization-menu"
-              aria-expanded={visualizationOpen}
-              aria-haspopup="menu"
-              data-active={visualizationActive}
-              onClick={toggleVisualizationMenu}
-            >
-              <NavIcon kind="ai-visualization" />
-              <span>AI可视化</span>
-              <span className="app-nav-dropdown-chevron" aria-hidden="true">
-                ▾
-              </span>
-            </button>
-            {visualizationOpen ? (
-              <div
-                id="ai-visualization-menu"
-                className="app-nav-dropdown-menu"
-                role="menu"
-                aria-label="AI可视化子菜单"
-                style={visualizationMenuPosition}
-              >
-                <button
-                  ref={firstVisualizationItemRef}
-                  type="button"
-                  role="menuitem"
-                  data-active={section === "interface-visualization"}
-                  onClick={() => selectVisualizationSection("interface-visualization")}
-                >
-                  接口可视化
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  data-active={section === "data-visualization"}
-                  onClick={() => selectVisualizationSection("data-visualization")}
-                >
-                  数据可视化
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  data-active={section === "log-visualization"}
-                  onClick={() => selectVisualizationSection("log-visualization")}
-                >
-                  日志可视化
-                </button>
-              </div>
-            ) : null}
-          </div>
-          <button
-            type="button"
-            aria-label="系统文档"
-            data-active={section === "system-guides"}
-            onClick={() => setSection("system-guides")}
-          >
-            <NavIcon kind="system-guides" />
-            <span>系统文档</span>
-          </button>
-          <button
-            type="button"
-            aria-label="文档统计"
-            data-active={section === "doc-stats"}
-            onClick={() => setSection("doc-stats")}
-          >
-            <NavIcon kind="doc-stats" />
-            <span>文档统计</span>
-          </button>
+          <NavDropdown
+            kind="data-management"
+            label="数据管理"
+            menuId="data-management-menu"
+            items={dataManagementItems}
+            section={section}
+            onSelect={setSection}
+          />
+          <NavDropdown
+            kind="interface-management"
+            label="接口管理"
+            menuId="interface-management-menu"
+            items={interfaceManagementItems}
+            section={section}
+            onSelect={setSection}
+          />
+          <NavDropdown
+            kind="ai-visualization"
+            label="AI可视化"
+            menuId="ai-visualization-menu"
+            items={visualizationItems}
+            section={section}
+            onSelect={setSection}
+          />
+          <NavDropdown
+            kind="system-center"
+            label="系统中心"
+            menuId="system-center-menu"
+            items={systemCenterItems}
+            section={section}
+            onSelect={setSection}
+          />
+          <NavDropdown
+            kind="configuration-management"
+            label="配置管理"
+            menuId="configuration-management-menu"
+            items={configurationManagementItems}
+            section={section}
+            onSelect={setSection}
+          />
         </nav>
       </header>
       <main
@@ -317,6 +372,8 @@ export function AppShell() {
           section === "table-relations" ||
           section === "relation-records" ||
           section === "interface-forwarding" ||
+          section === "value-mappings" ||
+          section === "shared-ai-config" ||
           visualizationActive
             ? "app-content app-content--traces"
             : "app-content"
@@ -327,6 +384,8 @@ export function AppShell() {
         {section === "table-relations" ? <TableRelationExplorer /> : null}
         {section === "relation-records" ? <RelationRecordExplorer /> : null}
         {section === "interface-forwarding" ? <InterfaceForwardingManager /> : null}
+        {section === "value-mappings" ? <ValueMappingManager /> : null}
+        {section === "shared-ai-config" ? <SharedAiConfigManager /> : null}
         {section === "traces" ? <TraceExplorer /> : null}
         {section === "system-guides" ? <SystemGuideManager /> : null}
         {section === "doc-stats" ? <DocumentReadStats /> : null}

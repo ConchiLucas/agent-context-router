@@ -119,7 +119,9 @@ Codex / Antigravity
 
 接口转发 MCP 的执行也优先使用具备 `interface-forwarding` 能力的在线 Host Runner：控制面先完成计划、只读分类、配置指纹和单次使用校验，再创建短租约任务；Runner 只执行服务端组装的 HTTP(S) GET/POST 请求并回传有界结果。账号请求头不落任务表、不进入 MCP 响应；Runner 不可用时保留容器内直连兼容路径。c12-data 的原始 Controller 路径不直接开放，只有登记为 MTP 可调用接口的明确包装路径才能执行。
 
-`prepare_forwarding_request` 按同接口、同环境、同转发地址、同身份选择最近一条成功日志，并在合并前移除验证码、临时令牌、时间戳等易失字段，把历史页码重置为 1、历史分页大小限制到 20。调用方参数优先级最高；返回的 `parameter_evidence` 为每个顶层字段标记 `caller`、`successful_history`、Schema 默认/示例或安全分页默认及可信度。历史 ID 在没有明确数据库字段映射时只标记为未验证并给出 warning，AI 应通过数据库或表关联工具获得当前值后重新 prepare，不得把历史 ID 描述成已经验证。
+`prepare_forwarding_request` 先解析转发配置。显式 `address_id`、`login_account`、`role_name` 优先；省略时在当前接口、task 环境和仍存在的候选中选择最近成功日志的地址与身份；没有成功记录但仅有一个候选时自动选择；其余情况返回 `needs_selection`。显式账号或角色会先排除不包含该身份的地址。`selection_evidence` 分别记录地址和身份来自 `caller`、`successful_history` 或 `single_candidate`；调用摘要只记录来源，不记录登录请求头。配置确定后，再按同接口、同环境、同转发地址、同身份选择最近一条成功日志，并在合并前移除验证码、临时令牌、时间戳等易失字段，把历史页码重置为 1、历史分页大小限制到 20。默认 `value_strategy=reuse_successful`，不会因为存在映射就查询业务数据库。用户要求更换指定业务值时使用 `refresh_selected + refresh_value_keys`；要求所有业务值重新造数时使用 `refresh_mapped`；明确拒绝历史时才使用 `ignore_history`。刷新只处理当前接口的精确参数绑定，先移除对应历史值，再从最多 10 个候选中稳定选择一个与旧值不同的值；调用方显式值最后覆盖且会跳过该字段的映射查询。返回的 `parameter_evidence` 标记 `caller`、`successful_history`、`value_mapping`、Schema 默认/示例或安全分页默认，`value_resolutions` 说明哪些映射被刷新或由 caller 覆盖；无法安全刷新时返回 `needs_value_resolution`，不生成计划。
+
+业务值取值链路既可由 AI 显式调用 `search_value_mappings -> resolve_value_candidates`，也可由 `prepare_forwarding_request` 在刷新策略下按接口绑定自动完成。搜索工具只读取当前 task Workspace 的已发布映射，可按中文业务词、`value_key`、别名或精确的 `interface_id + location + parameter_path` 定位规则；绑定列表每条映射最多返回 20 条并标记是否截断。解析工具不接收 SQL、连接信息或任意数据源，只执行映射中保存的数据库别名、表、字段和固定等值过滤；省略环境时继承 task 环境，显式环境必须与 task 一致，结果最多 10 条并携带来源字段。两类调用均进入 MCP 链路，日志中的搜索词只保存 SHA-256 摘要；接口准备日志另外记录策略和刷新 key 数量，不记录候选原文。
 
 ```text
 Codex / Antigravity
@@ -146,6 +148,7 @@ prepare 和文档搜索不建立业务数据库连接。业务数据库离线时
 
 | 页面行为 | 前端 | 后端 API |
 | --- | --- | --- |
+| 浏览六类共享配置并设置本机 AI 默认项 | `shared-ai-config-manager.tsx` | `GET /api/shared-config/ai/catalog` 聚合数据库、AI、本地 CLI、MinIO、图片模型和 Runtime Contract；`GET /api/shared-config/ai`、安全 `PUT /api/shared-config/ai/default` 维护本机 AI 默认项。所有明细实时取自配置中心，本地仅保存默认 Provider ID，失效时回退中心默认并返回提示 |
 | 加载工作空间卡片 | `workspace-dashboard.tsx` | `GET /api/workspaces` |
 | 查看并切换 Workspace 环境详情 | `workspace-mcp-environment-defaults.tsx` | `GET /api/workspaces/{id}/environments`、`GET /api/workspaces/{id}/nacos-profiles` |
 | 刷新工作空间映射 | `workspace-dashboard.tsx` | 安全 `POST /api/workspaces/{id}/refresh` |
@@ -166,6 +169,7 @@ prepare 和文档搜索不建立业务数据库连接。业务数据库离线时
 | 查看单表关联 | `table-relation-detail.tsx`、`table-relation-edge-row.tsx` | `GET /api/workspaces/{id}/table-relations/table` |
 | 按关联字段关键词查看一层关联记录 | `relation-record-explorer.tsx` | 安全只读 `POST /api/workspaces/{id}/relation-records/search` |
 | 管理并测试接口转发 | `interface-forwarding-manager.tsx` | 浏览器使用 `GET /api/interface-forwarding/overview` 只读展示 Workspace 环境下“接口服务 + 具名基础 URL”映射及每个地址的登录账号、角色标识和请求头；overview 聚合接口最近请求时间，有请求记录的接口优先按时间倒序，未请求接口按路径和请求方式稳定排序；前端对当前服务或全部接口的实际展示集合复用同一排序；写入接口保留给 AI/运维调用；execute 同时校验接口与地址的服务归属，测试下拉只显示同服务地址；MCP 执行优先经 Host Runner 单次租约访问宿主机 VPN 网络并统一落日志；接口 state/logs/schema |
+| 查看与使用业务值映射 | `value-mapping-manager.tsx` | 页面通过 `GET /api/value-mappings/overview` 只读展示；AI/运维接口保留结构化规则维护和预览；MCP 使用 `search_value_mappings` 定位已发布规则，再由 `resolve_value_candidates` 按 task 环境执行最多 10 条的服务端生成只读查询 |
 | 查看单表插入入口 | `table-relation-write-modal.tsx` | `GET /api/workspaces/{id}/table-relations/table/writes` |
 | 查看单表更新入口 | `table-relation-write-modal.tsx` | `GET /api/workspaces/{id}/table-relations/table/updates` |
 | 搜索表名、只看有关联的表、折叠多对多 | `table-relation-table-list.tsx`、`table-relations.ts` | 无请求，复用已加载数据在前端过滤 |

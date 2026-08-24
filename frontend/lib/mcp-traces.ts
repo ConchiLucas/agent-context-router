@@ -17,6 +17,8 @@ export const INTERNAL_MCP_TOOL_NAMES: readonly InternalMcpToolName[] = [
   "execute_database_query",
   "read_table_relations",
   "search_relation_tables",
+  "search_value_mappings",
+  "resolve_value_candidates",
   "search_forwarding_interfaces",
   "prepare_forwarding_request",
   "execute_forwarding_request",

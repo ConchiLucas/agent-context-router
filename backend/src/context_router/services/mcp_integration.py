@@ -35,6 +35,8 @@ from context_router.mcp_server import (
     READ_TASK_CONTEXT_TOOL_NAME,
     READ_TOOL_DESCRIPTION,
     READ_TOOL_NAME,
+    RESOLVE_VALUE_CANDIDATES_TOOL_DESCRIPTION,
+    RESOLVE_VALUE_CANDIDATES_TOOL_NAME,
     SEARCH_CONTEXT_TOOL_DESCRIPTION,
     SEARCH_CONTEXT_TOOL_NAME,
     SEARCH_DATABASE_TOOL_DESCRIPTION,
@@ -43,6 +45,8 @@ from context_router.mcp_server import (
     SEARCH_FORWARDING_INTERFACES_TOOL_NAME,
     SEARCH_RELATION_TABLES_TOOL_DESCRIPTION,
     SEARCH_RELATION_TABLES_TOOL_NAME,
+    SEARCH_VALUE_MAPPINGS_TOOL_DESCRIPTION,
+    SEARCH_VALUE_MAPPINGS_TOOL_NAME,
     START_WORKSPACE_TOOL_DESCRIPTION,
     START_WORKSPACE_TOOL_NAME,
 )
@@ -114,6 +118,14 @@ class McpIntegrationService:
                 McpToolInfo(
                     name=SEARCH_RELATION_TABLES_TOOL_NAME,
                     description=SEARCH_RELATION_TABLES_TOOL_DESCRIPTION,
+                ),
+                McpToolInfo(
+                    name=SEARCH_VALUE_MAPPINGS_TOOL_NAME,
+                    description=SEARCH_VALUE_MAPPINGS_TOOL_DESCRIPTION,
+                ),
+                McpToolInfo(
+                    name=RESOLVE_VALUE_CANDIDATES_TOOL_NAME,
+                    description=RESOLVE_VALUE_CANDIDATES_TOOL_DESCRIPTION,
                 ),
                 McpToolInfo(
                     name=SEARCH_FORWARDING_INTERFACES_TOOL_NAME,
@@ -248,6 +260,8 @@ class McpIntegrationService:
                                 READ_TOOL_NAME,
                                 SEARCH_DATABASE_TOOL_NAME,
                                 EXECUTE_DATABASE_TOOL_NAME,
+                                SEARCH_VALUE_MAPPINGS_TOOL_NAME,
+                                RESOLVE_VALUE_CANDIDATES_TOOL_NAME,
                                 APPLY_WORKSPACE_TOOL_NAME,
                                 START_WORKSPACE_TOOL_NAME,
                                 GET_WORKSPACE_OPERATION_TOOL_NAME,

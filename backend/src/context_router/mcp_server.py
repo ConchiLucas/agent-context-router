@@ -18,6 +18,7 @@ from context_router.mcp_contract import (
     CONTEXT_ROUTER_CORE_TOOL_NAMES,
     CONTEXT_ROUTER_INTERFACE_FORWARDING_TOOL_NAMES,
     CONTEXT_ROUTER_TABLE_RELATION_TOOL_NAMES,
+    CONTEXT_ROUTER_VALUE_MAPPING_TOOL_NAMES,
 )
 from context_router.mcp_contract import (
     CONTEXT_ROUTER_TRACE_SERVER_NAME as TRACE_SERVER_NAME,
@@ -52,6 +53,7 @@ from context_router.services.table_relation_context import (
     TableRelationContextError,
     TableRelationContextService,
 )
+from context_router.services.value_mapping import ValueMappingError, ValueMappingService
 from context_router.services.workspace_runtime_orchestration import (
     WorkspaceRuntimeOrchestrationError,
     WorkspaceRuntimeOrchestrationService,
@@ -96,16 +98,25 @@ MCP_SERVER_INSTRUCTIONS = (
     "measurements, re-runnable check SQL, and relation code sites. "
     "Empty writes or updates only mean no entry points are recorded yet. When only a business "
     "term is known, find exact table names first with search_relation_tables. "
+    "When an interface parameter needs a business value such as a shipper ID or carrier ID, "
+    "call search_value_mappings by business keyword or exact interface parameter. Then call "
+    "resolve_value_candidates with the selected mapping. It executes only the saved bounded "
+    "read rule, inherits the task environment when omitted, and returns at most 10 candidates. "
+    "Do not invent IDs when a published mapping is available. "
     "When the user wants to call an imported business interface, first use "
     "search_forwarding_interfaces, then prepare_forwarding_request. Execute only a ready "
     "short-lived plan with execute_forwarding_request and its exact request_sha256. The server "
     "selects the task Workspace/environment, route, and saved account headers; never ask the "
     "user to provide a raw URL or copy saved headers. The first release executes only interfaces "
-    "classified as read operations. A needs_selection or needs_parameters result is a normal "
-    "request for an explicit address, account role, or missing business value. Never invent "
-    "business IDs: inspect parameter_evidence and warnings, use successful history already "
-    "merged by prepare, and validate historical IDs with the database/table-relation tools when "
-    "current records are needed. Re-run prepare with the verified value as a caller parameter. "
+    "classified as read operations. Omitted address and account selections reuse the latest "
+    "successful valid configuration, or the only current candidate. Inspect selection_evidence "
+    "for the decision source. A needs_selection or needs_parameters result is a normal request "
+    "for an explicit address, account role, or missing business value. The default "
+    "value_strategy=reuse_successful preserves the latest successful request. Use "
+    "refresh_selected with refresh_value_keys only when the user asks to replace named business "
+    "values, refresh_mapped when all mapped values should be regenerated, and ignore_history only "
+    "when the user explicitly rejects history. Caller values always win. Never invent business "
+    "IDs: inspect parameter_evidence, value_resolutions, and warnings. "
     "When the user asks to start services, call start_workspace: start always means every "
     "registered project in the task Workspace. After modifying registered Workspace code, "
     "call apply_workspace_changes once with task_id and actual Workspace-relative changed "
@@ -129,6 +140,10 @@ MCP_SERVER_INSTRUCTIONS = (
     PREPARE_FORWARDING_REQUEST_TOOL_NAME,
     EXECUTE_FORWARDING_REQUEST_TOOL_NAME,
 ) = CONTEXT_ROUTER_INTERFACE_FORWARDING_TOOL_NAMES
+(
+    SEARCH_VALUE_MAPPINGS_TOOL_NAME,
+    RESOLVE_VALUE_CANDIDATES_TOOL_NAME,
+) = CONTEXT_ROUTER_VALUE_MAPPING_TOOL_NAMES
 APPLY_WORKSPACE_TOOL_NAME = "apply_workspace_changes"
 START_WORKSPACE_TOOL_NAME = "start_workspace"
 GET_WORKSPACE_OPERATION_TOOL_NAME = "get_workspace_operation"
@@ -228,17 +243,36 @@ SEARCH_RELATION_TABLES_TOOL_DESCRIPTION = (
     "here may still exist in the database — check search_database_objects before concluding "
     "it does not exist."
 )
+SEARCH_VALUE_MAPPINGS_TOOL_DESCRIPTION = (
+    "Search published business-value mappings in the current task Workspace. Provide a Chinese "
+    "business keyword, an exact imported interface ID and parameter location/path, or both. "
+    "Results explain the configured read-only resolver and list bounded interface bindings; no "
+    "database query is executed."
+)
+RESOLVE_VALUE_CANDIDATES_TOOL_DESCRIPTION = (
+    "Resolve up to 10 candidate values with one published mapping's saved database alias, table, "
+    "columns, and fixed filters. Omit environment to inherit the task environment; an explicit "
+    "environment must match the task. The caller cannot provide SQL, connection details, or an "
+    "unconfigured data source."
+)
 SEARCH_FORWARDING_INTERFACES_TOOL_DESCRIPTION = (
     "Search imported interfaces in the task Workspace and report whether each is callable in "
     "the task environment. Prefer an exact Chinese business meaning, path fragment, or Controller."
 )
 PREPARE_FORWARDING_REQUEST_TOOL_DESCRIPTION = (
     "Resolve one imported interface to the task environment, forwarding address, saved account "
-    "role, latest successful request history, and OpenAPI contract. Historical pagination is "
+    "role, latest successful request history, and OpenAPI contract. Explicit address/account/role "
+    "wins; otherwise the latest successful still-valid selection is reused, followed by a single "
+    "current candidate. selection_evidence reports caller, successful_history, or "
+    "single_candidate. "
+    "Historical pagination is "
     "safely normalized and volatile values are removed. Every proposed field includes source, "
     "evidence, and confidence; historical IDs not backed by an explicit database mapping are "
-    "reported in warnings. Returns a short-lived immutable plan only when all required values "
-    "are present. Saved request-header values are never returned."
+    "reported in warnings. value_strategy defaults to reuse_successful; refresh_selected replaces "
+    "only refresh_value_keys, refresh_mapped replaces every mapped interface value, and "
+    "ignore_history rebuilds without request history. Caller values always override generated "
+    "values. Returns a short-lived immutable plan only when all required values are present. "
+    "Saved request-header values are never returned."
 )
 EXECUTE_FORWARDING_REQUEST_TOOL_DESCRIPTION = (
     "Execute exactly one prepared, unexpired, read-only forwarding plan. The caller must echo the "
@@ -474,6 +508,7 @@ def create_context_router_mcp(
     middleware_context_service: MiddlewareContextService | None = None,
     table_relation_context_service: TableRelationContextService | None = None,
     interface_forwarding_context_service: InterfaceForwardingContextService | None = None,
+    value_mapping_service: ValueMappingService | None = None,
 ) -> FastMCP:
     server = ContextRouterMCP(
         name=MCP_SERVER_NAME,
@@ -742,6 +777,61 @@ def create_context_router_mcp(
             raise ToolError(f"{exc.code}: {exc}") from exc
 
     @server.tool(
+        name=SEARCH_VALUE_MAPPINGS_TOOL_NAME,
+        description=SEARCH_VALUE_MAPPINGS_TOOL_DESCRIPTION,
+        annotations=READ_TOOL_ANNOTATIONS,
+    )
+    def search_value_mappings(
+        task_id: Annotated[int, Field(ge=1, strict=True)],
+        query: Annotated[str | None, Field(min_length=1, max_length=240)] = None,
+        interface_id: Annotated[str | None, Field(min_length=1, max_length=36)] = None,
+        location: Literal["path", "query", "body"] | None = None,
+        parameter_path: Annotated[str | None, Field(min_length=1, max_length=240)] = None,
+        limit: Annotated[int, Field(ge=1, le=20, strict=True)] = 10,
+    ) -> dict[str, object]:
+        if value_mapping_service is None:
+            raise ToolError("value_mapping_disabled: 业务值映射 MCP 当前不可用")
+        try:
+            return value_mapping_service.search_for_task(
+                task_id=task_id,
+                query=query,
+                interface_id=interface_id,
+                location=location,
+                parameter_path=parameter_path,
+                limit=limit,
+            )
+        except ValueMappingError as exc:
+            raise ToolError(f"{exc.code}: {exc}") from exc
+
+    @server.tool(
+        name=RESOLVE_VALUE_CANDIDATES_TOOL_NAME,
+        description=RESOLVE_VALUE_CANDIDATES_TOOL_DESCRIPTION,
+        annotations=READ_TOOL_ANNOTATIONS,
+    )
+    def resolve_value_candidates(
+        task_id: Annotated[int, Field(ge=1, strict=True)],
+        mapping_id: Annotated[str, Field(min_length=1, max_length=36)],
+        environment: Annotated[
+            str | None,
+            Field(max_length=32, pattern=r"^[a-z][a-z0-9_-]{0,31}$"),
+        ] = None,
+        keyword: Annotated[str, Field(max_length=240)] = "",
+        limit: Annotated[int, Field(ge=1, le=10, strict=True)] = 10,
+    ) -> dict[str, object]:
+        if value_mapping_service is None:
+            raise ToolError("value_mapping_disabled: 业务值映射 MCP 当前不可用")
+        try:
+            return value_mapping_service.resolve_for_task(
+                mapping_id,
+                task_id=task_id,
+                environment=environment,
+                keyword=keyword,
+                limit=limit,
+            )
+        except ValueMappingError as exc:
+            raise ToolError(f"{exc.code}: {exc}") from exc
+
+    @server.tool(
         name=SEARCH_FORWARDING_INTERFACES_TOOL_NAME,
         description=SEARCH_FORWARDING_INTERFACES_TOOL_DESCRIPTION,
         annotations=READ_TOOL_ANNOTATIONS,
@@ -784,7 +874,26 @@ def create_context_router_mcp(
         path: Annotated[dict[str, Any] | None, Field(default=None)] = None,
         query: Annotated[dict[str, Any] | None, Field(default=None)] = None,
         body: Annotated[dict[str, Any] | None, Field(default=None)] = None,
-        use_history: Annotated[bool, Field(strict=True)] = True,
+        value_strategy: Literal[
+            "reuse_successful",
+            "refresh_selected",
+            "refresh_mapped",
+            "ignore_history",
+        ] = "reuse_successful",
+        refresh_value_keys: Annotated[
+            list[
+                Annotated[
+                    str,
+                    Field(
+                        min_length=1,
+                        max_length=64,
+                        pattern=r"^[a-z][a-z0-9_]{0,63}$",
+                    ),
+                ]
+            ]
+            | None,
+            Field(default=None, min_length=1, max_length=20),
+        ] = None,
     ) -> dict[str, object]:
         if interface_forwarding_context_service is None:
             raise ToolError("interface_forwarding_disabled: 接口转发 MCP 当前不可用")
@@ -799,7 +908,8 @@ def create_context_router_mcp(
                 path=path,
                 query=query,
                 body=body,
-                use_history=use_history,
+                value_strategy=value_strategy,
+                refresh_value_keys=refresh_value_keys,
             )
         except InterfaceForwardingContextError as exc:
             raise ToolError(f"{exc.code}: {exc}") from exc
@@ -995,6 +1105,31 @@ def _request_summary(name: str, arguments: dict[str, Any]) -> dict[str, object] 
             "only_related": arguments.get("only_related", True) is True,
             "limit": arguments.get("limit") if isinstance(arguments.get("limit"), int) else None,
         }
+    if name == SEARCH_VALUE_MAPPINGS_TOOL_NAME:
+        raw_query = arguments.get("query")
+        return {
+            "query_sha256": (
+                hashlib.sha256(raw_query.strip().encode("utf-8")).hexdigest()
+                if isinstance(raw_query, str)
+                else None
+            ),
+            "interface_id": _safe_string(arguments.get("interface_id"), 36),
+            "location": _safe_string(arguments.get("location"), 16),
+            "parameter_path": _safe_string(arguments.get("parameter_path"), 240),
+            "limit": arguments.get("limit") if isinstance(arguments.get("limit"), int) else None,
+        }
+    if name == RESOLVE_VALUE_CANDIDATES_TOOL_NAME:
+        keyword = arguments.get("keyword")
+        return {
+            "mapping_id": _safe_string(arguments.get("mapping_id"), 36),
+            "environment": _safe_string(arguments.get("environment"), 32),
+            "keyword_sha256": (
+                hashlib.sha256(keyword.strip().encode("utf-8")).hexdigest()
+                if isinstance(keyword, str) and keyword.strip()
+                else None
+            ),
+            "limit": arguments.get("limit") if isinstance(arguments.get("limit"), int) else None,
+        }
     if name == SEARCH_FORWARDING_INTERFACES_TOOL_NAME:
         raw_query = arguments.get("query")
         return {
@@ -1021,7 +1156,13 @@ def _request_summary(name: str, arguments: dict[str, Any]) -> dict[str, object] 
             "account_selected": isinstance(arguments.get("login_account"), str),
             "role_selected": isinstance(arguments.get("role_name"), str),
             "supplied_value_counts": supplied,
-            "use_history": arguments.get("use_history", True) is True,
+            "value_strategy": _safe_string(arguments.get("value_strategy"), 32)
+            or "reuse_successful",
+            "refresh_value_key_count": (
+                len(arguments.get("refresh_value_keys", []))
+                if isinstance(arguments.get("refresh_value_keys"), list)
+                else 0
+            ),
         }
     if name == EXECUTE_FORWARDING_REQUEST_TOOL_NAME:
         return {
@@ -1150,6 +1291,19 @@ def _result_summary(name: str, payload: dict[str, Any]) -> dict[str, object] | N
             "returned_count": len(tables) if isinstance(tables, list) else 0,
             "truncated": payload.get("truncated") is True,
         }
+    if name == SEARCH_VALUE_MAPPINGS_TOOL_NAME:
+        return {
+            "returned_count": payload.get("returned_count", 0),
+            "environment": _safe_string(payload.get("environment"), 32),
+            "truncated": payload.get("truncated") is True,
+        }
+    if name == RESOLVE_VALUE_CANDIDATES_TOOL_NAME:
+        return {
+            "mapping_id": _safe_string(payload.get("mapping_id"), 36),
+            "returned_count": payload.get("returned_count", 0),
+            "environment": _safe_string(payload.get("environment"), 32),
+            "truncated": payload.get("truncated") is True,
+        }
     if name == SEARCH_FORWARDING_INTERFACES_TOOL_NAME:
         return {
             "returned_count": payload.get("returned_count", 0),
@@ -1158,10 +1312,40 @@ def _result_summary(name: str, payload: dict[str, Any]) -> dict[str, object] | N
     if name == PREPARE_FORWARDING_REQUEST_TOOL_NAME:
         candidates = payload.get("candidates")
         missing = payload.get("missing")
+        value_resolutions = payload.get("value_resolutions")
+        resolution_issues = payload.get("resolution_issues")
+        selection_evidence = payload.get("selection_evidence")
+        address_selection = (
+            selection_evidence.get("address")
+            if isinstance(selection_evidence, dict)
+            else None
+        )
+        identity_selection = (
+            selection_evidence.get("identity")
+            if isinstance(selection_evidence, dict)
+            else None
+        )
         return {
             "status": _safe_string(payload.get("status"), 32),
+            "value_strategy": _safe_string(payload.get("value_strategy"), 32),
             "candidate_count": len(candidates) if isinstance(candidates, list) else 0,
             "missing_count": len(missing) if isinstance(missing, list) else 0,
+            "value_resolution_count": (
+                len(value_resolutions) if isinstance(value_resolutions, list) else 0
+            ),
+            "resolution_issue_count": (
+                len(resolution_issues) if isinstance(resolution_issues, list) else 0
+            ),
+            "address_selection_source": (
+                _safe_string(address_selection.get("source"), 32)
+                if isinstance(address_selection, dict)
+                else None
+            ),
+            "identity_selection_source": (
+                _safe_string(identity_selection.get("source"), 32)
+                if isinstance(identity_selection, dict)
+                else None
+            ),
             "plan_id": _safe_string(payload.get("plan_id"), 36),
         }
     if name == EXECUTE_FORWARDING_REQUEST_TOOL_NAME:

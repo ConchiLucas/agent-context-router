@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     public_mcp_url: str = "http://127.0.0.1:49173/mcp"
     internal_mcp_url: str = "http://127.0.0.1:8000/mcp"
     mcp_test_timeout_seconds: float = 15.0
+    shared_config_center_base_url: str = ""
+    shared_config_center_timeout_seconds: float = Field(default=10.0, ge=1.0, le=60.0)
     database_tools_enabled: bool = True
     database_max_rows: int = 5_000
     database_max_result_bytes: int = 4_000_000

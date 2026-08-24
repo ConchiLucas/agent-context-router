@@ -69,6 +69,30 @@ def _app() -> FastAPI:
     def delete_forwarding_interface() -> dict[str, bool]:
         return {"deleted": True}
 
+    @app.post("/api/value-mappings")
+    def create_value_mapping() -> dict[str, bool]:
+        return {"written": True}
+
+    @app.put("/api/value-mappings/mapping-1")
+    def update_value_mapping() -> dict[str, bool]:
+        return {"written": True}
+
+    @app.delete("/api/value-mappings/mapping-1")
+    def delete_value_mapping() -> dict[str, bool]:
+        return {"deleted": True}
+
+    @app.post("/api/value-mappings/mapping-1/preview")
+    def preview_value_mapping() -> dict[str, bool]:
+        return {"read": True}
+
+    @app.post("/api/shared-config/ai/refresh")
+    def refresh_shared_ai() -> dict[str, bool]:
+        return {"refreshed": True}
+
+    @app.put("/api/shared-config/ai/default")
+    def save_shared_ai_default() -> dict[str, bool]:
+        return {"saved": True}
+
     return app
 
 
@@ -152,6 +176,14 @@ def test_browser_origin_can_read_and_run_allowlisted_actions() -> None:
             ).status_code
             == 200
         )
+        assert client.post("/api/value-mappings", headers=headers).status_code == 200
+        assert client.put("/api/value-mappings/mapping-1", headers=headers).status_code == 200
+        assert client.delete("/api/value-mappings/mapping-1", headers=headers).status_code == 200
+        assert (
+            client.post("/api/value-mappings/mapping-1/preview", headers=headers).status_code == 200
+        )
+        assert client.post("/api/shared-config/ai/refresh", headers=headers).status_code == 200
+        assert client.put("/api/shared-config/ai/default", headers=headers).status_code == 200
 
 
 def test_browser_origin_cannot_call_configuration_commands() -> None:

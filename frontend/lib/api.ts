@@ -52,6 +52,13 @@ import type {
   InterfaceForwardingState,
   InterfaceForwardingLog,
   InterfaceForwardingExecuteResult,
+  ValueMappingOverview,
+  ValueMappingInterfaceSearchResult,
+  ValueMappingPreviewResult,
+  ValueMappingWrite,
+  ValueMapping,
+  SharedAiCatalog,
+  SharedConfigurationCatalog,
 } from "@/lib/types";
 import {
   buildMcpTraceListPath,
@@ -86,6 +93,30 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function listWorkspaces(): Promise<WorkspaceSummary[]> {
   return request<WorkspaceSummary[]>("/api/workspaces");
+}
+
+export function getSharedAiCatalog(): Promise<SharedAiCatalog> {
+  return request<SharedAiCatalog>("/api/shared-config/ai", { cache: "no-store" });
+}
+
+export function getSharedConfigurationCatalog(): Promise<SharedConfigurationCatalog> {
+  return request<SharedConfigurationCatalog>("/api/shared-config/ai/catalog", {
+    cache: "no-store",
+  });
+}
+
+export function refreshSharedAiCatalog(): Promise<SharedAiCatalog> {
+  return request<SharedAiCatalog>("/api/shared-config/ai/refresh", { method: "POST" });
+}
+
+export function saveSharedAiDefault(
+  providerId: string,
+  revision: number,
+): Promise<SharedAiCatalog> {
+  return request<SharedAiCatalog>("/api/shared-config/ai/default", {
+    method: "PUT",
+    body: JSON.stringify({ provider_id: providerId, revision }),
+  });
 }
 
 export function listSystemGuides(): Promise<SystemGuideDetail[]> {
@@ -629,4 +660,74 @@ export function executeInterfaceForwarding(interfaceId: string, input: { environ
 
 export function listInterfaceForwardingLogs(interfaceId: string): Promise<InterfaceForwardingLog[]> {
   return request(`/api/interface-forwarding/interfaces/${interfaceId}/logs`, { cache: "no-store" });
+}
+
+export function getValueMappingOverview(
+  workspaceId: string,
+  keyword = "",
+): Promise<ValueMappingOverview> {
+  const params = new URLSearchParams({ workspace_id: workspaceId });
+  if (keyword.trim()) params.set("keyword", keyword.trim());
+  return request<ValueMappingOverview>(
+    `/api/value-mappings/overview?${params.toString()}`,
+    { cache: "no-store" },
+  );
+}
+
+export function searchValueMappingInterfaces(
+  workspaceId: string,
+  keyword: string,
+  limit = 30,
+): Promise<ValueMappingInterfaceSearchResult> {
+  const params = new URLSearchParams({
+    workspace_id: workspaceId,
+    keyword: keyword.trim(),
+    limit: String(limit),
+  });
+  return request<ValueMappingInterfaceSearchResult>(
+    `/api/value-mappings/interfaces?${params.toString()}`,
+    { cache: "no-store" },
+  );
+}
+
+export function createValueMapping(input: ValueMappingWrite): Promise<ValueMapping> {
+  return request<ValueMapping>("/api/value-mappings", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateValueMapping(
+  mappingId: string,
+  input: ValueMappingWrite,
+): Promise<ValueMapping> {
+  return request<ValueMapping>(
+    `/api/value-mappings/${encodeURIComponent(mappingId)}`,
+    { method: "PUT", body: JSON.stringify(input) },
+  );
+}
+
+export function deleteValueMapping(mappingId: string): Promise<void> {
+  return request<void>(
+    `/api/value-mappings/${encodeURIComponent(mappingId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export function previewValueMapping(
+  mappingId: string,
+  input: {
+    workspace_id: string;
+    environment: string;
+    keyword: string;
+    limit?: number;
+  },
+): Promise<ValueMappingPreviewResult> {
+  return request<ValueMappingPreviewResult>(
+    `/api/value-mappings/${encodeURIComponent(mappingId)}/preview`,
+    {
+      method: "POST",
+      body: JSON.stringify({ ...input, limit: input.limit ?? 10 }),
+    },
+  );
 }

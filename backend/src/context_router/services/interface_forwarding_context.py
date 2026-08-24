@@ -23,8 +23,15 @@ from context_router.repositories.database_environment_repository import (
 )
 from context_router.repositories.task_repository import TaskReader, TaskRepositoryError
 from context_router.services.mcp_trace import current_tool_call_id
+from context_router.services.value_mapping import ValueMappingError, ValueMappingService
 
 OperationKind = Literal["read", "write", "destructive", "unknown"]
+ValueStrategy = Literal[
+    "reuse_successful",
+    "refresh_selected",
+    "refresh_mapped",
+    "ignore_history",
+]
 _MAX_RESPONSE_BYTES = 1_048_576
 _MAX_REQUEST_BYTES = 262_144
 _PLAN_TTL = timedelta(minutes=10)
@@ -73,12 +80,14 @@ class InterfaceForwardingContextService:
         database_url: str | None,
         task_repository: TaskReader,
         database_environment_repository: DatabaseEnvironmentStore,
+        value_mapping_service: ValueMappingService | None = None,
         host_runner_available: Callable[[], bool] | None = None,
         host_execution_timeout_seconds: float = 40,
     ) -> None:
         self._database_url = database_url
         self._tasks = task_repository
         self._environments = database_environment_repository
+        self._value_mappings = value_mapping_service
         self._host_runner_available = host_runner_available
         self._host_execution_timeout_seconds = max(5.0, host_execution_timeout_seconds)
 
@@ -196,19 +205,34 @@ class InterfaceForwardingContextService:
         path: dict[str, Any] | None = None,
         query: dict[str, Any] | None = None,
         body: dict[str, Any] | None = None,
-        use_history: bool = True,
+        value_strategy: ValueStrategy = "reuse_successful",
+        refresh_value_keys: list[str] | None = None,
     ) -> dict[str, object]:
+        if value_strategy != "refresh_selected" and refresh_value_keys:
+            raise InterfaceForwardingContextError(
+                "refresh_value_keys 只用于 refresh_selected 策略",
+                code="invalid_refresh_value_keys",
+            )
+        intent: dict[str, object] = {
+            "value_strategy": value_strategy,
+            "refresh_value_keys": refresh_value_keys or [],
+        }
         workspace_id, environment_key = self._task_scope(task_id, environment)
         with self._connect() as connection, connection.cursor() as cursor:
             interface = self._load_interface(cursor, workspace_id, interface_id)
             if interface["operation_kind"] != "read":
                 return {
                     "status": "operation_not_allowed",
+                    **intent,
                     "operation_kind": interface["operation_kind"],
                     "message": "MCP 首期只允许执行明确分类为只读的接口",
                 }
             if interface["invocation_mode"] == "disabled" or not interface["route_service_id"]:
-                return {"status": "route_unavailable", "message": "接口服务尚未配置可调用路由"}
+                return {
+                    "status": "route_unavailable",
+                    **intent,
+                    "message": "接口服务尚未配置可调用路由",
+                }
             addresses = self._addresses(
                 cursor,
                 workspace_id=workspace_id,
@@ -217,14 +241,53 @@ class InterfaceForwardingContextService:
                 address_id=address_id,
             )
             if not addresses:
-                return {"status": "route_unavailable", "message": "当前环境没有匹配的转发地址"}
-            if len(addresses) > 1:
+                return {
+                    "status": "route_unavailable",
+                    **intent,
+                    "message": "当前环境没有匹配的转发地址",
+                }
+            if not address_id and (login_account or role_name):
+                compatible_address_ids = self._address_ids_for_identity(
+                    cursor,
+                    address_ids=[str(item["id"]) for item in addresses],
+                    login_account=login_account,
+                    role_name=role_name,
+                )
+                addresses = [
+                    item for item in addresses if str(item["id"]) in compatible_address_ids
+                ]
+                if not addresses:
+                    return {
+                        "status": "identity_unavailable",
+                        **intent,
+                        "message": "当前环境没有包含该登录账号和角色的转发地址",
+                    }
+            successful_selection = self._latest_successful_selection(
+                cursor,
+                interface_id=interface_id,
+                environment=environment_key,
+                address_ids=[str(item["id"]) for item in addresses],
+                identity_ids=None,
+                login_account=login_account,
+                role_name=role_name,
+            )
+            address, address_evidence = self._choose_selection_candidate(
+                addresses,
+                explicit=address_id is not None,
+                historic_id=(
+                    str(successful_selection["address_id"])
+                    if successful_selection and successful_selection["address_id"]
+                    else None
+                ),
+                history=successful_selection,
+            )
+            if address is None:
                 return {
                     "status": "needs_selection",
+                    **intent,
                     "selection": "address",
                     "candidates": [self._public_address(item) for item in addresses],
                 }
-            address = addresses[0]
             identities = self._identities(
                 cursor,
                 address_id=str(address["id"]),
@@ -232,14 +295,53 @@ class InterfaceForwardingContextService:
                 role_name=role_name,
             )
             if (login_account or role_name) and not identities:
-                return {"status": "identity_unavailable", "message": "没有匹配的登录账号和角色"}
-            if len(identities) > 1:
+                return {
+                    "status": "identity_unavailable",
+                    **intent,
+                    "message": "没有匹配的登录账号和角色",
+                }
+            identity: dict[str, Any] | None = None
+            identity_evidence: dict[str, object] | None = None
+            if identities:
+                identity_history = successful_selection
+                historic_identity_id = (
+                    str(identity_history["identity_id"])
+                    if identity_history and identity_history["identity_id"]
+                    else None
+                )
+                if not any(str(item["id"]) == historic_identity_id for item in identities):
+                    identity_history = self._latest_successful_selection(
+                        cursor,
+                        interface_id=interface_id,
+                        environment=environment_key,
+                        address_ids=[str(address["id"])],
+                        identity_ids=[str(item["id"]) for item in identities],
+                        login_account=login_account,
+                        role_name=role_name,
+                    )
+                    historic_identity_id = (
+                        str(identity_history["identity_id"])
+                        if identity_history and identity_history["identity_id"]
+                        else None
+                    )
+                identity, identity_evidence = self._choose_selection_candidate(
+                    identities,
+                    explicit=login_account is not None or role_name is not None,
+                    historic_id=historic_identity_id,
+                    history=identity_history,
+                )
+            if identities and identity is None:
                 return {
                     "status": "needs_selection",
+                    **intent,
                     "selection": "identity",
+                    "selection_evidence": {"address": address_evidence, "identity": None},
                     "candidates": [self._public_identity(item) for item in identities],
                 }
-            identity = identities[0] if identities else None
+            selection_evidence = {
+                "address": address_evidence,
+                "identity": identity_evidence,
+            }
             values: dict[str, Any] = {"path": {}, "query": {}, "body": {}}
             sources: dict[str, dict[str, str]] = {"path": {}, "query": {}, "body": {}}
             evidence: dict[str, dict[str, dict[str, object]]] = {
@@ -249,7 +351,7 @@ class InterfaceForwardingContextService:
             }
             history: dict[str, object] | None = None
             normalizations: list[dict[str, object]] = []
-            if use_history:
+            if value_strategy != "ignore_history":
                 historic, history = self._history_values(
                     cursor,
                     interface_id=interface_id,
@@ -271,6 +373,19 @@ class InterfaceForwardingContextService:
                 self._route_path(interface),
             )
             self._apply_defaults(values, sources, evidence, contract)
+            value_resolutions: list[dict[str, object]] = []
+            resolution_issues: list[dict[str, object]] = []
+            if value_strategy != "reuse_successful":
+                value_resolutions, resolution_issues = self._refresh_mapped_values(
+                    task_id=task_id,
+                    interface_id=interface_id,
+                    strategy=value_strategy,
+                    refresh_value_keys=refresh_value_keys or [],
+                    values=values,
+                    sources=sources,
+                    evidence=evidence,
+                    caller_values={"path": path or {}, "query": query or {}, "body": body or {}},
+                )
             self._merge_values(
                 values,
                 sources,
@@ -279,10 +394,28 @@ class InterfaceForwardingContextService:
                 "caller",
             )
             warnings = self._parameter_warnings(values, evidence)
+            if resolution_issues:
+                return {
+                    "status": "needs_value_resolution",
+                    **intent,
+                    "selection_evidence": selection_evidence,
+                    "value_resolutions": value_resolutions,
+                    "resolution_issues": resolution_issues,
+                    "request": values,
+                    "sources": sources,
+                    "parameter_evidence": evidence,
+                    "history": history,
+                    "normalizations": normalizations,
+                    "warnings": warnings,
+                    "request_contract": self._contract_summary(contract),
+                }
             missing = self._missing_required(contract, values)
             if missing:
                 return {
                     "status": "needs_parameters",
+                    **intent,
+                    "selection_evidence": selection_evidence,
+                    "value_resolutions": value_resolutions,
                     "missing": missing,
                     "request": values,
                     "sources": sources,
@@ -296,6 +429,8 @@ class InterfaceForwardingContextService:
             if request_bytes > _MAX_REQUEST_BYTES:
                 return {
                     "status": "invalid_parameters",
+                    **intent,
+                    "selection_evidence": selection_evidence,
                     "message": "请求参数超过 256 KiB 上限",
                     "request_bytes": request_bytes,
                 }
@@ -337,6 +472,9 @@ class InterfaceForwardingContextService:
             )
         return {
             "status": "ready",
+            **intent,
+            "selection_evidence": selection_evidence,
+            "value_resolutions": value_resolutions,
             "plan_id": plan_id,
             "request_sha256": request_sha256,
             "expires_at": expires_at.isoformat(),
@@ -881,6 +1019,333 @@ class InterfaceForwardingContextService:
         return list(cursor.fetchall())
 
     @staticmethod
+    def _address_ids_for_identity(
+        cursor: Any,
+        *,
+        address_ids: list[str],
+        login_account: str | None,
+        role_name: str | None,
+    ) -> set[str]:
+        if not address_ids:
+            return set()
+        cursor.execute(
+            """SELECT DISTINCT environment_id
+               FROM interface_forwarding_identities
+               WHERE environment_id::text = ANY(%s)
+                 AND (%s::text IS NULL OR lower(login_account)=lower(%s))
+                 AND (%s::text IS NULL OR lower(role_name)=lower(%s))""",
+            (address_ids, login_account, login_account, role_name, role_name),
+        )
+        return {str(row["environment_id"]) for row in cursor.fetchall()}
+
+    @staticmethod
+    def _latest_successful_selection(
+        cursor: Any,
+        *,
+        interface_id: str,
+        environment: str,
+        address_ids: list[str],
+        identity_ids: list[str] | None,
+        login_account: str | None,
+        role_name: str | None,
+    ) -> dict[str, Any] | None:
+        if not address_ids:
+            return None
+        cursor.execute(
+            """SELECT log.id AS log_id, log.address_id, log.identity_id,
+                      log.created_at, log.status_code
+               FROM interface_forwarding_logs AS log
+               JOIN interface_forwarding_environments AS address
+                 ON address.id=log.address_id
+               LEFT JOIN interface_forwarding_identities AS identity
+                 ON identity.id=log.identity_id
+                AND identity.environment_id=address.id
+               WHERE log.interface_id=%s AND log.success=true
+                 AND log.environment_key=%s
+                 AND address.id::text = ANY(%s)
+                 AND (%s::text[] IS NULL OR identity.id::text = ANY(%s))
+                 AND (%s::text IS NULL OR lower(identity.login_account)=lower(%s))
+                 AND (%s::text IS NULL OR lower(identity.role_name)=lower(%s))
+               ORDER BY log.created_at DESC, log.id DESC
+               LIMIT 1""",
+            (
+                interface_id,
+                environment,
+                address_ids,
+                identity_ids,
+                identity_ids,
+                login_account,
+                login_account,
+                role_name,
+                role_name,
+            ),
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+    @classmethod
+    def _choose_selection_candidate(
+        cls,
+        candidates: list[dict[str, Any]],
+        *,
+        explicit: bool,
+        historic_id: str | None,
+        history: dict[str, Any] | None,
+    ) -> tuple[dict[str, Any] | None, dict[str, object] | None]:
+        if len(candidates) == 1:
+            return candidates[0], {"source": "caller" if explicit else "single_candidate"}
+        if historic_id:
+            candidate = next(
+                (item for item in candidates if str(item["id"]) == historic_id),
+                None,
+            )
+            if candidate is not None:
+                evidence: dict[str, object] = {"source": "successful_history"}
+                if history:
+                    evidence.update(
+                        {
+                            "log_id": str(history["log_id"]),
+                            "created_at": cls._iso(history["created_at"]),
+                            "status_code": history["status_code"],
+                        }
+                    )
+                return candidate, evidence
+        return None, None
+
+    def _refresh_mapped_values(
+        self,
+        *,
+        task_id: int,
+        interface_id: str,
+        strategy: ValueStrategy,
+        refresh_value_keys: list[str],
+        values: dict[str, Any],
+        sources: dict[str, dict[str, str]],
+        evidence: dict[str, dict[str, dict[str, object]]],
+        caller_values: dict[str, Any],
+    ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+        requested_keys = list(dict.fromkeys(item.strip().casefold() for item in refresh_value_keys))
+        if strategy == "refresh_selected" and not requested_keys:
+            return [], [
+                {
+                    "code": "refresh_value_keys_required",
+                    "message": "refresh_selected 必须指定至少一个 refresh_value_keys",
+                }
+            ]
+        if self._value_mappings is None:
+            return [], [
+                {
+                    "code": "value_mapping_disabled",
+                    "message": "业务值映射服务当前不可用",
+                }
+            ]
+        try:
+            search_result = self._value_mappings.search_for_task(
+                task_id=task_id,
+                query=None,
+                interface_id=interface_id,
+                location=None,
+                parameter_path=None,
+                limit=20,
+            )
+        except ValueMappingError as exc:
+            return [], [{"code": exc.code, "message": str(exc)}]
+
+        raw_mappings = search_result.get("mappings", [])
+        mappings = [item for item in raw_mappings if isinstance(item, dict)]
+        available_keys = {
+            str(item.get("value_key") or "").casefold(): item
+            for item in mappings
+            if item.get("value_key")
+        }
+        if strategy == "refresh_selected":
+            missing_keys = [key for key in requested_keys if key not in available_keys]
+            if missing_keys:
+                return [], [
+                    {
+                        "code": "value_mapping_unavailable",
+                        "message": "指定业务值没有绑定到当前接口",
+                        "value_keys": missing_keys,
+                        "available_value_keys": sorted(available_keys),
+                    }
+                ]
+            selected_mappings = [available_keys[key] for key in requested_keys]
+        else:
+            selected_mappings = list(available_keys.values())
+
+        resolutions: list[dict[str, object]] = []
+        issues: list[dict[str, object]] = []
+        for mapping in selected_mappings:
+            value_key = str(mapping["value_key"])
+            mapping_id = str(mapping["mapping_id"])
+            bindings = [
+                item
+                for item in mapping.get("bindings", [])
+                if isinstance(item, dict)
+                and item.get("location") in {"path", "query", "body"}
+                and isinstance(item.get("parameter_path"), str)
+            ]
+            refresh_bindings: list[dict[str, Any]] = []
+            caller_bindings: list[dict[str, str]] = []
+            previous_values: list[object] = []
+            for binding in bindings:
+                location = str(binding["location"])
+                parameter_path = str(binding["parameter_path"])
+                if self._path_exists(caller_values.get(location, {}), parameter_path):
+                    caller_bindings.append(
+                        {"location": location, "parameter_path": parameter_path}
+                    )
+                    continue
+                exists, previous = self._path_value(values.get(location, {}), parameter_path)
+                if exists and previous not in (None, ""):
+                    previous_values.append(previous)
+                self._remove_path_value(values.get(location, {}), parameter_path)
+                sources[location].pop(parameter_path, None)
+                evidence[location].pop(parameter_path, None)
+                refresh_bindings.append(binding)
+
+            if not refresh_bindings:
+                resolutions.append(
+                    {
+                        "mapping_id": mapping_id,
+                        "value_key": value_key,
+                        "status": "caller_override",
+                        "fields": caller_bindings,
+                    }
+                )
+                continue
+            if any("[]" in str(item["parameter_path"]) for item in refresh_bindings):
+                issues.append(
+                    {
+                        "code": "unsupported_mapping_path",
+                        "mapping_id": mapping_id,
+                        "value_key": value_key,
+                        "message": "自动刷新暂不支持数组参数路径",
+                    }
+                )
+                continue
+            try:
+                result = self._value_mappings.resolve_for_task(
+                    mapping_id,
+                    task_id=task_id,
+                    environment=None,
+                    keyword="",
+                    limit=10,
+                )
+            except ValueMappingError as exc:
+                issues.append(
+                    {
+                        "code": exc.code,
+                        "mapping_id": mapping_id,
+                        "value_key": value_key,
+                        "message": str(exc),
+                    }
+                )
+                continue
+            candidates = [
+                item
+                for item in result.get("candidates", [])
+                if isinstance(item, dict) and item.get("value") not in (None, "")
+            ]
+            selected = next(
+                (
+                    item
+                    for item in candidates
+                    if all(item.get("value") != previous for previous in previous_values)
+                ),
+                None,
+            )
+            if selected is None:
+                issues.append(
+                    {
+                        "code": (
+                            "no_alternative_candidate"
+                            if candidates and previous_values
+                            else "value_candidate_not_found"
+                        ),
+                        "mapping_id": mapping_id,
+                        "value_key": value_key,
+                        "message": (
+                            "没有找到不同于成功历史的候选值"
+                            if candidates and previous_values
+                            else "当前映射没有查到可用候选值"
+                        ),
+                    }
+                )
+                continue
+
+            selected_value = selected["value"]
+            field_summaries: list[dict[str, str]] = []
+            for binding in refresh_bindings:
+                location = str(binding["location"])
+                parameter_path = str(binding["parameter_path"])
+                self._set_path_value(values[location], parameter_path, selected_value)
+                sources[location][parameter_path] = "value_mapping"
+                evidence[location][parameter_path] = {
+                    "source": "value_mapping",
+                    "confidence": "high",
+                    "action": "refreshed",
+                    "evidence": {
+                        "mapping_id": mapping_id,
+                        "value_key": value_key,
+                        "selection": "first_deterministic_candidate",
+                        "previous_value_excluded": bool(previous_values),
+                    },
+                }
+                field_summaries.append(
+                    {"location": location, "parameter_path": parameter_path}
+                )
+            resolutions.append(
+                {
+                    "mapping_id": mapping_id,
+                    "value_key": value_key,
+                    "status": "refreshed",
+                    "fields": field_summaries,
+                    "candidate_count": len(candidates),
+                    "previous_value_excluded": bool(previous_values),
+                }
+            )
+        return resolutions, issues
+
+    @classmethod
+    def _path_exists(cls, values: object, parameter_path: str) -> bool:
+        return cls._path_value(values, parameter_path)[0]
+
+    @staticmethod
+    def _path_value(values: object, parameter_path: str) -> tuple[bool, object]:
+        current = values
+        for part in parameter_path.split("."):
+            if not isinstance(current, dict) or part not in current:
+                return False, None
+            current = current[part]
+        return True, current
+
+    @staticmethod
+    def _set_path_value(values: dict[str, Any], parameter_path: str, value: object) -> None:
+        parts = parameter_path.split(".")
+        current = values
+        for part in parts[:-1]:
+            nested = current.get(part)
+            if not isinstance(nested, dict):
+                nested = {}
+                current[part] = nested
+            current = nested
+        current[parts[-1]] = value
+
+    @staticmethod
+    def _remove_path_value(values: object, parameter_path: str) -> None:
+        if not isinstance(values, dict):
+            return
+        parts = parameter_path.split(".")
+        current = values
+        for part in parts[:-1]:
+            nested = current.get(part)
+            if not isinstance(nested, dict):
+                return
+            current = nested
+        current.pop(parts[-1], None)
+
+    @staticmethod
     def _history_values(
         cursor: Any,
         *,
@@ -895,9 +1360,9 @@ class InterfaceForwardingContextService:
                WHERE interface_id=%s AND success=true
                  AND (environment_key=%s OR environment_key IS NULL)
                  AND (address_id=%s OR address_id IS NULL)
-                 AND (%s::text IS NULL OR identity_id=%s)
+                 AND identity_id::text IS NOT DISTINCT FROM %s::text
                ORDER BY created_at DESC LIMIT 1""",
-            (interface_id, environment, address_id, identity_id, identity_id),
+            (interface_id, environment, address_id, identity_id),
         )
         row = cursor.fetchone()
         if not row:

@@ -67,8 +67,9 @@ title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 sum
 
 ## 页面
 
-- 顶部主导航增加“AI可视化”下拉入口，预留接口可视化、数据可视化、日志可视化三个子菜单；当前仅建立菜单和选中状态，不提供可视化业务内容。
-- 顶部主导航增加“接口转发”，提供按 Workspace 隔离的 Swagger/OpenAPI 服务树、接口检索、转发配置、入参/出参结构、请求测试、最后参数恢复和请求日志。转发配置只读展示 Workspace 已登记环境、具名基础地址、接口服务映射及账号请求头，不提供浏览器新增、编辑或删除入口，配置写入由 AI/运维 API 完成；测试时仅可选择当前接口服务对应的地址。AI 经 MCP 执行只读接口时优先使用 Host Runner 访问宿主机 VPN，账号请求头始终由服务端注入且不暴露给 AI。准备请求时优先复用相同环境、地址和账号角色的最近成功日志，安全归一化分页和易失字段，并返回逐字段来源、证据、可信度及未验证历史 ID 提示。
+- 顶部主导航固定为“工作空间、数据管理、接口管理、AI可视化、系统中心”五组：工作空间直接进入页面；数据管理包含数据源、表关联、关联数据；接口管理包含接口转发、映射管理；AI可视化包含接口可视化、数据可视化、日志可视化；系统中心包含调用链路、系统文档、文档统计。四组下拉复用相同的选中态、键盘焦点、方向键、Esc 和点击外部关闭交互；当前三个可视化子菜单仅建立菜单和选中状态，不提供业务内容。
+- 顶部主导航增加“接口转发”，提供按 Workspace 隔离的 Swagger/OpenAPI 服务树、接口检索、转发配置、入参/出参结构、请求测试、最后参数恢复和请求日志。转发配置只读展示 Workspace 已登记环境、具名基础地址、接口服务映射及账号请求头，不提供浏览器新增、编辑或删除入口，配置写入由 AI/运维 API 完成；测试时仅可选择当前接口服务对应的地址。AI 经 MCP 执行只读接口时优先使用 Host Runner 访问宿主机 VPN，账号请求头始终由服务端注入且不暴露给 AI。准备请求默认使用 `reuse_successful`，优先复用相同环境、地址和账号角色的最近成功日志并安全归一化分页和易失字段；只有用户明确要求时才使用 `refresh_selected` 定向刷新 `refresh_value_keys`、`refresh_mapped` 刷新当前接口全部已映射业务值，或 `ignore_history` 放弃历史后重建。调用方显式值永远优先且不会被数据库候选覆盖。
+- 顶部“接口管理”下的“映射管理”按 Workspace 只读展示业务值名称、稳定 `value_key`、关键词别名、结构化数据库取值规则及现有接口参数绑定。浏览器不提供新增、编辑、保存、删除、绑定、解绑或候选值预览入口，完整维护与预览能力只供本机 AI/运维接口使用。数据库规则只引用只读 `mcp_alias`、表、取值字段、搜索/展示字段及标量等值过滤，不接收任意 SQL。MCP 通过 `search_value_mappings` 按关键词或精确接口参数查找已发布映射，再由 `resolve_value_candidates` 继承 task 环境执行服务端生成的有界只读查询，单次最多返回 10 个候选值。
 - 左侧“系统文档”按当前 MCP `tools/list` 为每个工具提供独立的只读源码/树形视图，页面使用简洁中文介绍但不修改 AI 客户端收到的原始英文工具描述；页面同时允许搜索已有统一 JSON 使用说明、切换树形/源码和保存正文，不提供新建、删除、key、顺序、prepare 策略、启用、版本或发布状态。
 - 页面能力以查看、筛选和复制为主，保留连接测试、密码按需查看、Workspace 刷新、MCP 接入/测试、文档树、调用历史和运行记录查看；Workspace 卡片另提供只读环境详情页，页头环境下拉框控制下面全部内容。
 - 工作空间卡片展示本机主目录、共享文档目录数量、项目数量、数据源/数据库授权汇总和更新时间；页面顶部可在编辑 YAML 后“重载本机映射”。右上角“刷新映射”只重建文档缓存与派生搜索索引。
@@ -105,6 +106,7 @@ title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 sum
 - 每个 Workspace 独立维护动态环境列表，`local` 固定存在且为默认；`test`、`uat` 不是系统枚举，只有攀枝花等确有需要的 Workspace 才登记，其他项目可以只有 `local` 或使用其他合规名称。
 - 环境映射复用已有 `project_databases` 的只读策略，不复制连接口令，也不要求数据库名称携带环境前缀。一个环境的同一逻辑别名只有一个数据库目标，但 `local`、`test` 等多个环境可以复用同一条授权。
 - `prepare_task_context(environment=...)` 可显式固化任一已登记环境并记录 `task_explicit`；省略参数时固定 `local` 并记录 `workspace_default`。`read_task_context`、数据库搜索和只读查询始终使用 task 快照；中间件可显式覆盖。表关联 MCP 没有环境参数，固定读取 Workspace 唯一发布版本。
+- `prepare_forwarding_request` 的转发配置选择优先级固定为：调用方显式地址/账号/角色 > 当前接口与环境最近一次成功且仍有效的地址和身份 > 当前唯一候选；只有多个候选且没有可靠成功历史时才返回 `needs_selection`。显式账号或角色会先缩小地址范围，返回的 `selection_evidence` 说明 `caller`、`successful_history` 或 `single_candidate`，日志摘要只保存来源，不保存请求头。业务值取值优先级固定为：调用方显式值 > 按策略保留的成功历史 > 业务值映射候选 > Schema/安全分页默认。`refresh_selected` 必须提供稳定 `value_key`；服务器只查询这些字段并优先选择与成功历史不同的候选。多字段刷新各自按接口绑定解析，未绑定、无候选、只有旧候选或数组参数路径暂不支持时返回 `needs_value_resolution`，不生成可执行计划。
 - 保存环境数据库关联或环境内容会递增共享 revision；旧 task 在数据库工具调用时返回 `environment_changed` 并要求重新 prepare。环境详情页以一个下拉框统一切换当前环境、Nacos 映射、MCP 继承说明和数据源汇总。
 - task 所选环境的 JSON 只在显式调用 `read_task_context` 请求 `environment` 时返回给可信本机 MCP 调用方。可按明确业务需要保存地址及密码、Token、AccessKey 等访问凭据，但内容以明文 JSONB 保存在本地；严禁把实际值写入日志、开发文档、链路摘要或示例输出。
 - Workspace 为每个已登记环境最多保存一个 Nacos 连接和组件抽取规则。`read_middleware_context` 显式环境优先，省略时继承 task 环境；本机工具默认返回密码、Token、SecretKey 等明文字段，调用方可显式传 `reveal_secrets=false` 获取脱敏视图。Nacos 地址、命名空间、dataId 和字段路径均由服务端配置决定。
@@ -126,7 +128,7 @@ title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 sum
 
 ## MCP
 
-- MCP 固定提供十二个工具：九个上下文、只读数据库、中间件与表关联工具，以及三个 Workspace 运行编排工具 `apply_workspace_changes`、`start_workspace`、`get_workspace_operation`。数据源或中间件记录增删不会改变 `tools/list`。
+- MCP 固定提供 17 个当前工具，包括上下文、只读数据库、中间件、表关联、业务值映射、接口转发和三个 Workspace 运行编排工具。数据源、中间件、映射或接口记录增删不会改变 `tools/list`。
 - 服务端先在全部工作空间根目录中按 cwd 最长前缀确定 Workspace，再按源码 `relative_path` 计算最深匹配 Project 作为 `active_project` 快照；docs 文档入口目录不参与活动项目归属。活动项目只帮助说明 Codex 当前开发位置，不限制文档、搜索、read 或数据库授权范围。
 - prepare 不按 task 内容搜索或排名，也不返回 Markdown 正文；它只返回 task_id、可用能力、必要 warning，以及节点仅含 `document_id`、`summary`、`children` 的确定性三层投影。存在真实 Workspace 根 `AGENTS.md` 时固定从它开始；缺少真实根时，才从 cwd 命中的 Project 入口或合成根开始。未返回的深层文档和其他 Project 文档仍可由 Workspace 范围的 `search_context_documents` 定位并按结果 ID 读取。数据库别名和环境 JSON 由 `read_task_context` 按需返回。
 - `prepare_task_context` 的可选 `environment` 接受当前 Workspace 已登记的任意合规键；显式值记录 `task_explicit`，省略时固定 `local` 并记录 `workspace_default`。两者都不修改 Workspace 配置，未登记的环境返回 `environment_not_configured`。

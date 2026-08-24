@@ -33,10 +33,14 @@ const MCP_TOOL_DESCRIPTIONS_ZH: Readonly<Record<string, string>> = {
     "读取当前 Workspace 已发布的表关联、写入入口和更新入口。",
   search_relation_tables:
     "按业务词或表名搜索当前 Workspace 已发布的表关联目录。",
+  search_value_mappings:
+    "按业务关键词或接口参数查找当前 Workspace 已发布的取值映射。",
+  resolve_value_candidates:
+    "使用已配置的只读数据库规则解析业务值候选，省略环境时继承任务环境。",
   search_forwarding_interfaces:
     "在当前任务环境中搜索已导入接口，并显示是否具备可调用路由。",
   prepare_forwarding_request:
-    "结合接口契约、历史参数、转发地址和账号角色生成短期只读执行计划。",
+    "默认复用成功日志；按取值策略定向刷新或重建业务值，并生成短期只读执行计划。",
   execute_forwarding_request:
     "校验计划摘要后单次执行只读接口，请求头由服务端安全注入。",
   apply_workspace_changes:

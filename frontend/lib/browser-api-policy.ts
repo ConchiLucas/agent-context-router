@@ -11,6 +11,9 @@ const SAFE_BROWSER_POST_PATHS = [
   /^\/api\/projects\/[^/]+\/runtime-config\/(fast|full)\/execute$/,
   /^\/api\/interface-forwarding\/(import|environments|identities)$/,
   /^\/api\/interface-forwarding\/interfaces\/[^/]+\/execute$/,
+  /^\/api\/value-mappings$/,
+  /^\/api\/value-mappings\/[^/]+\/preview$/,
+  /^\/api\/shared-config\/ai\/refresh$/,
 ];
 
 export function isBrowserApiRequestAllowed(
@@ -32,11 +35,17 @@ export function isBrowserApiRequestAllowed(
     ) {
       return true;
     }
+    if (/^\/api\/value-mappings\/[^/]+$/.test(path)) {
+      return true;
+    }
+    if (/^\/api\/shared-config\/ai\/default$/.test(path)) return true;
     return /^\/api\/system-guides\/[^/]+\/content$/.test(path);
   }
   if (normalizedMethod === "DELETE") {
-    return /^\/api\/interface-forwarding\/(services|interfaces|environments|identities)\/[^/]+$/.test(
-      path,
+    return (
+      /^\/api\/interface-forwarding\/(services|interfaces|environments|identities)\/[^/]+$/.test(
+        path,
+      ) || /^\/api\/value-mappings\/[^/]+$/.test(path)
     );
   }
   return false;

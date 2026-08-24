@@ -23,6 +23,8 @@ services:
       CONTEXT_ROUTER_PUBLIC_MCP_URL: ${CONTEXT_ROUTER_PUBLIC_MCP_URL:-http://127.0.0.1:49173/mcp}
       CONTEXT_ROUTER_INTERNAL_MCP_URL: http://127.0.0.1:8000/mcp
       CONTEXT_ROUTER_MCP_TEST_TIMEOUT_SECONDS: ${CONTEXT_ROUTER_MCP_TEST_TIMEOUT_SECONDS:-15}
+      CONTEXT_ROUTER_SHARED_CONFIG_CENTER_BASE_URL: ${CONTEXT_ROUTER_SHARED_CONFIG_CENTER_BASE_URL:-http://shared-config-center-api:8080}
+      CONTEXT_ROUTER_SHARED_CONFIG_CENTER_TIMEOUT_SECONDS: ${CONTEXT_ROUTER_SHARED_CONFIG_CENTER_TIMEOUT_SECONDS:-10}
       CONTEXT_ROUTER_DATABASE_PAYLOAD_REQUEST_BYTES: ${CONTEXT_ROUTER_DATABASE_PAYLOAD_REQUEST_BYTES:-1000000}
       CONTEXT_ROUTER_DATABASE_PAYLOAD_RESPONSE_BYTES: ${CONTEXT_ROUTER_DATABASE_PAYLOAD_RESPONSE_BYTES:-1000000}
       CONTEXT_ROUTER_DATABASE_PAYLOAD_HARD_MAX_BYTES: ${CONTEXT_ROUTER_DATABASE_PAYLOAD_HARD_MAX_BYTES:-4000000}
@@ -35,6 +37,9 @@ services:
       - ${CONTEXT_ROUTER_WORKSPACE_HOST_ROOT:-/Users/conchi/workforce}:/workspace:rw
       - ${CONTEXT_ROUTER_RUNTIME_HOST_ROOT:-./.runtime-runner}:/runtime
       - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      default: {}
+      vibedeploy-shared: {}
 
   frontend:
     image: node:22-bookworm
@@ -74,3 +79,8 @@ services:
 
 volumes:
   frontend_node_modules:
+
+networks:
+  vibedeploy-shared:
+    name: vibedeploy-shared
+    external: true

@@ -81,6 +81,19 @@ class RecordingMiddlewareContextService:
         return _PrepareResult()
 
 
+class RecordingValueMappingService:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, object]]] = []
+
+    def search_for_task(self, **arguments: object) -> dict[str, object]:
+        self.calls.append(("search", arguments))
+        return {"mappings": [], "returned_count": 0, "truncated": False}
+
+    def resolve_for_task(self, mapping_id: str, **arguments: object) -> dict[str, object]:
+        self.calls.append(("resolve", {"mapping_id": mapping_id, **arguments}))
+        return {"mapping_id": mapping_id, "candidates": [], "returned_count": 0}
+
+
 class _RuntimeResult:
     def __init__(self, operation_id: str, task_id: int = 9) -> None:
         self.operation_id = operation_id
@@ -137,6 +150,8 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "execute_database_query",
         "read_table_relations",
         "search_relation_tables",
+        "search_value_mappings",
+        "resolve_value_candidates",
         "search_forwarding_interfaces",
         "prepare_forwarding_request",
         "execute_forwarding_request",
@@ -149,25 +164,25 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
     assert tools[0].annotations.destructiveHint is False
     assert tools[0].annotations.idempotentHint is False
     assert tools[0].annotations.openWorldHint is False
-    for tool in tools[1:10]:
+    for tool in tools[1:12]:
         assert tool.annotations is not None
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
         assert tool.annotations.idempotentHint is True
         assert tool.annotations.openWorldHint is False
-    assert tools[10].annotations is not None
-    assert tools[10].annotations.readOnlyHint is True
-    assert tools[10].annotations.idempotentHint is False
-    assert tools[11].annotations is not None
-    assert tools[11].annotations.readOnlyHint is False
-    assert tools[11].annotations.destructiveHint is False
-    assert tools[11].annotations.openWorldHint is True
-    for tool in (tools[12], tools[13]):
+    assert tools[12].annotations is not None
+    assert tools[12].annotations.readOnlyHint is True
+    assert tools[12].annotations.idempotentHint is False
+    assert tools[13].annotations is not None
+    assert tools[13].annotations.readOnlyHint is False
+    assert tools[13].annotations.destructiveHint is False
+    assert tools[13].annotations.openWorldHint is True
+    for tool in (tools[14], tools[15]):
         assert tool.annotations is not None
         assert tool.annotations.readOnlyHint is False
         assert tool.annotations.destructiveHint is True
         assert tool.annotations.idempotentHint is False
-    for tool in (tools[14],):
+    for tool in (tools[16],):
         assert tool.annotations is not None
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
@@ -239,6 +254,105 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "only_related",
         "limit",
     }
+    mapping_search_schema = tools[9].inputSchema
+    assert mapping_search_schema["required"] == ["task_id"]
+    assert set(mapping_search_schema["properties"]) == {
+        "task_id",
+        "query",
+        "interface_id",
+        "location",
+        "parameter_path",
+        "limit",
+    }
+    mapping_resolve_schema = tools[10].inputSchema
+    assert mapping_resolve_schema["required"] == ["task_id", "mapping_id"]
+    assert set(mapping_resolve_schema["properties"]) == {
+        "task_id",
+        "mapping_id",
+        "environment",
+        "keyword",
+        "limit",
+    }
+    assert mapping_resolve_schema["properties"]["limit"]["maximum"] == 10
+    forwarding_prepare_schema = tools[12].inputSchema
+    assert forwarding_prepare_schema["required"] == ["task_id", "interface_id"]
+    assert set(forwarding_prepare_schema["properties"]) == {
+        "task_id",
+        "interface_id",
+        "environment",
+        "address_id",
+        "login_account",
+        "role_name",
+        "path",
+        "query",
+        "body",
+        "value_strategy",
+        "refresh_value_keys",
+    }
+    assert forwarding_prepare_schema["properties"]["value_strategy"]["default"] == (
+        "reuse_successful"
+    )
+
+
+def test_value_mapping_tools_forward_only_task_scoped_arguments() -> None:
+    document_service = UnusedService()
+    mappings = RecordingValueMappingService()
+    server = create_context_router_mcp(  # type: ignore[arg-type]
+        document_service,
+        document_service,
+        value_mapping_service=mappings,  # type: ignore[arg-type]
+    )
+
+    _, search_result = asyncio.run(
+        server.call_tool(
+            "search_value_mappings",
+            {
+                "task_id": 9,
+                "query": "货主ID",
+                "interface_id": "interface-1",
+                "location": "body",
+                "parameter_path": "shipperId",
+                "limit": 5,
+            },
+        )
+    )
+    _, resolve_result = asyncio.run(
+        server.call_tool(
+            "resolve_value_candidates",
+            {
+                "task_id": 9,
+                "mapping_id": "mapping-1",
+                "keyword": "攀枝花",
+                "limit": 3,
+            },
+        )
+    )
+
+    assert search_result["returned_count"] == 0
+    assert resolve_result["mapping_id"] == "mapping-1"
+    assert mappings.calls == [
+        (
+            "search",
+            {
+                "task_id": 9,
+                "query": "货主ID",
+                "interface_id": "interface-1",
+                "location": "body",
+                "parameter_path": "shipperId",
+                "limit": 5,
+            },
+        ),
+        (
+            "resolve",
+            {
+                "mapping_id": "mapping-1",
+                "task_id": 9,
+                "environment": None,
+                "keyword": "攀枝花",
+                "limit": 3,
+            },
+        ),
+    ]
 
 
 def test_workspace_runtime_tools_forward_only_task_scoped_arguments() -> None:
