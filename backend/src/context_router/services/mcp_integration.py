@@ -45,6 +45,8 @@ from context_router.mcp_server import (
     RESOLVE_VALUE_CANDIDATES_TOOL_NAME,
     SAVE_DATA_VISUALIZATION_QUERY_TOOL_DESCRIPTION,
     SAVE_DATA_VISUALIZATION_QUERY_TOOL_NAME,
+    SAVE_TASK_VISUALIZATION_RESULT_TOOL_DESCRIPTION,
+    SAVE_TASK_VISUALIZATION_RESULT_TOOL_NAME,
     SEARCH_CONTEXT_TOOL_DESCRIPTION,
     SEARCH_CONTEXT_TOOL_NAME,
     SEARCH_DATABASE_TOOL_DESCRIPTION,
@@ -122,6 +124,10 @@ class McpIntegrationService:
                 McpToolInfo(
                     name=SAVE_DATA_VISUALIZATION_QUERY_TOOL_NAME,
                     description=SAVE_DATA_VISUALIZATION_QUERY_TOOL_DESCRIPTION,
+                ),
+                McpToolInfo(
+                    name=SAVE_TASK_VISUALIZATION_RESULT_TOOL_NAME,
+                    description=SAVE_TASK_VISUALIZATION_RESULT_TOOL_DESCRIPTION,
                 ),
                 McpToolInfo(
                     name=LIST_TASK_CONTAINERS_TOOL_NAME,
@@ -284,6 +290,7 @@ class McpIntegrationService:
                                 READ_TOOL_NAME,
                                 SEARCH_DATABASE_TOOL_NAME,
                                 EXECUTE_DATABASE_TOOL_NAME,
+                                SAVE_TASK_VISUALIZATION_RESULT_TOOL_NAME,
                                 SEARCH_VALUE_MAPPINGS_TOOL_NAME,
                                 RESOLVE_VALUE_CANDIDATES_TOOL_NAME,
                                 APPLY_WORKSPACE_TOOL_NAME,

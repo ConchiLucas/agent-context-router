@@ -20,6 +20,7 @@ import { SharedAiConfigManager } from "@/components/shared-ai-config-manager";
 import { DataVisualizationWorkbench } from "@/components/data-visualization-workbench";
 import { InterfaceVisualizationWorkbench } from "@/components/interface-visualization-workbench";
 import { LogVisualizationWorkbench } from "@/components/log-visualization-workbench";
+import { TaskVisualizationWorkbench } from "@/components/task-visualization-workbench";
 
 type Section =
   | "workspaces"
@@ -29,6 +30,7 @@ type Section =
   | "interface-forwarding"
   | "value-mappings"
   | "shared-ai-config"
+  | "task-visualization"
   | "interface-visualization"
   | "data-visualization"
   | "log-visualization"
@@ -37,6 +39,7 @@ type Section =
   | "doc-stats";
 
 type VisualizationSection =
+  | "task-visualization"
   | "interface-visualization"
   | "data-visualization"
   | "log-visualization";
@@ -70,8 +73,9 @@ const configurationManagementItems: NavMenuItem[] = [
 ];
 
 const visualizationItems: NavMenuItem[] = [
-  { section: "interface-visualization", label: "接口可视化" },
+  { section: "task-visualization", label: "任务可视化" },
   { section: "data-visualization", label: "数据可视化" },
+  { section: "interface-visualization", label: "接口可视化" },
   { section: "log-visualization", label: "日志可视化" },
 ];
 
@@ -403,6 +407,12 @@ export function AppShell() {
         {section === "interface-forwarding" ? <InterfaceForwardingManager /> : null}
         {section === "value-mappings" ? <ValueMappingManager /> : null}
         {section === "shared-ai-config" ? <SharedAiConfigManager /> : null}
+        {section === "task-visualization" ? (
+          <TaskVisualizationWorkbench
+            taskId={visualizationTaskId}
+            onOpenRelated={openRelatedVisualization}
+          />
+        ) : null}
         {section === "interface-visualization" ? (
           <InterfaceVisualizationWorkbench
             taskId={visualizationTaskId}

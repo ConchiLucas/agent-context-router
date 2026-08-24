@@ -1534,6 +1534,40 @@ p {
   white-space: nowrap;
 }
 
+.task-visualization-toolbar {
+  display: grid;
+  gap: 14px;
+  align-items: end;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  background: var(--surface);
+  grid-template-columns: minmax(180px, 0.8fr) minmax(150px, 0.5fr) minmax(260px, 1.4fr) auto;
+}
+
+.task-visualization-toolbar label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.task-visualization-toolbar select,
+.task-visualization-toolbar input {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  padding: 8px 10px;
+  color: var(--foreground);
+  background: var(--surface);
+}
+
+.task-visualization-toolbar button {
+  min-height: 40px;
+}
+
 .visualization-retry-banner {
   display: flex;
   gap: 12px;
@@ -1605,6 +1639,29 @@ p {
 .interface-request-list-item[data-active="true"] {
   border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
   background: var(--accent-soft);
+}
+
+.task-visualization-list-item > small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.task-status--resolved {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.task-status--failed {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.task-status--investigating,
+.task-status--unclosed {
+  color: var(--warning);
+  background: var(--surface-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warning) 45%, var(--border));
 }
 
 .interface-request-list-line,
@@ -1875,7 +1932,129 @@ p {
   color: var(--foreground);
 }
 
+.task-conclusion,
+.task-timeline {
+  min-width: 0;
+  border-top: 1px solid var(--border);
+  padding-top: 18px;
+}
+
+.task-conclusion > header,
+.task-timeline > header,
+.task-timeline li > div > header {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.task-conclusion h3,
+.task-timeline h3,
+.task-conclusion h4 {
+  margin: 0;
+}
+
+.task-conclusion-content {
+  display: grid;
+  gap: 16px;
+  margin-top: 14px;
+  line-height: 1.65;
+}
+
+.task-conclusion-content p,
+.task-conclusion-content ul {
+  margin: 6px 0 0;
+}
+
+.task-conclusion-content ul {
+  display: grid;
+  gap: 8px;
+  padding-left: 20px;
+}
+
+.task-conclusion-content li span {
+  display: block;
+  color: var(--muted);
+}
+
+.task-conclusion-content code {
+  overflow-wrap: anywhere;
+}
+
+.task-timeline > header > small {
+  color: var(--muted);
+}
+
+.task-timeline ol {
+  display: grid;
+  gap: 0;
+  margin: 14px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.task-timeline li {
+  position: relative;
+  display: grid;
+  gap: 12px;
+  padding: 0 0 18px;
+  grid-template-columns: 12px minmax(0, 1fr);
+}
+
+.task-timeline li:not(:last-child)::before {
+  position: absolute;
+  top: 12px;
+  bottom: 0;
+  left: 5px;
+  width: 1px;
+  content: "";
+  background: var(--border-strong);
+}
+
+.task-timeline-marker {
+  position: relative;
+  z-index: 1;
+  width: 11px;
+  height: 11px;
+  margin-top: 5px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.task-timeline li > div {
+  min-width: 0;
+}
+
+.task-timeline li > div > header {
+  align-items: baseline;
+}
+
+.task-timeline li header span,
+.task-timeline li time,
+.task-timeline li p {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.task-timeline li time {
+  flex: none;
+}
+
+.task-timeline li p {
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 1100px) {
+  .task-visualization-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .task-visualization-keyword {
+    grid-column: 1 / -1;
+  }
   .relation-record-toolbar.data-visualization-toolbar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1899,6 +2078,19 @@ p {
 }
 
 @media (max-width: 640px) {
+  .task-visualization-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .task-visualization-keyword {
+    grid-column: auto;
+  }
+
+  .task-conclusion > header,
+  .task-timeline li > div > header {
+    align-items: stretch;
+    flex-direction: column;
+  }
   .visualization-retry-banner {
     align-items: stretch;
     flex-direction: column;

@@ -49,7 +49,7 @@ export function LogVisualizationWorkbench({
 }: {
   taskId?: number | null;
   onOpenRelated?: (
-    section: "interface-visualization" | "data-visualization" | "log-visualization",
+    section: "task-visualization" | "interface-visualization" | "data-visualization" | "log-visualization",
     taskId: number,
   ) => void;
 }) {
@@ -209,6 +209,7 @@ export function LogVisualizationWorkbench({
               {detail.task_id && onOpenRelated ? (
                 <nav className="visualization-related-actions" aria-label="查看同任务记录">
                   <span>关联任务 #{detail.task_id}</span>
+                  <button type="button" className="secondary-button" onClick={() => onOpenRelated("task-visualization", detail.task_id!)}>返回任务</button>
                   <button type="button" className="secondary-button" onClick={() => onOpenRelated("interface-visualization", detail.task_id!)}>查看接口请求</button>
                   <button type="button" className="secondary-button" onClick={() => onOpenRelated("data-visualization", detail.task_id!)}>查看数据条件</button>
                 </nav>

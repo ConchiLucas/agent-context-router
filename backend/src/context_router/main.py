@@ -13,6 +13,7 @@ from context_router.api.ai_interface_visualization import (
     router as ai_interface_visualization_router,
 )
 from context_router.api.ai_log_visualization import router as ai_log_visualization_router
+from context_router.api.ai_task_visualization import router as ai_task_visualization_router
 from context_router.api.data_sources import router as data_sources_router
 from context_router.api.database_environments import router as database_environments_router
 from context_router.api.document_chain_analytics import (
@@ -172,6 +173,7 @@ from context_router.repositories.workspace_shared_file_repository import (
 from context_router.services.ai_data_visualization import AiDataVisualizationService
 from context_router.services.ai_interface_visualization import AiInterfaceVisualizationService
 from context_router.services.ai_log_visualization import AiLogVisualizationService
+from context_router.services.ai_task_visualization import AiTaskVisualizationService
 from context_router.services.context_document_read import ContextDocumentReadService
 from context_router.services.context_document_search import ContextDocumentSearchService
 from context_router.services.context_preparation import ContextPreparationService
@@ -501,6 +503,7 @@ def create_app(
         workspaces=resolved_workspace_repository,
         containers=workspace_container_service,
     )
+    ai_task_visualization_service = AiTaskVisualizationService(resolved_settings.database_url)
     interface_forwarding_context_service = InterfaceForwardingContextService(
         database_url=resolved_settings.database_url,
         task_repository=resolved_task_repository,
@@ -578,6 +581,7 @@ def create_app(
         value_mapping_service=value_mapping_service,
         ai_data_visualization_service=ai_data_visualization_service,
         ai_log_visualization_service=ai_log_visualization_service,
+        ai_task_visualization_service=ai_task_visualization_service,
     )
     mcp_app = mcp_server.streamable_http_app()
 
@@ -681,6 +685,7 @@ def create_app(
     app.state.ai_data_visualization_service = ai_data_visualization_service
     app.state.ai_interface_visualization_service = ai_interface_visualization_service
     app.state.ai_log_visualization_service = ai_log_visualization_service
+    app.state.ai_task_visualization_service = ai_task_visualization_service
     app.state.ai_log_investigation_repository = resolved_ai_log_investigation_repository
     app.state.document_read_stats_repository = resolved_document_read_stats_repository
     app.state.document_read_stats_service = document_read_stats_service
@@ -721,6 +726,7 @@ def create_app(
     app.include_router(ai_data_visualization_router, prefix=resolved_settings.api_prefix)
     app.include_router(ai_interface_visualization_router, prefix=resolved_settings.api_prefix)
     app.include_router(ai_log_visualization_router, prefix=resolved_settings.api_prefix)
+    app.include_router(ai_task_visualization_router, prefix=resolved_settings.api_prefix)
 
     @app.get("/health")
     def health() -> dict[str, str]:

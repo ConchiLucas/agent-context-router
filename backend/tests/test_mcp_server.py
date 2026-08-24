@@ -82,6 +82,22 @@ class RecordingAiDataVisualizationService:
         return _PrepareResult()
 
 
+class _TaskVisualizationResult:
+    def model_dump(self, **_: object) -> dict[str, object]:
+        return {"task_id": 9, "status": "resolved", "revision": 1}
+
+
+class RecordingAiTaskVisualizationService:
+    def __init__(self) -> None:
+        self.task_id = 0
+        self.payload: object | None = None
+
+    def save_result(self, task_id: int, payload: object) -> _TaskVisualizationResult:
+        self.task_id = task_id
+        self.payload = payload
+        return _TaskVisualizationResult()
+
+
 class RecordingMiddlewareContextService:
     def __init__(self) -> None:
         self.arguments: dict[str, object] = {}
@@ -171,6 +187,7 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "search_database_objects",
         "execute_database_query",
         "save_data_visualization_query",
+        "save_task_visualization_result",
         "list_task_containers",
         "inspect_container_errors",
         "read_table_relations",
@@ -197,8 +214,8 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         tools[4],
         tools[5],
         tools[6],
-        tools[8],
-        *tools[10:16],
+        tools[9],
+        *tools[11:17],
     )
     for tool in read_only_tools:
         assert tool.annotations is not None
@@ -206,24 +223,24 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         assert tool.annotations.destructiveHint is False
         assert tool.annotations.idempotentHint is True
         assert tool.annotations.openWorldHint is False
-    for tool in (tools[7], tools[9]):
+    for tool in (tools[7], tools[8], tools[10]):
         assert tool.annotations is not None
         assert tool.annotations.readOnlyHint is False
         assert tool.annotations.destructiveHint is False
         assert tool.annotations.idempotentHint is True
-    assert tools[16].annotations is not None
-    assert tools[16].annotations.readOnlyHint is True
-    assert tools[16].annotations.idempotentHint is False
     assert tools[17].annotations is not None
-    assert tools[17].annotations.readOnlyHint is False
-    assert tools[17].annotations.destructiveHint is False
-    assert tools[17].annotations.openWorldHint is True
-    for tool in (tools[18], tools[19]):
+    assert tools[17].annotations.readOnlyHint is True
+    assert tools[17].annotations.idempotentHint is False
+    assert tools[18].annotations is not None
+    assert tools[18].annotations.readOnlyHint is False
+    assert tools[18].annotations.destructiveHint is False
+    assert tools[18].annotations.openWorldHint is True
+    for tool in (tools[19], tools[20]):
         assert tool.annotations is not None
         assert tool.annotations.readOnlyHint is False
         assert tool.annotations.destructiveHint is True
         assert tool.annotations.idempotentHint is False
-    for tool in (tools[20],):
+    for tool in (tools[21],):
         assert tool.annotations is not None
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
@@ -285,10 +302,21 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "table_name",
         "keyword",
     ]
-    container_list_schema = tools[8].inputSchema
+    task_visualization_schema = tools[8].inputSchema
+    assert task_visualization_schema["required"] == ["task_id", "status", "summary"]
+    assert set(task_visualization_schema["properties"]) == {
+        "task_id",
+        "status",
+        "summary",
+        "root_cause",
+        "code_locations",
+        "suggested_actions",
+        "verification",
+    }
+    container_list_schema = tools[9].inputSchema
     assert container_list_schema["required"] == ["task_id"]
     assert set(container_list_schema["properties"]) == {"task_id", "query"}
-    inspection_schema = tools[9].inputSchema
+    inspection_schema = tools[10].inputSchema
     assert inspection_schema["required"] == ["task_id", "container_id"]
     assert set(inspection_schema["properties"]) == {
         "task_id",
@@ -297,7 +325,7 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "tail",
         "keywords",
     }
-    relation_schema = tools[10].inputSchema
+    relation_schema = tools[11].inputSchema
     assert relation_schema["required"] == ["task_id", "tables"]
     assert set(relation_schema["properties"]) == {
         "task_id",
@@ -307,7 +335,7 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "evidence",
     }
     assert relation_schema["properties"]["evidence"]["default"] == "none"
-    relation_search_schema = tools[11].inputSchema
+    relation_search_schema = tools[12].inputSchema
     assert relation_search_schema["required"] == ["task_id"]
     assert set(relation_search_schema["properties"]) == {
         "task_id",
@@ -316,7 +344,7 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "only_related",
         "limit",
     }
-    mapping_search_schema = tools[12].inputSchema
+    mapping_search_schema = tools[13].inputSchema
     assert mapping_search_schema["required"] == ["task_id"]
     assert set(mapping_search_schema["properties"]) == {
         "task_id",
@@ -326,7 +354,7 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "parameter_path",
         "limit",
     }
-    mapping_resolve_schema = tools[13].inputSchema
+    mapping_resolve_schema = tools[14].inputSchema
     assert mapping_resolve_schema["required"] == ["task_id", "mapping_id"]
     assert set(mapping_resolve_schema["properties"]) == {
         "task_id",
@@ -336,7 +364,7 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "limit",
     }
     assert mapping_resolve_schema["properties"]["limit"]["maximum"] == 10
-    forwarding_history_schema = tools[15].inputSchema
+    forwarding_history_schema = tools[16].inputSchema
     assert forwarding_history_schema["required"] == ["task_id", "interface_id"]
     assert set(forwarding_history_schema["properties"]) == {
         "task_id",
@@ -345,7 +373,7 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "success_only",
         "include_response",
     }
-    forwarding_prepare_schema = tools[16].inputSchema
+    forwarding_prepare_schema = tools[17].inputSchema
     assert forwarding_prepare_schema["required"] == ["task_id", "interface_id"]
     assert set(forwarding_prepare_schema["properties"]) == {
         "task_id",
@@ -695,6 +723,36 @@ def test_data_visualization_tool_derives_scope_from_task() -> None:
         "table_name": "contract",
         "keyword": "HT-001",
     }
+
+
+def test_task_visualization_tool_saves_structured_conclusion() -> None:
+    document_service = UnusedService()
+    visualization = RecordingAiTaskVisualizationService()
+    server = create_context_router_mcp(  # type: ignore[arg-type]
+        document_service,
+        document_service,
+        ai_task_visualization_service=visualization,  # type: ignore[arg-type]
+    )
+
+    _, result = asyncio.run(
+        server.call_tool(
+            "save_task_visualization_result",
+            {
+                "task_id": 9,
+                "status": "resolved",
+                "summary": "定位并修复环境解析问题",
+                "root_cause": "环境键未传递",
+                "code_locations": [{"path": "backend/src/context_router/main.py", "line": 10}],
+                "suggested_actions": ["补充回归测试"],
+                "verification": [{"type": "test", "description": "后端测试", "result": "通过"}],
+            },
+        )
+    )
+
+    assert result == {"task_id": 9, "status": "resolved", "revision": 1}
+    assert visualization.task_id == 9
+    assert visualization.payload is not None
+    assert visualization.payload.summary == "定位并修复环境解析问题"  # type: ignore[attr-defined]
 
 
 @pytest.mark.parametrize("invalid_task_id", ["9", True])

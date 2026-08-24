@@ -22,10 +22,16 @@ from context_router.mcp_contract import (
     CONTEXT_ROUTER_INTERFACE_FORWARDING_TOOL_NAMES,
     CONTEXT_ROUTER_LOG_VISUALIZATION_TOOL_NAMES,
     CONTEXT_ROUTER_TABLE_RELATION_TOOL_NAMES,
+    CONTEXT_ROUTER_TASK_VISUALIZATION_TOOL_NAMES,
     CONTEXT_ROUTER_VALUE_MAPPING_TOOL_NAMES,
 )
 from context_router.mcp_contract import (
     CONTEXT_ROUTER_TRACE_SERVER_NAME as TRACE_SERVER_NAME,
+)
+from context_router.schemas.ai_task_visualization import (
+    AiTaskCodeLocation,
+    AiTaskResultWrite,
+    AiTaskVerificationItem,
 )
 from context_router.schemas.context import ContextDocumentReadRequest
 from context_router.services.ai_data_visualization import (
@@ -35,6 +41,10 @@ from context_router.services.ai_data_visualization import (
 from context_router.services.ai_log_visualization import (
     AiLogVisualizationError,
     AiLogVisualizationService,
+)
+from context_router.services.ai_task_visualization import (
+    AiTaskVisualizationError,
+    AiTaskVisualizationService,
 )
 from context_router.services.context_document_read import (
     ContextDocumentReadError,
@@ -119,6 +129,10 @@ MCP_SERVER_INSTRUCTIONS = (
     "conditions, call save_data_visualization_query after resolving an exact published relation "
     "table and keyword. The current task supplies Workspace, environment, and AI source; never "
     "invent a Workspace or environment for this record. "
+    "Before completing an investigation or implementation task, call "
+    "save_task_visualization_result with a concise evidence-backed conclusion, relevant code "
+    "locations, suggested next actions, and verification results. The task_id supplies all "
+    "scope; never put credentials, raw logs, or speculative findings in the conclusion. "
     "When diagnosing errors in Docker services, call list_task_containers and inspect only a "
     "container returned for the current task Workspace with inspect_container_errors. The log "
     "reader is bounded and saves a visualization record only when error evidence is found; do "
@@ -172,6 +186,7 @@ MCP_SERVER_INSTRUCTIONS = (
     INSPECT_CONTAINER_ERRORS_TOOL_NAME,
 ) = CONTEXT_ROUTER_LOG_VISUALIZATION_TOOL_NAMES
 (SAVE_DATA_VISUALIZATION_QUERY_TOOL_NAME,) = CONTEXT_ROUTER_DATA_VISUALIZATION_TOOL_NAMES
+(SAVE_TASK_VISUALIZATION_RESULT_TOOL_NAME,) = CONTEXT_ROUTER_TASK_VISUALIZATION_TOOL_NAMES
 APPLY_WORKSPACE_TOOL_NAME = "apply_workspace_changes"
 START_WORKSPACE_TOOL_NAME = "start_workspace"
 GET_WORKSPACE_OPERATION_TOOL_NAME = "get_workspace_operation"
@@ -204,6 +219,13 @@ SAVE_DATA_VISUALIZATION_QUERY_TOOL_DESCRIPTION = (
     "environment, and AI source are derived from task_id; the caller supplies only the exact "
     "published relation table, keyword, and user-facing description. Repeated identical saves "
     "within one task are idempotent. This tool does not execute the database query."
+)
+SAVE_TASK_VISUALIZATION_RESULT_TOOL_DESCRIPTION = (
+    "Save or update the structured conclusion shown by AI Task Visualization for the current "
+    "task. Use investigating only for a meaningful interim conclusion, resolved when the task "
+    "was completed and verified, or failed when the task could not be completed. Include only "
+    "evidence-backed summaries, Workspace-relative code locations, safe suggested actions, and "
+    "verification outcomes. Repeated calls update the same task record and increase its revision."
 )
 PREPARE_TOOL_DESCRIPTION = (
     "Locate the registered workspace for cwd, create a server-side task number, and "
@@ -569,6 +591,7 @@ def create_context_router_mcp(
     value_mapping_service: ValueMappingService | None = None,
     ai_data_visualization_service: AiDataVisualizationService | None = None,
     ai_log_visualization_service: AiLogVisualizationService | None = None,
+    ai_task_visualization_service: AiTaskVisualizationService | None = None,
 ) -> FastMCP:
     forwarding_execution_limiter = asyncio.Semaphore(4)
     server = ContextRouterMCP(
@@ -801,6 +824,47 @@ def create_context_router_mcp(
             )
             return result.model_dump(mode="json", exclude_none=True)
         except AiDataVisualizationError as exc:
+            raise ToolError(f"{exc.code}: {exc}") from exc
+
+    @server.tool(
+        name=SAVE_TASK_VISUALIZATION_RESULT_TOOL_NAME,
+        description=SAVE_TASK_VISUALIZATION_RESULT_TOOL_DESCRIPTION,
+        annotations=LOG_INSPECTION_TOOL_ANNOTATIONS,
+    )
+    def save_task_visualization_result(
+        task_id: Annotated[int, Field(ge=1, strict=True)],
+        status: Literal["investigating", "resolved", "failed"],
+        summary: Annotated[str, Field(min_length=1, max_length=4000)],
+        root_cause: Annotated[str | None, Field(max_length=4000)] = None,
+        code_locations: Annotated[
+            list[AiTaskCodeLocation] | None,
+            Field(default=None, max_length=50),
+        ] = None,
+        suggested_actions: Annotated[
+            list[Annotated[str, Field(min_length=1, max_length=1000)]] | None,
+            Field(default=None, max_length=50),
+        ] = None,
+        verification: Annotated[
+            list[AiTaskVerificationItem] | None,
+            Field(default=None, max_length=50),
+        ] = None,
+    ) -> dict[str, object]:
+        if ai_task_visualization_service is None:
+            raise ToolError("task_visualization_disabled: 任务可视化 MCP 当前不可用")
+        try:
+            result = ai_task_visualization_service.save_result(
+                task_id,
+                AiTaskResultWrite(
+                    status=status,
+                    summary=summary,
+                    root_cause=root_cause,
+                    code_locations=code_locations or [],
+                    suggested_actions=suggested_actions or [],
+                    verification=verification or [],
+                ),
+            )
+            return result.model_dump(mode="json", exclude_none=True)
+        except AiTaskVisualizationError as exc:
             raise ToolError(f"{exc.code}: {exc}") from exc
 
     @server.tool(
@@ -1248,6 +1312,20 @@ def _request_summary(name: str, arguments: dict[str, Any]) -> dict[str, object] 
                 else None
             ),
         }
+    if name == SAVE_TASK_VISUALIZATION_RESULT_TOOL_NAME:
+        locations = arguments.get("code_locations")
+        actions = arguments.get("suggested_actions")
+        verification = arguments.get("verification")
+        return {
+            "status": _safe_string(arguments.get("status"), 20),
+            "summary_characters": (
+                len(arguments["summary"]) if isinstance(arguments.get("summary"), str) else 0
+            ),
+            "root_cause_supplied": isinstance(arguments.get("root_cause"), str),
+            "code_location_count": len(locations) if isinstance(locations, list) else 0,
+            "suggested_action_count": len(actions) if isinstance(actions, list) else 0,
+            "verification_count": len(verification) if isinstance(verification, list) else 0,
+        }
     if name == READ_TABLE_RELATIONS_TOOL_NAME:
         sections = arguments.get("sections")
         tables = arguments.get("tables")
@@ -1439,6 +1517,15 @@ def _result_summary(name: str, payload: dict[str, Any]) -> dict[str, object] | N
         return _bounded_result_metadata(payload, count_key="returned_count")
     if name == EXECUTE_DATABASE_TOOL_NAME:
         return _bounded_result_metadata(payload, count_key="returned_rows")
+    if name == SAVE_TASK_VISUALIZATION_RESULT_TOOL_NAME:
+        locations = payload.get("code_locations")
+        verification = payload.get("verification")
+        return {
+            "status": _safe_string(payload.get("status"), 20),
+            "revision": payload.get("revision"),
+            "code_location_count": len(locations) if isinstance(locations, list) else 0,
+            "verification_count": len(verification) if isinstance(verification, list) else 0,
+        }
     if name == READ_TABLE_RELATIONS_TOOL_NAME:
         entries = payload.get("tables")
         if not isinstance(entries, list):

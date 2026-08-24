@@ -598,6 +598,7 @@ export type InternalMcpToolName =
   | "search_database_objects"
   | "execute_database_query"
   | "save_data_visualization_query"
+  | "save_task_visualization_result"
   | "list_task_containers"
   | "inspect_container_errors"
   | "read_table_relations"
@@ -1010,6 +1011,101 @@ export interface AiLogInvestigationDetail extends AiLogInvestigationListItem {
   error_excerpt: string;
   log_line_count: number;
   fingerprint: string;
+}
+
+export type AiTaskVisualizationStatus =
+  | "investigating"
+  | "resolved"
+  | "failed"
+  | "unclosed";
+
+export interface AiTaskVisualizationListItem {
+  task_id: number;
+  description: string;
+  workspace_id: string;
+  workspace_name: string;
+  environment: string;
+  agent_name: string;
+  status: AiTaskVisualizationStatus;
+  created_at: string;
+  last_activity_at: string;
+  tool_call_count: number;
+  tool_error_count: number;
+  running_call_count: number;
+  data_query_count: number;
+  interface_success_count: number;
+  interface_failed_count: number;
+  error_event_count: number;
+}
+
+export interface AiTaskVisualizationList {
+  items: AiTaskVisualizationListItem[];
+  limit: number;
+  has_more: boolean;
+  next_cursor?: string | null;
+}
+
+export interface AiTaskCodeLocation {
+  path: string;
+  line?: number | null;
+  description: string;
+}
+
+export interface AiTaskVerificationItem {
+  type: string;
+  description: string;
+  result: string;
+}
+
+export interface AiTaskVisualizationResult {
+  task_id: number;
+  status: "investigating" | "resolved" | "failed";
+  summary: string;
+  root_cause?: string | null;
+  code_locations: AiTaskCodeLocation[];
+  suggested_actions: string[];
+  verification: AiTaskVerificationItem[];
+  source: string;
+  revision: number;
+  created_at: string;
+  updated_at: string;
+  finalized_at?: string | null;
+}
+
+export interface AiTaskVisualizationDetail extends AiTaskVisualizationListItem {
+  cwd: string;
+  active_project_name?: string | null;
+  result?: AiTaskVisualizationResult | null;
+  related: {
+    mcp_trace: boolean;
+    data_visualization: boolean;
+    interface_visualization: boolean;
+    log_visualization: boolean;
+  };
+}
+
+export interface AiTaskTimelineEvent {
+  event_id: string;
+  event_type:
+    | "mcp_call"
+    | "data_query"
+    | "interface_request"
+    | "log_investigation"
+    | "task_result";
+  title: string;
+  status: string;
+  occurred_at: string;
+  summary: string;
+  artifact_type: "mcp" | "data" | "interface" | "log" | "result";
+  artifact_id: string;
+}
+
+export interface AiTaskTimeline {
+  task_id: number;
+  items: AiTaskTimelineEvent[];
+  limit: number;
+  has_more: boolean;
+  next_cursor?: string | null;
 }
 
 export type TableRelationGenerationStatus =

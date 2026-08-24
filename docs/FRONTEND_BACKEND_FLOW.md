@@ -138,7 +138,7 @@ Codex / Antigravity
 
 `mcp_tool_calls.id` 由 PostgreSQL Identity 生成，任务内展示顺序由后端按该 ID 计算，不依赖客户端 sequence、前端时间戳拼接或任务锁。旧文档/数据库调用由 migration 恢复为 `legacy` 节点，因此升级后仍可查看历史记录。后端启动时会把上次进程遗留的内部 `running` 调用收敛为 `error/server_restarted`，避免页面永久显示运行中。
 
-这条链路的边界固定在 Context Router 自身：只有进入 `/mcp` 并由 `ContextRouterMCP` 分发的 21 个当前工具会被记录，三个已下线工具的既有历史继续保留。客户端对 GitHub、浏览器或其他 MCP Server 的直连请求不会经过本服务，也不会通过客户端上报补录；链路页面不尝试呈现跨 Server 调用。
+这条链路的边界固定在 Context Router 自身：只有进入 `/mcp` 并由 `ContextRouterMCP` 分发的 22 个当前工具会被记录，三个已下线工具的既有历史继续保留。客户端对 GitHub、浏览器或其他 MCP Server 的直连请求不会经过本服务，也不会通过客户端上报补录；链路页面不尝试呈现跨 Server 调用。
 
 prepare 和文档搜索不建立业务数据库连接。业务数据库离线时，`/health`、文档 prepare/search/read 仍可工作；MCP 链路只有实际对象搜索或查询会尝试连接，浏览器连接测试以及 AI/运维触发的数据库同步才会显式连接。
 
@@ -150,6 +150,7 @@ prepare 和文档搜索不建立业务数据库连接。业务数据库离线时
 | --- | --- | --- |
 | 浏览六类共享配置并设置本机 AI 默认项 | `shared-ai-config-manager.tsx` | `GET /api/shared-config/ai/catalog` 聚合数据库、AI、本地 CLI、MinIO、图片模型和 Runtime Contract；`GET /api/shared-config/ai`、安全 `PUT /api/shared-config/ai/default` 维护本机 AI 默认项。所有明细实时取自配置中心，本地仅保存默认 Provider ID，失效时回退中心默认并返回提示 |
 | 接收 AI 查询条件并查询关联数据 | `data-visualization-workbench.tsx` | Codex/Antigravity 通过 MCP `save_data_visualization_query` 按 task 保存结构化条件，本机运维也可使用 `POST /api/ai-visualization/query-records`；服务端校验 task、Workspace、环境与发布表并幂等写入。浏览器按 Workspace、环境、来源或 task 读取最近 30 天记录，查询后把状态、耗时和结果规模写回执行摘要 |
+| 查看 AI 任务执行与结论 | `task-visualization-workbench.tsx` | `GET /api/ai-visualization/tasks` 聚合已有 task 的 MCP、数据、接口和日志统计，详情与时间线使用稳定游标读取；AI 通过 MCP `save_task_visualization_result` 更新同一 task 的脱敏结构化结论。浏览器只读，不创建或编辑任务 |
 | 查看 AI 实际执行的接口请求 | `interface-visualization-workbench.tsx` | `GET /api/ai-visualization/interface-requests` 按 `created_at DESC, id DESC` 聚合真实接口日志、任务描述和接口摘要，支持 task 筛选和游标分页；详情通过日志 `plan_id` 返回递归脱敏的最终请求、响应和 `parameter_evidence`。页面只读，不创建第二套请求记录或调用接口 |
 | 加载工作空间卡片 | `workspace-dashboard.tsx` | `GET /api/workspaces` |
 | 查看并切换 Workspace 环境详情 | `workspace-mcp-environment-defaults.tsx` | `GET /api/workspaces/{id}/environments`、`GET /api/workspaces/{id}/nacos-profiles` |
@@ -242,8 +243,8 @@ api/table_relations.py
 - `local_workspace_mapping.py` 读取项目本机 YAML，按 Workspace ID 决定卡片显示、主目录和 reader 目录。`project_registry.py` 以主目录构建唯一文档缓存；reader cwd 返回 `documents_only` 快照，数据库与运行服务按 task.cwd 再次拒绝越权。
 - `workspace_shared_files.py` 扫描主目录 `docs/` 和固定 deploy 目录；`workspace_shared_file_repository.py` 在同一 PostgreSQL 事务中替换源文件副本及 Workspace/Project 运行配置。恢复操作只删除并重建主目录对应的 docs/deploy 目录。
 - `runtime_runner.py` 暴露只允许 Bearer Token 且拒绝浏览器请求的注册、心跳、领取租约和完成回报协议；`scripts/context_router_host_runner.py` 是宿主机执行器。普通部署步骤只执行物化快照；`host_action` 只接受控制面和 Runner 两端共同登记的动作白名单，并把未指定环境固定为 `local`。攀枝花开机保障动作只能调用 `/Users/conchi/script/ensure-panzhihua-host-runtime.sh`，不能执行任意路径或任意命令。
-- `mcp_server.py` 固定注册 21 个上下文、数据库、中间件、表关联、值映射、数据可视化收件、接口转发、容器日志和 Workspace 运行工具，并挂载到 `/mcp`。项目、数据源、中间件或容器变化不会改变工具名。
-- `mcp_server.py` 使用统一工具分发埋点记录全部 21 个当前工具；观测持久化失败只降低链路可见性，不改变 MCP 工具原始成功或失败结果。中间件调用摘要只记录数量与开关，不记录返回内容；Trace 查询仍识别三个已下线工具，以展示历史调用。
+- `mcp_server.py` 固定注册 22 个上下文、数据库、中间件、表关联、值映射、数据与任务可视化收件、接口转发、容器日志和 Workspace 运行工具，并挂载到 `/mcp`。项目、数据源、中间件或容器变化不会改变工具名。
+- `mcp_server.py` 使用统一工具分发埋点记录全部 22 个当前工具；观测持久化失败只降低链路可见性，不改变 MCP 工具原始成功或失败结果。中间件调用摘要只记录数量与开关，不记录返回内容；Trace 查询仍识别三个已下线工具，以展示历史调用。
 - `mcp_tool_call_repository.py` 保存通用工具调用和任务链路摘要；文档与数据库 Repository 继续保存各自明细，并通过可空唯一 `tool_call_id` 关联。
 - `api/mcp_traces.py` 返回全局任务链路列表和单任务统一调用详情；列表支持项目、Agent、固定内部工具、调用状态和关键词的服务端过滤。普通 task 即使没有成功落下内部调用节点也能显示，`web-preview` 与 `connection-test` 系统任务除外。API 已把文档、数据库明细转换为同一 `artifacts` 数组，并返回 `complete / running / partial` 完整性状态与稳定 warning code；主详情只包含 payload 的 available/status/reason，完整 JSON 由带 `Cache-Control: no-store` 的归属校验接口懒加载。
 - `mcp_integration.py` 生成客户端配置，并接收 `workspace_id`，以 MCP Python Client 对后端自身执行 initialize、tools/list、Workspace 匹配、prepare、search 和 read，不绕过协议直接调用 service。
@@ -300,11 +301,13 @@ Markdown 解析器只生成 React 元素，不使用 `dangerouslySetInnerHTML`�
 
 Workspace 调用记录通过 `task-history.ts` 保留文档读取批次和单批位置，通过 `database-access.ts` 把文档 read call 与数据库 call 按创建时间合并为上下文时间线。历史“文档树”视图在前端以被调用文档 ID 为集合递归裁剪当前 Workspace 文档树，只保留命中节点及其全部祖先，隐藏无关旁支和命中节点下未调用的后代；正常“查看文档树”仍展示完整树。后端工作空间任务列表在 `LIMIT` 前过滤既没有 read call 也没有数据库调用的任务；同一次批量读取的文档在一行横向展示，读取成功的卡片复用 Workspace 文档详情接口和 Markdown 抽屉。数据库卡片仍只展示客观摘要。
 
-全局调用链路页由 `trace-explorer.tsx` 读取统一 Trace API，服务端直接返回 `sequence`、调用状态、完整性和关联 artifacts。页面提供任务、Agent、21 个当前工具、三个历史工具和状态筛选，只保留调用树与调用列表；“调用树”只对显式 `parent_tool_call_id` 绘制父子含义，普通调用按稳定顺序纵向排列。文档搜索节点只展示返回文档数量等脱敏摘要，文档工具不请求文档树或 Markdown；数据库工具通过 `database-call-payload-modal.tsx` 点击后懒加载全屏出入参详情。中间件工具只展示组件数量、是否显式 reveal 和警告数量。列表和详情会把链路标记为“完整 / 运行中 / 可能不完整”，并把 prepare 缺失、历史、重启中断或未关联明细转换为中文提示。
+全局调用链路页由 `trace-explorer.tsx` 读取统一 Trace API，服务端直接返回 `sequence`、调用状态、完整性和关联 artifacts。页面提供任务、Agent、22 个当前工具、三个历史工具和状态筛选，只保留调用树与调用列表；“调用树”只对显式 `parent_tool_call_id` 绘制父子含义，普通调用按稳定顺序纵向排列。文档搜索节点只展示返回文档数量等脱敏摘要，文档工具不请求文档树或 Markdown；数据库工具通过 `database-call-payload-modal.tsx` 点击后懒加载全屏出入参详情。中间件工具只展示组件数量、是否显式 reveal 和警告数量。列表和详情会把链路标记为“完整 / 运行中 / 可能不完整”，并把 prepare 缺失、历史、重启中断或未关联明细转换为中文提示。
 
 表关联页由 `table-relation-explorer.tsx` 拉取 Workspace 唯一发布版本、表清单和单表详情，不接收任务或页面环境。后端按当前选中的表完成基数视角翻转、过滤和折叠标记，前端只负责呈现。关联数据页另外携带页面环境：关系结构仍取唯一发布版本，实际数据连接由该环境映射解析。关联数据的生成尚未实现，示例数据由后端种子脚本写入。
 
-数据可视化页不复用关联数据页的 React 状态，只复用表清单和有界查询 API。`save_data_visualization_query` 从已验证 task 补全 Workspace、动态环境、来源和 tool call 关联，`AiDataVisualizationService` 继续校验已发布关联表并按 task 条件生成稳定幂等键。关联查询携带 `ai_query_record_id`，完成后回写成功/失败、耗时、结果规模和短错误摘要；浏览器写入仍由 `BrowserReadOnlyMiddleware` 拒绝。三个可视化页面使用 task 筛选互相跳转，不共享数据管理页面状态。
+数据可视化页不复用关联数据页的 React 状态，只复用表清单和有界查询 API。`save_data_visualization_query` 从已验证 task 补全 Workspace、动态环境、来源和 tool call 关联，`AiDataVisualizationService` 继续校验已发布关联表并按 task 条件生成稳定幂等键。关联查询携带 `ai_query_record_id`，完成后回写成功/失败、耗时、结果规模和短错误摘要；浏览器写入仍由 `BrowserReadOnlyMiddleware` 拒绝。四个可视化页面使用 task 筛选互相跳转，不共享数据管理页面状态。
+
+任务可视化页不建立第二套任务状态机。`AiTaskVisualizationService` 直接以 `mcp_tasks.id` 聚合最近 30 天的统一工具调用、数据查询、接口转发日志和容器错误快照；`save_task_visualization_result` 对摘要、根因、代码位置、后续建议和验证结果递归脱敏后按 task 覆盖更新并记录 revision。列表、详情和最新在前的时间线均只读，关联按钮只在对应记录存在时显示，并带同一个 task_id 进入其他可视化页面。
 
 接口可视化页由 `AiInterfaceVisualizationService` 聚合真实 `interface_forwarding_logs`、`mcp_tasks`、接口元数据和请求计划证据。列表使用 `created_at + id` 不透明游标，支持 task 筛选并限制为最近 30 天；请求预览、详情和复制内容统一递归脱敏。Codex/Antigravity 调用顺序为 `search_forwarding_interfaces`，按需调用 `read_forwarding_request_history`、业务值映射或只读数据库工具，再调用 `prepare_forwarding_request -> execute_forwarding_request`；页面仅观察最终真实请求。
 

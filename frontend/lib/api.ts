@@ -65,6 +65,10 @@ import type {
   AiInterfaceRequestList,
   AiLogInvestigationDetail,
   AiLogInvestigationList,
+  AiTaskTimeline,
+  AiTaskVisualizationDetail,
+  AiTaskVisualizationList,
+  AiTaskVisualizationStatus,
 } from "@/lib/types";
 import {
   buildMcpTraceListPath,
@@ -702,6 +706,48 @@ export function getAiLogInvestigation(
 ): Promise<AiLogInvestigationDetail> {
   return request<AiLogInvestigationDetail>(
     `/api/ai-visualization/log-investigations/${encodeURIComponent(recordId)}`,
+    { cache: "no-store" },
+  );
+}
+
+export function getAiVisualizationTasks(options?: {
+  workspaceId?: string;
+  environment?: string;
+  agentName?: string;
+  status?: AiTaskVisualizationStatus;
+  keyword?: string;
+  limit?: number;
+  cursor?: string;
+}): Promise<AiTaskVisualizationList> {
+  const params = new URLSearchParams({ limit: String(options?.limit ?? 30) });
+  if (options?.workspaceId) params.set("workspace_id", options.workspaceId);
+  if (options?.environment) params.set("environment", options.environment);
+  if (options?.agentName) params.set("agent_name", options.agentName);
+  if (options?.status) params.set("status", options.status);
+  if (options?.keyword?.trim()) params.set("keyword", options.keyword.trim());
+  if (options?.cursor) params.set("cursor", options.cursor);
+  return request<AiTaskVisualizationList>(
+    `/api/ai-visualization/tasks?${params.toString()}`,
+    { cache: "no-store" },
+  );
+}
+
+export function getAiVisualizationTask(
+  taskId: number,
+): Promise<AiTaskVisualizationDetail> {
+  return request<AiTaskVisualizationDetail>(`/api/ai-visualization/tasks/${taskId}`, {
+    cache: "no-store",
+  });
+}
+
+export function getAiVisualizationTaskTimeline(
+  taskId: number,
+  options?: { limit?: number; cursor?: string },
+): Promise<AiTaskTimeline> {
+  const params = new URLSearchParams({ limit: String(options?.limit ?? 50) });
+  if (options?.cursor) params.set("cursor", options.cursor);
+  return request<AiTaskTimeline>(
+    `/api/ai-visualization/tasks/${taskId}/timeline?${params.toString()}`,
     { cache: "no-store" },
   );
 }
