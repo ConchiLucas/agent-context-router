@@ -597,11 +597,14 @@ export type InternalMcpToolName =
   | "read_context_document"
   | "search_database_objects"
   | "execute_database_query"
+  | "list_task_containers"
+  | "inspect_container_errors"
   | "read_table_relations"
   | "search_relation_tables"
   | "search_value_mappings"
   | "resolve_value_candidates"
   | "search_forwarding_interfaces"
+  | "read_forwarding_request_history"
   | "prepare_forwarding_request"
   | "execute_forwarding_request"
   | "apply_workspace_changes"
@@ -898,6 +901,105 @@ export interface RelationRecordSearchResult {
   scanned_columns: string[];
   source_keys: Record<string, string | number | boolean | null>;
   cards: RelationRecordCard[];
+}
+
+export interface AiDataQueryRecord {
+  id: string;
+  source: string;
+  description: string;
+  workspace_id: string;
+  workspace_name: string;
+  environment: string;
+  database_key: string;
+  schema_name: string;
+  table_name: string;
+  keyword: string;
+  created_at: string;
+}
+
+export interface AiDataQueryLatest {
+  record: AiDataQueryRecord | null;
+}
+
+export interface AiDataQueryHistory {
+  items: AiDataQueryRecord[];
+}
+
+export interface AiInterfaceRequestListItem {
+  id: string;
+  workspace_id: string;
+  workspace_name: string;
+  source: string;
+  description: string;
+  interface_id: string;
+  interface_name: string;
+  service_name: string;
+  method: string;
+  path: string;
+  environment: string;
+  address_name?: string | null;
+  login_account?: string | null;
+  role_name?: string | null;
+  request_preview: string;
+  status_code?: number | null;
+  success: boolean;
+  duration_ms: number;
+  response_bytes: number;
+  response_truncated: boolean;
+  created_at: string;
+}
+
+export interface AiInterfaceRequestList {
+  items: AiInterfaceRequestListItem[];
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}
+
+export interface AiInterfaceRequestDetail extends AiInterfaceRequestListItem {
+  task_id?: number | null;
+  tool_call_id?: number | null;
+  plan_id?: string | null;
+  request_sha256?: string | null;
+  request: unknown;
+  response: unknown;
+  parameter_evidence: Record<string, unknown>;
+}
+
+export interface AiLogInvestigationListItem {
+  id: string;
+  workspace_id: string;
+  workspace_name: string;
+  source: string;
+  description: string;
+  environment: string;
+  container_id: string;
+  container_name: string;
+  image: string;
+  project_id?: string | null;
+  project_name?: string | null;
+  project_kind?: string | null;
+  severity: "error" | "critical" | string;
+  error_title: string;
+  occurred_at?: string | null;
+  occurrence_count: number;
+  truncated: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AiLogInvestigationList {
+  items: AiLogInvestigationListItem[];
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}
+
+export interface AiLogInvestigationDetail extends AiLogInvestigationListItem {
+  task_id?: number | null;
+  error_excerpt: string;
+  log_line_count: number;
+  fingerprint: string;
 }
 
 export type TableRelationGenerationStatus =

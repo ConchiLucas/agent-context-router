@@ -80,7 +80,7 @@ test("maps trace completeness and warning codes to concise Chinese messages", ()
   );
 });
 
-test("keeps the seventeen current and three historical Context Router tools", () => {
+test("keeps the twenty current and three historical Context Router tools", () => {
   assert.deepEqual(INTERNAL_MCP_TOOL_NAMES, [
     "prepare_task_context",
     "read_task_context",
@@ -89,11 +89,14 @@ test("keeps the seventeen current and three historical Context Router tools", ()
     "read_context_document",
     "search_database_objects",
     "execute_database_query",
+    "list_task_containers",
+    "inspect_container_errors",
     "read_table_relations",
     "search_relation_tables",
     "search_value_mappings",
     "resolve_value_candidates",
     "search_forwarding_interfaces",
+    "read_forwarding_request_history",
     "prepare_forwarding_request",
     "execute_forwarding_request",
     "apply_workspace_changes",

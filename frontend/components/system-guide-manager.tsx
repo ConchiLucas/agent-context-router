@@ -29,6 +29,10 @@ const MCP_TOOL_DESCRIPTIONS_ZH: Readonly<Record<string, string>> = {
     "在当前任务已授权的数据库中搜索 Schema、表、视图、字段或索引。",
   execute_database_query:
     "使用 read_task_context 返回的数据库别名执行一条受限制的只读 SQL。",
+  list_task_containers:
+    "列出当前任务 Workspace 通过运行标签注册的 Docker 容器，不返回其他容器。",
+  inspect_container_errors:
+    "读取一个已注册容器的有界日志快照，确认错误后脱敏并写入日志可视化。",
   read_table_relations:
     "读取当前 Workspace 已发布的表关联、写入入口和更新入口。",
   search_relation_tables:
@@ -39,6 +43,8 @@ const MCP_TOOL_DESCRIPTIONS_ZH: Readonly<Record<string, string>> = {
     "使用已配置的只读数据库规则解析业务值候选，省略环境时继承任务环境。",
   search_forwarding_interfaces:
     "在当前任务环境中搜索已导入接口，并显示是否具备可调用路由。",
+  read_forwarding_request_history:
+    "读取当前任务环境内单个接口最近的请求记录，按需返回有界响应，不返回账号请求头。",
   prepare_forwarding_request:
     "默认复用成功日志；按取值策略定向刷新或重建业务值，并生成短期只读执行计划。",
   execute_forwarding_request:

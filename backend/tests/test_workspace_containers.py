@@ -266,6 +266,40 @@ def test_stream_logs_rejects_container_from_another_workspace(tmp_path: Path) ->
         service.stream_logs("workspace-1", "b" * 64)
 
 
+def test_read_log_snapshot_is_bounded_and_does_not_follow(tmp_path: Path) -> None:
+    container_id = "d" * 64
+    inspect_connection = _Connection(
+        {
+            "Config": {
+                "Tty": False,
+                "Labels": {"runtime-runner.workspace-id": "workspace-1"},
+            }
+        }
+    )
+    payload = b"2026-08-09T10:20:30.123456789Z ERROR request failed\n"
+    frame = bytes([2, 0, 0, 0]) + len(payload).to_bytes(4, "big") + payload
+    log_connection = _StreamingConnection([frame])
+    connections = iter([inspect_connection, log_connection])
+    service = WorkspaceContainerService(
+        tmp_path / "unused.sock",
+        connection_factory=lambda: next(connections),  # type: ignore[arg-type]
+    )
+
+    result = service.read_log_snapshot(
+        "workspace-1",
+        container_id,
+        tail=50,
+        since="2026-08-09T10:00:00Z",
+    )
+
+    query = parse_qs(urlparse(log_connection.path).query)
+    assert query["follow"] == ["0"]
+    assert query["tail"] == ["50"]
+    assert result.truncated is False
+    assert result.records[0].stream == "stderr"
+    assert result.records[0].content == "ERROR request failed"
+
+
 def test_closing_log_stream_interrupts_blocked_docker_read(tmp_path: Path) -> None:
     released = threading.Event()
     connection = _BlockingConnection(released)

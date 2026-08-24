@@ -16,14 +16,13 @@ from urllib.parse import quote, urlencode
 from context_router.schemas.workspaces import WorkspaceContainerSummary
 
 MAX_DOCKER_RESPONSE_BYTES = 2_000_000
+MAX_LOG_SNAPSHOT_BYTES = 512_000
 MAX_LOG_LINE_CHARS = 65_536
 LOG_HEARTBEAT_SECONDS = 15
 MAX_CONTAINER_ACTION_WORKERS = 6
 CONTAINER_ID_PATTERN = re.compile(r"^[a-f0-9]{12,64}$")
 ANSI_ESCAPE_PATTERN = re.compile(r"\x1b(?:[@-_][0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))")
-TIMESTAMP_PATTERN = re.compile(
-    r"^(?P<timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)\s?"
-)
+TIMESTAMP_PATTERN = re.compile(r"^(?P<timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)\s?")
 
 
 class WorkspaceContainerError(RuntimeError):
@@ -35,6 +34,19 @@ class _LogRecord:
     stream: str
     content: str
     timestamp: str | None
+
+
+@dataclass(frozen=True)
+class ContainerLogRecord:
+    stream: str
+    content: str
+    timestamp: str | None
+
+
+@dataclass(frozen=True)
+class ContainerLogSnapshot:
+    records: list[ContainerLogRecord]
+    truncated: bool
 
 
 class _UnixHTTPConnection(http.client.HTTPConnection):
@@ -146,24 +158,8 @@ class WorkspaceContainerService:
         tail: int = 200,
         since: str | None = None,
     ) -> Iterator[str]:
-        self._ensure_socket()
-        if not CONTAINER_ID_PATTERN.fullmatch(container_id):
-            raise WorkspaceContainerError("容器不存在")
-
+        config = self._validated_container_config(workspace_id, container_id)
         encoded_id = quote(container_id, safe="")
-        document = self._read_json(
-            f"/containers/{encoded_id}/json",
-            "Docker 容器信息读取失败",
-            missing_message="容器不存在",
-        )
-        if not isinstance(document, dict):
-            raise WorkspaceContainerError("Docker 返回了无效的容器信息")
-        config = document.get("Config")
-        config = config if isinstance(config, dict) else {}
-        labels = config.get("Labels")
-        labels = labels if isinstance(labels, dict) else {}
-        if labels.get("runtime-runner.workspace-id") != workspace_id:
-            raise WorkspaceContainerError("容器不属于当前工作空间")
 
         query: dict[str, str] = {
             "follow": "1",
@@ -196,6 +192,77 @@ class WorkspaceContainerService:
             connection,
             response,
             tty=bool(config.get("Tty")),
+        )
+
+    def read_log_snapshot(
+        self,
+        workspace_id: str,
+        container_id: str,
+        *,
+        tail: int = 500,
+        since: str | None = None,
+    ) -> ContainerLogSnapshot:
+        """Read one bounded, non-following log snapshot from a registered container."""
+        config = self._validated_container_config(workspace_id, container_id)
+        encoded_id = quote(container_id, safe="")
+        query: dict[str, str] = {
+            "follow": "0",
+            "stdout": "1",
+            "stderr": "1",
+            "timestamps": "1",
+            "tail": str(max(1, min(tail, 1000))),
+        }
+        if since and TIMESTAMP_PATTERN.match(since):
+            query["since"] = since
+
+        connection = self._connection(timeout=10)
+        try:
+            connection.request(
+                "GET",
+                f"/containers/{encoded_id}/logs?{urlencode(query)}",
+                headers={"Accept": "application/octet-stream"},
+            )
+            response = connection.getresponse()
+            if response.status == 404:
+                raise WorkspaceContainerError("容器不存在")
+            if response.status != 200:
+                raise WorkspaceContainerError("Docker 日志快照读取失败")
+
+            parser = _DockerLogParser(tty=bool(config.get("Tty")))
+            parsed: list[_LogRecord] = []
+            total_bytes = 0
+            truncated = False
+            while True:
+                chunk = response.read(16_384)
+                if not chunk:
+                    break
+                total_bytes += len(chunk)
+                if total_bytes > MAX_LOG_SNAPSHOT_BYTES:
+                    allowed = len(chunk) - (total_bytes - MAX_LOG_SNAPSHOT_BYTES)
+                    if allowed > 0:
+                        parsed.extend(parser.feed(chunk[:allowed]))
+                    truncated = True
+                    break
+                parsed.extend(parser.feed(chunk))
+            if not truncated:
+                parsed.extend(parser.flush())
+        except WorkspaceContainerError:
+            raise
+        except (OSError, http.client.HTTPException, TimeoutError) as exc:
+            raise WorkspaceContainerError("Docker 日志快照读取失败") from exc
+        finally:
+            connection.close()
+
+        return ContainerLogSnapshot(
+            records=[
+                ContainerLogRecord(
+                    stream=record.stream,
+                    content=record.content,
+                    timestamp=record.timestamp,
+                )
+                for record in parsed
+            ],
+            truncated=truncated,
         )
 
     def bulk_action(
@@ -328,6 +395,29 @@ class WorkspaceContainerService:
     def _ensure_socket(self) -> None:
         if self._uses_docker_socket and not self._docker_socket.exists():
             raise WorkspaceContainerError("Docker Socket 当前不可用")
+
+    def _validated_container_config(
+        self,
+        workspace_id: str,
+        container_id: str,
+    ) -> dict[str, object]:
+        self._ensure_socket()
+        if not CONTAINER_ID_PATTERN.fullmatch(container_id):
+            raise WorkspaceContainerError("容器不存在")
+        document = self._read_json(
+            f"/containers/{quote(container_id, safe='')}/json",
+            "Docker 容器信息读取失败",
+            missing_message="容器不存在",
+        )
+        if not isinstance(document, dict):
+            raise WorkspaceContainerError("Docker 返回了无效的容器信息")
+        config = document.get("Config")
+        config = config if isinstance(config, dict) else {}
+        labels = config.get("Labels")
+        labels = labels if isinstance(labels, dict) else {}
+        if labels.get("runtime-runner.workspace-id") != workspace_id:
+            raise WorkspaceContainerError("容器不属于当前工作空间")
+        return config
 
     def _connection(
         self,

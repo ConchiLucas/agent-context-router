@@ -17,6 +17,9 @@ import { WorkspaceDashboard } from "@/components/workspace-dashboard";
 import { InterfaceForwardingManager } from "@/components/interface-forwarding-manager";
 import { ValueMappingManager } from "@/components/value-mapping-manager";
 import { SharedAiConfigManager } from "@/components/shared-ai-config-manager";
+import { DataVisualizationWorkbench } from "@/components/data-visualization-workbench";
+import { InterfaceVisualizationWorkbench } from "@/components/interface-visualization-workbench";
+import { LogVisualizationWorkbench } from "@/components/log-visualization-workbench";
 
 type Section =
   | "workspaces"
@@ -386,6 +389,9 @@ export function AppShell() {
         {section === "interface-forwarding" ? <InterfaceForwardingManager /> : null}
         {section === "value-mappings" ? <ValueMappingManager /> : null}
         {section === "shared-ai-config" ? <SharedAiConfigManager /> : null}
+        {section === "interface-visualization" ? <InterfaceVisualizationWorkbench /> : null}
+        {section === "data-visualization" ? <DataVisualizationWorkbench /> : null}
+        {section === "log-visualization" ? <LogVisualizationWorkbench /> : null}
         {section === "traces" ? <TraceExplorer /> : null}
         {section === "system-guides" ? <SystemGuideManager /> : null}
         {section === "doc-stats" ? <DocumentReadStats /> : null}

@@ -5,9 +5,11 @@ import hashlib
 import re
 from collections.abc import Callable
 from datetime import UTC, datetime
+from functools import partial
 from time import perf_counter_ns
 from typing import Annotated, Any, Literal
 
+import anyio
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
@@ -17,6 +19,7 @@ from context_router.database.errors import DatabaseAccessError
 from context_router.mcp_contract import (
     CONTEXT_ROUTER_CORE_TOOL_NAMES,
     CONTEXT_ROUTER_INTERFACE_FORWARDING_TOOL_NAMES,
+    CONTEXT_ROUTER_LOG_VISUALIZATION_TOOL_NAMES,
     CONTEXT_ROUTER_TABLE_RELATION_TOOL_NAMES,
     CONTEXT_ROUTER_VALUE_MAPPING_TOOL_NAMES,
 )
@@ -24,6 +27,10 @@ from context_router.mcp_contract import (
     CONTEXT_ROUTER_TRACE_SERVER_NAME as TRACE_SERVER_NAME,
 )
 from context_router.schemas.context import ContextDocumentReadRequest
+from context_router.services.ai_log_visualization import (
+    AiLogVisualizationError,
+    AiLogVisualizationService,
+)
 from context_router.services.context_document_read import (
     ContextDocumentReadError,
     ContextDocumentReadService,
@@ -103,8 +110,14 @@ MCP_SERVER_INSTRUCTIONS = (
     "resolve_value_candidates with the selected mapping. It executes only the saved bounded "
     "read rule, inherits the task environment when omitted, and returns at most 10 candidates. "
     "Do not invent IDs when a published mapping is available. "
+    "When diagnosing errors in Docker services, call list_task_containers and inspect only a "
+    "container returned for the current task Workspace with inspect_container_errors. The log "
+    "reader is bounded and saves a visualization record only when error evidence is found; do "
+    "not invent container IDs or inspect containers outside Agent Context Router registration. "
     "When the user wants to call an imported business interface, first use "
-    "search_forwarding_interfaces, then prepare_forwarding_request. Execute only a ready "
+    "search_forwarding_interfaces. Use read_forwarding_request_history when recent request or "
+    "response values can help assemble parameters, then call prepare_forwarding_request. "
+    "Execute only a ready "
     "short-lived plan with execute_forwarding_request and its exact request_sha256. The server "
     "selects the task Workspace/environment, route, and saved account headers; never ask the "
     "user to provide a raw URL or copy saved headers. The first release executes only interfaces "
@@ -137,6 +150,7 @@ MCP_SERVER_INSTRUCTIONS = (
 ) = CONTEXT_ROUTER_TABLE_RELATION_TOOL_NAMES
 (
     SEARCH_FORWARDING_INTERFACES_TOOL_NAME,
+    READ_FORWARDING_REQUEST_HISTORY_TOOL_NAME,
     PREPARE_FORWARDING_REQUEST_TOOL_NAME,
     EXECUTE_FORWARDING_REQUEST_TOOL_NAME,
 ) = CONTEXT_ROUTER_INTERFACE_FORWARDING_TOOL_NAMES
@@ -144,6 +158,10 @@ MCP_SERVER_INSTRUCTIONS = (
     SEARCH_VALUE_MAPPINGS_TOOL_NAME,
     RESOLVE_VALUE_CANDIDATES_TOOL_NAME,
 ) = CONTEXT_ROUTER_VALUE_MAPPING_TOOL_NAMES
+(
+    LIST_TASK_CONTAINERS_TOOL_NAME,
+    INSPECT_CONTAINER_ERRORS_TOOL_NAME,
+) = CONTEXT_ROUTER_LOG_VISUALIZATION_TOOL_NAMES
 APPLY_WORKSPACE_TOOL_NAME = "apply_workspace_changes"
 START_WORKSPACE_TOOL_NAME = "start_workspace"
 GET_WORKSPACE_OPERATION_TOOL_NAME = "get_workspace_operation"
@@ -158,6 +176,18 @@ START_WORKSPACE_TOOL_DESCRIPTION = (
 GET_WORKSPACE_OPERATION_TOOL_DESCRIPTION = (
     "Read one Workspace runtime operation, its ordered steps, and bounded log tails. Poll "
     "until status is succeeded, failed, cancelled, or interrupted."
+)
+LIST_TASK_CONTAINERS_TOOL_DESCRIPTION = (
+    "List only Docker containers registered to the current task Workspace by Agent Context "
+    "Router runtime labels. Use this before log inspection to resolve the intended service. "
+    "Arbitrary Docker container names or containers from other Workspaces are never returned."
+)
+INSPECT_CONTAINER_ERRORS_TOOL_DESCRIPTION = (
+    "Read a bounded, non-following Docker log snapshot from one container returned by "
+    "list_task_containers, extract and redact error blocks, and save a log-visualization record "
+    "only when an error is found. Defaults to the latest 15 minutes and 500 lines. Containers "
+    "that are unregistered, inaccessible, or outside the task Workspace are rejected and never "
+    "recorded. Repeated inspection of the same error in one task updates the same record."
 )
 PREPARE_TOOL_DESCRIPTION = (
     "Locate the registered workspace for cwd, create a server-side task number, and "
@@ -259,6 +289,12 @@ SEARCH_FORWARDING_INTERFACES_TOOL_DESCRIPTION = (
     "Search imported interfaces in the task Workspace and report whether each is callable in "
     "the task environment. Prefer an exact Chinese business meaning, path fragment, or Controller."
 )
+READ_FORWARDING_REQUEST_HISTORY_TOOL_DESCRIPTION = (
+    "Read the newest bounded request history for one imported interface in the task Workspace "
+    "and environment. Use it when request parameters may be reused from recent calls or when a "
+    "later request needs a value from an earlier structured response. Request headers are never "
+    "returned. Responses are omitted by default and are bounded when explicitly requested."
+)
 PREPARE_FORWARDING_REQUEST_TOOL_DESCRIPTION = (
     "Resolve one imported interface to the task environment, forwarding address, saved account "
     "role, latest successful request history, and OpenAPI contract. Explicit address/account/role "
@@ -320,6 +356,12 @@ FORWARDING_EXECUTE_TOOL_ANNOTATIONS = ToolAnnotations(
     destructiveHint=False,
     idempotentHint=False,
     openWorldHint=True,
+)
+LOG_INSPECTION_TOOL_ANNOTATIONS = ToolAnnotations(
+    readOnlyHint=False,
+    destructiveHint=False,
+    idempotentHint=True,
+    openWorldHint=False,
 )
 
 
@@ -509,7 +551,9 @@ def create_context_router_mcp(
     table_relation_context_service: TableRelationContextService | None = None,
     interface_forwarding_context_service: InterfaceForwardingContextService | None = None,
     value_mapping_service: ValueMappingService | None = None,
+    ai_log_visualization_service: AiLogVisualizationService | None = None,
 ) -> FastMCP:
+    forwarding_execution_limiter = asyncio.Semaphore(4)
     server = ContextRouterMCP(
         name=MCP_SERVER_NAME,
         instructions=MCP_SERVER_INSTRUCTIONS,
@@ -712,6 +756,53 @@ def create_context_router_mcp(
             raise ToolError(f"{exc.code}: {exc}") from exc
 
     @server.tool(
+        name=LIST_TASK_CONTAINERS_TOOL_NAME,
+        description=LIST_TASK_CONTAINERS_TOOL_DESCRIPTION,
+        annotations=READ_TOOL_ANNOTATIONS,
+    )
+    def list_task_containers(
+        task_id: Annotated[int, Field(ge=1, strict=True)],
+        query: Annotated[str | None, Field(min_length=1, max_length=240)] = None,
+    ) -> dict[str, object]:
+        if ai_log_visualization_service is None:
+            raise ToolError("log_visualization_disabled: 容器日志排查 MCP 当前不可用")
+        try:
+            return ai_log_visualization_service.list_task_containers(
+                task_id=task_id,
+                query=query,
+            )
+        except AiLogVisualizationError as exc:
+            raise ToolError(f"{exc.code}: {exc}") from exc
+
+    @server.tool(
+        name=INSPECT_CONTAINER_ERRORS_TOOL_NAME,
+        description=INSPECT_CONTAINER_ERRORS_TOOL_DESCRIPTION,
+        annotations=LOG_INSPECTION_TOOL_ANNOTATIONS,
+    )
+    def inspect_container_errors(
+        task_id: Annotated[int, Field(ge=1, strict=True)],
+        container_id: Annotated[str, Field(min_length=12, max_length=64)],
+        since_minutes: Annotated[int, Field(ge=1, le=1440, strict=True)] = 15,
+        tail: Annotated[int, Field(ge=1, le=1000, strict=True)] = 500,
+        keywords: Annotated[
+            list[Annotated[str, Field(min_length=1, max_length=120)]] | None,
+            Field(default=None, min_length=1, max_length=10),
+        ] = None,
+    ) -> dict[str, object]:
+        if ai_log_visualization_service is None:
+            raise ToolError("log_visualization_disabled: 容器日志排查 MCP 当前不可用")
+        try:
+            return ai_log_visualization_service.inspect_container_errors(
+                task_id=task_id,
+                container_id=container_id,
+                since_minutes=since_minutes,
+                tail=tail,
+                keywords=keywords,
+            )
+        except AiLogVisualizationError as exc:
+            raise ToolError(f"{exc.code}: {exc}") from exc
+
+    @server.tool(
         name=READ_TABLE_RELATIONS_TOOL_NAME,
         description=READ_TABLE_RELATIONS_TOOL_DESCRIPTION,
         annotations=READ_TOOL_ANNOTATIONS,
@@ -857,6 +948,31 @@ def create_context_router_mcp(
             raise ToolError(f"{exc.code}: {exc}") from exc
 
     @server.tool(
+        name=READ_FORWARDING_REQUEST_HISTORY_TOOL_NAME,
+        description=READ_FORWARDING_REQUEST_HISTORY_TOOL_DESCRIPTION,
+        annotations=READ_TOOL_ANNOTATIONS,
+    )
+    def read_forwarding_request_history(
+        task_id: Annotated[int, Field(ge=1, strict=True)],
+        interface_id: Annotated[str, Field(min_length=1, max_length=36)],
+        limit: Annotated[int, Field(ge=1, le=10, strict=True)] = 5,
+        success_only: Annotated[bool, Field(strict=True)] = True,
+        include_response: Annotated[bool, Field(strict=True)] = False,
+    ) -> dict[str, object]:
+        if interface_forwarding_context_service is None:
+            raise ToolError("interface_forwarding_disabled: 接口转发 MCP 当前不可用")
+        try:
+            return interface_forwarding_context_service.history(
+                task_id=task_id,
+                interface_id=interface_id,
+                limit=limit,
+                success_only=success_only,
+                include_response=include_response,
+            )
+        except InterfaceForwardingContextError as exc:
+            raise ToolError(f"{exc.code}: {exc}") from exc
+
+    @server.tool(
         name=PREPARE_FORWARDING_REQUEST_TOOL_NAME,
         description=PREPARE_FORWARDING_REQUEST_TOOL_DESCRIPTION,
         annotations=FORWARDING_PREPARE_TOOL_ANNOTATIONS,
@@ -919,7 +1035,7 @@ def create_context_router_mcp(
         description=EXECUTE_FORWARDING_REQUEST_TOOL_DESCRIPTION,
         annotations=FORWARDING_EXECUTE_TOOL_ANNOTATIONS,
     )
-    def execute_forwarding_request(
+    async def execute_forwarding_request(
         task_id: Annotated[int, Field(ge=1, strict=True)],
         plan_id: Annotated[str, Field(min_length=1, max_length=36)],
         request_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")],
@@ -927,11 +1043,16 @@ def create_context_router_mcp(
         if interface_forwarding_context_service is None:
             raise ToolError("interface_forwarding_disabled: 接口转发 MCP 当前不可用")
         try:
-            return interface_forwarding_context_service.execute(
-                task_id=task_id,
-                plan_id=plan_id,
-                request_sha256=request_sha256,
-            )
+            async with forwarding_execution_limiter:
+                return await anyio.to_thread.run_sync(
+                    partial(
+                        interface_forwarding_context_service.execute,
+                        task_id=task_id,
+                        plan_id=plan_id,
+                        request_sha256=request_sha256,
+                    ),
+                    abandon_on_cancel=False,
+                )
         except InterfaceForwardingContextError as exc:
             raise ToolError(f"{exc.code}: {exc}") from exc
 
@@ -1142,6 +1263,13 @@ def _request_summary(name: str, arguments: dict[str, Any]) -> dict[str, object] 
             "role": _safe_string(arguments.get("role"), 160),
             "limit": arguments.get("limit") if isinstance(arguments.get("limit"), int) else None,
         }
+    if name == READ_FORWARDING_REQUEST_HISTORY_TOOL_NAME:
+        return {
+            "interface_id": _safe_string(arguments.get("interface_id"), 36),
+            "limit": arguments.get("limit") if isinstance(arguments.get("limit"), int) else 5,
+            "success_only": arguments.get("success_only", True) is True,
+            "include_response": arguments.get("include_response", False) is True,
+        }
     if name == PREPARE_FORWARDING_REQUEST_TOOL_NAME:
         supplied = {
             location: len(arguments.get(location, {}))
@@ -1309,6 +1437,11 @@ def _result_summary(name: str, payload: dict[str, Any]) -> dict[str, object] | N
             "returned_count": payload.get("returned_count", 0),
             "environment": _safe_string(payload.get("environment"), 32),
         }
+    if name == READ_FORWARDING_REQUEST_HISTORY_TOOL_NAME:
+        return {
+            "returned_count": payload.get("returned_count", 0),
+            "environment": _safe_string(payload.get("environment"), 32),
+        }
     if name == PREPARE_FORWARDING_REQUEST_TOOL_NAME:
         candidates = payload.get("candidates")
         missing = payload.get("missing")
@@ -1316,14 +1449,10 @@ def _result_summary(name: str, payload: dict[str, Any]) -> dict[str, object] | N
         resolution_issues = payload.get("resolution_issues")
         selection_evidence = payload.get("selection_evidence")
         address_selection = (
-            selection_evidence.get("address")
-            if isinstance(selection_evidence, dict)
-            else None
+            selection_evidence.get("address") if isinstance(selection_evidence, dict) else None
         )
         identity_selection = (
-            selection_evidence.get("identity")
-            if isinstance(selection_evidence, dict)
-            else None
+            selection_evidence.get("identity") if isinstance(selection_evidence, dict) else None
         )
         return {
             "status": _safe_string(payload.get("status"), 32),

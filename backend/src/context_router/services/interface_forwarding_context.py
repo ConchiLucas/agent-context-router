@@ -83,6 +83,7 @@ class InterfaceForwardingContextService:
         value_mapping_service: ValueMappingService | None = None,
         host_runner_available: Callable[[], bool] | None = None,
         host_execution_timeout_seconds: float = 40,
+        host_job_poll_interval_seconds: float = 0.25,
     ) -> None:
         self._database_url = database_url
         self._tasks = task_repository
@@ -90,6 +91,9 @@ class InterfaceForwardingContextService:
         self._value_mappings = value_mapping_service
         self._host_runner_available = host_runner_available
         self._host_execution_timeout_seconds = max(5.0, host_execution_timeout_seconds)
+        self._host_job_poll_interval_seconds = min(
+            1.0, max(0.05, host_job_poll_interval_seconds)
+        )
 
     def search(
         self,
@@ -191,6 +195,80 @@ class InterfaceForwardingContextService:
             "query": normalized,
             "returned_count": len(results),
             "results": results,
+        }
+
+    def history(
+        self,
+        *,
+        task_id: int,
+        interface_id: str,
+        limit: int = 5,
+        success_only: bool = True,
+        include_response: bool = False,
+    ) -> dict[str, object]:
+        workspace_id, environment = self._task_scope(task_id, None)
+        bounded_limit = max(1, min(limit, 10))
+        with self._connect() as connection, connection.cursor() as cursor:
+            interface = self._load_interface(cursor, workspace_id, interface_id)
+            cursor.execute(
+                """SELECT log.id, log.created_at, log.status_code, log.success,
+                          log.duration_ms, log.request_body, log.response_body,
+                          log.response_bytes, log.response_truncated,
+                          address.name AS address_name,
+                          log.identity_name, log.identity_role,
+                          plan.parameter_evidence
+                   FROM interface_forwarding_logs AS log
+                   LEFT JOIN interface_forwarding_environments AS address
+                     ON address.id=log.address_id
+                   LEFT JOIN interface_forwarding_request_plans AS plan
+                     ON plan.id=log.plan_id
+                   WHERE log.workspace_id=%s AND log.interface_id=%s
+                     AND (log.environment_key=%s OR log.environment_key IS NULL)
+                     AND (%s=false OR log.success=true)
+                   ORDER BY log.created_at DESC, log.id DESC
+                   LIMIT %s""",
+                (workspace_id, interface_id, environment, success_only, bounded_limit),
+            )
+            rows = list(cursor.fetchall())
+
+        requests: list[dict[str, object]] = []
+        for row in rows:
+            item: dict[str, object] = {
+                "log_id": str(row["id"]),
+                "created_at": self._iso(row["created_at"]),
+                "status_code": row["status_code"],
+                "success": bool(row["success"]),
+                "duration_ms": int(row["duration_ms"] or 0),
+                "address_name": row["address_name"],
+                "login_account": row["identity_name"],
+                "role_name": row["identity_role"],
+                "request": self._parse_log_payload(row["request_body"]),
+                "parameter_evidence": (
+                    row["parameter_evidence"]
+                    if isinstance(row["parameter_evidence"], dict)
+                    else {}
+                ),
+                "response_bytes": int(row["response_bytes"] or 0),
+                "response_truncated": bool(row["response_truncated"]),
+            }
+            if include_response:
+                response, history_truncated = self._bounded_log_payload(row["response_body"])
+                item["response"] = response
+                item["response_history_truncated"] = history_truncated
+            requests.append(item)
+
+        return {
+            "status": "ok",
+            "environment": environment,
+            "interface": {
+                "id": str(interface["id"]),
+                "name": str(interface["name"]),
+                "service": str(interface["service_name"]),
+                "method": str(interface["method"]),
+                "path": str(interface["path"]),
+            },
+            "returned_count": len(requests),
+            "requests": requests,
         }
 
     def prepare(
@@ -750,7 +828,7 @@ class InterfaceForwardingContextService:
                 )
             if row["status"] in {"completed", "failed"}:
                 return dict(row)
-            time.sleep(0.1)
+            time.sleep(self._host_job_poll_interval_seconds)
         with self._connect() as connection, connection.cursor() as cursor:
             cursor.execute(
                 """UPDATE interface_forwarding_host_jobs
@@ -1382,6 +1460,26 @@ class InterfaceForwardingContextService:
         if any(key in parsed for key in ("path", "query", "body")):
             return parsed, history
         return {"body": parsed}, history
+
+    @staticmethod
+    def _parse_log_payload(value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return value
+
+    @classmethod
+    def _bounded_log_payload(cls, value: object) -> tuple[object, bool]:
+        if not isinstance(value, str):
+            return value, False
+        maximum_characters = 100_000
+        truncated = len(value) > maximum_characters
+        bounded = value[:maximum_characters]
+        if truncated:
+            return bounded, True
+        return cls._parse_log_payload(bounded), False
 
     @staticmethod
     def _merge_values(

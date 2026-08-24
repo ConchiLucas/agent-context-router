@@ -59,6 +59,12 @@ import type {
   ValueMapping,
   SharedAiCatalog,
   SharedConfigurationCatalog,
+  AiDataQueryLatest,
+  AiDataQueryHistory,
+  AiInterfaceRequestDetail,
+  AiInterfaceRequestList,
+  AiLogInvestigationDetail,
+  AiLogInvestigationList,
 } from "@/lib/types";
 import {
   buildMcpTraceListPath,
@@ -598,6 +604,73 @@ export function searchRelationRecords(
         page: input.page ?? 1,
       }),
     },
+  );
+}
+
+export function getLatestAiDataQuery(): Promise<AiDataQueryLatest> {
+  return request<AiDataQueryLatest>("/api/ai-visualization/query-records/latest", {
+    cache: "no-store",
+  });
+}
+
+export function getAiDataQueryHistory(limit = 20): Promise<AiDataQueryHistory> {
+  return request<AiDataQueryHistory>(
+    `/api/ai-visualization/query-records?limit=${encodeURIComponent(String(limit))}`,
+    { cache: "no-store" },
+  );
+}
+
+export function getAiInterfaceRequests(options?: {
+  workspaceId?: string;
+  success?: boolean;
+  limit?: number;
+  offset?: number;
+}): Promise<AiInterfaceRequestList> {
+  const params = new URLSearchParams({
+    limit: String(options?.limit ?? 50),
+    offset: String(options?.offset ?? 0),
+  });
+  if (options?.workspaceId) params.set("workspace_id", options.workspaceId);
+  if (options?.success !== undefined) params.set("success", String(options.success));
+  return request<AiInterfaceRequestList>(
+    `/api/ai-visualization/interface-requests?${params.toString()}`,
+    { cache: "no-store" },
+  );
+}
+
+export function getAiInterfaceRequest(
+  requestId: string,
+): Promise<AiInterfaceRequestDetail> {
+  return request<AiInterfaceRequestDetail>(
+    `/api/ai-visualization/interface-requests/${encodeURIComponent(requestId)}`,
+    { cache: "no-store" },
+  );
+}
+
+export function getAiLogInvestigations(options?: {
+  workspaceId?: string;
+  severity?: "error" | "critical";
+  limit?: number;
+  offset?: number;
+}): Promise<AiLogInvestigationList> {
+  const params = new URLSearchParams({
+    limit: String(options?.limit ?? 50),
+    offset: String(options?.offset ?? 0),
+  });
+  if (options?.workspaceId) params.set("workspace_id", options.workspaceId);
+  if (options?.severity) params.set("severity", options.severity);
+  return request<AiLogInvestigationList>(
+    `/api/ai-visualization/log-investigations?${params.toString()}`,
+    { cache: "no-store" },
+  );
+}
+
+export function getAiLogInvestigation(
+  recordId: string,
+): Promise<AiLogInvestigationDetail> {
+  return request<AiLogInvestigationDetail>(
+    `/api/ai-visualization/log-investigations/${encodeURIComponent(recordId)}`,
+    { cache: "no-store" },
   );
 }
 

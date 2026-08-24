@@ -22,11 +22,17 @@ from context_router.mcp_server import (
     EXECUTE_FORWARDING_REQUEST_TOOL_NAME,
     GET_WORKSPACE_OPERATION_TOOL_DESCRIPTION,
     GET_WORKSPACE_OPERATION_TOOL_NAME,
+    INSPECT_CONTAINER_ERRORS_TOOL_DESCRIPTION,
+    INSPECT_CONTAINER_ERRORS_TOOL_NAME,
+    LIST_TASK_CONTAINERS_TOOL_DESCRIPTION,
+    LIST_TASK_CONTAINERS_TOOL_NAME,
     MCP_SERVER_NAME,
     PREPARE_FORWARDING_REQUEST_TOOL_DESCRIPTION,
     PREPARE_FORWARDING_REQUEST_TOOL_NAME,
     PREPARE_TOOL_DESCRIPTION,
     PREPARE_TOOL_NAME,
+    READ_FORWARDING_REQUEST_HISTORY_TOOL_DESCRIPTION,
+    READ_FORWARDING_REQUEST_HISTORY_TOOL_NAME,
     READ_MIDDLEWARE_CONTEXT_TOOL_DESCRIPTION,
     READ_MIDDLEWARE_CONTEXT_TOOL_NAME,
     READ_TABLE_RELATIONS_TOOL_DESCRIPTION,
@@ -112,6 +118,14 @@ class McpIntegrationService:
                     description=EXECUTE_DATABASE_TOOL_DESCRIPTION,
                 ),
                 McpToolInfo(
+                    name=LIST_TASK_CONTAINERS_TOOL_NAME,
+                    description=LIST_TASK_CONTAINERS_TOOL_DESCRIPTION,
+                ),
+                McpToolInfo(
+                    name=INSPECT_CONTAINER_ERRORS_TOOL_NAME,
+                    description=INSPECT_CONTAINER_ERRORS_TOOL_DESCRIPTION,
+                ),
+                McpToolInfo(
                     name=READ_TABLE_RELATIONS_TOOL_NAME,
                     description=READ_TABLE_RELATIONS_TOOL_DESCRIPTION,
                 ),
@@ -130,6 +144,10 @@ class McpIntegrationService:
                 McpToolInfo(
                     name=SEARCH_FORWARDING_INTERFACES_TOOL_NAME,
                     description=SEARCH_FORWARDING_INTERFACES_TOOL_DESCRIPTION,
+                ),
+                McpToolInfo(
+                    name=READ_FORWARDING_REQUEST_HISTORY_TOOL_NAME,
+                    description=READ_FORWARDING_REQUEST_HISTORY_TOOL_DESCRIPTION,
                 ),
                 McpToolInfo(
                     name=PREPARE_FORWARDING_REQUEST_TOOL_NAME,

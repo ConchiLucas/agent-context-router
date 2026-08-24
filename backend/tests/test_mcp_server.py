@@ -1,4 +1,5 @@
 import asyncio
+import threading
 
 import pytest
 from mcp.server.fastmcp.exceptions import ToolError
@@ -94,6 +95,18 @@ class RecordingValueMappingService:
         return {"mapping_id": mapping_id, "candidates": [], "returned_count": 0}
 
 
+class BlockingForwardingService:
+    def __init__(self) -> None:
+        self.started = threading.Event()
+        self.release = threading.Event()
+
+    def execute(self, **arguments: object) -> dict[str, object]:
+        self.started.set()
+        if not self.release.wait(timeout=2):
+            raise AssertionError("forwarding execution was not released")
+        return {"status": "completed", "arguments": arguments}
+
+
 class _RuntimeResult:
     def __init__(self, operation_id: str, task_id: int = 9) -> None:
         self.operation_id = operation_id
@@ -148,11 +161,14 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "read_context_document",
         "search_database_objects",
         "execute_database_query",
+        "list_task_containers",
+        "inspect_container_errors",
         "read_table_relations",
         "search_relation_tables",
         "search_value_mappings",
         "resolve_value_candidates",
         "search_forwarding_interfaces",
+        "read_forwarding_request_history",
         "prepare_forwarding_request",
         "execute_forwarding_request",
         "apply_workspace_changes",
@@ -164,25 +180,29 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
     assert tools[0].annotations.destructiveHint is False
     assert tools[0].annotations.idempotentHint is False
     assert tools[0].annotations.openWorldHint is False
-    for tool in tools[1:12]:
+    for tool in (*tools[1:8], *tools[9:15]):
         assert tool.annotations is not None
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
         assert tool.annotations.idempotentHint is True
         assert tool.annotations.openWorldHint is False
-    assert tools[12].annotations is not None
-    assert tools[12].annotations.readOnlyHint is True
-    assert tools[12].annotations.idempotentHint is False
-    assert tools[13].annotations is not None
-    assert tools[13].annotations.readOnlyHint is False
-    assert tools[13].annotations.destructiveHint is False
-    assert tools[13].annotations.openWorldHint is True
-    for tool in (tools[14], tools[15]):
+    assert tools[8].annotations is not None
+    assert tools[8].annotations.readOnlyHint is False
+    assert tools[8].annotations.destructiveHint is False
+    assert tools[8].annotations.idempotentHint is True
+    assert tools[15].annotations is not None
+    assert tools[15].annotations.readOnlyHint is True
+    assert tools[15].annotations.idempotentHint is False
+    assert tools[16].annotations is not None
+    assert tools[16].annotations.readOnlyHint is False
+    assert tools[16].annotations.destructiveHint is False
+    assert tools[16].annotations.openWorldHint is True
+    for tool in (tools[17], tools[18]):
         assert tool.annotations is not None
         assert tool.annotations.readOnlyHint is False
         assert tool.annotations.destructiveHint is True
         assert tool.annotations.idempotentHint is False
-    for tool in (tools[16],):
+    for tool in (tools[19],):
         assert tool.annotations is not None
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
@@ -235,7 +255,19 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
     }
     assert query_schema["required"] == ["task_id", "database", "sql"]
     assert set(query_schema["properties"]) == {"task_id", "database", "sql"}
-    relation_schema = tools[7].inputSchema
+    container_list_schema = tools[7].inputSchema
+    assert container_list_schema["required"] == ["task_id"]
+    assert set(container_list_schema["properties"]) == {"task_id", "query"}
+    inspection_schema = tools[8].inputSchema
+    assert inspection_schema["required"] == ["task_id", "container_id"]
+    assert set(inspection_schema["properties"]) == {
+        "task_id",
+        "container_id",
+        "since_minutes",
+        "tail",
+        "keywords",
+    }
+    relation_schema = tools[9].inputSchema
     assert relation_schema["required"] == ["task_id", "tables"]
     assert set(relation_schema["properties"]) == {
         "task_id",
@@ -245,7 +277,7 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "evidence",
     }
     assert relation_schema["properties"]["evidence"]["default"] == "none"
-    relation_search_schema = tools[8].inputSchema
+    relation_search_schema = tools[10].inputSchema
     assert relation_search_schema["required"] == ["task_id"]
     assert set(relation_search_schema["properties"]) == {
         "task_id",
@@ -254,7 +286,7 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "only_related",
         "limit",
     }
-    mapping_search_schema = tools[9].inputSchema
+    mapping_search_schema = tools[11].inputSchema
     assert mapping_search_schema["required"] == ["task_id"]
     assert set(mapping_search_schema["properties"]) == {
         "task_id",
@@ -264,7 +296,7 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "parameter_path",
         "limit",
     }
-    mapping_resolve_schema = tools[10].inputSchema
+    mapping_resolve_schema = tools[12].inputSchema
     assert mapping_resolve_schema["required"] == ["task_id", "mapping_id"]
     assert set(mapping_resolve_schema["properties"]) == {
         "task_id",
@@ -274,7 +306,16 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "limit",
     }
     assert mapping_resolve_schema["properties"]["limit"]["maximum"] == 10
-    forwarding_prepare_schema = tools[12].inputSchema
+    forwarding_history_schema = tools[14].inputSchema
+    assert forwarding_history_schema["required"] == ["task_id", "interface_id"]
+    assert set(forwarding_history_schema["properties"]) == {
+        "task_id",
+        "interface_id",
+        "limit",
+        "success_only",
+        "include_response",
+    }
+    forwarding_prepare_schema = tools[15].inputSchema
     assert forwarding_prepare_schema["required"] == ["task_id", "interface_id"]
     assert set(forwarding_prepare_schema["properties"]) == {
         "task_id",
@@ -353,6 +394,45 @@ def test_value_mapping_tools_forward_only_task_scoped_arguments() -> None:
             },
         ),
     ]
+
+
+def test_forwarding_execution_keeps_mcp_event_loop_responsive() -> None:
+    async def scenario() -> None:
+        document_service = UnusedService()
+        forwarding = BlockingForwardingService()
+        server = create_context_router_mcp(  # type: ignore[arg-type]
+            document_service,
+            document_service,
+            interface_forwarding_context_service=forwarding,  # type: ignore[arg-type]
+        )
+
+        call = asyncio.create_task(
+            server.call_tool(
+                "execute_forwarding_request",
+                {
+                    "task_id": 9,
+                    "plan_id": "plan-1",
+                    "request_sha256": "a" * 64,
+                },
+            )
+        )
+        await asyncio.sleep(0.05)
+
+        assert forwarding.started.is_set()
+        assert not call.done()
+
+        forwarding.release.set()
+        _, result = await call
+        assert result == {
+            "status": "completed",
+            "arguments": {
+                "task_id": 9,
+                "plan_id": "plan-1",
+                "request_sha256": "a" * 64,
+            },
+        }
+
+    asyncio.run(scenario())
 
 
 def test_workspace_runtime_tools_forward_only_task_scoped_arguments() -> None:

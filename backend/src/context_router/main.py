@@ -8,6 +8,11 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from context_router.api.ai_data_visualization import router as ai_data_visualization_router
+from context_router.api.ai_interface_visualization import (
+    router as ai_interface_visualization_router,
+)
+from context_router.api.ai_log_visualization import router as ai_log_visualization_router
 from context_router.api.data_sources import router as data_sources_router
 from context_router.api.database_environments import router as database_environments_router
 from context_router.api.document_chain_analytics import (
@@ -40,6 +45,16 @@ from context_router.database.registry import ConnectorRegistry
 from context_router.database.result import DatabaseResultFormatter
 from context_router.mcp_server import create_context_router_mcp
 from context_router.middleware.browser_read_only import BrowserReadOnlyMiddleware
+from context_router.repositories.ai_data_query_repository import (
+    AiDataQueryStore,
+    InMemoryAiDataQueryRepository,
+    PostgresAiDataQueryRepository,
+)
+from context_router.repositories.ai_log_investigation_repository import (
+    AiLogInvestigationStore,
+    InMemoryAiLogInvestigationRepository,
+    PostgresAiLogInvestigationRepository,
+)
 from context_router.repositories.data_source_repository import (
     DataSourceStore,
     InMemoryDataSourceRepository,
@@ -86,11 +101,6 @@ from context_router.repositories.mcp_tool_call_repository import (
     McpToolCallStore,
     PostgresMcpToolCallRepository,
 )
-from context_router.repositories.shared_ai_default_repository import (
-    InMemorySharedAiDefaultRepository,
-    PostgresSharedAiDefaultRepository,
-    SharedAiDefaultStore,
-)
 from context_router.repositories.nacos_profile_repository import (
     InMemoryNacosProfileRepository,
     NacosProfileStore,
@@ -121,6 +131,11 @@ from context_router.repositories.runtime_runner_repository import (
     InMemoryRuntimeRunnerRepository,
     PostgresRuntimeRunnerRepository,
     RuntimeRunnerStore,
+)
+from context_router.repositories.shared_ai_default_repository import (
+    InMemorySharedAiDefaultRepository,
+    PostgresSharedAiDefaultRepository,
+    SharedAiDefaultStore,
 )
 from context_router.repositories.system_guide_repository import (
     InMemorySystemGuideRepository,
@@ -154,6 +169,9 @@ from context_router.repositories.workspace_shared_file_repository import (
     PostgresWorkspaceSharedFileRepository,
     WorkspaceSharedFileStore,
 )
+from context_router.services.ai_data_visualization import AiDataVisualizationService
+from context_router.services.ai_interface_visualization import AiInterfaceVisualizationService
+from context_router.services.ai_log_visualization import AiLogVisualizationService
 from context_router.services.context_document_read import ContextDocumentReadService
 from context_router.services.context_document_search import ContextDocumentSearchService
 from context_router.services.context_preparation import ContextPreparationService
@@ -173,9 +191,9 @@ from context_router.services.nacos_middleware import MiddlewareContextService
 from context_router.services.project_registry import ProjectRegistry, ProjectRegistryError
 from context_router.services.runtime_execution import RuntimeExecutionService
 from context_router.services.runtime_materialization import RuntimeMaterializationService
-from context_router.services.system_guides import SystemGuideService
 from context_router.services.shared_ai_config import SharedAiConfigService
 from context_router.services.shared_config_client import SharedConfigCenterClient
+from context_router.services.system_guides import SystemGuideService
 from context_router.services.table_relation_context import TableRelationContextService
 from context_router.services.value_mapping import ValueMappingService
 from context_router.services.workspace_containers import WorkspaceContainerService
@@ -217,6 +235,8 @@ def create_app(
     nacos_profile_repository: NacosProfileStore | None = None,
     mcp_environment_default_repository: McpEnvironmentDefaultStore | None = None,
     shared_ai_default_repository: SharedAiDefaultStore | None = None,
+    ai_data_query_repository: AiDataQueryStore | None = None,
+    ai_log_investigation_repository: AiLogInvestigationStore | None = None,
 ) -> FastAPI:
     resolved_settings = settings or Settings()
     if workspace_repository is not None:
@@ -285,6 +305,16 @@ def create_app(
         PostgresSharedAiDefaultRepository(resolved_settings.database_url)
         if resolved_settings.database_url
         else InMemorySharedAiDefaultRepository()
+    )
+    resolved_ai_data_query_repository = ai_data_query_repository or (
+        PostgresAiDataQueryRepository(resolved_settings.database_url)
+        if resolved_settings.database_url
+        else InMemoryAiDataQueryRepository()
+    )
+    resolved_ai_log_investigation_repository = ai_log_investigation_repository or (
+        PostgresAiLogInvestigationRepository(resolved_settings.database_url)
+        if resolved_settings.database_url
+        else InMemoryAiLogInvestigationRepository()
     )
     resolved_runtime_config_repository = runtime_config_repository or (
         PostgresRuntimeConfigRepository(resolved_settings.database_url)
@@ -454,6 +484,22 @@ def create_app(
         sql_policy=SqlSafetyPolicy(),
         task_repository=resolved_task_repository,
     )
+    ai_data_visualization_service = AiDataVisualizationService(
+        records=resolved_ai_data_query_repository,
+        workspaces=resolved_workspace_repository,
+        environments=resolved_database_environment_repository,
+        relations=resolved_table_relation_repository,
+    )
+    ai_interface_visualization_service = AiInterfaceVisualizationService(
+        resolved_settings.database_url
+    )
+    ai_log_visualization_service = AiLogVisualizationService(
+        records=resolved_ai_log_investigation_repository,
+        tasks=resolved_task_repository,
+        projects=resolved_project_repository,
+        workspaces=resolved_workspace_repository,
+        containers=workspace_container_service,
+    )
     interface_forwarding_context_service = InterfaceForwardingContextService(
         database_url=resolved_settings.database_url,
         task_repository=resolved_task_repository,
@@ -529,6 +575,7 @@ def create_app(
         table_relation_context_service=table_relation_context_service,
         interface_forwarding_context_service=interface_forwarding_context_service,
         value_mapping_service=value_mapping_service,
+        ai_log_visualization_service=ai_log_visualization_service,
     )
     mcp_app = mcp_server.streamable_http_app()
 
@@ -629,6 +676,10 @@ def create_app(
     app.state.interface_forwarding_service = interface_forwarding_service
     app.state.interface_forwarding_context_service = interface_forwarding_context_service
     app.state.value_mapping_service = value_mapping_service
+    app.state.ai_data_visualization_service = ai_data_visualization_service
+    app.state.ai_interface_visualization_service = ai_interface_visualization_service
+    app.state.ai_log_visualization_service = ai_log_visualization_service
+    app.state.ai_log_investigation_repository = resolved_ai_log_investigation_repository
     app.state.document_read_stats_repository = resolved_document_read_stats_repository
     app.state.document_read_stats_service = document_read_stats_service
     app.state.document_chain_analytics_repository = resolved_document_chain_analytics_repository
@@ -665,6 +716,9 @@ def create_app(
     app.include_router(shared_config_router, prefix=resolved_settings.api_prefix)
     app.include_router(interface_forwarding_router, prefix=resolved_settings.api_prefix)
     app.include_router(value_mappings_router, prefix=resolved_settings.api_prefix)
+    app.include_router(ai_data_visualization_router, prefix=resolved_settings.api_prefix)
+    app.include_router(ai_interface_visualization_router, prefix=resolved_settings.api_prefix)
+    app.include_router(ai_log_visualization_router, prefix=resolved_settings.api_prefix)
 
     @app.get("/health")
     def health() -> dict[str, str]:

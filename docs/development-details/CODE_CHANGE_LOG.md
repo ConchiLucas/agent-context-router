@@ -13,6 +13,12 @@
 
 ### 2026-08-24
 
+- 实现“AI可视化 → 日志可视化”第一版：新增 `list_task_containers` 与 `inspect_container_errors` MCP 工具，只允许读取 task Workspace 运行标签注册的 Docker 容器；日志使用非跟随时间/行数/字节上限，提取多行错误并脱敏，未发现错误不落库。同一 task 相同错误幂等更新；新增最新优先的只读列表/详情 API、双栏页面和 migration `20260824_0060`。
+- MCP 接口执行改为在线程中等待 Host Runner，并限制最多 4 个并发执行；客户端取消时继续完成回调和日志收尾，Host Job 轮询间隔调整为 0.25 秒，避免同步等待阻塞控制面心跳与完成回调造成假性 `HostRunnerTimeout`。
+- 实现“AI可视化 → 接口可视化”第一版：直接聚合真实接口转发日志、任务原始描述与请求计划参数证据，按最新请求倒序展示 Workspace/状态筛选、请求列表和详情，不增加审批状态或重复请求记录表。新增只读列表/详情 API 和 migration `20260824_0059` 日志索引。
+- MCP 新增 `read_forwarding_request_history`，允许 Codex、Antigravity 在当前 task Workspace/环境内读取单接口最近请求；响应默认省略、显式读取时限长，账号请求头永不返回。工具可结合现有接口搜索、业务值映射、只读数据库、请求准备和执行链自主组装参数并直接调用接口。
+- 实现“AI可视化 → 数据可视化”页面，默认载入本机 AI/运维最新保存的查询条件，支持加载最新、右侧历史记录回填、条件复核和现有关联数据只读查询；没有修改“数据管理 → 关联数据”组件。
+- 新增 `POST /api/ai-visualization/query-records` 外部写入接口，以及浏览器可读的最新和历史接口。写入校验工作空间、动态环境与已发布关联表；新增 migration `20260824_0058` 和 `ai_data_query_records`，不保存查询结果。
 - 配置管理左侧补齐数据库配置、AI 配置、本地 CLI 配置、MinIO 配置、图片模型配置、Runtime Contract 六个菜单，并对齐共享配置中心的语义图标、柔和背景和贴左选中竖线。六类配置均由本应用通过配置中心 API 自行绘制只读详情；只有 AI 默认项写入本地，数据库密码、AI/API Key、MinIO 凭据及 Runtime Contract 密钥默认遮罩。
 - 新增“配置管理 → AI 配置”页面及 `/api/shared-config/ai` 读取、刷新、默认项保存接口。Provider、模型、地址和明文密钥仅从 `ai_share_config` 配置中心实时读取；页面默认脱敏展示密钥，按眼睛按钮才临时显示明文。本机只持久化默认 Provider ID，首次有效读取自动初始化；本机默认已被配置中心删除时自动回退中心 `activeProviderId` 并提示。新增 migration `20260824_0057` 和 `shared_ai_defaults` 单例表。
 
