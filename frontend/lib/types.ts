@@ -1072,6 +1072,13 @@ export interface AiTaskVisualizationResult {
   finalized_at?: string | null;
 }
 
+export type AiTaskChainHealthStatus =
+  | "healthy"
+  | "running"
+  | "attention"
+  | "failed"
+  | "unused";
+
 export interface AiTaskVisualizationDetail extends AiTaskVisualizationListItem {
   cwd: string;
   active_project_name?: string | null;
@@ -1082,6 +1089,12 @@ export interface AiTaskVisualizationDetail extends AiTaskVisualizationListItem {
     interface_visualization: boolean;
     log_visualization: boolean;
   };
+  chain_health: Array<{
+    key: "mcp" | "data" | "interface" | "log" | "conclusion";
+    label: string;
+    status: AiTaskChainHealthStatus;
+    summary: string;
+  }>;
 }
 
 export interface AiTaskTimelineEvent {

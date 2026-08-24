@@ -7,6 +7,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from context_router.schemas.ai_task_visualization import (
+    AiTaskChainHealthItem,
     AiTaskCodeLocation,
     AiTaskRelatedArtifacts,
     AiTaskResult,
@@ -50,6 +51,9 @@ WITH tool_stats AS (
     GROUP BY call.task_id
 ), data_stats AS (
     SELECT record.task_id, COUNT(*) AS data_query_count,
+           COUNT(*) FILTER (WHERE record.execution_status = 'succeeded') AS data_succeeded_count,
+           COUNT(*) FILTER (WHERE record.execution_status = 'failed') AS data_failed_count,
+           COUNT(*) FILTER (WHERE record.execution_status = 'pending') AS data_pending_count,
            MAX(COALESCE(record.updated_at, record.created_at)) AS last_activity_at
     FROM ai_data_query_records AS record
     JOIN mcp_tasks AS owner ON owner.id = record.task_id
@@ -100,6 +104,9 @@ WITH tool_stats AS (
            COALESCE(tool.tool_error_count, 0) AS tool_error_count,
            COALESCE(tool.running_call_count, 0) AS running_call_count,
            COALESCE(data.data_query_count, 0) AS data_query_count,
+           COALESCE(data.data_succeeded_count, 0) AS data_succeeded_count,
+           COALESCE(data.data_failed_count, 0) AS data_failed_count,
+           COALESCE(data.data_pending_count, 0) AS data_pending_count,
            COALESCE(interface.interface_success_count, 0) AS interface_success_count,
            COALESCE(interface.interface_failed_count, 0) AS interface_failed_count,
            COALESCE(log.error_event_count, 0) AS error_event_count,
@@ -235,6 +242,7 @@ class AiTaskVisualizationService:
                 ),
                 log_visualization=item.error_event_count > 0,
             ),
+            chain_health=self._chain_health(item, row, result),
         )
 
     def timeline(
@@ -368,6 +376,103 @@ class AiTaskVisualizationService:
             interface_failed_count=int(row["interface_failed_count"]),
             error_event_count=int(row["error_event_count"]),
         )
+
+    @staticmethod
+    def _chain_health(
+        item: AiTaskVisualizationListItem,
+        row: dict[str, Any],
+        result: AiTaskResult | None,
+    ) -> list[AiTaskChainHealthItem]:
+        if item.tool_error_count > 0:
+            mcp_status = "failed"
+            mcp_summary = f"{item.tool_error_count} 次失败 / {item.tool_call_count} 次调用"
+        elif item.running_call_count > 0:
+            mcp_status = "running"
+            mcp_summary = f"{item.running_call_count} 次调用仍在执行"
+        elif item.tool_call_count > 0:
+            mcp_status = "healthy"
+            mcp_summary = f"{item.tool_call_count} 次调用均已完成"
+        else:
+            mcp_status = "unused"
+            mcp_summary = "本任务未调用 Context Router MCP"
+
+        data_succeeded = int(row["data_succeeded_count"])
+        data_failed = int(row["data_failed_count"])
+        data_pending = int(row["data_pending_count"])
+        if data_failed > 0 and data_succeeded > 0:
+            data_status = "attention"
+            data_summary = f"{data_succeeded} 次成功，{data_failed} 次失败"
+        elif data_failed > 0:
+            data_status = "failed"
+            data_summary = f"{data_failed} 次查询失败"
+        elif data_pending > 0:
+            data_status = "running"
+            data_summary = f"{data_pending} 个查询条件待执行"
+        elif data_succeeded > 0:
+            data_status = "healthy"
+            data_summary = f"{data_succeeded} 次查询成功"
+        else:
+            data_status = "unused"
+            data_summary = "本任务未保存数据查询条件"
+
+        if item.interface_failed_count > 0 and item.interface_success_count > 0:
+            interface_status = "attention"
+            interface_summary = (
+                f"{item.interface_success_count} 次成功，{item.interface_failed_count} 次失败"
+            )
+        elif item.interface_failed_count > 0:
+            interface_status = "failed"
+            interface_summary = f"{item.interface_failed_count} 次请求失败"
+        elif item.interface_success_count > 0:
+            interface_status = "healthy"
+            interface_summary = f"{item.interface_success_count} 次请求成功"
+        else:
+            interface_status = "unused"
+            interface_summary = "本任务未执行接口请求"
+
+        if item.error_event_count > 0:
+            log_status = "attention"
+            log_summary = f"已保存 {item.error_event_count} 个错误事件"
+        else:
+            log_status = "unused"
+            log_summary = "本任务未保存错误日志记录"
+
+        if result is None:
+            conclusion_status = "attention"
+            conclusion_summary = "AI 尚未写入结构化任务结论"
+        elif result.status == "resolved":
+            conclusion_status = "healthy"
+            conclusion_summary = f"已完成并记录 {len(result.verification)} 项验证"
+        elif result.status == "investigating":
+            conclusion_status = "running"
+            conclusion_summary = "AI 已写入阶段性排查结论"
+        else:
+            conclusion_status = "failed"
+            conclusion_summary = "任务因明确阻塞未完成"
+
+        return [
+            AiTaskChainHealthItem(
+                key="mcp", label="MCP 调用", status=mcp_status, summary=mcp_summary
+            ),
+            AiTaskChainHealthItem(
+                key="data", label="数据查询", status=data_status, summary=data_summary
+            ),
+            AiTaskChainHealthItem(
+                key="interface",
+                label="接口请求",
+                status=interface_status,
+                summary=interface_summary,
+            ),
+            AiTaskChainHealthItem(
+                key="log", label="错误日志", status=log_status, summary=log_summary
+            ),
+            AiTaskChainHealthItem(
+                key="conclusion",
+                label="任务结论",
+                status=conclusion_status,
+                summary=conclusion_summary,
+            ),
+        ]
 
     @staticmethod
     def _read_result(db_cursor: Any, task_id: int) -> AiTaskResult | None:

@@ -322,6 +322,10 @@ export function AppShell() {
     setVisualizationTaskId(taskId);
     setSection(next);
   };
+  const openTaskTrace = (taskId: number) => {
+    setVisualizationTaskId(taskId);
+    setSection("traces");
+  };
 
   return (
     <div className="app-shell">
@@ -411,6 +415,7 @@ export function AppShell() {
           <TaskVisualizationWorkbench
             taskId={visualizationTaskId}
             onOpenRelated={openRelatedVisualization}
+            onOpenTrace={openTaskTrace}
           />
         ) : null}
         {section === "interface-visualization" ? (
@@ -431,7 +436,12 @@ export function AppShell() {
             onOpenRelated={openRelatedVisualization}
           />
         ) : null}
-        {section === "traces" ? <TraceExplorer /> : null}
+        {section === "traces" ? (
+          <TraceExplorer
+            taskId={visualizationTaskId}
+            onBackToTask={(taskId) => openRelatedVisualization("task-visualization", taskId)}
+          />
+        ) : null}
         {section === "system-guides" ? <SystemGuideManager /> : null}
         {section === "doc-stats" ? <DocumentReadStats /> : null}
       </main>

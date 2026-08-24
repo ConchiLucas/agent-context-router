@@ -15,6 +15,7 @@ import {
   getAiVisualizationTaskTimeline,
 } from "@/lib/api";
 import type {
+  AiTaskChainHealthStatus,
   AiTaskTimelineEvent,
   AiTaskVisualizationDetail,
   AiTaskVisualizationListItem,
@@ -45,6 +46,14 @@ const eventLabels: Record<AiTaskTimelineEvent["event_type"], string> = {
   task_result: "结论",
 };
 
+const chainStatusLabels: Record<AiTaskChainHealthStatus, string> = {
+  healthy: "正常",
+  running: "执行中",
+  attention: "需关注",
+  failed: "失败",
+  unused: "未使用",
+};
+
 function formatTime(value: string) {
   return new Intl.DateTimeFormat("zh-CN", {
     month: "2-digit",
@@ -64,9 +73,11 @@ function taskCounts(item: AiTaskVisualizationListItem) {
 export function TaskVisualizationWorkbench({
   taskId,
   onOpenRelated,
+  onOpenTrace,
 }: {
   taskId: number | null;
   onOpenRelated: (section: RelatedSection, taskId: number) => void;
+  onOpenTrace: (taskId: number) => void;
 }) {
   const { workspaces, workspaceError, workspaceLoading, reloadWorkspaces } =
     useVisualizationWorkspaces();
@@ -257,8 +268,31 @@ export function TaskVisualizationWorkbench({
                 <div><dt>错误事件</dt><dd>{detail.error_event_count} 个</dd></div>
               </dl>
 
+              <section className="task-chain-health" aria-labelledby="task-chain-health-title">
+                <header>
+                  <div>
+                    <p className="section-eyebrow">CHAIN HEALTH</p>
+                    <h3 id="task-chain-health-title">链路健康状态</h3>
+                  </div>
+                  <small>基于当前任务真实记录</small>
+                </header>
+                <ul>
+                  {detail.chain_health.map((item) => (
+                    <li key={item.key} data-status={item.status}>
+                      <span className="task-chain-health-marker" aria-hidden="true" />
+                      <div>
+                        <span className="task-chain-health-heading"><strong>{item.label}</strong><em>{chainStatusLabels[item.status]}</em></span>
+                        <span>{item.summary}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <p>“未使用”只表示当前任务没有对应记录，不代表相关系统不可用。</p>
+              </section>
+
               <nav className="visualization-related-actions" aria-label="查看任务关联记录">
                 <span>关联记录</span>
+                {detail.related.mcp_trace ? <button type="button" className="secondary-button" onClick={() => onOpenTrace(detail.task_id)}>调用链路</button> : null}
                 {detail.related.data_visualization ? <button type="button" className="secondary-button" onClick={() => onOpenRelated("data-visualization", detail.task_id)}>数据条件</button> : null}
                 {detail.related.interface_visualization ? <button type="button" className="secondary-button" onClick={() => onOpenRelated("interface-visualization", detail.task_id)}>接口请求</button> : null}
                 {detail.related.log_visualization ? <button type="button" className="secondary-button" onClick={() => onOpenRelated("log-visualization", detail.task_id)}>错误日志</button> : null}

@@ -19,6 +19,7 @@
 | 接口转发 | [前后端链路速查](./FRONTEND_BACKEND_FLOW.md) | `services/interface_forwarding.py`、`api/interface_forwarding.py`、`interface-forwarding-manager.tsx` |
 | 业务值映射、数据库取值规则与接口参数绑定 | [业务功能说明](./BUSINESS_FEATURES.md)、[数据库信息](./DATABASE_INFO.md)、[前后端链路速查](./FRONTEND_BACKEND_FLOW.md) | `services/value_mapping.py`、`api/value_mappings.py`、`value-mapping-manager.tsx` |
 | AI 容器日志排查与日志可视化 | [业务功能说明](./BUSINESS_FEATURES.md)、[启动与开发规范](./STARTUP_GUIDE.md)、[前后端链路速查](./FRONTEND_BACKEND_FLOW.md) | `services/workspace_containers.py`、`services/ai_log_visualization.py`、`api/ai_log_visualization.py`、`log-visualization-workbench.tsx` |
+| AI 任务结论、时间线和调用链路联动 | [MCP 使用说明](./managed/context-router-usage-guide.md)、[前后端链路速查](./FRONTEND_BACKEND_FLOW.md) | `services/ai_task_visualization.py`、`api/ai_task_visualization.py`、`task-visualization-workbench.tsx`、`trace-explorer.tsx` |
 
 ## 当前架构约束
 

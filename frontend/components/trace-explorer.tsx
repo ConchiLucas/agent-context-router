@@ -287,9 +287,16 @@ function TraceCallDetail({
   );
 }
 
-export function TraceExplorer() {
+export function TraceExplorer({
+  taskId = null,
+  onBackToTask,
+}: {
+  taskId?: number | null;
+  onBackToTask?: (taskId: number) => void;
+}) {
+  const scopedToTask = taskId !== null;
   const [traces, setTraces] = useState<McpTraceSummary[]>([]);
-  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(taskId);
   const [trace, setTrace] = useState<McpTraceDetail | null>(null);
   const [view, setView] = useState<TraceView>("graph");
   const [selectedCallId, setSelectedCallId] = useState<number | null>(null);
@@ -304,6 +311,10 @@ export function TraceExplorer() {
   const traceListRequestIdRef = useRef(0);
 
   const loadTraces = useCallback(async () => {
+    if (scopedToTask) {
+      setLoadingList(false);
+      return;
+    }
     const requestId = traceListRequestIdRef.current + 1;
     traceListRequestIdRef.current = requestId;
     setLoadingList(true);
@@ -330,7 +341,11 @@ export function TraceExplorer() {
         setLoadingList(false);
       }
     }
-  }, [searchKeyword, toolName]);
+  }, [scopedToTask, searchKeyword, toolName]);
+
+  useEffect(() => {
+    if (taskId !== null) setSelectedTaskId(taskId);
+  }, [taskId]);
 
   useEffect(() => {
     void loadTraces();
@@ -378,6 +393,7 @@ export function TraceExplorer() {
   }, [selectedTaskId]);
 
   useEffect(() => {
+    if (scopedToTask) return;
     if (loadingList) return;
     if (
       selectedTaskId !== null &&
@@ -386,7 +402,7 @@ export function TraceExplorer() {
       return;
     }
     setSelectedTaskId(traces[0]?.task_id ?? null);
-  }, [loadingList, selectedTaskId, traces]);
+  }, [loadingList, scopedToTask, selectedTaskId, traces]);
 
   const sortedCalls = useMemo(
     () => sortTraceCalls(internalTraceCalls(trace?.calls ?? [])),
@@ -403,11 +419,25 @@ export function TraceExplorer() {
   ).length;
 
   return (
-    <section className="trace-explorer">
+    <section className="trace-explorer" data-task-scoped={scopedToTask}>
       {error ? <div className="error-banner">{error}</div> : null}
 
+      {scopedToTask && taskId !== null ? (
+        <div className="trace-task-scope-banner">
+          <div>
+            <span className="section-eyebrow">TASK LINK</span>
+            <strong>仅显示任务 #{taskId} 的 MCP 调用链路</strong>
+          </div>
+          {onBackToTask ? (
+            <button type="button" className="secondary-button" onClick={() => onBackToTask(taskId)}>
+              返回任务详情
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="trace-workspace">
-        <aside className="trace-task-panel" aria-label="MCP 任务列表">
+        {!scopedToTask ? <aside className="trace-task-panel" aria-label="MCP 任务列表">
           <div className="trace-filter-panel">
             <div className="trace-filter-row">
               <label className="trace-search">
@@ -468,7 +498,7 @@ export function TraceExplorer() {
               </button>
             ))}
           </div>
-        </aside>
+        </aside> : null}
 
         <main className="trace-main-panel">
           {loadingTrace ? (

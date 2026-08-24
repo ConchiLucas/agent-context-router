@@ -1939,6 +1939,112 @@ p {
   padding-top: 18px;
 }
 
+.task-chain-health {
+  min-width: 0;
+  border-top: 1px solid var(--border);
+  padding-top: 18px;
+}
+
+.task-chain-health > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.task-chain-health h3,
+.task-chain-health p {
+  margin: 0;
+}
+
+.task-chain-health > header small,
+.task-chain-health > p,
+.task-chain-health li span {
+  color: var(--muted);
+}
+
+.task-chain-health-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--foreground) !important;
+}
+
+.task-chain-health-heading em {
+  flex: none;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.task-chain-health li[data-status="healthy"] .task-chain-health-heading em {
+  color: var(--accent);
+}
+
+.task-chain-health li[data-status="running"] .task-chain-health-heading em,
+.task-chain-health li[data-status="attention"] .task-chain-health-heading em {
+  color: var(--warning);
+}
+
+.task-chain-health li[data-status="failed"] .task-chain-health-heading em {
+  color: var(--danger);
+}
+
+.task-chain-health ul {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0 10px;
+  padding: 0;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  list-style: none;
+}
+
+.task-chain-health li {
+  display: grid;
+  min-width: 0;
+  gap: 9px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 12px;
+  grid-template-columns: 10px minmax(0, 1fr);
+  background: var(--surface-soft);
+}
+
+.task-chain-health li > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.task-chain-health li span {
+  overflow-wrap: anywhere;
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.task-chain-health-marker {
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.task-chain-health li[data-status="healthy"] .task-chain-health-marker {
+  background: var(--accent);
+}
+
+.task-chain-health li[data-status="running"] .task-chain-health-marker,
+.task-chain-health li[data-status="attention"] .task-chain-health-marker {
+  background: var(--warning);
+}
+
+.task-chain-health li[data-status="failed"] .task-chain-health-marker {
+  background: var(--danger);
+}
+
 .task-conclusion > header,
 .task-timeline > header,
 .task-timeline li > div > header {
@@ -2048,6 +2154,9 @@ p {
 }
 
 @media (max-width: 1100px) {
+  .task-chain-health ul {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .task-visualization-toolbar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -2078,6 +2187,14 @@ p {
 }
 
 @media (max-width: 640px) {
+  .task-chain-health > header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .task-chain-health ul {
+    grid-template-columns: 1fr;
+  }
   .task-visualization-toolbar {
     grid-template-columns: 1fr;
   }
@@ -4731,6 +4848,28 @@ p {
 .trace-explorer {
   min-height: 0;
   min-width: 0;
+}
+
+.trace-task-scope-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  padding: 12px 16px;
+  background: var(--surface-soft);
+}
+
+.trace-task-scope-banner > div {
+  display: grid;
+  gap: 4px;
+}
+
+.trace-explorer[data-task-scoped="true"] .trace-workspace {
+  height: calc(100vh - var(--app-header-height) - 126px);
+  min-height: calc(100vh - var(--app-header-height) - 126px);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .trace-workspace {
@@ -7897,6 +8036,20 @@ p.workspace-runtime-runner-status {
   .app-shell {
     --app-header-height: 120px;
     --app-content-inline: 16px;
+  }
+
+  .trace-task-scope-banner {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .trace-task-scope-banner .secondary-button {
+    width: 100%;
+  }
+
+  .trace-explorer[data-task-scoped="true"] .trace-workspace {
+    height: auto;
+    min-height: calc(100vh - var(--app-header-height) - 190px);
   }
 
   .app-header {

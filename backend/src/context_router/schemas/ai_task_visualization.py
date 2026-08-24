@@ -3,10 +3,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 AiTaskResultStatus = Literal["investigating", "resolved", "failed"]
 AiTaskDisplayStatus = Literal["investigating", "resolved", "failed", "unclosed"]
+AiTaskChainStatus = Literal["healthy", "running", "attention", "failed", "unused"]
 
 
 class AiTaskCodeLocation(BaseModel):
@@ -28,6 +29,14 @@ class AiTaskResultWrite(BaseModel):
     code_locations: list[AiTaskCodeLocation] = Field(default_factory=list, max_length=50)
     suggested_actions: list[str] = Field(default_factory=list, max_length=50)
     verification: list[AiTaskVerificationItem] = Field(default_factory=list, max_length=50)
+
+    @model_validator(mode="after")
+    def validate_terminal_evidence(self) -> AiTaskResultWrite:
+        if self.status == "resolved" and not self.verification:
+            raise ValueError("resolved 任务必须至少包含一项验证结果")
+        if self.status == "failed" and not (self.root_cause or "").strip():
+            raise ValueError("failed 任务必须写明无法完成的根因")
+        return self
 
 
 class AiTaskResult(BaseModel):
@@ -78,11 +87,19 @@ class AiTaskRelatedArtifacts(BaseModel):
     log_visualization: bool
 
 
+class AiTaskChainHealthItem(BaseModel):
+    key: Literal["mcp", "data", "interface", "log", "conclusion"]
+    label: str
+    status: AiTaskChainStatus
+    summary: str
+
+
 class AiTaskVisualizationDetail(AiTaskVisualizationListItem):
     cwd: str
     active_project_name: str | None = None
     result: AiTaskResult | None = None
     related: AiTaskRelatedArtifacts
+    chain_health: list[AiTaskChainHealthItem]
 
 
 class AiTaskTimelineEvent(BaseModel):

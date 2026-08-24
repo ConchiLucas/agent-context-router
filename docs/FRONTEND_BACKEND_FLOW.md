@@ -307,7 +307,7 @@ Workspace 调用记录通过 `task-history.ts` 保留文档读取批次和单批
 
 数据可视化页不复用关联数据页的 React 状态，只复用表清单和有界查询 API。`save_data_visualization_query` 从已验证 task 补全 Workspace、动态环境、来源和 tool call 关联，`AiDataVisualizationService` 继续校验已发布关联表并按 task 条件生成稳定幂等键。关联查询携带 `ai_query_record_id`，完成后回写成功/失败、耗时、结果规模和短错误摘要；浏览器写入仍由 `BrowserReadOnlyMiddleware` 拒绝。四个可视化页面使用 task 筛选互相跳转，不共享数据管理页面状态。
 
-任务可视化页不建立第二套任务状态机。`AiTaskVisualizationService` 直接以 `mcp_tasks.id` 聚合最近 30 天的统一工具调用、数据查询、接口转发日志和容器错误快照；`save_task_visualization_result` 对摘要、根因、代码位置、后续建议和验证结果递归脱敏后按 task 覆盖更新并记录 revision。列表、详情和最新在前的时间线均只读，关联按钮只在对应记录存在时显示，并带同一个 task_id 进入其他可视化页面。
+任务可视化页不建立第二套任务状态机。`AiTaskVisualizationService` 直接以 `mcp_tasks.id` 聚合最近 30 天的统一工具调用、数据查询、接口转发日志和容器错误快照；详情接口同时把真实计数归一为 MCP、数据、接口、日志和结论五项链路健康状态。数据查询区分 pending/succeeded/failed，接口区分全部成功、部分失败和全部失败，未产生记录统一标记为 `unused` 而不是故障。`save_task_visualization_result` 对摘要、根因、代码位置、后续建议和验证结果递归脱敏后按 task 覆盖更新并记录 revision。列表、详情和最新在前的时间线均只读，关联按钮只在对应记录存在时显示，并带同一个 task_id 进入其他可视化页面。
 
 接口可视化页由 `AiInterfaceVisualizationService` 聚合真实 `interface_forwarding_logs`、`mcp_tasks`、接口元数据和请求计划证据。列表使用 `created_at + id` 不透明游标，支持 task 筛选并限制为最近 30 天；请求预览、详情和复制内容统一递归脱敏。Codex/Antigravity 调用顺序为 `search_forwarding_interfaces`，按需调用 `read_forwarding_request_history`、业务值映射或只读数据库工具，再调用 `prepare_forwarding_request -> execute_forwarding_request`；页面仅观察最终真实请求。
 

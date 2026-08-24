@@ -755,6 +755,27 @@ def test_task_visualization_tool_saves_structured_conclusion() -> None:
     assert visualization.payload.summary == "定位并修复环境解析问题"  # type: ignore[attr-defined]
 
 
+def test_task_visualization_tool_rejects_unverified_resolution() -> None:
+    document_service = UnusedService()
+    server = create_context_router_mcp(  # type: ignore[arg-type]
+        document_service,
+        document_service,
+        ai_task_visualization_service=RecordingAiTaskVisualizationService(),  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(ToolError, match="resolved 任务必须至少包含一项验证结果"):
+        asyncio.run(
+            server.call_tool(
+                "save_task_visualization_result",
+                {
+                    "task_id": 9,
+                    "status": "resolved",
+                    "summary": "没有验证证据的结论",
+                },
+            )
+        )
+
+
 @pytest.mark.parametrize("invalid_task_id", ["9", True])
 @pytest.mark.parametrize(
     ("tool_name", "arguments"),

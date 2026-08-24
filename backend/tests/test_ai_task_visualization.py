@@ -1,18 +1,23 @@
 from datetime import UTC, datetime
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from context_router.api.ai_task_visualization import router
 from context_router.schemas.ai_task_visualization import (
+    AiTaskChainHealthItem,
     AiTaskRelatedArtifacts,
     AiTaskResult,
+    AiTaskResultWrite,
     AiTaskTimeline,
     AiTaskTimelineEvent,
     AiTaskVisualizationDetail,
     AiTaskVisualizationList,
     AiTaskVisualizationListItem,
 )
+from context_router.services.ai_task_visualization import AiTaskVisualizationService
 
 
 def _item() -> AiTaskVisualizationListItem:
@@ -65,6 +70,14 @@ class FakeTaskVisualizationService:
                 interface_visualization=True,
                 log_visualization=True,
             ),
+            chain_health=[
+                AiTaskChainHealthItem(
+                    key="mcp",
+                    label="MCP 调用",
+                    status="healthy",
+                    summary="8 次调用均已完成",
+                )
+            ],
         )
 
     def timeline(self, task_id: int, **_: object) -> AiTaskTimeline:
@@ -102,5 +115,82 @@ def test_task_visualization_read_api_returns_list_detail_and_timeline() -> None:
     assert listed.json()["items"][0]["task_id"] == 42
     assert detail.status_code == 200
     assert detail.json()["result"]["summary"] == "已确认并修复分页参数"
+    assert detail.json()["chain_health"][0]["status"] == "healthy"
     assert timeline.status_code == 200
     assert timeline.json()["items"][0]["event_type"] == "mcp_call"
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"status": "resolved", "summary": "声称已完成但没有验证"},
+        {"status": "failed", "summary": "声称失败但没有根因"},
+    ],
+)
+def test_terminal_task_result_requires_evidence(payload: dict[str, str]) -> None:
+    with pytest.raises(ValidationError):
+        AiTaskResultWrite.model_validate(payload)
+
+
+def test_chain_health_explains_failures_partial_success_and_log_evidence() -> None:
+    item = _item()
+    result = AiTaskResult(
+        task_id=42,
+        status="resolved",
+        summary="已完成",
+        verification=[{"type": "test", "description": "回归测试", "result": "通过"}],
+        source="codex",
+        revision=1,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+
+    health = AiTaskVisualizationService._chain_health(
+        item,
+        {
+            "data_succeeded_count": 1,
+            "data_failed_count": 1,
+            "data_pending_count": 0,
+        },
+        result,
+    )
+
+    assert [(entry.key, entry.status) for entry in health] == [
+        ("mcp", "failed"),
+        ("data", "attention"),
+        ("interface", "attention"),
+        ("log", "attention"),
+        ("conclusion", "healthy"),
+    ]
+    assert health[-1].summary == "已完成并记录 1 项验证"
+
+
+def test_chain_health_does_not_treat_unused_chains_as_failures() -> None:
+    item = _item().model_copy(
+        update={
+            "tool_call_count": 0,
+            "tool_error_count": 0,
+            "data_query_count": 0,
+            "interface_success_count": 0,
+            "interface_failed_count": 0,
+            "error_event_count": 0,
+        }
+    )
+
+    health = AiTaskVisualizationService._chain_health(
+        item,
+        {
+            "data_succeeded_count": 0,
+            "data_failed_count": 0,
+            "data_pending_count": 0,
+        },
+        None,
+    )
+
+    assert [entry.status for entry in health] == [
+        "unused",
+        "unused",
+        "unused",
+        "unused",
+        "attention",
+    ]
