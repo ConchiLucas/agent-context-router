@@ -21,6 +21,12 @@ from context_router.schemas.ai_log_visualization import (
     AiLogInvestigationList,
     AiLogInvestigationListItem,
 )
+from context_router.services.visualization_pagination import (
+    VisualizationCursorError,
+    decode_visualization_cursor,
+    encode_visualization_cursor,
+)
+from context_router.services.visualization_security import redact_text
 from context_router.services.workspace_containers import (
     ContainerLogRecord,
     WorkspaceContainerError,
@@ -33,12 +39,6 @@ ERROR_PATTERN = re.compile(
 )
 CRITICAL_PATTERN = re.compile(r"(?i)\b(?:fatal|panic|critical|segmentation fault)\b")
 EXCEPTION_NAME_PATTERN = re.compile(r"\b(?:[A-Za-z_][\w.]*)(?:Error|Exception|Failure|Timeout)\b")
-SENSITIVE_KEY_PATTERN = re.compile(
-    r"(?i)(\b(?:authorization|api[_-]?key|access[_-]?token|refresh[_-]?token|"
-    r"password|passwd|secret|cookie)\b\s*[:=]\s*)([^\s,;]+|\"[^\"]*\")"
-)
-BEARER_PATTERN = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+")
-URL_CREDENTIAL_PATTERN = re.compile(r"(?i)([a-z][a-z0-9+.-]*://[^\s:/]+:)([^@\s]+)(@)")
 UUID_PATTERN = re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F-]{27,}\b")
 LONG_HEX_PATTERN = re.compile(r"\b[0-9a-fA-F]{16,}\b")
 NUMBER_PATTERN = re.compile(r"\b\d+\b")
@@ -164,7 +164,7 @@ class AiLogVisualizationService:
 
         now = datetime.now(UTC)
         fingerprint = hashlib.sha256(
-            f"{workspace_id}\n{container.id}\n{_normalize_signature(extracted['anchor'])}".encode()
+            f"{workspace_id}\n{container.id}\n{_normalize_signature(extracted['signature'])}".encode()
         ).hexdigest()
         idempotency_key = hashlib.sha256(f"{task_id}:{fingerprint}".encode()).hexdigest()
         workspace_name = task.workspace_name or self._workspace_name(workspace_id)
@@ -195,13 +195,13 @@ class AiLogVisualizationService:
             updated_at=now,
         )
         try:
-            stored = self._records.upsert(record)
+            saved = self._records.upsert(record)
         except AiLogInvestigationRepositoryError as exc:
             raise AiLogVisualizationError(str(exc)) from exc
         return {
             "status": "recorded",
-            "record_created": True,
-            "record": self._detail(stored).model_dump(mode="json"),
+            "record_created": saved.created,
+            "record": self._detail(saved.record).model_dump(mode="json"),
         }
 
     def list_records(
@@ -211,21 +211,39 @@ class AiLogVisualizationService:
         severity: str | None,
         limit: int,
         offset: int,
+        cursor: str | None = None,
+        task_id: int | None = None,
     ) -> AiLogInvestigationList:
+        before_updated_at = None
+        before_id = None
+        if cursor:
+            try:
+                before_updated_at, before_id = decode_visualization_cursor(cursor)
+            except VisualizationCursorError as exc:
+                raise AiLogVisualizationError(str(exc), code="invalid_cursor") from exc
         try:
             records = self._records.list_records(
                 workspace_id=workspace_id,
                 severity=severity,
                 limit=limit + 1,
-                offset=offset,
+                offset=0 if cursor else offset,
+                before_updated_at=before_updated_at,
+                before_id=before_id,
+                task_id=task_id,
             )
         except AiLogInvestigationRepositoryError as exc:
             raise AiLogVisualizationError(str(exc)) from exc
+        visible = records[:limit]
         return AiLogInvestigationList(
-            items=[self._item(record) for record in records[:limit]],
+            items=[self._item(record) for record in visible],
             limit=limit,
             offset=offset,
             has_more=len(records) > limit,
+            next_cursor=(
+                encode_visualization_cursor(visible[-1].updated_at, visible[-1].id)
+                if len(records) > limit and visible
+                else None
+            ),
         )
 
     def get_record(self, record_id: str) -> AiLogInvestigationDetail:
@@ -321,8 +339,9 @@ def _extract_errors(
                 for keyword in normalized_keywords
             )
         ]
-        if matched:
-            anchors = matched
+        if not matched:
+            return None
+        anchors = matched
 
     ranges: list[tuple[int, int]] = []
     for index in anchors:
@@ -334,24 +353,25 @@ def _extract_errors(
     selected_indices = [index for start, end in ranges for index in range(start, end)]
     selected_indices = selected_indices[-MAX_EXCERPT_LINES:]
     lines = [_format_record(records[index]) for index in selected_indices]
-    excerpt = _redact("\n".join(lines))
+    excerpt = redact_text("\n".join(lines))
     excerpt_truncated = len(excerpt) > MAX_EXCERPT_CHARS
     if excerpt_truncated:
         excerpt = excerpt[-MAX_EXCERPT_CHARS:]
         excerpt = f"[较早的错误上下文已截断]\n{excerpt}"
 
     latest = records[anchors[-1]]
-    title_record = next(
+    title_index = next(
         (
-            records[index]
+            index
             for index in reversed(anchors)
             if EXCEPTION_NAME_PATTERN.search(records[index].content)
         ),
-        latest,
+        anchors[-1],
     )
+    title_record = records[title_index]
     title_match = EXCEPTION_NAME_PATTERN.search(title_record.content)
     title = title_match.group(0) if title_match else title_record.content.strip()
-    title = _redact(title)[:240] or "Docker 容器错误"
+    title = redact_text(title)[:240] or "Docker 容器错误"
     occurred_at = _parse_timestamp(latest.timestamp)
     severity = (
         "critical"
@@ -359,12 +379,20 @@ def _extract_errors(
         else "error"
     )
     return {
-        "anchor": title_record.content,
+        "signature": "\n".join(
+            record.content
+            for record in records[
+                max(0, title_index - 1) : min(
+                    len(records),
+                    title_index + 5,
+                )
+            ]
+        ),
         "title": title,
         "severity": severity,
         "excerpt": excerpt,
         "occurred_at": occurred_at,
-        "occurrence_count": len(anchors),
+        "occurrence_count": len(ranges),
         "truncated": excerpt_truncated or len(selected_indices) >= MAX_EXCERPT_LINES,
     }
 
@@ -381,12 +409,6 @@ def _parse_timestamp(value: str | None) -> datetime | None:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return None
-
-
-def _redact(value: str) -> str:
-    value = BEARER_PATTERN.sub("Bearer [REDACTED]", value)
-    value = SENSITIVE_KEY_PATTERN.sub(lambda match: f"{match.group(1)}[REDACTED]", value)
-    return URL_CREDENTIAL_PATTERN.sub(r"\1[REDACTED]\3", value)
 
 
 def _normalize_signature(value: str) -> str:

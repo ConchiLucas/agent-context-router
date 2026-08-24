@@ -27,6 +27,8 @@ def _error(exc: AiDataVisualizationError) -> HTTPException:
         "environment_not_found",
         "relation_snapshot_not_found",
         "relation_table_not_found",
+        "task_not_found",
+        "record_not_found",
     }:
         code = status.HTTP_404_NOT_FOUND
     return HTTPException(status_code=code, detail=f"{exc.code}: {exc}")
@@ -42,9 +44,21 @@ def create(payload: AiDataQueryWrite, request: Request) -> AiDataQueryRecord:
 
 
 @router.get("/latest", response_model=AiDataQueryLatest)
-def latest(request: Request) -> AiDataQueryLatest:
+def latest(
+    request: Request,
+    workspace_id: str | None = Query(default=None, min_length=1, max_length=36),
+    environment: str | None = Query(
+        default=None,
+        pattern=r"^[a-z][a-z0-9_-]{0,31}$",
+    ),
+    task_id: int | None = Query(default=None, ge=1),
+) -> AiDataQueryLatest:
     try:
-        return _service(request).latest()
+        return _service(request).latest(
+            workspace_id=workspace_id,
+            environment=environment,
+            task_id=task_id,
+        )
     except AiDataVisualizationError as exc:
         raise _error(exc) from exc
 
@@ -52,9 +66,25 @@ def latest(request: Request) -> AiDataQueryLatest:
 @router.get("", response_model=AiDataQueryHistory)
 def history(
     request: Request,
+    workspace_id: str | None = Query(default=None, min_length=1, max_length=36),
+    environment: str | None = Query(
+        default=None,
+        pattern=r"^[a-z][a-z0-9_-]{0,31}$",
+    ),
+    source: str | None = Query(
+        default=None,
+        pattern=r"^[a-z][a-z0-9_-]{0,31}$",
+    ),
+    task_id: int | None = Query(default=None, ge=1),
     limit: int = Query(default=20, ge=1, le=100),
 ) -> AiDataQueryHistory:
     try:
-        return _service(request).history(limit=limit)
+        return _service(request).history(
+            workspace_id=workspace_id,
+            environment=environment,
+            source=source,
+            task_id=task_id,
+            limit=limit,
+        )
     except AiDataVisualizationError as exc:
         raise _error(exc) from exc

@@ -36,6 +36,11 @@ type Section =
   | "system-guides"
   | "doc-stats";
 
+type VisualizationSection =
+  | "interface-visualization"
+  | "data-visualization"
+  | "log-visualization";
+
 type NavKind =
   | Section
   | "data-management"
@@ -303,7 +308,16 @@ function NavDropdown({
 
 export function AppShell() {
   const [section, setSection] = useState<Section>("workspaces");
+  const [visualizationTaskId, setVisualizationTaskId] = useState<number | null>(null);
   const visualizationActive = visualizationSections.includes(section);
+  const selectSection = (next: Section) => {
+    setVisualizationTaskId(null);
+    setSection(next);
+  };
+  const openRelatedVisualization = (next: VisualizationSection, taskId: number) => {
+    setVisualizationTaskId(taskId);
+    setSection(next);
+  };
 
   return (
     <div className="app-shell">
@@ -320,7 +334,7 @@ export function AppShell() {
             type="button"
             aria-label="工作空间"
             data-active={section === "workspaces"}
-            onClick={() => setSection("workspaces")}
+            onClick={() => selectSection("workspaces")}
           >
             <NavIcon kind="workspaces" />
             <span>工作空间</span>
@@ -331,7 +345,7 @@ export function AppShell() {
             menuId="data-management-menu"
             items={dataManagementItems}
             section={section}
-            onSelect={setSection}
+            onSelect={selectSection}
           />
           <NavDropdown
             kind="interface-management"
@@ -339,7 +353,7 @@ export function AppShell() {
             menuId="interface-management-menu"
             items={interfaceManagementItems}
             section={section}
-            onSelect={setSection}
+            onSelect={selectSection}
           />
           <NavDropdown
             kind="ai-visualization"
@@ -347,7 +361,7 @@ export function AppShell() {
             menuId="ai-visualization-menu"
             items={visualizationItems}
             section={section}
-            onSelect={setSection}
+            onSelect={selectSection}
           />
           <NavDropdown
             kind="system-center"
@@ -355,7 +369,7 @@ export function AppShell() {
             menuId="system-center-menu"
             items={systemCenterItems}
             section={section}
-            onSelect={setSection}
+            onSelect={selectSection}
           />
           <NavDropdown
             kind="configuration-management"
@@ -363,7 +377,7 @@ export function AppShell() {
             menuId="configuration-management-menu"
             items={configurationManagementItems}
             section={section}
-            onSelect={setSection}
+            onSelect={selectSection}
           />
         </nav>
       </header>
@@ -389,9 +403,24 @@ export function AppShell() {
         {section === "interface-forwarding" ? <InterfaceForwardingManager /> : null}
         {section === "value-mappings" ? <ValueMappingManager /> : null}
         {section === "shared-ai-config" ? <SharedAiConfigManager /> : null}
-        {section === "interface-visualization" ? <InterfaceVisualizationWorkbench /> : null}
-        {section === "data-visualization" ? <DataVisualizationWorkbench /> : null}
-        {section === "log-visualization" ? <LogVisualizationWorkbench /> : null}
+        {section === "interface-visualization" ? (
+          <InterfaceVisualizationWorkbench
+            taskId={visualizationTaskId}
+            onOpenRelated={openRelatedVisualization}
+          />
+        ) : null}
+        {section === "data-visualization" ? (
+          <DataVisualizationWorkbench
+            taskId={visualizationTaskId}
+            onOpenRelated={openRelatedVisualization}
+          />
+        ) : null}
+        {section === "log-visualization" ? (
+          <LogVisualizationWorkbench
+            taskId={visualizationTaskId}
+            onOpenRelated={openRelatedVisualization}
+          />
+        ) : null}
         {section === "traces" ? <TraceExplorer /> : null}
         {section === "system-guides" ? <SystemGuideManager /> : null}
         {section === "doc-stats" ? <DocumentReadStats /> : null}

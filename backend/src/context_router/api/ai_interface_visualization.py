@@ -22,11 +22,12 @@ def _service(request: Request) -> AiInterfaceVisualizationService:
 
 
 def _error(exc: AiInterfaceVisualizationError) -> HTTPException:
-    code = (
-        status.HTTP_404_NOT_FOUND
-        if exc.code == "request_not_found"
-        else status.HTTP_503_SERVICE_UNAVAILABLE
-    )
+    if exc.code == "request_not_found":
+        code = status.HTTP_404_NOT_FOUND
+    elif exc.code == "invalid_cursor":
+        code = status.HTTP_400_BAD_REQUEST
+    else:
+        code = status.HTTP_503_SERVICE_UNAVAILABLE
     return HTTPException(status_code=code, detail=str(exc))
 
 
@@ -37,6 +38,8 @@ def list_requests(
     success: bool | None = None,
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0, le=100_000),
+    cursor: str | None = Query(default=None, min_length=1, max_length=500),
+    task_id: int | None = Query(default=None, ge=1),
 ):
     try:
         return _service(request).list_requests(
@@ -44,6 +47,8 @@ def list_requests(
             success=success,
             limit=limit,
             offset=offset,
+            cursor=cursor,
+            task_id=task_id,
         )
     except AiInterfaceVisualizationError as exc:
         raise _error(exc) from exc
@@ -55,4 +60,3 @@ def request_detail(request_id: str, request: Request):
         return _service(request).get_request(request_id)
     except AiInterfaceVisualizationError as exc:
         raise _error(exc) from exc
-

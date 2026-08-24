@@ -112,12 +112,18 @@ def test_interface_request_list_uses_newest_first_and_bounded_paging() -> None:
 
 
 def test_interface_request_detail_joins_intent_request_response_and_evidence() -> None:
-    service = _Service([_row("log-1", datetime(2026, 8, 24, 10, 30, tzinfo=UTC))])
+    row = _row("log-1", datetime(2026, 8, 24, 10, 30, tzinfo=UTC))
+    row["request_body"] = '{"body":{"password":"plain-secret","pageNumber":1}}'
+    row["response_body"] = '{"token":"plain-token","data":[]}'
+    service = _Service([row])
 
     result = service.get_request("log-1")
 
     assert result.source == "codex"
     assert result.description == "查询最新合同第一页"
-    assert result.request["body"] == {"pageNumber": 1}
-    assert result.response == {"code": 0, "data": []}
+    assert result.request["body"] == {
+        "password": "[REDACTED]",
+        "pageNumber": 1,
+    }
+    assert result.response == {"token": "[REDACTED]", "data": []}
     assert result.parameter_evidence["body"]["pageNumber"]["source"] == "caller"

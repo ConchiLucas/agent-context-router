@@ -11,6 +11,15 @@ from context_router.schemas.ai_interface_visualization import (
     AiInterfaceRequestList,
     AiInterfaceRequestListItem,
 )
+from context_router.services.visualization_pagination import (
+    VisualizationCursorError,
+    decode_visualization_cursor,
+    encode_visualization_cursor,
+)
+from context_router.services.visualization_security import (
+    VISUALIZATION_RETENTION_DAYS,
+    redact_value,
+)
 
 
 class AiInterfaceVisualizationError(RuntimeError):
@@ -30,37 +39,58 @@ class AiInterfaceVisualizationService:
         success: bool | None = None,
         limit: int = 50,
         offset: int = 0,
+        cursor: str | None = None,
+        task_id: int | None = None,
     ) -> AiInterfaceRequestList:
         bounded_limit = max(1, min(limit, 100))
         bounded_offset = max(0, offset)
+        clauses = ["log.created_at >= CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')"]
+        parameters: list[object] = [VISUALIZATION_RETENTION_DAYS]
+        if workspace_id is not None:
+            clauses.append("log.workspace_id=%s")
+            parameters.append(workspace_id)
+        if success is not None:
+            clauses.append("log.success=%s")
+            parameters.append(success)
+        if task_id is not None:
+            clauses.append("log.task_id=%s")
+            parameters.append(task_id)
+        if cursor:
+            try:
+                before_created_at, before_id = decode_visualization_cursor(cursor)
+            except VisualizationCursorError as exc:
+                raise AiInterfaceVisualizationError(str(exc), code="invalid_cursor") from exc
+            clauses.append("(log.created_at, log.id) < (%s, %s)")
+            parameters.extend((before_created_at, before_id))
+            bounded_offset = 0
+        parameters.extend((bounded_limit + 1, bounded_offset))
         try:
             with self._connect() as connection, connection.cursor() as cursor:
                 cursor.execute(
                     f"""{self._base_select()}
-                       WHERE (%s::text IS NULL OR log.workspace_id=%s)
-                         AND (%s::boolean IS NULL OR log.success=%s)
+                       WHERE {" AND ".join(clauses)}
                        ORDER BY log.created_at DESC, log.id DESC
                        LIMIT %s OFFSET %s""",
-                    (
-                        workspace_id,
-                        workspace_id,
-                        success,
-                        success,
-                        bounded_limit + 1,
-                        bounded_offset,
-                    ),
+                    tuple(parameters),
                 )
                 rows = list(cursor.fetchall())
         except psycopg.Error as exc:
             raise AiInterfaceVisualizationError("接口请求记录读取失败") from exc
 
         has_more = len(rows) > bounded_limit
-        items = [self._list_item(row) for row in rows[:bounded_limit]]
+        visible_rows = rows[:bounded_limit]
+        items = [self._list_item(row) for row in visible_rows]
+        next_cursor = (
+            encode_visualization_cursor(visible_rows[-1]["created_at"], str(visible_rows[-1]["id"]))
+            if has_more and visible_rows
+            else None
+        )
         return AiInterfaceRequestList(
             items=items,
             limit=bounded_limit,
             offset=bounded_offset,
             has_more=has_more,
+            next_cursor=next_cursor,
         )
 
     def get_request(self, request_id: str) -> AiInterfaceRequestDetail:
@@ -68,8 +98,9 @@ class AiInterfaceVisualizationService:
             with self._connect() as connection, connection.cursor() as cursor:
                 cursor.execute(
                     f"""{self._base_select()}
-                       WHERE log.id=%s""",
-                    (request_id,),
+                       WHERE log.id=%s
+                         AND log.created_at >= CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')""",
+                    (request_id, VISUALIZATION_RETENTION_DAYS),
                 )
                 row = cursor.fetchone()
         except psycopg.Error as exc:
@@ -84,12 +115,10 @@ class AiInterfaceVisualizationService:
             tool_call_id=row["tool_call_id"],
             plan_id=str(row["plan_id"]) if row["plan_id"] else None,
             request_sha256=row["request_sha256"],
-            request=self._parse_payload(row["request_body"]),
-            response=self._parse_payload(row["response_body"]),
+            request=redact_value(self._parse_payload(row["request_body"])),
+            response=redact_value(self._parse_payload(row["response_body"])),
             parameter_evidence=(
-                row["parameter_evidence"]
-                if isinstance(row["parameter_evidence"], dict)
-                else {}
+                row["parameter_evidence"] if isinstance(row["parameter_evidence"], dict) else {}
             ),
         )
 
@@ -130,7 +159,7 @@ class AiInterfaceVisualizationService:
     def _list_item(cls, row: dict[str, Any]) -> AiInterfaceRequestListItem:
         source = str(row["agent_name"] or "manual")
         description = str(row["description"] or "手动接口请求")
-        request = cls._parse_payload(row["request_body"])
+        request = redact_value(cls._parse_payload(row["request_body"]))
         preview = json.dumps(request, ensure_ascii=False, separators=(",", ":"))
         if len(preview) > 240:
             preview = f"{preview[:237]}..."
@@ -166,4 +195,3 @@ class AiInterfaceVisualizationService:
             return json.loads(value)
         except json.JSONDecodeError:
             return value
-

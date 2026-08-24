@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
 import psycopg
+
+from context_router.services.visualization_security import VISUALIZATION_RETENTION_DAYS
 
 
 class AiLogInvestigationRepositoryError(RuntimeError):
@@ -39,8 +41,14 @@ class AiLogInvestigationRecord:
     updated_at: datetime
 
 
+@dataclass(frozen=True, slots=True)
+class AiLogInvestigationSaveResult:
+    record: AiLogInvestigationRecord
+    created: bool
+
+
 class AiLogInvestigationStore(Protocol):
-    def upsert(self, record: AiLogInvestigationRecord) -> AiLogInvestigationRecord: ...
+    def upsert(self, record: AiLogInvestigationRecord) -> AiLogInvestigationSaveResult: ...
 
     def list_records(
         self,
@@ -49,6 +57,9 @@ class AiLogInvestigationStore(Protocol):
         severity: str | None,
         limit: int,
         offset: int,
+        before_updated_at: datetime | None = None,
+        before_id: str | None = None,
+        task_id: int | None = None,
     ) -> list[AiLogInvestigationRecord]: ...
 
     def get(self, record_id: str) -> AiLogInvestigationRecord | None: ...
@@ -59,14 +70,16 @@ class InMemoryAiLogInvestigationRepository:
         self._records: dict[str, AiLogInvestigationRecord] = {}
         self._ids_by_idempotency_key: dict[str, str] = {}
 
-    def upsert(self, record: AiLogInvestigationRecord) -> AiLogInvestigationRecord:
+    def upsert(self, record: AiLogInvestigationRecord) -> AiLogInvestigationSaveResult:
         existing_id = self._ids_by_idempotency_key.get(record.idempotency_key)
+        created = existing_id is None
         if existing_id is not None:
             current = self._records[existing_id]
             record = replace(record, id=current.id, created_at=current.created_at)
         self._records[record.id] = record
         self._ids_by_idempotency_key[record.idempotency_key] = record.id
-        return record
+        self._prune()
+        return AiLogInvestigationSaveResult(record=record, created=created)
 
     def list_records(
         self,
@@ -75,18 +88,40 @@ class InMemoryAiLogInvestigationRepository:
         severity: str | None,
         limit: int,
         offset: int,
+        before_updated_at: datetime | None = None,
+        before_id: str | None = None,
+        task_id: int | None = None,
     ) -> list[AiLogInvestigationRecord]:
         records = [
             record
             for record in self._records.values()
             if (workspace_id is None or record.workspace_id == workspace_id)
             and (severity is None or record.severity == severity)
+            and (task_id is None or record.task_id == task_id)
+            and record.updated_at
+            >= datetime.now(UTC) - timedelta(days=VISUALIZATION_RETENTION_DAYS)
+            and (
+                before_updated_at is None
+                or (record.updated_at, record.id) < (before_updated_at, before_id or "")
+            )
         ]
         records.sort(key=lambda item: (item.updated_at, item.id), reverse=True)
         return records[offset : offset + limit]
 
     def get(self, record_id: str) -> AiLogInvestigationRecord | None:
-        return self._records.get(record_id)
+        record = self._records.get(record_id)
+        if record and record.updated_at >= datetime.now(UTC) - timedelta(
+            days=VISUALIZATION_RETENTION_DAYS
+        ):
+            return record
+        return None
+
+    def _prune(self) -> None:
+        cutoff = datetime.now(UTC) - timedelta(days=VISUALIZATION_RETENTION_DAYS)
+        expired = [key for key, value in self._records.items() if value.updated_at < cutoff]
+        for key in expired:
+            record = self._records.pop(key)
+            self._ids_by_idempotency_key.pop(record.idempotency_key, None)
 
 
 class PostgresAiLogInvestigationRepository:
@@ -106,7 +141,7 @@ class PostgresAiLogInvestigationRepository:
     def __init__(self, database_url: str | None) -> None:
         self._database_url = database_url.strip() if database_url else None
 
-    def upsert(self, record: AiLogInvestigationRecord) -> AiLogInvestigationRecord:
+    def upsert(self, record: AiLogInvestigationRecord) -> AiLogInvestigationSaveResult:
         if not self._database_url:
             raise AiLogInvestigationRepositoryError("日志可视化数据库尚未配置")
         try:
@@ -142,7 +177,7 @@ class PostgresAiLogInvestigationRepository:
                         log_line_count = EXCLUDED.log_line_count,
                         truncated = EXCLUDED.truncated,
                         updated_at = EXCLUDED.updated_at
-                    RETURNING id
+                    RETURNING id, (xmax = 0) AS created
                     """,
                     (
                         record.id,
@@ -172,12 +207,17 @@ class PostgresAiLogInvestigationRepository:
                 ).fetchone()
                 if row is None:
                     raise AiLogInvestigationRepositoryError("日志可视化记录写入失败")
+                connection.execute(
+                    """DELETE FROM ai_log_investigations
+                       WHERE updated_at < CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')""",
+                    (VISUALIZATION_RETENTION_DAYS,),
+                )
                 stored = self._get_with_connection(connection, str(row[0]))
         except psycopg.Error as exc:
             raise AiLogInvestigationRepositoryError("日志可视化记录写入失败") from exc
         if stored is None:
             raise AiLogInvestigationRepositoryError("日志可视化记录写入后无法读取")
-        return stored
+        return AiLogInvestigationSaveResult(record=stored, created=bool(row[1]))
 
     def list_records(
         self,
@@ -186,17 +226,26 @@ class PostgresAiLogInvestigationRepository:
         severity: str | None,
         limit: int,
         offset: int,
+        before_updated_at: datetime | None = None,
+        before_id: str | None = None,
+        task_id: int | None = None,
     ) -> list[AiLogInvestigationRecord]:
         if not self._database_url:
             raise AiLogInvestigationRepositoryError("日志可视化数据库尚未配置")
-        clauses: list[str] = []
-        parameters: list[object] = []
+        clauses: list[str] = ["record.updated_at >= CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')"]
+        parameters: list[object] = [VISUALIZATION_RETENTION_DAYS]
         if workspace_id is not None:
             clauses.append("record.workspace_id = %s")
             parameters.append(workspace_id)
         if severity is not None:
             clauses.append("record.severity = %s")
             parameters.append(severity)
+        if before_updated_at is not None:
+            clauses.append("(record.updated_at, record.id) < (%s, %s)")
+            parameters.extend((before_updated_at, before_id or ""))
+        if task_id is not None:
+            clauses.append("record.task_id = %s")
+            parameters.append(task_id)
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         parameters.extend((limit, offset))
         try:
@@ -228,8 +277,10 @@ class PostgresAiLogInvestigationRepository:
         record_id: str,
     ) -> AiLogInvestigationRecord | None:
         row = connection.execute(
-            f"{self._SELECT} WHERE record.id = %s",
-            (record_id,),
+            f"""{self._SELECT}
+                WHERE record.id = %s
+                  AND record.updated_at >= CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')""",
+            (record_id, VISUALIZATION_RETENTION_DAYS),
         ).fetchone()
         return self._record(row) if row else None
 

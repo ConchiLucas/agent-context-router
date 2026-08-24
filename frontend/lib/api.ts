@@ -589,6 +589,7 @@ export function searchRelationRecords(
     edgeId?: string;
     sourceKeys?: Record<string, string | number | boolean | null>;
     page?: number;
+    aiQueryRecordId?: string;
   },
 ): Promise<RelationRecordSearchResult> {
   return request<RelationRecordSearchResult>(
@@ -602,20 +603,43 @@ export function searchRelationRecords(
         edge_id: input.edgeId,
         source_keys: input.sourceKeys,
         page: input.page ?? 1,
+        ai_query_record_id: input.aiQueryRecordId,
       }),
     },
   );
 }
 
-export function getLatestAiDataQuery(): Promise<AiDataQueryLatest> {
-  return request<AiDataQueryLatest>("/api/ai-visualization/query-records/latest", {
+export function getLatestAiDataQuery(options?: {
+  workspaceId?: string;
+  environment?: string;
+  taskId?: number;
+}): Promise<AiDataQueryLatest> {
+  const params = new URLSearchParams();
+  if (options?.workspaceId) params.set("workspace_id", options.workspaceId);
+  if (options?.environment) params.set("environment", options.environment);
+  if (options?.taskId) params.set("task_id", String(options.taskId));
+  const query = params.size ? `?${params.toString()}` : "";
+  return request<AiDataQueryLatest>(`/api/ai-visualization/query-records/latest${query}`, {
     cache: "no-store",
   });
 }
 
-export function getAiDataQueryHistory(limit = 20): Promise<AiDataQueryHistory> {
+export function getAiDataQueryHistory(options?: {
+  limit?: number;
+  workspaceId?: string;
+  environment?: string;
+  source?: string;
+  taskId?: number;
+}): Promise<AiDataQueryHistory> {
+  const params = new URLSearchParams({
+    limit: String(options?.limit ?? 20),
+  });
+  if (options?.workspaceId) params.set("workspace_id", options.workspaceId);
+  if (options?.environment) params.set("environment", options.environment);
+  if (options?.source) params.set("source", options.source);
+  if (options?.taskId) params.set("task_id", String(options.taskId));
   return request<AiDataQueryHistory>(
-    `/api/ai-visualization/query-records?limit=${encodeURIComponent(String(limit))}`,
+    `/api/ai-visualization/query-records?${params.toString()}`,
     { cache: "no-store" },
   );
 }
@@ -625,6 +649,8 @@ export function getAiInterfaceRequests(options?: {
   success?: boolean;
   limit?: number;
   offset?: number;
+  cursor?: string;
+  taskId?: number;
 }): Promise<AiInterfaceRequestList> {
   const params = new URLSearchParams({
     limit: String(options?.limit ?? 50),
@@ -632,6 +658,8 @@ export function getAiInterfaceRequests(options?: {
   });
   if (options?.workspaceId) params.set("workspace_id", options.workspaceId);
   if (options?.success !== undefined) params.set("success", String(options.success));
+  if (options?.cursor) params.set("cursor", options.cursor);
+  if (options?.taskId) params.set("task_id", String(options.taskId));
   return request<AiInterfaceRequestList>(
     `/api/ai-visualization/interface-requests?${params.toString()}`,
     { cache: "no-store" },
@@ -652,6 +680,8 @@ export function getAiLogInvestigations(options?: {
   severity?: "error" | "critical";
   limit?: number;
   offset?: number;
+  cursor?: string;
+  taskId?: number;
 }): Promise<AiLogInvestigationList> {
   const params = new URLSearchParams({
     limit: String(options?.limit ?? 50),
@@ -659,6 +689,8 @@ export function getAiLogInvestigations(options?: {
   });
   if (options?.workspaceId) params.set("workspace_id", options.workspaceId);
   if (options?.severity) params.set("severity", options.severity);
+  if (options?.cursor) params.set("cursor", options.cursor);
+  if (options?.taskId) params.set("task_id", String(options.taskId));
   return request<AiLogInvestigationList>(
     `/api/ai-visualization/log-investigations?${params.toString()}`,
     { cache: "no-store" },

@@ -18,6 +18,7 @@ from pydantic import Field
 from context_router.database.errors import DatabaseAccessError
 from context_router.mcp_contract import (
     CONTEXT_ROUTER_CORE_TOOL_NAMES,
+    CONTEXT_ROUTER_DATA_VISUALIZATION_TOOL_NAMES,
     CONTEXT_ROUTER_INTERFACE_FORWARDING_TOOL_NAMES,
     CONTEXT_ROUTER_LOG_VISUALIZATION_TOOL_NAMES,
     CONTEXT_ROUTER_TABLE_RELATION_TOOL_NAMES,
@@ -27,6 +28,10 @@ from context_router.mcp_contract import (
     CONTEXT_ROUTER_TRACE_SERVER_NAME as TRACE_SERVER_NAME,
 )
 from context_router.schemas.context import ContextDocumentReadRequest
+from context_router.services.ai_data_visualization import (
+    AiDataVisualizationError,
+    AiDataVisualizationService,
+)
 from context_router.services.ai_log_visualization import (
     AiLogVisualizationError,
     AiLogVisualizationService,
@@ -110,6 +115,10 @@ MCP_SERVER_INSTRUCTIONS = (
     "resolve_value_candidates with the selected mapping. It executes only the saved bounded "
     "read rule, inherits the task environment when omitted, and returns at most 10 candidates. "
     "Do not invent IDs when a published mapping is available. "
+    "When the user wants the browser data-visualization page to open with AI-selected query "
+    "conditions, call save_data_visualization_query after resolving an exact published relation "
+    "table and keyword. The current task supplies Workspace, environment, and AI source; never "
+    "invent a Workspace or environment for this record. "
     "When diagnosing errors in Docker services, call list_task_containers and inspect only a "
     "container returned for the current task Workspace with inspect_container_errors. The log "
     "reader is bounded and saves a visualization record only when error evidence is found; do "
@@ -162,6 +171,7 @@ MCP_SERVER_INSTRUCTIONS = (
     LIST_TASK_CONTAINERS_TOOL_NAME,
     INSPECT_CONTAINER_ERRORS_TOOL_NAME,
 ) = CONTEXT_ROUTER_LOG_VISUALIZATION_TOOL_NAMES
+(SAVE_DATA_VISUALIZATION_QUERY_TOOL_NAME,) = CONTEXT_ROUTER_DATA_VISUALIZATION_TOOL_NAMES
 APPLY_WORKSPACE_TOOL_NAME = "apply_workspace_changes"
 START_WORKSPACE_TOOL_NAME = "start_workspace"
 GET_WORKSPACE_OPERATION_TOOL_NAME = "get_workspace_operation"
@@ -188,6 +198,12 @@ INSPECT_CONTAINER_ERRORS_TOOL_DESCRIPTION = (
     "only when an error is found. Defaults to the latest 15 minutes and 500 lines. Containers "
     "that are unregistered, inaccessible, or outside the task Workspace are rejected and never "
     "recorded. Repeated inspection of the same error in one task updates the same record."
+)
+SAVE_DATA_VISUALIZATION_QUERY_TOOL_DESCRIPTION = (
+    "Save one validated data-visualization query condition for the current task. Workspace, "
+    "environment, and AI source are derived from task_id; the caller supplies only the exact "
+    "published relation table, keyword, and user-facing description. Repeated identical saves "
+    "within one task are idempotent. This tool does not execute the database query."
 )
 PREPARE_TOOL_DESCRIPTION = (
     "Locate the registered workspace for cwd, create a server-side task number, and "
@@ -551,6 +567,7 @@ def create_context_router_mcp(
     table_relation_context_service: TableRelationContextService | None = None,
     interface_forwarding_context_service: InterfaceForwardingContextService | None = None,
     value_mapping_service: ValueMappingService | None = None,
+    ai_data_visualization_service: AiDataVisualizationService | None = None,
     ai_log_visualization_service: AiLogVisualizationService | None = None,
 ) -> FastMCP:
     forwarding_execution_limiter = asyncio.Semaphore(4)
@@ -753,6 +770,37 @@ def create_context_router_mcp(
         try:
             return database_query_service.execute(task_id=task_id, database=database, sql=sql)
         except DatabaseAccessError as exc:
+            raise ToolError(f"{exc.code}: {exc}") from exc
+
+    @server.tool(
+        name=SAVE_DATA_VISUALIZATION_QUERY_TOOL_NAME,
+        description=SAVE_DATA_VISUALIZATION_QUERY_TOOL_DESCRIPTION,
+        annotations=LOG_INSPECTION_TOOL_ANNOTATIONS,
+    )
+    def save_data_visualization_query(
+        task_id: Annotated[int, Field(ge=1, strict=True)],
+        description: Annotated[str, Field(min_length=1, max_length=2000)],
+        database_key: Annotated[
+            str,
+            Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_-]{0,63}$"),
+        ],
+        schema_name: Annotated[str, Field(min_length=1, max_length=255)],
+        table_name: Annotated[str, Field(min_length=1, max_length=255)],
+        keyword: Annotated[str, Field(min_length=1, max_length=500)],
+    ) -> dict[str, object]:
+        if ai_data_visualization_service is None:
+            raise ToolError("data_visualization_disabled: 数据可视化 MCP 当前不可用")
+        try:
+            result = ai_data_visualization_service.create_for_task(
+                task_id=task_id,
+                description=description,
+                database_key=database_key,
+                schema_name=schema_name,
+                table_name=table_name,
+                keyword=keyword,
+            )
+            return result.model_dump(mode="json", exclude_none=True)
+        except AiDataVisualizationError as exc:
             raise ToolError(f"{exc.code}: {exc}") from exc
 
     @server.tool(

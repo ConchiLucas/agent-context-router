@@ -148,7 +148,7 @@ CONTEXT_ROUTER_DATABASE_URL=postgresql://USER:PASSWORD@host.docker.internal:5432
 docker compose exec backend uv run alembic upgrade head
 ```
 
-当前 migration head 为 `20260824_0060`。`0060` 增加 AI 日志可视化错误快照表，只保存已注册容器中确认并脱敏的有界错误段；`0059` 为接口可视化按 Workspace 和请求时间倒序读取增加日志索引；`0058` 增加 AI 数据可视化查询条件历史。配置中心、本机 AI 默认项、业务值映射以及更早的接口转发与 Workspace 环境模型继续保持兼容。
+当前 migration head 为 `20260824_0061`。`0061` 增加数据可视化任务关联、幂等键和执行摘要；`0060` 增加 AI 日志可视化错误快照表，只保存已注册容器中确认并脱敏的有界错误段；`0059` 为接口可视化按 Workspace 和请求时间倒序读取增加日志索引；`0058` 增加 AI 数据可视化查询条件历史。配置中心、本机 AI 默认项、业务值映射以及更早的接口转发与 Workspace 环境模型继续保持兼容。
 
 表关联页面的关联数据目前没有自动生成流水线，示例数据由可重复执行的种子脚本写入：
 

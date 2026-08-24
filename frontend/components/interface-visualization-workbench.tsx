@@ -1,16 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import {
   getAiInterfaceRequest,
   getAiInterfaceRequests,
-  listWorkspaces,
 } from "@/lib/api";
+import {
+  CopyVisualizationButton,
+  useVisualizationRecords,
+  useVisualizationWorkspaces,
+} from "@/components/visualization-record-explorer";
 import type {
-  AiInterfaceRequestDetail,
-  AiInterfaceRequestListItem,
-  WorkspaceSummary,
+    AiInterfaceRequestDetail,
+    AiInterfaceRequestListItem,
 } from "@/lib/types";
 
 type StatusFilter = "all" | "success" | "failed";
@@ -82,89 +85,59 @@ function evidenceSourceLabel(source: string): string {
   }[source] ?? source;
 }
 
-export function InterfaceVisualizationWorkbench() {
-  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
+export function InterfaceVisualizationWorkbench({
+  taskId,
+  onOpenRelated,
+}: {
+  taskId?: number | null;
+  onOpenRelated?: (
+    section: "interface-visualization" | "data-visualization" | "log-visualization",
+    taskId: number,
+  ) => void;
+}) {
   const [workspaceId, setWorkspaceId] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [items, setItems] = useState<AiInterfaceRequestListItem[]>([]);
-  const [hasMore, setHasMore] = useState(false);
-  const [selectedId, setSelectedId] = useState("");
-  const [detail, setDetail] = useState<AiInterfaceRequestDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [detailError, setDetailError] = useState("");
-
-  useEffect(() => {
-    listWorkspaces().then(setWorkspaces).catch(() => setWorkspaces([]));
-  }, []);
-
   const success = statusFilter === "all" ? undefined : statusFilter === "success";
-
-  const loadRequests = useCallback(
-    async (append = false) => {
-      append ? setLoadingMore(true) : setLoading(true);
-      setError("");
-      try {
-        const result = await getAiInterfaceRequests({
-          workspaceId: workspaceId || undefined,
-          success,
-          limit: 50,
-          offset: append ? items.length : 0,
-        });
-        const nextItems = append ? [...items, ...result.items] : result.items;
-        setItems(nextItems);
-        setHasMore(result.has_more);
-        setSelectedId((current) =>
-          nextItems.some((item) => item.id === current) ? current : (nextItems[0]?.id ?? ""),
-        );
-      } catch (reason) {
-        setError(reason instanceof Error ? reason.message : "接口请求记录加载失败");
-        if (!append) {
-          setItems([]);
-          setSelectedId("");
-        }
-      } finally {
-        setLoading(false);
-        setLoadingMore(false);
-      }
-    },
-    [items, success, workspaceId],
+  const {
+    workspaces,
+    workspaceError,
+    workspaceLoading,
+    reloadWorkspaces,
+  } = useVisualizationWorkspaces();
+  const loadPage = useCallback(
+    (cursor?: string) => getAiInterfaceRequests({
+      workspaceId: workspaceId || undefined,
+      success,
+      limit: 50,
+      cursor,
+      taskId: taskId ?? undefined,
+    }),
+    [success, taskId, workspaceId],
   );
-
-  useEffect(() => {
-    void loadRequests(false);
-    // The list is intentionally refreshed only when its server-side filters change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId, statusFilter]);
-
-  useEffect(() => {
-    if (!selectedId) {
-      setDetail(null);
-      setDetailError("");
-      return;
-    }
-    let active = true;
-    setDetailLoading(true);
-    setDetailError("");
-    getAiInterfaceRequest(selectedId)
-      .then((result) => {
-        if (active) setDetail(result);
-      })
-      .catch((reason) => {
-        if (active) {
-          setDetail(null);
-          setDetailError(reason instanceof Error ? reason.message : "请求详情加载失败");
-        }
-      })
-      .finally(() => {
-        if (active) setDetailLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [selectedId]);
+  const loadDetail = useCallback(
+    (id: string) => getAiInterfaceRequest(id),
+    [],
+  );
+  const {
+    items,
+    selectedId,
+    setSelectedId,
+    detail,
+    loading,
+    loadingMore,
+    detailLoading,
+    error,
+    detailError,
+    hasMore,
+    refresh,
+    loadMore,
+  } = useVisualizationRecords<AiInterfaceRequestListItem, AiInterfaceRequestDetail>({
+    filterKey: `${workspaceId}:${statusFilter}:${taskId ?? ""}`,
+    loadPage,
+    loadDetail,
+    listErrorMessage: "接口请求记录加载失败",
+    detailErrorMessage: "请求详情加载失败",
+  });
 
   const evidence = useMemo(
     () => evidenceRows(detail?.parameter_evidence ?? {}),
@@ -179,7 +152,7 @@ export function InterfaceVisualizationWorkbench() {
           <h1 id="interface-visualization-title">接口可视化</h1>
           <p>展示 Codex、Antigravity 和手动测试实际执行的接口请求，最新请求优先。</p>
         </div>
-        <button type="button" className="secondary-button" disabled={loading} onClick={() => void loadRequests(false)}>
+        <button type="button" className="secondary-button" disabled={loading} onClick={() => void refresh()}>
           {loading ? "正在刷新…" : "刷新列表"}
         </button>
       </header>
@@ -187,7 +160,7 @@ export function InterfaceVisualizationWorkbench() {
       <div className="interface-visualization-toolbar" aria-label="请求列表筛选">
         <label>
           <span>工作空间</span>
-          <select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)}>
+          <select value={workspaceId} disabled={workspaceLoading} onChange={(event) => setWorkspaceId(event.target.value)}>
             <option value="">全部工作空间</option>
             {workspaces.map((workspace) => (
               <option key={workspace.id} value={workspace.id}>{workspace.name}</option>
@@ -206,6 +179,13 @@ export function InterfaceVisualizationWorkbench() {
       </div>
 
       {error ? <p className="error-banner" role="alert">{error}</p> : null}
+      {taskId ? <p className="interface-visualization-notice">当前只显示任务 #{taskId} 的接口请求。</p> : null}
+      {workspaceError ? (
+        <p className="error-banner visualization-retry-banner" role="alert">
+          <span>{workspaceError}</span>
+          <button type="button" className="secondary-button" onClick={() => void reloadWorkspaces()}>重新加载工作空间</button>
+        </p>
+      ) : null}
 
       <div className="interface-visualization-layout">
         <aside className="interface-request-list" aria-label="接口请求列表">
@@ -241,7 +221,7 @@ export function InterfaceVisualizationWorkbench() {
             </button>
           ))}
           {hasMore ? (
-            <button type="button" className="secondary-button interface-request-load-more" disabled={loadingMore} onClick={() => void loadRequests(true)}>
+            <button type="button" className="secondary-button interface-request-load-more" disabled={loadingMore} onClick={() => void loadMore()}>
               {loadingMore ? "正在加载…" : "加载更多"}
             </button>
           ) : null}
@@ -274,6 +254,14 @@ export function InterfaceVisualizationWorkbench() {
                 <p>{detail.description}</p>
               </section>
 
+              {detail.task_id && onOpenRelated ? (
+                <nav className="visualization-related-actions" aria-label="查看同任务记录">
+                  <span>关联任务 #{detail.task_id}</span>
+                  <button type="button" className="secondary-button" onClick={() => onOpenRelated("data-visualization", detail.task_id!)}>查看数据条件</button>
+                  <button type="button" className="secondary-button" onClick={() => onOpenRelated("log-visualization", detail.task_id!)}>查看错误日志</button>
+                </nav>
+              ) : null}
+
               <dl className="interface-request-metadata">
                 <div><dt>工作空间</dt><dd>{detail.workspace_name}</dd></div>
                 <div><dt>环境</dt><dd>{detail.environment}</dd></div>
@@ -304,11 +292,11 @@ export function InterfaceVisualizationWorkbench() {
 
               <div className="interface-request-payloads">
                 <section>
-                  <h3>请求参数</h3>
+                  <header><h3>请求参数</h3><CopyVisualizationButton value={jsonText(detail.request)} /></header>
                   <pre tabIndex={0}>{jsonText(detail.request)}</pre>
                 </section>
                 <section>
-                  <h3>响应结果</h3>
+                  <header><h3>响应结果</h3><CopyVisualizationButton value={jsonText(detail.response)} /></header>
                   <pre tabIndex={0}>{jsonText(detail.response)}</pre>
                 </section>
               </div>
@@ -319,4 +307,3 @@ export function InterfaceVisualizationWorkbench() {
     </section>
   );
 }
-

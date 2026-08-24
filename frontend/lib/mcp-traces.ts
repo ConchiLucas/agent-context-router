@@ -15,6 +15,7 @@ export const INTERNAL_MCP_TOOL_NAMES: readonly InternalMcpToolName[] = [
   "read_context_document",
   "search_database_objects",
   "execute_database_query",
+  "save_data_visualization_query",
   "list_task_containers",
   "inspect_container_errors",
   "read_table_relations",

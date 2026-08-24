@@ -77,10 +77,20 @@ function CompactPager({
   );
 }
 
-export function DataVisualizationWorkbench() {
+export function DataVisualizationWorkbench({
+  taskId,
+  onOpenRelated,
+}: {
+  taskId?: number | null;
+  onOpenRelated?: (
+    section: "interface-visualization" | "data-visualization" | "log-visualization",
+    taskId: number,
+  ) => void;
+}) {
   const composing = useRef(false);
   const historyButtonRef = useRef<HTMLButtonElement>(null);
   const historyCloseButtonRef = useRef<HTMLButtonElement>(null);
+  const historyDialogRef = useRef<HTMLElement>(null);
   const workspacesRef = useRef<WorkspaceSummary[]>([]);
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [workspaceId, setWorkspaceId] = useState("");
@@ -119,9 +129,14 @@ export function DataVisualizationWorkbench() {
     setError(null);
     setNotice(null);
     try {
-      const [environmentPayload, tablePayload] = await Promise.all([
+      const [environmentPayload, tablePayload, historyPayload] = await Promise.all([
         getWorkspaceEnvironments(targetWorkspaceId),
         listTableRelationTables(targetWorkspaceId, { onlyRelated: true }),
+        getAiDataQueryHistory({
+          workspaceId: targetWorkspaceId,
+          taskId: taskId ?? undefined,
+          limit: 20,
+        }),
       ]);
       const orderedTables = sortTableSummaries(tablePayload.tables);
       const desiredEnvironment = record?.environment;
@@ -142,6 +157,7 @@ export function DataVisualizationWorkbench() {
       setEnvironments(environmentPayload.environments);
       setEnvironment(nextEnvironment);
       setTables(orderedTables);
+      setHistory(historyPayload.items);
       setDatabaseKey(nextTable?.database_key ?? "");
       setSelectedTable(nextTable ? tableValue(nextTable) : "");
       setKeyword(record?.keyword ?? "");
@@ -157,7 +173,7 @@ export function DataVisualizationWorkbench() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [taskId]);
 
   const applyRecord = useCallback(async (
     record: AiDataQueryRecord,
@@ -172,16 +188,21 @@ export function DataVisualizationWorkbench() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([listWorkspaces(), getLatestAiDataQuery(), getAiDataQueryHistory(20)])
-      .then(async ([workspaceItems, latestPayload, historyPayload]) => {
+    listWorkspaces()
+      .then(async (workspaceItems) => {
         if (cancelled) return;
         workspacesRef.current = workspaceItems;
         setWorkspaces(workspaceItems);
-        setHistory(historyPayload.items);
+        const firstWorkspace = workspaceItems[0];
+        if (!firstWorkspace) return;
+        const latestPayload = await getLatestAiDataQuery({
+          workspaceId: taskId ? undefined : firstWorkspace.id,
+          taskId: taskId ?? undefined,
+        });
         if (latestPayload.record) {
           await applyRecord(latestPayload.record, workspaceItems);
-        } else if (workspaceItems[0]) {
-          await loadContext(workspaceItems[0].id, null);
+        } else {
+          await loadContext(firstWorkspace.id, null);
         }
       })
       .catch((cause: unknown) => {
@@ -189,7 +210,7 @@ export function DataVisualizationWorkbench() {
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [applyRecord, loadContext]);
+  }, [applyRecord, loadContext, taskId]);
 
   useEffect(() => {
     if (!historyOpen) return;
@@ -197,6 +218,24 @@ export function DataVisualizationWorkbench() {
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         closeHistory();
+        return;
+      }
+      if (event.key === "Tab") {
+        const focusable = Array.from(
+          historyDialogRef.current?.querySelectorAll<HTMLElement>(
+            "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])",
+          ) ?? [],
+        );
+        if (!focusable.length) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
       }
     };
     window.addEventListener("keydown", closeOnEscape);
@@ -228,8 +267,17 @@ export function DataVisualizationWorkbench() {
     setError(null);
     try {
       const [latestPayload, historyPayload] = await Promise.all([
-        getLatestAiDataQuery(),
-        getAiDataQueryHistory(20),
+        getLatestAiDataQuery({
+          workspaceId: workspaceId || undefined,
+          environment: environment || undefined,
+          taskId: taskId ?? undefined,
+        }),
+        getAiDataQueryHistory({
+          workspaceId: workspaceId || undefined,
+          environment: environment || undefined,
+          taskId: taskId ?? undefined,
+          limit: 20,
+        }),
       ]);
       setHistory(historyPayload.items);
       if (latestPayload.record) await applyRecord(latestPayload.record);
@@ -246,7 +294,16 @@ export function DataVisualizationWorkbench() {
     setSearching(true);
     setError(null);
     try {
-      setResult(await searchRelationRecords(workspaceId, {
+      const linkedRecordId = activeRecord
+        && activeRecord.workspace_id === workspaceId
+        && activeRecord.environment === environment
+        && activeRecord.database_key === selected.database_key
+        && activeRecord.schema_name === selected.schema_name
+        && activeRecord.table_name === selected.table_name
+        && activeRecord.keyword === keyword.trim()
+        ? activeRecord.id
+        : undefined;
+      const nextResult = await searchRelationRecords(workspaceId, {
         environment,
         table: {
           database_key: selected.database_key,
@@ -254,7 +311,18 @@ export function DataVisualizationWorkbench() {
           table_name: selected.table_name,
         },
         keyword: keyword.trim(),
-      }));
+        aiQueryRecordId: linkedRecordId,
+      });
+      setResult(nextResult);
+      if (linkedRecordId) {
+        setActiveRecord((current) => current?.id === linkedRecordId ? {
+          ...current,
+          execution_status: "succeeded",
+          executed_at: new Date().toISOString(),
+          result_card_count: nextResult.cards.length,
+          result_row_count: nextResult.cards.reduce((total, card) => total + card.page.total_rows, 0),
+        } : current);
+      }
     } catch (cause: unknown) {
       setResult(null);
       setError(cause instanceof Error ? cause.message : "关联数据查询失败");
@@ -308,6 +376,20 @@ export function DataVisualizationWorkbench() {
         <article className="data-visualization-source" aria-label="AI 查询描述">
           <div><span>{sourceLabel(activeRecord.source)}</span><time dateTime={activeRecord.created_at}>{formatTime(activeRecord.created_at)}</time></div>
           <p>{activeRecord.description || "AI 工具未提供原始文字描述。"}</p>
+          <small>
+            {activeRecord.execution_status === "succeeded"
+              ? `已查询 · ${activeRecord.result_row_count ?? 0} 条命中`
+              : activeRecord.execution_status === "failed"
+                ? `查询失败 · ${activeRecord.error_summary ?? "请重新执行"}`
+                : "等待人工确认查询"}
+          </small>
+          {activeRecord.task_id && onOpenRelated ? (
+            <nav className="visualization-related-actions" aria-label="查看同任务记录">
+              <span>关联任务 #{activeRecord.task_id}</span>
+              <button type="button" className="secondary-button" onClick={() => onOpenRelated("interface-visualization", activeRecord.task_id!)}>查看接口请求</button>
+              <button type="button" className="secondary-button" onClick={() => onOpenRelated("log-visualization", activeRecord.task_id!)}>查看错误日志</button>
+            </nav>
+          ) : null}
         </article>
       ) : (
         <div className="data-visualization-empty-source">
@@ -348,9 +430,10 @@ export function DataVisualizationWorkbench() {
 
       {historyOpen ? (
         <div className="data-visualization-history-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeHistory(); }}>
-          <aside className="data-visualization-history" role="dialog" aria-modal="true" aria-labelledby="data-visualization-history-title">
+          <aside ref={historyDialogRef} className="data-visualization-history" role="dialog" aria-modal="true" aria-labelledby="data-visualization-history-title" aria-describedby="data-visualization-history-description">
             <header><div><p className="section-eyebrow">RECENT QUERIES</p><h2 id="data-visualization-history-title">历史记录</h2></div><button ref={historyCloseButtonRef} type="button" className="close-button" aria-label="关闭历史记录" onClick={closeHistory}>×</button></header>
-            {history.length ? <div className="data-visualization-history-list">{history.map((record) => <button key={record.id} type="button" data-active={activeRecord?.id === record.id} onClick={() => { closeHistory(); void applyRecord(record); }}><span><strong>{record.description || record.keyword}</strong><time dateTime={record.created_at}>{formatTime(record.created_at)}</time></span><small>{sourceLabel(record.source)} · {record.workspace_name} · {record.environment}</small><code>{record.database_key}.{record.schema_name}.{record.table_name} · {record.keyword}</code></button>)}</div> : <div className="relation-record-empty"><h3>暂无历史记录</h3><p>AI 工具保存的条件会显示在这里。</p></div>}
+            <p id="data-visualization-history-description" className="sr-only">选择一条历史记录会恢复对应的工作空间、环境、表和关键词。</p>
+            {history.length ? <div className="data-visualization-history-list">{history.map((record) => <button key={record.id} type="button" data-active={activeRecord?.id === record.id} onClick={() => { closeHistory(); void applyRecord(record); }}><span><strong>{record.description || record.keyword}</strong><time dateTime={record.created_at}>{formatTime(record.created_at)}</time></span><small>{sourceLabel(record.source)} · {record.workspace_name} · {record.environment} · {record.execution_status === "succeeded" ? `已查询 ${record.result_row_count ?? 0} 条` : record.execution_status === "failed" ? "查询失败" : "待查询"}</small><code>{record.database_key}.{record.schema_name}.{record.table_name} · {record.keyword}</code></button>)}</div> : <div className="relation-record-empty"><h3>暂无历史记录</h3><p>AI 工具保存的条件会显示在这里。</p></div>}
           </aside>
         </div>
       ) : null}

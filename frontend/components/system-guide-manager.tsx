@@ -29,6 +29,8 @@ const MCP_TOOL_DESCRIPTIONS_ZH: Readonly<Record<string, string>> = {
     "在当前任务已授权的数据库中搜索 Schema、表、视图、字段或索引。",
   execute_database_query:
     "使用 read_task_context 返回的数据库别名执行一条受限制的只读 SQL。",
+  save_data_visualization_query:
+    "把当前任务识别出的关联数据查询条件保存到数据可视化页面，等待人工确认执行。",
   list_task_containers:
     "列出当前任务 Workspace 通过运行标签注册的 Docker 容器，不返回其他容器。",
   inspect_container_errors:

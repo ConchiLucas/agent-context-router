@@ -489,6 +489,7 @@ def create_app(
         workspaces=resolved_workspace_repository,
         environments=resolved_database_environment_repository,
         relations=resolved_table_relation_repository,
+        tasks=resolved_task_repository,
     )
     ai_interface_visualization_service = AiInterfaceVisualizationService(
         resolved_settings.database_url
@@ -575,6 +576,7 @@ def create_app(
         table_relation_context_service=table_relation_context_service,
         interface_forwarding_context_service=interface_forwarding_context_service,
         value_mapping_service=value_mapping_service,
+        ai_data_visualization_service=ai_data_visualization_service,
         ai_log_visualization_service=ai_log_visualization_service,
     )
     mcp_app = mcp_server.streamable_http_app()

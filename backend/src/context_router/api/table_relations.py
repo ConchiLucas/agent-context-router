@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+from time import perf_counter_ns
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
@@ -41,6 +43,7 @@ from context_router.services.table_relation_query import (
 )
 
 router = APIRouter(prefix="/workspaces", tags=["table-relations"])
+logger = logging.getLogger(__name__)
 _WORKSPACE_MISSING = "工作空间不存在"
 
 
@@ -121,10 +124,39 @@ def search_relation_records(
     request: Request,
 ) -> RelationRecordSearchResult:
     """Search only relation-key columns and return direct related table rows."""
+    started_ns = perf_counter_ns()
     try:
         _require_workspace(request, workspace_id, payload.environment)
-        return _record_service(request).search(workspace_id=workspace_id, request=payload)
+        result = _record_service(request).search(workspace_id=workspace_id, request=payload)
+        if payload.ai_query_record_id and payload.page == 1 and payload.edge_id is None:
+            try:
+                request.app.state.ai_data_visualization_service.record_execution(
+                    record_id=payload.ai_query_record_id,
+                    workspace_id=workspace_id,
+                    environment=payload.environment,
+                    succeeded=True,
+                    result_card_count=len(result.cards),
+                    result_row_count=sum(card.page.total_rows for card in result.cards),
+                    duration_ms=max(0, (perf_counter_ns() - started_ns) // 1_000_000),
+                )
+            except Exception:
+                logger.warning("Unable to persist AI data query execution summary", exc_info=True)
+        return result
     except RelationRecordExplorerError as exc:
+        if payload.ai_query_record_id and payload.page == 1 and payload.edge_id is None:
+            try:
+                request.app.state.ai_data_visualization_service.record_execution(
+                    record_id=payload.ai_query_record_id,
+                    workspace_id=workspace_id,
+                    environment=payload.environment,
+                    succeeded=False,
+                    result_card_count=None,
+                    result_row_count=None,
+                    duration_ms=max(0, (perf_counter_ns() - started_ns) // 1_000_000),
+                    error_summary=str(exc),
+                )
+            except Exception:
+                logger.warning("Unable to persist failed AI data query summary", exc_info=True)
         code = (
             status.HTTP_404_NOT_FOUND
             if exc.code in {"relation_not_found"}

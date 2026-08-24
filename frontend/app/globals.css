@@ -954,6 +954,14 @@ p {
   font-size: 0.76rem;
 }
 
+.log-error-excerpt header > div {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .log-error-excerpt pre {
   max-height: 620px;
   min-height: 300px;
@@ -1345,6 +1353,12 @@ p {
   line-height: 1.65;
 }
 
+.data-visualization-source > small {
+  display: block;
+  margin-top: 8px;
+  color: var(--muted);
+}
+
 .data-visualization-empty-source {
   display: grid;
   gap: 5px;
@@ -1518,6 +1532,36 @@ p {
   color: var(--muted);
   font-size: 0.82rem;
   white-space: nowrap;
+}
+
+.visualization-retry-banner {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.visualization-retry-banner .secondary-button {
+  min-height: 36px;
+  flex: none;
+}
+
+.visualization-related-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+
+.visualization-related-actions > span {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.visualization-related-actions .secondary-button {
+  min-height: 36px;
 }
 
 .interface-visualization-layout {
@@ -1783,6 +1827,24 @@ p {
   min-width: 0;
 }
 
+.interface-request-payloads > section > header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.interface-request-payloads > section > header h3 {
+  margin: 0;
+}
+
+.visualization-copy-button {
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+}
+
 .interface-request-payloads pre {
   max-height: 460px;
   min-height: 220px;
@@ -1837,6 +1899,11 @@ p {
 }
 
 @media (max-width: 640px) {
+  .visualization-retry-banner {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .data-visualization-heading {
     flex-direction: column;
   }

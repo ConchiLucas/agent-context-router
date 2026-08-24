@@ -1,16 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
 import {
   getAiLogInvestigation,
   getAiLogInvestigations,
-  listWorkspaces,
 } from "@/lib/api";
+import {
+  CopyVisualizationButton,
+  useVisualizationRecords,
+  useVisualizationWorkspaces,
+} from "@/components/visualization-record-explorer";
 import type {
   AiLogInvestigationDetail,
   AiLogInvestigationListItem,
-  WorkspaceSummary,
 } from "@/lib/types";
 
 type SeverityFilter = "all" | "error" | "critical";
@@ -40,84 +43,58 @@ function formatTime(value?: string | null): string {
   }).format(new Date(value));
 }
 
-export function LogVisualizationWorkbench() {
-  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
+export function LogVisualizationWorkbench({
+  taskId,
+  onOpenRelated,
+}: {
+  taskId?: number | null;
+  onOpenRelated?: (
+    section: "interface-visualization" | "data-visualization" | "log-visualization",
+    taskId: number,
+  ) => void;
+}) {
   const [workspaceId, setWorkspaceId] = useState("");
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>("all");
-  const [items, setItems] = useState<AiLogInvestigationListItem[]>([]);
-  const [hasMore, setHasMore] = useState(false);
-  const [selectedId, setSelectedId] = useState("");
-  const [detail, setDetail] = useState<AiLogInvestigationDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [detailError, setDetailError] = useState("");
-
-  useEffect(() => {
-    listWorkspaces().then(setWorkspaces).catch(() => setWorkspaces([]));
-  }, []);
-
-  const loadRecords = useCallback(async (append = false) => {
-    append ? setLoadingMore(true) : setLoading(true);
-    setError("");
-    try {
-      const result = await getAiLogInvestigations({
-        workspaceId: workspaceId || undefined,
-        severity: severityFilter === "all" ? undefined : severityFilter,
-        limit: 50,
-        offset: append ? items.length : 0,
-      });
-      const nextItems = append ? [...items, ...result.items] : result.items;
-      setItems(nextItems);
-      setHasMore(result.has_more);
-      setSelectedId((current) =>
-        nextItems.some((item) => item.id === current) ? current : (nextItems[0]?.id ?? ""),
-      );
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "日志排查记录加载失败");
-      if (!append) {
-        setItems([]);
-        setSelectedId("");
-      }
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  }, [items, severityFilter, workspaceId]);
-
-  useEffect(() => {
-    void loadRecords(false);
-    // The list refreshes when a server-side filter changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId, severityFilter]);
-
-  useEffect(() => {
-    if (!selectedId) {
-      setDetail(null);
-      setDetailError("");
-      return;
-    }
-    let active = true;
-    setDetailLoading(true);
-    setDetailError("");
-    getAiLogInvestigation(selectedId)
-      .then((result) => {
-        if (active) setDetail(result);
-      })
-      .catch((reason) => {
-        if (active) {
-          setDetail(null);
-          setDetailError(reason instanceof Error ? reason.message : "错误详情加载失败");
-        }
-      })
-      .finally(() => {
-        if (active) setDetailLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [selectedId]);
+  const {
+    workspaces,
+    workspaceError,
+    workspaceLoading,
+    reloadWorkspaces,
+  } = useVisualizationWorkspaces();
+  const loadPage = useCallback(
+    (cursor?: string) => getAiLogInvestigations({
+      workspaceId: workspaceId || undefined,
+      severity: severityFilter === "all" ? undefined : severityFilter,
+      limit: 50,
+      cursor,
+      taskId: taskId ?? undefined,
+    }),
+    [severityFilter, taskId, workspaceId],
+  );
+  const loadDetail = useCallback(
+    (id: string) => getAiLogInvestigation(id),
+    [],
+  );
+  const {
+    items,
+    selectedId,
+    setSelectedId,
+    detail,
+    loading,
+    loadingMore,
+    detailLoading,
+    error,
+    detailError,
+    hasMore,
+    refresh,
+    loadMore,
+  } = useVisualizationRecords<AiLogInvestigationListItem, AiLogInvestigationDetail>({
+    filterKey: `${workspaceId}:${severityFilter}:${taskId ?? ""}`,
+    loadPage,
+    loadDetail,
+    listErrorMessage: "日志排查记录加载失败",
+    detailErrorMessage: "错误详情加载失败",
+  });
 
   return (
     <section className="interface-visualization-page" aria-labelledby="log-visualization-title">
@@ -127,7 +104,7 @@ export function LogVisualizationWorkbench() {
           <h1 id="log-visualization-title">日志可视化</h1>
           <p>展示 AI 从已注册 Docker 容器中确认的错误快照，最新排查优先。</p>
         </div>
-        <button type="button" className="secondary-button" disabled={loading} onClick={() => void loadRecords(false)}>
+        <button type="button" className="secondary-button" disabled={loading} onClick={() => void refresh()}>
           {loading ? "正在刷新…" : "刷新列表"}
         </button>
       </header>
@@ -135,7 +112,7 @@ export function LogVisualizationWorkbench() {
       <div className="interface-visualization-toolbar" aria-label="日志排查列表筛选">
         <label>
           <span>工作空间</span>
-          <select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)}>
+          <select value={workspaceId} disabled={workspaceLoading} onChange={(event) => setWorkspaceId(event.target.value)}>
             <option value="">全部工作空间</option>
             {workspaces.map((workspace) => (
               <option key={workspace.id} value={workspace.id}>{workspace.name}</option>
@@ -154,6 +131,13 @@ export function LogVisualizationWorkbench() {
       </div>
 
       {error ? <p className="error-banner" role="alert">{error}</p> : null}
+      {taskId ? <p className="interface-visualization-notice">当前只显示任务 #{taskId} 的错误记录。</p> : null}
+      {workspaceError ? (
+        <p className="error-banner visualization-retry-banner" role="alert">
+          <span>{workspaceError}</span>
+          <button type="button" className="secondary-button" onClick={() => void reloadWorkspaces()}>重新加载工作空间</button>
+        </p>
+      ) : null}
 
       <div className="interface-visualization-layout">
         <aside className="interface-request-list" aria-label="日志排查记录列表">
@@ -187,7 +171,7 @@ export function LogVisualizationWorkbench() {
             </button>
           ))}
           {hasMore ? (
-            <button type="button" className="secondary-button interface-request-load-more" disabled={loadingMore} onClick={() => void loadRecords(true)}>
+            <button type="button" className="secondary-button interface-request-load-more" disabled={loadingMore} onClick={() => void loadMore()}>
               {loadingMore ? "正在加载…" : "加载更多"}
             </button>
           ) : null}
@@ -215,12 +199,20 @@ export function LogVisualizationWorkbench() {
 
               <dl className="interface-request-metadata">
                 <div><dt>工作空间</dt><dd>{detail.workspace_name}</dd></div>
-                <div><dt>环境</dt><dd>{detail.environment}</dd></div>
+                <div><dt>任务环境</dt><dd>{detail.environment}</dd></div>
                 <div><dt>项目</dt><dd>{detail.project_name ?? "-"}</dd></div>
                 <div><dt>容器</dt><dd>{detail.container_name}</dd></div>
                 <div><dt>镜像</dt><dd>{detail.image}</dd></div>
                 <div><dt>AI 来源</dt><dd>{sourceLabel(detail.source)}</dd></div>
               </dl>
+
+              {detail.task_id && onOpenRelated ? (
+                <nav className="visualization-related-actions" aria-label="查看同任务记录">
+                  <span>关联任务 #{detail.task_id}</span>
+                  <button type="button" className="secondary-button" onClick={() => onOpenRelated("interface-visualization", detail.task_id!)}>查看接口请求</button>
+                  <button type="button" className="secondary-button" onClick={() => onOpenRelated("data-visualization", detail.task_id!)}>查看数据条件</button>
+                </nav>
+              ) : null}
 
               {detail.truncated ? (
                 <p className="interface-visualization-notice">日志超过快照上限，当前展示的是经过截断和脱敏的错误内容。</p>
@@ -229,7 +221,10 @@ export function LogVisualizationWorkbench() {
               <section className="log-error-excerpt">
                 <header>
                   <h3>错误内容</h3>
-                  <span>{detail.log_line_count} 行已扫描 · {detail.occurrence_count} 个错误锚点</span>
+                  <div>
+                    <span>{detail.log_line_count} 行已扫描 · {detail.occurrence_count} 个错误事件</span>
+                    <CopyVisualizationButton value={detail.error_excerpt} />
+                  </div>
                 </header>
                 <pre tabIndex={0}>{detail.error_excerpt}</pre>
               </section>

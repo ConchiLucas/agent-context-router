@@ -32,6 +32,7 @@ class AiLogInvestigationList(BaseModel):
     limit: int = Field(ge=1, le=100)
     offset: int = Field(ge=0)
     has_more: bool
+    next_cursor: str | None = None
 
 
 class AiLogInvestigationDetail(AiLogInvestigationListItem):

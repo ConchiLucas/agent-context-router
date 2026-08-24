@@ -25,6 +25,7 @@ from context_router.schemas.relation_records import (
 from context_router.schemas.table_relations import TableRelationEndpoint, TableRelationView
 from context_router.services.database_access import DatabaseAccessService, ResolvedDatabaseAccess
 from context_router.services.table_relation_query import TableRelationQueryService
+from context_router.services.visualization_security import redact_table_rows
 
 _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
 _MAX_RELATED_TABLES = 40
@@ -136,8 +137,7 @@ class RelationRecordExplorerService:
                 for relation, source, target in matched
             ]
             related_cards = [
-                card for card in (future.result() for future in futures)
-                if card.page.total_rows
+                card for card in (future.result() for future in futures) if card.page.total_rows
             ]
 
         cards = related_cards
@@ -197,8 +197,7 @@ class RelationRecordExplorerService:
         selected_row = rows[0]
         row_by_column = dict(zip(query_columns, selected_row, strict=False))
         matched_columns = [
-            name for name in unique
-            if name in row_by_column and str(row_by_column[name]) == keyword
+            name for name in unique if name in row_by_column and str(row_by_column[name]) == keyword
         ]
         key_cache = {
             name: [row_by_column[name]]
@@ -224,7 +223,7 @@ class RelationRecordExplorerService:
             target_column="",
             matched_columns=matched_columns,
             columns=rendered_columns,
-            rows=[selected_row],
+            rows=redact_table_rows(query_columns, [selected_row]),
             page=RelationRecordPage(
                 page=1,
                 page_size=1,
@@ -303,7 +302,7 @@ class RelationRecordExplorerService:
             ),
             target_column=target.column_name,
             columns=rendered_columns,
-            rows=formatted.as_dict()["rows"],
+            rows=redact_table_rows(query_columns, formatted.as_dict()["rows"]),
             page=RelationRecordPage(
                 page=page,
                 page_size=_PAGE_SIZE,
@@ -478,8 +477,4 @@ def _random_function(engine: str) -> str:
 
 
 def _plain_source_keys(key_cache: dict[str, list[Any]]) -> dict[str, Any]:
-    return {
-        column: values[0]
-        for column, values in key_cache.items()
-        if values
-    }
+    return {column: values[0] for column, values in key_cache.items() if values}

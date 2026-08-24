@@ -119,3 +119,35 @@ def test_rejects_table_outside_published_relation_snapshot() -> None:
 
     assert response.status_code == 404
     assert response.json()["detail"].startswith("relation_table_not_found")
+
+
+def test_idempotent_save_and_execution_summary_are_workspace_scoped() -> None:
+    payload = _payload("ORDER-3")
+    payload["idempotency_key"] = "codex-retry-order-3"
+    with _client() as client:
+        first = client.post("/api/ai-visualization/query-records", json=payload)
+        second = client.post("/api/ai-visualization/query-records", json=payload)
+        record_id = first.json()["id"]
+        client.app.state.ai_data_visualization_service.record_execution(
+            record_id=record_id,
+            workspace_id="workspace-1",
+            environment="local",
+            succeeded=True,
+            result_card_count=2,
+            result_row_count=7,
+            duration_ms=18,
+        )
+        history = client.get(
+            "/api/ai-visualization/query-records"
+            "?workspace_id=workspace-1&environment=local&limit=20"
+        )
+        latest = client.get(
+            "/api/ai-visualization/query-records/latest?workspace_id=workspace-1&environment=local"
+        )
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert second.json()["id"] == record_id
+    assert len(history.json()["items"]) == 1
+    assert latest.json()["record"]["execution_status"] == "succeeded"
+    assert latest.json()["record"]["result_row_count"] == 7

@@ -597,6 +597,7 @@ export type InternalMcpToolName =
   | "read_context_document"
   | "search_database_objects"
   | "execute_database_query"
+  | "save_data_visualization_query"
   | "list_task_containers"
   | "inspect_container_errors"
   | "read_table_relations"
@@ -915,6 +916,13 @@ export interface AiDataQueryRecord {
   table_name: string;
   keyword: string;
   created_at: string;
+  task_id?: number | null;
+  execution_status: "pending" | "succeeded" | "failed";
+  executed_at?: string | null;
+  result_card_count?: number | null;
+  result_row_count?: number | null;
+  duration_ms?: number | null;
+  error_summary?: string | null;
 }
 
 export interface AiDataQueryLatest {
@@ -954,6 +962,7 @@ export interface AiInterfaceRequestList {
   limit: number;
   offset: number;
   has_more: boolean;
+  next_cursor?: string | null;
 }
 
 export interface AiInterfaceRequestDetail extends AiInterfaceRequestListItem {
@@ -993,6 +1002,7 @@ export interface AiLogInvestigationList {
   limit: number;
   offset: number;
   has_more: boolean;
+  next_cursor?: string | null;
 }
 
 export interface AiLogInvestigationDetail extends AiLogInvestigationListItem {

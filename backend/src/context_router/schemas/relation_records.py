@@ -18,6 +18,7 @@ class RelationRecordSearchInput(BaseModel):
     edge_id: str | None = Field(default=None, min_length=1, max_length=32)
     source_keys: dict[str, str | int | float | bool | None] | None = None
     page: int = Field(default=1, ge=1, le=100_000)
+    ai_query_record_id: str | None = Field(default=None, min_length=1, max_length=36)
 
     @field_validator("keyword")
     @classmethod
