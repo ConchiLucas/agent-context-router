@@ -83,6 +83,10 @@ def list_workspace_tasks(
             database_environment=record.database_environment,
             database_environment_revision=record.database_environment_revision,
             database_environment_selection=record.database_environment_selection,
+            intent_type=record.intent_type,
+            intent_error_signal=record.intent_error_signal,
+            intent_summary=record.intent_summary,
+            intent_source=record.intent_source,
         )
         for record in records
     ]
@@ -118,6 +122,10 @@ def get_task_document_reads(task_id: int, request: Request) -> ContextTaskReadHi
         database_environment=task.database_environment,
         database_environment_revision=task.database_environment_revision,
         database_environment_selection=task.database_environment_selection,
+        intent_type=task.intent_type,
+        intent_error_signal=task.intent_error_signal,
+        intent_summary=task.intent_summary,
+        intent_source=task.intent_source,
         agent_name=task.agent_name,
         created_at=task.created_at,
         calls=[

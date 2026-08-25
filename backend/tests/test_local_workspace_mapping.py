@@ -86,4 +86,7 @@ def test_reader_path_prepares_documents_only_context(tmp_path: Path) -> None:
         cwd=str(reader_root),
     )
     assert result.access == ["documents"]
-    assert result.warnings == ["当前目录共享主工作空间文档；数据库和部署工具不可用"]
+    assert result.warnings == [
+        "当前目录共享主工作空间文档；数据库和部署工具不可用",
+        "未声明 intent_type，已按 task_execute 兼容处理；新客户端应先识别用户意图并显式传入",
+    ]

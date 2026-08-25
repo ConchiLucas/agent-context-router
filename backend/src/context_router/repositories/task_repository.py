@@ -7,6 +7,8 @@ from typing import Literal, Protocol
 
 import psycopg
 
+from context_router.schemas.context import TaskIntentSource, TaskIntentType
+
 DatabaseEnvironmentSelection = Literal["workspace_default", "task_explicit"]
 _ENVIRONMENT_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 
@@ -35,6 +37,10 @@ class TaskRecord:
     database_environment: str | None = None
     database_environment_revision: int | None = None
     database_environment_selection: DatabaseEnvironmentSelection | None = None
+    intent_type: TaskIntentType = "task_execute"
+    intent_error_signal: bool = False
+    intent_summary: str | None = None
+    intent_source: TaskIntentSource = "compatibility_default"
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +75,10 @@ class TaskWriter(Protocol):
         database_environment: str | None = None,
         database_environment_revision: int | None = None,
         database_environment_selection: DatabaseEnvironmentSelection | None = None,
+        intent_type: TaskIntentType = "task_execute",
+        intent_error_signal: bool = False,
+        intent_summary: str | None = None,
+        intent_source: TaskIntentSource = "compatibility_default",
     ) -> int: ...
 
 
@@ -155,6 +165,10 @@ class PostgresTaskRepository:
         database_environment: str | None = None,
         database_environment_revision: int | None = None,
         database_environment_selection: DatabaseEnvironmentSelection | None = None,
+        intent_type: TaskIntentType = "task_execute",
+        intent_error_signal: bool = False,
+        intent_summary: str | None = None,
+        intent_source: TaskIntentSource = "compatibility_default",
     ) -> int:
         if not self._database_url:
             raise TaskRepositoryError("任务数据库尚未配置")
@@ -181,6 +195,12 @@ class PostgresTaskRepository:
         normalized_environment_selection = database_environment_selection
         if database_environment is not None and normalized_environment_selection is None:
             normalized_environment_selection = "workspace_default"
+        self._validate_intent(
+            intent_type=intent_type,
+            intent_error_signal=intent_error_signal,
+            intent_summary=intent_summary,
+            intent_source=intent_source,
+        )
 
         legacy_project_name = active_project_name or workspace_name
         try:
@@ -203,11 +223,15 @@ class PostgresTaskRepository:
                         project_name,
                         task,
                         cwd,
-                        agent_name
+                        agent_name,
+                        intent_type,
+                        intent_error_signal,
+                        intent_summary,
+                        intent_source
                     )
                     VALUES (
                         'workspace', %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s, %s, %s
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                     )
                     RETURNING id
                     """,
@@ -227,6 +251,10 @@ class PostgresTaskRepository:
                         task,
                         cwd,
                         agent_name,
+                        intent_type,
+                        intent_error_signal,
+                        intent_summary.strip() if intent_summary else None,
+                        intent_source,
                     ),
                 ).fetchone()
         except psycopg.Error as exc:
@@ -262,7 +290,11 @@ class PostgresTaskRepository:
                         active_project_kind,
                         database_environment,
                         database_environment_revision,
-                        database_environment_selection
+                        database_environment_selection,
+                        intent_type,
+                        intent_error_signal,
+                        intent_summary,
+                        intent_source
                     FROM mcp_tasks
                     WHERE id = %s
                     """,
@@ -310,6 +342,10 @@ class PostgresTaskRepository:
                         task.database_environment,
                         task.database_environment_revision,
                         task.database_environment_selection,
+                        task.intent_type,
+                        task.intent_error_signal,
+                        task.intent_summary,
+                        task.intent_source,
                         COUNT(read_call.id) AS read_call_count
                     FROM mcp_tasks AS task
                     LEFT JOIN mcp_document_read_calls AS read_call
@@ -372,6 +408,10 @@ class PostgresTaskRepository:
                         task.database_environment,
                         task.database_environment_revision,
                         task.database_environment_selection,
+                        task.intent_type,
+                        task.intent_error_signal,
+                        task.intent_summary,
+                        task.intent_source,
                         COUNT(read_call.id) AS read_call_count
                     FROM mcp_tasks AS task
                     LEFT JOIN mcp_document_read_calls AS read_call
@@ -429,6 +469,10 @@ class PostgresTaskRepository:
             database_environment=str(row[15]) if row[15] is not None else None,
             database_environment_revision=int(row[16]) if row[16] is not None else None,
             database_environment_selection=(str(row[17]) if row[17] is not None else None),  # type: ignore[arg-type]
+            intent_type=str(row[18]),  # type: ignore[arg-type]
+            intent_error_signal=bool(row[19]),
+            intent_summary=str(row[20]) if row[20] is not None else None,
+            intent_source=str(row[21]),  # type: ignore[arg-type]
         )
 
     @classmethod
@@ -453,5 +497,36 @@ class PostgresTaskRepository:
             database_environment=task.database_environment,
             database_environment_revision=task.database_environment_revision,
             database_environment_selection=task.database_environment_selection,
-            read_call_count=int(row[18]),
+            intent_type=task.intent_type,
+            intent_error_signal=task.intent_error_signal,
+            intent_summary=task.intent_summary,
+            intent_source=task.intent_source,
+            read_call_count=int(row[22]),
         )
+
+    @staticmethod
+    def _validate_intent(
+        *,
+        intent_type: str,
+        intent_error_signal: bool,
+        intent_summary: str | None,
+        intent_source: str,
+    ) -> None:
+        if intent_type not in {
+            "interface_execute",
+            "data_query",
+            "task_execute",
+            "bug_investigate",
+            "bug_fix",
+        }:
+            raise TaskRepositoryError("任务意图类型无效")
+        if intent_source not in {
+            "agent_declared",
+            "compatibility_default",
+            "system_default",
+        }:
+            raise TaskRepositoryError("任务意图来源无效")
+        if intent_error_signal and intent_type not in {"bug_investigate", "bug_fix"}:
+            raise TaskRepositoryError("只有 Bug 查询或修复任务可以声明错误信号")
+        if intent_summary is not None and len(intent_summary.strip()) > 1000:
+            raise TaskRepositoryError("任务意图摘要不能超过 1000 个字符")

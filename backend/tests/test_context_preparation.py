@@ -193,7 +193,13 @@ def test_prepare_returns_only_compact_tree_and_task_capabilities(tmp_path: Path)
     payload = result.model_dump(exclude_none=True)
 
     assert payload["task_id"] == 41
-    assert set(payload) == {"task_id", "documents", "access"}
+    assert set(payload) == {
+        "task_id",
+        "documents",
+        "execution_contract",
+        "access",
+        "warnings",
+    }
     assert payload["access"] == [
         "documents",
         "database",
@@ -214,8 +220,55 @@ def test_prepare_returns_only_compact_tree_and_task_capabilities(tmp_path: Path)
     assert "content" not in str(payload)
     assert repository.created[0]["agent_name"] == "codex"
     assert repository.created[0]["active_project_id"] is not None
+    assert payload["execution_contract"]["intent_type"] == "task_execute"
+    assert payload["execution_contract"]["intent_source"] == "compatibility_default"
+    assert payload["execution_contract"]["mutation_policy"] == "allowed"
+    assert "未声明 intent_type" in payload["warnings"][0]
     workspace_id = str(repository.created[0]["workspace_id"])
     assert repository.created[0]["workspace_key"] == registry.get_workspace_key(workspace_id)
+
+
+def test_prepare_persists_declared_bug_investigation_contract(tmp_path: Path) -> None:
+    registry, _ = build_registry(tmp_path)
+    repository = FakeTaskRepository()
+    service = ContextPreparationService(registry, repository)
+
+    result = service.prepare(
+        task="只查询 UAT 服务报错，不修改代码",
+        cwd=str(tmp_path / "project" / "src"),
+        agent_name="codex",
+        intent_type="bug_investigate",
+        error_signal=True,
+        intent_summary="只查询报错原因",
+    )
+
+    assert result.execution_contract.intent_type == "bug_investigate"
+    assert result.execution_contract.mutation_policy == "forbidden"
+    assert result.execution_contract.visualization_targets == ["task", "log"]
+    assert result.warnings is None
+    assert repository.created[0]["intent_type"] == "bug_investigate"
+    assert repository.created[0]["intent_error_signal"] is True
+    assert repository.created[0]["intent_source"] == "agent_declared"
+
+
+def test_data_query_contract_prefers_direct_mapping_random_selection(tmp_path: Path) -> None:
+    registry, _ = build_registry(tmp_path)
+    repository = FakeTaskRepository()
+    service = ContextPreparationService(registry, repository)
+
+    result = service.prepare(
+        task="随机查询一个 UAT 货主信息",
+        cwd=str(tmp_path / "project" / "src"),
+        agent_name="gemini",
+        intent_type="data_query",
+        intent_summary="随机查询一条货主信息",
+    )
+
+    instructions = " ".join(result.execution_contract.instructions)
+    assert "selection=random" in instructions
+    assert "ORDER BY RAND()" in instructions
+    assert "命中映射时不要" in instructions
+    assert "没有合适的已发布映射时，才调用 read_task_context" in instructions
 
 
 def test_workspace_preview_uses_same_result_shape(tmp_path: Path) -> None:

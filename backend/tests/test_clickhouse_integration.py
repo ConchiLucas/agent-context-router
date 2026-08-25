@@ -117,6 +117,10 @@ class IntegrationTaskRepository:
         active_project_id: str | None = None,
         active_project_name: str | None = None,
         active_project_kind: str | None = None,
+        intent_type: str = "task_execute",
+        intent_error_signal: bool = False,
+        intent_summary: str | None = None,
+        intent_source: str = "compatibility_default",
     ) -> int:
         task_id = self._next_task_id
         self._next_task_id += 1
@@ -136,6 +140,10 @@ class IntegrationTaskRepository:
             active_project_id=active_project_id,
             active_project_name=active_project_name,
             active_project_kind=active_project_kind,  # type: ignore[arg-type]
+            intent_type=intent_type,  # type: ignore[arg-type]
+            intent_error_signal=intent_error_signal,
+            intent_summary=intent_summary,
+            intent_source=intent_source,  # type: ignore[arg-type]
         )
         return task_id
 

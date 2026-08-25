@@ -499,6 +499,16 @@ export interface PreparedDatabaseEnvironment {
 export interface PrepareTaskContextResult {
   task_id: number;
   documents: ContextDocumentNode;
+  execution_contract: {
+    intent_type: AiTaskIntentType;
+    error_signal: boolean;
+    intent_summary?: string | null;
+    intent_source: AiTaskIntentSource;
+    mutation_policy: "allowed" | "forbidden";
+    required_steps: string[];
+    visualization_targets: Array<"task" | "data" | "interface" | "log">;
+    instructions: string[];
+  };
   access: Array<
     "documents" | "database" | "environment" | "middleware" | "runtime"
   >;
@@ -518,6 +528,10 @@ export interface ContextTaskSummary {
   database_environment?: DatabaseEnvironment | null;
   database_environment_revision?: number | null;
   database_environment_selection?: DatabaseEnvironmentSelection | null;
+  intent_type?: AiTaskIntentType;
+  intent_error_signal?: boolean;
+  intent_summary?: string | null;
+  intent_source?: AiTaskIntentSource;
   agent_name?: string;
   created_at: string;
   read_call_count: number;
@@ -567,6 +581,10 @@ export interface ContextTaskReadHistory {
   database_environment?: DatabaseEnvironment | null;
   database_environment_revision?: number | null;
   database_environment_selection?: DatabaseEnvironmentSelection | null;
+  intent_type?: AiTaskIntentType;
+  intent_error_signal?: boolean;
+  intent_summary?: string | null;
+  intent_source?: AiTaskIntentSource;
   agent_name?: string;
   created_at: string;
   calls: ContextReadHistoryCall[];
@@ -1019,6 +1037,18 @@ export type AiTaskVisualizationStatus =
   | "failed"
   | "unclosed";
 
+export type AiTaskIntentType =
+  | "interface_execute"
+  | "data_query"
+  | "task_execute"
+  | "bug_investigate"
+  | "bug_fix";
+
+export type AiTaskIntentSource =
+  | "agent_declared"
+  | "compatibility_default"
+  | "system_default";
+
 export interface AiTaskVisualizationListItem {
   task_id: number;
   description: string;
@@ -1026,6 +1056,10 @@ export interface AiTaskVisualizationListItem {
   workspace_name: string;
   environment: string;
   agent_name: string;
+  intent_type: AiTaskIntentType;
+  intent_error_signal: boolean;
+  intent_summary?: string | null;
+  intent_source: AiTaskIntentSource;
   status: AiTaskVisualizationStatus;
   created_at: string;
   last_activity_at: string;

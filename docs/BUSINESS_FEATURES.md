@@ -4,6 +4,14 @@
 
 让开发者先把本机代码根目录注册为工作空间，再在工作空间内分别配置一个或多个前端/后端项目的源码相对路径和文档入口相对路径，并把工作空间级文档、全部项目文档和只读数据库授权提供给本地 Codex、Antigravity 等 MCP 客户端。真实 Workspace 根 `AGENTS.md` 定义工作空间文档树的显式层级；各项目位于 `docs/` 层级下的 `AGENTS.md` 递归文档独立加入 Workspace 搜索和按 ID 读取范围。缺少真实根时才使用直接列出项目入口的合成根。数据库以 Workspace 内唯一别名暴露渐进 Schema 搜索和有界只读查询，不把连接信息交给 Agent。
 
+## AI 任务意图路由
+
+- `prepare_task_context` 接收由 Codex、Antigravity 等调用方识别的结构化主意图：执行接口、查询数据、普通任务、只查询 Bug 或修改 Bug。服务端不再次调用模型分类，只校验枚举、错误信号和摘要并持久化到 task。
+- prepare 返回机器可读 `execution_contract`，包含写操作策略、必需步骤、可视化目标和简短执行指令。旧客户端省略意图时兼容为普通任务并收到 warning。
+- 接口执行、数据条件和容器错误继续由各自现有 MCP 工具在真实动作发生时落库；意图路由不伪造可视化记录。一次主任务可以因辅助取证同时产生多类记录。
+- `bug_investigate` 的 Context Router 运行更新和启动操作由服务端拒绝；`save_task_visualization_result(resolved)` 会按主意图检查接口记录、数据条件、容器检查和 Workspace 更新证据。
+- MCP 无法拦截客户端直接编辑文件，因此只查询 Bug 的完整只读保证由服务端运行写保护、prepare 返回契约和 Workspace 编码规则共同完成。
+
 ## 工作空间与项目
 
 - 工作空间是顶层管理和聚合边界。数据库保存稳定 ID、名称、类型和兼容 `root_path`；当前电脑的主目录和卡片显示由项目内 `.context-router/workspaces.local.yaml` 决定。
@@ -133,6 +141,8 @@ title 和 summary 只读取 Front Matter，不从正文兜底生成；没有 sum
 ## MCP
 
 - MCP 固定提供 22 个当前工具，包括上下文、只读数据库、中间件、表关联、业务值映射、接口转发、数据与任务可视化收件、容器日志排查和三个 Workspace 运行编排工具。容器日志工具只接受 task 范围内通过运行标签注册的容器，错误快照读取有时间、行数和字节上限。数据源、中间件、映射、容器或日志记录增删不会改变 `tools/list`。
+- 业务值映射同时服务数据查询和接口参数组装。数据查询遇到业务名称、ID、编码或编号时先搜索已发布映射，再按 task 环境解析候选；没有映射才探索表关系和 Schema。未按接口筛选时 MCP 只返回绑定数量而不展开接口绑定；候选可保持默认顺序，或从最多 10 条的有界池中随机抽取。
+- 映射搜索与解析可在 prepare 后直接调用，不依赖 `read_task_context` 返回数据库列表；映射未命中时才读取别名并探索 Schema。用户要求随机或任意数量时，调用方必须把 `selection=random` 和准确 `limit` 传给候选解析，不再用原始 SQL 重复查询或执行 `ORDER BY RAND()`；调用摘要记录选择策略和候选池规模。
 - 服务端先在全部工作空间根目录中按 cwd 最长前缀确定 Workspace，再按源码 `relative_path` 计算最深匹配 Project 作为 `active_project` 快照；docs 文档入口目录不参与活动项目归属。活动项目只帮助说明 Codex 当前开发位置，不限制文档、搜索、read 或数据库授权范围。
 - prepare 不按 task 内容搜索或排名，也不返回 Markdown 正文；它只返回 task_id、可用能力、必要 warning，以及节点仅含 `document_id`、`summary`、`children` 的确定性三层投影。存在真实 Workspace 根 `AGENTS.md` 时固定从它开始；缺少真实根时，才从 cwd 命中的 Project 入口或合成根开始。未返回的深层文档和其他 Project 文档仍可由 Workspace 范围的 `search_context_documents` 定位并按结果 ID 读取。数据库别名和环境 JSON 由 `read_task_context` 按需返回。
 - `prepare_task_context` 的可选 `environment` 接受当前 Workspace 已登记的任意合规键；显式值记录 `task_explicit`，省略时固定 `local` 并记录 `workspace_default`。两者都不修改 Workspace 配置，未登记的环境返回 `environment_not_configured`。

@@ -25,6 +25,9 @@ from context_router.services.workspace_runtime_orchestration import (
 
 
 class FakeTasks:
+    def __init__(self, intent_type: str = "task_execute") -> None:
+        self.intent_type = intent_type
+
     def get_task(self, task_id: int) -> TaskRecord:
         assert task_id == 7
         return TaskRecord(
@@ -43,6 +46,7 @@ class FakeTasks:
             active_project_id="api",
             active_project_name="API",
             active_project_kind="backend",
+            intent_type=self.intent_type,  # type: ignore[arg-type]
         )
 
 
@@ -81,7 +85,11 @@ class FakeRegistry:
         return self.snapshot
 
 
-def build_service(tmp_path: Path) -> WorkspaceRuntimeOrchestrationService:
+def build_service(
+    tmp_path: Path,
+    *,
+    intent_type: str = "task_execute",
+) -> WorkspaceRuntimeOrchestrationService:
     workspace_root = tmp_path / "workspace"
     for relative in ("apps/admin/src", "services/api", "shared"):
         (workspace_root / relative).mkdir(parents=True)
@@ -107,7 +115,7 @@ def build_service(tmp_path: Path) -> WorkspaceRuntimeOrchestrationService:
         ),
     )
     return WorkspaceRuntimeOrchestrationService(
-        task_repository=FakeTasks(),
+        task_repository=FakeTasks(intent_type),
         registry=FakeRegistry(workspace_root),
         project_config_repository=project_configs,
         workspace_runtime_repository=workspace_configs,
@@ -171,6 +179,18 @@ def test_start_workspace_always_creates_one_workspace_start_step(tmp_path: Path)
 
     assert operation.kind == "start_workspace"
     assert [(step.owner_type, step.mode) for step in operation.steps] == [("workspace", "start")]
+
+
+def test_bug_investigation_intent_rejects_runtime_mutations(tmp_path: Path) -> None:
+    service = build_service(tmp_path, intent_type="bug_investigate")
+
+    with pytest.raises(WorkspaceRuntimeOrchestrationError) as apply_error:
+        service.apply_changes(task_id=7, changed_files=["services/api/main.py"])
+    with pytest.raises(WorkspaceRuntimeOrchestrationError) as start_error:
+        service.start_workspace(task_id=7)
+
+    assert apply_error.value.code == "intent_mutation_forbidden"
+    assert start_error.value.code == "intent_mutation_forbidden"
 
 
 def test_host_action_is_allowlisted_and_defaults_to_local(tmp_path: Path, monkeypatch) -> None:

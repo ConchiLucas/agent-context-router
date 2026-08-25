@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 import { WorkspaceDetail } from "@/components/workspace-detail";
@@ -45,6 +45,8 @@ export function WorkspaceDashboard() {
   const [refreshErrors, setRefreshErrors] = useState<
     Record<string, string>
   >({});
+  const lastWorkspaceEntryRef = useRef<HTMLButtonElement>(null);
+  const lastWorkspaceEntryIdRef = useRef<string | null>(null);
 
   const loadWorkspaces = useCallback(async () => {
     setLoading(true);
@@ -122,6 +124,7 @@ export function WorkspaceDashboard() {
         onBack={() => {
           setActiveWorkspace(null);
           void loadWorkspaces();
+          window.requestAnimationFrame(() => lastWorkspaceEntryRef.current?.focus());
         }}
       />
     );
@@ -283,7 +286,16 @@ export function WorkspaceDashboard() {
               <button
                 type="button"
                 className="primary-button"
-                onClick={() => setActiveWorkspace(workspace)}
+                ref={
+                  workspace.id === lastWorkspaceEntryIdRef.current
+                    ? lastWorkspaceEntryRef
+                    : undefined
+                }
+                onClick={(event) => {
+                  lastWorkspaceEntryIdRef.current = workspace.id;
+                  lastWorkspaceEntryRef.current = event.currentTarget;
+                  setActiveWorkspace(workspace);
+                }}
               >
                 进入工作空间
               </button>

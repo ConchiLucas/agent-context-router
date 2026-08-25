@@ -109,8 +109,62 @@ def test_mcp_mapping_filters_exact_interface_parameter_and_bounds_bindings() -> 
     )
 
     assert result["binding_count"] == 21
+    assert result["bindings_included"] is True
     assert len(result["bindings"]) == 20
     assert result["bindings_truncated"] is True
+
+
+def test_mcp_mapping_omits_binding_details_without_interface_scope() -> None:
+    mapping = {
+        "id": "mapping-1",
+        "value_key": "shipper_id",
+        "name": "货主ID",
+        "description": "货主主键",
+        "aliases": ["货主编号"],
+        "resolver_type": "database_column",
+        "database_alias": "member",
+        "schema_name": None,
+        "table_name": "member_shipper",
+        "value_column": "id",
+        "search_columns": ["shipper_name"],
+        "display_columns": ["shipper_name"],
+        "filters": {"status": 1},
+        "bindings": [{"interface_id": f"interface-{index}"} for index in range(3)],
+    }
+
+    result = ValueMappingService._mcp_mapping(
+        mapping,
+        interface_id=None,
+        location=None,
+        parameter_path=None,
+    )
+
+    assert result["binding_count"] == 3
+    assert result["bindings_included"] is False
+    assert result["bindings"] == []
+    assert result["bindings_truncated"] is True
+
+
+def test_candidate_selection_preserves_default_order_and_bounds_random_pool() -> None:
+    candidates = [{"value": index} for index in range(10)]
+
+    assert (
+        ValueMappingService._select_candidates(
+            candidates,
+            selection="default",
+            limit=2,
+        )
+        == candidates[:2]
+    )
+    selected = ValueMappingService._select_candidates(
+        candidates,
+        selection="random",
+        limit=3,
+    )
+
+    assert len(selected) == 3
+    assert all(item in candidates for item in selected)
+    assert len({item["value"] for item in selected}) == 3
 
 
 def test_interface_parameters_include_nested_body_fields_and_path_fallback() -> None:

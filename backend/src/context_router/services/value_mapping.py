@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import math
 import re
-from typing import Any
+from random import SystemRandom
+from typing import Any, Literal
 from uuid import uuid4
 
 import psycopg
@@ -24,6 +25,7 @@ from context_router.services.database_access import DatabaseAccessService
 
 _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _PATH_PARAMETER = re.compile(r"\{([^{}]+)\}")
+_RANDOM = SystemRandom()
 
 
 class ValueMappingError(RuntimeError):
@@ -134,7 +136,7 @@ class ValueMappingService:
             cursor.execute(
                 f"""SELECT mapping.id, {rank_sql} AS relevance_rank
                     FROM interface_value_mappings AS mapping
-                    WHERE {' AND '.join(where)}
+                    WHERE {" AND ".join(where)}
                     ORDER BY relevance_rank, lower(mapping.name), mapping.id
                     LIMIT %s""",
                 (*rank_parameters, *parameters, bounded_limit + 1),
@@ -168,6 +170,7 @@ class ValueMappingService:
         environment: str | None,
         keyword: str,
         limit: int,
+        selection: Literal["default", "random"] = "default",
     ) -> dict[str, object]:
         """Execute one saved resolver in the database environment captured by the task."""
         workspace_id, selected_environment = self._task_scope(task_id, environment)
@@ -180,6 +183,7 @@ class ValueMappingService:
         if normalized_keyword and not mapping["search_columns"]:
             raise ValueMappingError("当前映射还没有配置可搜索字段", code="search_unavailable")
         bounded_limit = max(1, min(limit, 10))
+        candidate_pool_limit = 10 if selection == "random" else bounded_limit
         try:
             access = self._database_access.resolve(
                 task_id=task_id,
@@ -190,10 +194,15 @@ class ValueMappingService:
                 mapping,
                 access=access,
                 keyword=normalized_keyword,
-                limit=bounded_limit,
+                limit=candidate_pool_limit,
             )
         except DatabaseAccessError as exc:
             raise ValueMappingError(str(exc), code=exc.code) from exc
+        selected_candidates = self._select_candidates(
+            candidates,
+            selection=selection,
+            limit=bounded_limit,
+        )
         return {
             "task_id": task_id,
             "mapping_id": mapping_id,
@@ -201,6 +210,7 @@ class ValueMappingService:
             "name": mapping["name"],
             "environment": selected_environment,
             "keyword": normalized_keyword,
+            "selection": selection,
             "source": {
                 "database_alias": mapping["database_alias"],
                 "schema_name": mapping["schema_name"],
@@ -208,8 +218,9 @@ class ValueMappingService:
                 "value_column": mapping["value_column"],
                 "display_columns": mapping["display_columns"],
             },
-            "candidates": candidates,
-            "returned_count": len(candidates),
+            "candidates": selected_candidates,
+            "returned_count": len(selected_candidates),
+            "candidate_pool_count": len(candidates),
             "elapsed_ms": elapsed_ms,
             "truncated": truncated,
         }
@@ -508,12 +519,11 @@ class ValueMappingService:
             if isinstance(binding, dict)
             and (interface_id is None or binding.get("interface_id") == interface_id)
             and (location is None or binding.get("location") == location)
-            and (
-                parameter_path is None
-                or binding.get("parameter_path") == parameter_path
-            )
+            and (parameter_path is None or binding.get("parameter_path") == parameter_path)
         ]
         visible_bindings = bindings[:20]
+        if interface_id is None:
+            visible_bindings = []
         return {
             "mapping_id": mapping["id"],
             "value_key": mapping["value_key"],
@@ -531,9 +541,25 @@ class ValueMappingService:
                 "filters": mapping["filters"],
             },
             "binding_count": len(bindings),
+            "bindings_included": interface_id is not None,
             "bindings": visible_bindings,
             "bindings_truncated": len(bindings) > len(visible_bindings),
         }
+
+    @staticmethod
+    def _select_candidates(
+        candidates: list[dict[str, object]],
+        *,
+        selection: Literal["default", "random"],
+        limit: int,
+    ) -> list[dict[str, object]]:
+        bounded_limit = max(1, min(limit, 10))
+        if selection == "default":
+            return candidates[:bounded_limit]
+        if selection == "random":
+            sample_size = min(bounded_limit, len(candidates))
+            return _RANDOM.sample(candidates, sample_size)
+        raise ValueMappingError("不支持的候选选择策略", code="invalid_selection")
 
     def _execute_candidates(
         self,

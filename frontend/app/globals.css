@@ -2488,26 +2488,23 @@ p {
 }
 
 .mcp-integration-modal {
-  display: grid;
   position: fixed;
   z-index: 50;
   inset: 0;
-  padding: 28px;
-  place-items: center;
-  background: rgb(32 33 31 / 54%);
-  backdrop-filter: blur(10px);
+  overflow: hidden;
+  background: var(--background);
 }
 
 .mcp-integration-panel {
   display: grid;
-  width: min(1180px, 100%);
-  height: min(820px, calc(100vh - 56px));
+  width: 100%;
+  height: 100dvh;
   grid-template-rows: auto auto minmax(0, 1fr);
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 22px;
+  border: 0;
+  border-radius: 0;
   background: var(--surface);
-  box-shadow: 0 28px 90px rgb(20 22 20 / 24%);
+  box-shadow: none;
 }
 
 .mcp-integration-header {
@@ -6433,6 +6430,25 @@ p {
   background: var(--background);
 }
 
+.workspace-environment-modal {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  overflow: auto;
+  background: var(--background);
+}
+
+.workspace-environment-modal .mcp-environment-page-header {
+  padding-right: 64px;
+}
+
+.workspace-environment-close-button {
+  position: fixed;
+  z-index: 2;
+  top: 32px;
+  right: 32px;
+}
+
 .mcp-environment-page-shell {
   width: min(1120px, calc(100% - 48px));
   margin: 0 auto;
@@ -6773,6 +6789,11 @@ p {
 
   .mcp-environment-back-link {
     width: 100%;
+  }
+
+  .workspace-environment-close-button {
+    top: 20px;
+    right: 16px;
   }
 
   .workspace-environment-header-actions,
@@ -7285,10 +7306,25 @@ p.workspace-runtime-runner-status {
   line-height: 1.55;
 }
 
+.workspace-detail {
+  display: block;
+  position: fixed;
+  z-index: 150;
+  inset: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 32px;
+  background: var(--background);
+  scrollbar-gutter: stable;
+}
+
 .workspace-detail-header {
-  position: relative;
+  position: sticky;
+  z-index: 1;
+  top: 0;
   margin-bottom: 22px;
-  padding-right: 64px;
+  padding: 0 64px 18px 0;
+  background: var(--background);
 }
 
 .workspace-detail-close-button {
@@ -8142,6 +8178,10 @@ p.workspace-runtime-runner-status {
   .workspace-source-card > header {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .workspace-detail {
+    padding: 20px 16px;
   }
 
   .workspace-project-form,

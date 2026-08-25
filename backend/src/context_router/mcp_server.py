@@ -83,13 +83,19 @@ from context_router.services.workspace_runtime_orchestration import (
 
 MCP_SERVER_NAME = "Context Router"
 MCP_SERVER_INSTRUCTIONS = (
-    "Call prepare_task_context once at the start of a new workspace task. Preserve the "
+    "Call prepare_task_context once at the start of a new workspace task. First classify the "
+    "user's primary intent as interface_execute, data_query, task_execute, bug_investigate, or "
+    "bug_fix and pass it as intent_type. Set error_signal=true only when a Bug request contains "
+    "or points to actual runtime error evidence. Preserve the "
     "returned task_id and pass it to every document or database call for that task. "
     "Prepare returns the real workspace entry when present, otherwise the active project or "
     "synthetic workspace entry, plus at most two explicit descendant levels and access "
-    "capabilities. This navigation projection is not the full searchable scope. Call "
-    "read_task_context only when database aliases or generic environment configuration "
-    "are needed; it is not the authoritative source for live Nacos middleware details. "
+    "capabilities. This navigation projection is not the full searchable scope. A business-value "
+    "mapping search and resolution can run immediately after prepare_task_context; do not call "
+    "read_task_context, search_database_objects, or execute_database_query merely to discover or "
+    "recheck the mapping source. Call read_task_context only after no suitable mapping is found "
+    "and raw database aliases or generic environment configuration are needed; it is not the "
+    "authoritative source for live Nacos middleware details. "
     "When the document tree is large or the target is uncertain, call "
     "search_context_documents and then read the selected document or section with "
     "read_context_document. "
@@ -118,13 +124,17 @@ MCP_SERVER_INSTRUCTIONS = (
     "expands only soft verdicts and evidence=all expands every relation with per-dimension "
     "verdicts, "
     "measurements, re-runnable check SQL, and relation code sites. "
-    "Empty writes or updates only mean no entry points are recorded yet. When only a business "
-    "term is known, find exact table names first with search_relation_tables. "
-    "When an interface parameter needs a business value such as a shipper ID or carrier ID, "
-    "call search_value_mappings by business keyword or exact interface parameter. Then call "
-    "resolve_value_candidates with the selected mapping. It executes only the saved bounded "
+    "Empty writes or updates only mean no entry points are recorded yet. When a table-relation "
+    "task starts from only a business term, find exact table names with search_relation_tables. "
+    "When a data query or interface parameter contains a business value such as a shipper ID "
+    "or carrier ID, call search_value_mappings by business keyword before discovering tables "
+    "or inventing SQL. Then call "
+    "resolve_value_candidates with the selected mapping. When the user asks for a random value, "
+    "pass selection=random and the exact requested limit; do not replace it with ORDER BY RAND() "
+    "or another raw random SQL query. It executes only the saved bounded "
     "read rule, inherits the task environment when omitted, and returns at most 10 candidates. "
-    "Do not invent IDs when a published mapping is available. "
+    "Use table-relation and raw schema discovery only when no published mapping fits. Do not "
+    "invent IDs when a published mapping is available. "
     "When the user wants the browser data-visualization page to open with AI-selected query "
     "conditions, call save_data_visualization_query after resolving an exact published relation "
     "table and keyword. The current task supplies Workspace, environment, and AI source; never "
@@ -232,20 +242,28 @@ SAVE_TASK_VISUALIZATION_RESULT_TOOL_DESCRIPTION = (
     "verification outcomes. Repeated calls update the same task record and increase its revision."
 )
 PREPARE_TOOL_DESCRIPTION = (
-    "Locate the registered workspace for cwd, create a server-side task number, and "
+    "First classify the user's primary intent and pass intent_type. Locate the registered "
+    "workspace for cwd, create a server-side task number, and "
     "return a task-local document projection. A real workspace AGENTS.md is always level 1; "
     "without one, the active project or synthetic workspace entry is level 1. The result has "
     "at most two explicit descendant levels. Nodes contain only document_id, summary, and "
     "children. Unrelated documents and deeper descendants are omitted from prepare but remain "
     "available through workspace-wide search_context_documents and read_context_document. "
     "Omit environment to use local, or pass any environment registered by the Workspace for "
-    "this task only. access states which task capabilities "
+    "this task only. The returned execution_contract is authoritative for mutation policy, "
+    "required MCP steps, and visualization targets. A bug_investigate task is read-only; a "
+    "bug_fix task with error_signal=true must inspect a registered container before applying "
+    "changes. access states which task capabilities "
     "are available. Database aliases and environment config are intentionally omitted; request "
     "them only when needed with read_task_context. access includes middleware when live Nacos "
     "middleware context may be requested with read_middleware_context."
 )
 READ_TASK_CONTEXT_TOOL_DESCRIPTION = (
     "Read database aliases and/or generic saved environment JSON for an existing task. "
+    "Do not call this before search_value_mappings or resolve_value_candidates: published "
+    "mappings already own their database alias and resolve it in the task environment. Call it "
+    "only when no mapping fits and raw database discovery/querying is required, or when generic "
+    "environment JSON is explicitly needed. "
     "This is not the authoritative or live source for Redis, MQ, Elasticsearch, MinIO, or "
     "other Nacos-managed middleware; use read_middleware_context for those details. Request "
     "only the sections needed. Environment config is sensitive local-only context and must "
@@ -281,7 +299,9 @@ SEARCH_DATABASE_TOOL_DESCRIPTION = (
 )
 EXECUTE_DATABASE_TOOL_DESCRIPTION = (
     "Execute exactly one bounded read-only SQL statement against a database alias returned "
-    "by read_task_context. Connection details and query limits are enforced server-side."
+    "by read_task_context. Do not use this to repeat a business-value mapping resolver or to "
+    "implement random selection after resolve_value_candidates; use selection=random there. "
+    "Connection details and query limits are enforced server-side."
 )
 READ_TABLE_RELATIONS_TOOL_DESCRIPTION = (
     "Read the curated relation list for up to 10 database tables in the current task's "
@@ -316,15 +336,22 @@ SEARCH_RELATION_TABLES_TOOL_DESCRIPTION = (
     "it does not exist."
 )
 SEARCH_VALUE_MAPPINGS_TOOL_DESCRIPTION = (
-    "Search published business-value mappings in the current task Workspace. Provide a Chinese "
-    "business keyword, an exact imported interface ID and parameter location/path, or both. "
-    "Results explain the configured read-only resolver and list bounded interface bindings; no "
+    "Search published business-value mappings for data queries or interface parameters in the "
+    "current task Workspace. Provide a Chinese business keyword, an exact imported interface ID "
+    "and parameter location/path, or both. Use this before table/schema discovery whenever a "
+    "business ID, code, number, or named entity may already be mapped. Results explain the "
+    "configured read-only resolver. Calls without interface_id omit binding details and return "
+    "only their count; calls for an exact interface return at most 20 matching bindings. No "
     "database query is executed."
 )
 RESOLVE_VALUE_CANDIDATES_TOOL_DESCRIPTION = (
     "Resolve up to 10 candidate values with one published mapping's saved database alias, table, "
     "columns, and fixed filters. Omit environment to inherit the task environment; an explicit "
-    "environment must match the task. The caller cannot provide SQL, connection details, or an "
+    "environment must match the task. selection=default preserves resolver order; "
+    "selection=random samples from a bounded pool of at most 10 candidates and never performs an "
+    "unbounded database random sort. For requests such as random/随机/任意一个, set "
+    "selection=random and set limit to the number requested. This tool does not require a prior "
+    "read_task_context call. The caller cannot provide SQL, connection details, or an "
     "unconfigured data source."
 )
 SEARCH_FORWARDING_INTERFACES_TOOL_DESCRIPTION = (
@@ -628,6 +655,33 @@ def create_context_router_mcp(
                 description=("Optional task-only environment. Omit to use local."),
             ),
         ] = None,
+        intent_type: Literal[
+            "interface_execute",
+            "data_query",
+            "task_execute",
+            "bug_investigate",
+            "bug_fix",
+        ]
+        | None = None,
+        error_signal: Annotated[
+            bool,
+            Field(
+                strict=True,
+                description=(
+                    "True only for bug_investigate or bug_fix when the user provides or points "
+                    "to runtime error evidence."
+                ),
+            ),
+        ] = False,
+        intent_summary: Annotated[
+            str | None,
+            Field(
+                max_length=1000,
+                description=(
+                    "Short statement of requested action and whether code changes are allowed."
+                ),
+            ),
+        ] = None,
     ) -> dict[str, Any]:
         try:
             result = preparation_service.prepare(
@@ -635,6 +689,9 @@ def create_context_router_mcp(
                 cwd=cwd,
                 agent_name=agent_name,
                 environment=environment,
+                intent_type=intent_type,
+                error_signal=error_signal,
+                intent_summary=intent_summary,
             )
         except ContextPreparationError as exc:
             raise ToolError(f"{exc.code}: {exc}") from exc
@@ -1024,6 +1081,7 @@ def create_context_router_mcp(
         ] = None,
         keyword: Annotated[str, Field(max_length=240)] = "",
         limit: Annotated[int, Field(ge=1, le=10, strict=True)] = 10,
+        selection: Literal["default", "random"] = "default",
     ) -> dict[str, object]:
         if value_mapping_service is None:
             raise ToolError("value_mapping_disabled: 业务值映射 MCP 当前不可用")
@@ -1034,6 +1092,7 @@ def create_context_router_mcp(
                 environment=environment,
                 keyword=keyword,
                 limit=limit,
+                selection=selection,
             )
         except ValueMappingError as exc:
             raise ToolError(f"{exc.code}: {exc}") from exc
@@ -1380,6 +1439,7 @@ def _request_summary(name: str, arguments: dict[str, Any]) -> dict[str, object] 
                 else None
             ),
             "limit": arguments.get("limit") if isinstance(arguments.get("limit"), int) else None,
+            "selection": _safe_string(arguments.get("selection"), 16) or "default",
         }
     if name == SEARCH_FORWARDING_INTERFACES_TOOL_NAME:
         raw_query = arguments.get("query")
@@ -1569,6 +1629,12 @@ def _result_summary(name: str, payload: dict[str, Any]) -> dict[str, object] | N
             "mapping_id": _safe_string(payload.get("mapping_id"), 36),
             "returned_count": payload.get("returned_count", 0),
             "environment": _safe_string(payload.get("environment"), 32),
+            "selection": _safe_string(payload.get("selection"), 16) or "default",
+            "candidate_pool_count": (
+                payload.get("candidate_pool_count")
+                if isinstance(payload.get("candidate_pool_count"), int)
+                else None
+            ),
             "truncated": payload.get("truncated") is True,
         }
     if name == SEARCH_FORWARDING_INTERFACES_TOOL_NAME:

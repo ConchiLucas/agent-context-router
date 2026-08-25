@@ -104,6 +104,7 @@ class WorkspaceRuntimeOrchestrationService:
         changed_files: list[str],
         trigger: str = "mcp",
     ) -> RuntimeOperationView:
+        self._require_task_mutation_allowed(task_id)
         workspace = self._workspace_for_task(task_id)
         normalized = self._normalize_changed_files(changed_files, workspace.resolved_root_path)
         policy = self._workspace_runtime.get_policy(workspace.id)
@@ -199,6 +200,7 @@ class WorkspaceRuntimeOrchestrationService:
         task_id: int,
         trigger: str = "mcp",
     ) -> RuntimeOperationView:
+        self._require_task_mutation_allowed(task_id)
         workspace = self._workspace_for_task(task_id)
         snapshot = self._materialize_workspace(workspace.id)
         return self._create_view(
@@ -399,6 +401,18 @@ class WorkspaceRuntimeOrchestrationService:
             )
         except (TaskRepositoryError, ProjectRegistryError) as exc:
             raise WorkspaceRuntimeOrchestrationError("invalid_task", str(exc)) from exc
+
+    def _require_task_mutation_allowed(self, task_id: int) -> None:
+        try:
+            task = self._task_repository.get_task(task_id)
+        except TaskRepositoryError as exc:
+            raise WorkspaceRuntimeOrchestrationError("invalid_task", str(exc)) from exc
+        if task.intent_type == "bug_investigate":
+            raise WorkspaceRuntimeOrchestrationError(
+                "intent_mutation_forbidden",
+                "当前任务意图是只查询 Bug，禁止修改、部署或启动工作空间；"
+                "如用户明确要求修复，请创建 bug_fix 任务",
+            )
 
     def _materialize_workspace(self, workspace_id: str) -> MaterializedRuntimeConfig:
         try:

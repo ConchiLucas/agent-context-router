@@ -74,7 +74,15 @@ def test_status_returns_the_published_generation() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["generation"]["status"] == "published"
-    assert payload["database_keys"] == ["c12_mtp_db", "c12_portal_db"]
+    assert payload["database_keys"] == [
+        "c12_admin_db",
+        "c12_auth_db",
+        "c12_mtp_db",
+        "c12_park_db",
+        "c12_portal_db",
+        "c12_rcc_db",
+        "c12_wms_db",
+    ]
     assert WORKSPACE in payload["rebuild_command"]
 
 
@@ -103,7 +111,7 @@ def test_table_detail_returns_a_flat_list_carrying_both_verdicts() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert "groups" not in payload
-    assert payload["relation_count"] == len(payload["relations"]) == 4
+    assert payload["relation_count"] == len(payload["relations"]) == 5
 
     by_id = {relation["relation_id"]: relation for relation in payload["relations"]}
     # The disagreement the page exists to surface, all the way through the wire.
@@ -136,10 +144,10 @@ def test_a_dead_column_is_counted_but_not_listed() -> None:
         ).json()
 
     assert payload["hidden_count"] == 1
-    assert [relation["relation_id"] for relation in payload["relations"]] == [
-        "cs_dsly_order_entrusted_order_relate.entrusted_order_no",
-        "cs_dsly_order_entrusted_order_relate.route_no",
-    ]
+    relation_ids = [relation["relation_id"] for relation in payload["relations"]]
+    assert "cs_dsly_order_entrusted_order_relate.entrusted_order_id" not in relation_ids
+    assert "cs_dsly_order_entrusted_order_relate.entrusted_order_no" in relation_ids
+    assert "cs_dsly_order_entrusted_order_relate.route_no" in relation_ids
 
 
 def _edge_id(client: TestClient, table_name: str, relation_id: str) -> str:

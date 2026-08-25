@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from context_router.schemas.context import TaskIntentSource, TaskIntentType
+
 AiTaskResultStatus = Literal["investigating", "resolved", "failed"]
 AiTaskDisplayStatus = Literal["investigating", "resolved", "failed", "unclosed"]
 AiTaskChainStatus = Literal["healthy", "running", "attention", "failed", "unused"]
@@ -61,6 +63,10 @@ class AiTaskVisualizationListItem(BaseModel):
     workspace_name: str
     environment: str
     agent_name: str
+    intent_type: TaskIntentType
+    intent_error_signal: bool = False
+    intent_summary: str | None = None
+    intent_source: TaskIntentSource
     status: AiTaskDisplayStatus
     created_at: datetime
     last_activity_at: datetime

@@ -123,15 +123,16 @@ def test_the_list_is_flat_and_ordered_by_the_relation_identity(
 ) -> None:
     view = detail(service, "cs_dsly_highway_cargo")
 
-    # Four foreign keys on one table, ordered by the identity each row shows, so
+    # Five foreign keys on one table, ordered by the identity each row shows, so
     # the order cannot shift when a verdict is re-measured.
     assert [item.relation_id for item in view.relations] == [
+        "cs_dsly_highway_cargo.cargo_code",
         "cs_dsly_highway_cargo.cargo_id",
         "cs_dsly_highway_cargo.carrier_order_no",
         "cs_dsly_highway_cargo.category_id",
         "cs_dsly_highway_cargo.dispatch_order_no",
     ]
-    assert view.relation_count == 4
+    assert view.relation_count == 5
 
 
 def test_a_relation_keeps_one_identity_from_both_of_its_ends(
@@ -263,22 +264,21 @@ def test_dead_columns_are_kept_off_the_list_but_stay_counted(
     projection: SeedProjection,
 ) -> None:
     dead = [edge for edge in projection.edges if is_dead_column(edge.db_evidence)]
-    assert len(dead) == 3, "种子里保留了死列，用来证明死列确实被挡在列表外"
+    assert len(dead) == 7, "种子里保留了死列，用来证明死列确实被挡在列表外"
     entrusted_dead = next(
         edge
         for edge in dead
-        if edge.left_column == "entrusted_order_id"
-        or edge.right_column == "entrusted_order_id"
+        if edge.left_column == "entrusted_order_id" or edge.right_column == "entrusted_order_id"
     )
 
     relate = detail(service, "cs_dsly_order_entrusted_order_relate")
     parent = detail(service, "cs_dsly_order_entrusted_order")
 
-    # The column beside it, holding the value that is really written, stays.
-    assert [item.relation_id for item in relate.relations] == [
-        "cs_dsly_order_entrusted_order_relate.entrusted_order_no",
-        "cs_dsly_order_entrusted_order_relate.route_no",
-    ]
+    # The dead id stays hidden while the fields that are really written stay visible.
+    relation_ids = [item.relation_id for item in relate.relations]
+    assert "cs_dsly_order_entrusted_order_relate.entrusted_order_id" not in relation_ids
+    assert "cs_dsly_order_entrusted_order_relate.entrusted_order_no" in relation_ids
+    assert "cs_dsly_order_entrusted_order_relate.route_no" in relation_ids
     assert relate.hidden_count == 1
     assert parent.hidden_count == 1
     for view in (relate, parent):
@@ -314,23 +314,8 @@ def test_a_table_reachable_only_through_a_dead_column_reads_as_unrelated(
         table.table_name for table in related.tables
     }
     assert hidden == {
-        "cs_dsly_basic_driver",
-        "cs_dsly_basic_driver_info",
-        "cs_dsly_basic_outbound_box",
-        "cs_dsly_basic_ship",
-        "cs_dsly_basic_ship_owner",
-        "cs_dsly_basic_vehicle",
-        "cs_dsly_highway_attachment",
-        "cs_dsly_highway_container",
-        "cs_dsly_line_approval_history",
-        "cs_dsly_line_route_inquiry_quote",
-        "cs_dsly_line_route_snapshot_quote",
         "cs_dsly_operation_attachment",
         "cs_dsly_order_attachment",
-        "cs_dsly_order_container",
-        "cs_dsly_order_entrusted_order_settlement",
-        "cs_dsly_order_file",
-        "cs_dsly_railway_attachment",
         "cs_dsly_railway_carrier_order_container",
         "cs_dsly_shipping_attachment",
         "cs_dsly_shipping_container",
@@ -342,25 +327,65 @@ def test_a_table_reachable_only_through_a_dead_column_reads_as_unrelated(
         "cs_dsly_declaration_attachment",
         "cs_dsly_declaration_interface_file_transfer_record",
         "cs_dsly_declaration_origin",
-        "cs_portal_member_contract_attachment",
-        "cs_portal_member_entrusted_order_complain",
-        "cs_portal_member_entrusted_order_evaluation",
-        "cs_portal_member_invoice",
-        "cs_portal_member_message_recipient",
-        "cs_portal_cockpit_accident",
-        "cs_portal_cockpit_congestion",
-        "cs_portal_cockpit_enterprise_rank",
         "cs_portal_cockpit_kpi",
-        "cs_portal_cockpit_map_flow",
-        "cs_portal_cockpit_ontime_route",
         "cs_portal_cockpit_ontime_summary",
-        "cs_portal_cockpit_station_turnover",
-        "cs_portal_cockpit_timeliness_route",
     }
     assert related.total_count == everything.total_count
     assert related.related_count == len(related.tables)
     # Busiest table first, so the interesting one is reachable without scrolling.
-    assert related.tables[0].table_name == "cs_bt_departure_plan"
+    assert related.tables[0].table_name == "sys_user"
+
+
+def test_railway_first_priority_relations_are_published(
+    service: TableRelationQueryService,
+) -> None:
+    cargo = detail(service, "cs_dsly_railway_cargo")
+    manifest = detail(service, "cs_dsly_railway_dispatch_manifest")
+    attachment = detail(service, "cs_dsly_railway_attachment")
+    carrier = detail(service, "cs_dsly_railway_carrier_order")
+    dispatch = detail(service, "cs_dsly_railway_dispatch_order")
+    record = detail(service, "cs_dsly_railway_dispatch_record")
+    dispatch_line = detail(service, "cs_dsly_railway_dispatch_order_line")
+
+    assert "cs_dsly_railway_cargo.cargo_code" in {
+        item.relation_id for item in cargo.relations
+    }
+    assert "cs_dsly_railway_dispatch_manifest.cargo_id" in {
+        item.relation_id for item in manifest.relations
+    }
+    assert "cs_dsly_railway_attachment.source_id" in {
+        item.relation_id for item in attachment.relations
+    }
+    assert {
+        "cs_dsly_railway_dispatch_order.id",
+        "cs_dsly_railway_carrier_order.id",
+    }.issubset({item.references for item in attachment.relations})
+    carrier_ids = {item.relation_id for item in carrier.relations}
+    assert any(
+        identity.endswith("cs_dsly_railway_carrier_order.shipper_id")
+        for identity in carrier_ids
+    )
+    assert any(
+        identity.endswith("cs_dsly_railway_carrier_order.carrier_id")
+        for identity in carrier_ids
+    )
+    assert "cs_dsly_railway_carrier_order.contract_no" in carrier_ids
+
+    dispatch_ids = {item.relation_id for item in dispatch.relations}
+    for suffix in (
+        "cs_dsly_railway_dispatch_order.carrier_id",
+        "cs_logistics_waybill_execution.waybill_no",
+        "cs_logistics_cargo_safety.waybill_no",
+    ):
+        assert any(identity.endswith(suffix) for identity in dispatch_ids)
+
+    assert any(
+        identity.endswith("cs_dsly_railway_dispatch_record.operator_id")
+        for identity in {item.relation_id for item in record.relations}
+    )
+    assert "cs_dsly_railway_dispatch_order_line.station_id" in {
+        item.relation_id for item in dispatch_line.relations
+    }
 
 
 def test_table_list_search_and_database_filter_narrow_the_result(
@@ -394,7 +419,7 @@ def test_generation_summary_splits_every_edge_into_shown_and_held_back(
 
     assert generation is not None
     assert generation.edge_count == len(SEED_EDGES)
-    assert generation.hidden_count == 3
+    assert generation.hidden_count == 7
     assert generation.edge_count == generation.relation_count + generation.hidden_count
 
 
@@ -406,7 +431,15 @@ def test_status_reports_the_published_generation_and_the_seed_command(
     assert status.generation is not None
     assert status.generation.status == "published"
     assert status.building is None
-    assert status.database_keys == ["c12_mtp_db", "c12_portal_db"]
+    assert status.database_keys == [
+        "c12_admin_db",
+        "c12_auth_db",
+        "c12_mtp_db",
+        "c12_park_db",
+        "c12_portal_db",
+        "c12_rcc_db",
+        "c12_wms_db",
+    ]
     assert WORKSPACE in status.rebuild_command
 
 

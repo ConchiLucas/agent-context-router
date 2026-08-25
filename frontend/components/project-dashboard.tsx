@@ -883,6 +883,13 @@ export const ProjectDashboard = forwardRef<
             role="dialog"
             aria-modal="true"
             aria-label={`查看项目数据源 ${dataSourceProject.name}`}
+            data-workspace-detail-subdialog
+            onKeyDown={(event) => {
+              if (event.key !== "Escape") return;
+              event.preventDefault();
+              event.stopPropagation();
+              closeProjectDataSources();
+            }}
           >
             <header>
               <span className="file-chip">只读数据源授权</span>
@@ -1065,6 +1072,13 @@ export const ProjectDashboard = forwardRef<
             role="dialog"
             aria-modal="true"
             aria-label={`${mcpPreviewProject.name} MCP JSON`}
+            data-workspace-detail-subdialog
+            onKeyDown={(event) => {
+              if (event.key !== "Escape") return;
+              event.preventDefault();
+              event.stopPropagation();
+              closeMcpPreview();
+            }}
           >
             <header className="mcp-json-header">
               <div>
@@ -1098,6 +1112,13 @@ export const ProjectDashboard = forwardRef<
           role="dialog"
           aria-modal="true"
           aria-label={`${historyProject.name} MCP 调用记录`}
+          data-workspace-detail-subdialog
+          onKeyDown={(event) => {
+            if (event.key !== "Escape") return;
+            event.preventDefault();
+            event.stopPropagation();
+            closeTaskHistory();
+          }}
         >
           <header className="tree-toolbar-overlay">
             <div className="tree-project-summary task-history-summary">
@@ -1368,7 +1389,18 @@ export const ProjectDashboard = forwardRef<
       ) : null}
 
       {activeProject && tree ? (
-        <div className="tree-modal" role="dialog" aria-modal="true">
+        <div
+          className="tree-modal"
+          role="dialog"
+          aria-modal="true"
+          data-workspace-detail-subdialog
+          onKeyDown={(event) => {
+            if (event.key !== "Escape") return;
+            event.preventDefault();
+            event.stopPropagation();
+            closeTree();
+          }}
+        >
           <header className="tree-toolbar-overlay">
             <div className="tree-project-summary">
               <h2>{activeProject.name}</h2>

@@ -9,6 +9,15 @@ ProjectKind = Literal["frontend", "backend"]
 TaskScope = Literal["project", "workspace"]
 DatabaseEnvironment = str
 DatabaseEnvironmentSelection = Literal["workspace_default", "task_explicit"]
+TaskIntentType = Literal[
+    "interface_execute",
+    "data_query",
+    "task_execute",
+    "bug_investigate",
+    "bug_fix",
+]
+TaskIntentSource = Literal["agent_declared", "compatibility_default", "system_default"]
+TaskMutationPolicy = Literal["allowed", "forbidden"]
 
 
 class ContextDocumentNode(BaseModel):
@@ -37,9 +46,23 @@ class PreparedDatabase(BaseModel):
     environment: DatabaseEnvironment | None = None
 
 
+class TaskExecutionContract(BaseModel):
+    intent_type: TaskIntentType
+    error_signal: bool = False
+    intent_summary: str | None = None
+    intent_source: TaskIntentSource
+    mutation_policy: TaskMutationPolicy
+    required_steps: list[str] = Field(default_factory=list)
+    visualization_targets: list[Literal["task", "data", "interface", "log"]] = Field(
+        default_factory=lambda: ["task"]
+    )
+    instructions: list[str] = Field(default_factory=list)
+
+
 class PrepareTaskContextResult(BaseModel):
     task_id: int
     documents: ContextDocumentNode
+    execution_contract: TaskExecutionContract
     access: list[Literal["documents", "database", "environment", "middleware", "runtime"]] = Field(
         default_factory=lambda: [
             "documents",
@@ -130,6 +153,10 @@ class ContextTaskSummary(BaseModel):
     database_environment: str | None = None
     database_environment_revision: int | None = None
     database_environment_selection: DatabaseEnvironmentSelection | None = None
+    intent_type: TaskIntentType = "task_execute"
+    intent_error_signal: bool = False
+    intent_summary: str | None = None
+    intent_source: TaskIntentSource = "compatibility_default"
 
 
 class ContextReadHistoryItem(BaseModel):
@@ -176,6 +203,10 @@ class ContextTaskReadHistory(BaseModel):
     database_environment: str | None = None
     database_environment_revision: int | None = None
     database_environment_selection: DatabaseEnvironmentSelection | None = None
+    intent_type: TaskIntentType = "task_execute"
+    intent_error_signal: bool = False
+    intent_summary: str | None = None
+    intent_source: TaskIntentSource = "compatibility_default"
     agent_name: str | None = None
     created_at: datetime
     calls: list[ContextReadHistoryCall]

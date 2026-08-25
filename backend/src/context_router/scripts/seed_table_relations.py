@@ -176,8 +176,13 @@ class SeedEdge:
         return db_verdict_from_counts(_measurement(self.measured))
 
 
+ADMIN = "c12_admin_db.uat_admin"
+AUTH = "c12_auth_db.uat_auth"
 MTP = "c12_mtp_db.uat_mtp"
+PARK = "c12_park_db.uat_park"
 PORTAL = "c12_portal_db.uat_portal"
+RCC = "c12_rcc_db.uat_rcc"
+WMS = "c12_wms_db.uat_wms"
 
 # Where the 攀枝花 sources sit relative to that workspace's root. Relative because
 # an absolute path would be this machine's answer to a question about a repository.
@@ -220,12 +225,18 @@ _DRIVER_BASIC = f"{_BASIC}/driver/service/DriverBasicService.java"
 _DRIVER_ADMIN = f"{_BASIC}/driver/service/DriverAdminService.java"
 _DRIVER_PORTAL = f"{_BASIC}/driver/service/DriverPortalService.java"
 _DRIVER_INFO = f"{_BASIC}/driver/service/DriverInfoService.java"
+_DRIVER_ADMIN_CTRL = f"{_BASIC}/driver/controller/DriverAdminController.java"
+_VEHICLE_PORTAL_CTRL = f"{_BASIC}/vehicle/controller/VehiclePortalController.java"
 _SHIP_ADMIN_CTRL = f"{_BASIC}/ship/controller/ShipAdminController.java"
 _SHIP_PORTAL_CTRL = f"{_BASIC}/ship/controller/ShipPortalController.java"
 _SHIP_OWNER_ADMIN_CTRL = f"{_BASIC}/shipowner/controller/ShipOwnerAdminController.java"
 _SHIP_OWNER_PORTAL_CTRL = f"{_BASIC}/shipowner/controller/ShipOwnerPortalController.java"
 _PORT_ADMIN_SVC = f"{_BASIC}/port/service/PortAdminService.java"
 _OUTBOUND_BOX_SYNC = f"{_BASIC}/outboundbox/service/WmsOutboundBoxSyncService.java"
+_WMS_OUTBOUND_BOX_SVC = (
+    "backend/c12-wms/c12-wms-biz/src/main/java/com/chinaservices/wms/module"
+    "/so/shipping/service/OutboundBoxService.java"
+)
 _LINE = (
     "backend/c12-mtp/c12-mtp-line-service/c12-mtp-line-biz"
     "/src/main/java/com/chinaservices/dsly/line/module"
@@ -289,6 +300,9 @@ _CARGO_BASIC = f"{_HIGHWAY}/cargo/service/HighwayCargoBasicService.java"
 _RECORD_BASIC = f"{_HIGHWAY}/record/service/HighwayRecordBasicService.java"
 _PARK_PORTAL = f"{_HIGHWAY}/parkappointment/service/HighwayParkAppointmentPortalService.java"
 _DISPATCH_BOX = f"{_HIGHWAY}/dispatchbox/service/HighwayDispatchBoxPortalService.java"
+_HIGHWAY_OUTBOUND_SHIPMENT = (
+    f"{_HIGHWAY}/outboundshipment/service/MtpWmsOutboundShipmentSyncService.java"
+)
 _CONTAINER_PORTAL = f"{_HIGHWAY}/container/service/HighwayContainerPortalService.java"
 _ATTACHMENT_BASIC = f"{_HIGHWAY}/attachment/service/HighwayAttachmentBasicService.java"
 _ATTACHMENT_ADMIN = f"{_HIGHWAY}/attachment/service/HighwayAttachmentAdminService.java"
@@ -423,6 +437,9 @@ _SETTLE_OP_FEE = f"{_SETTLE}/operationfee/service/OperationFeeService.java"
 _SETTLE_PAY_CONFIRM = f"{_SETTLE}/paymentconfirmation/service/PaymentConfirmationAdminService.java"
 _SETTLE_PAY_VERIFY = f"{_SETTLE}/paymentverification/service/PaymentVerificationAdminService.java"
 _SETTLE_RCV_CONFIRM = f"{_SETTLE}/receiptconfirmation/service/ReceiptConfirmationAdminService.java"
+_SETTLE_RCV_ATTACHMENT = (
+    f"{_SETTLE}/receiptconfirmation/service/ReceiptConfirmationAttachmentService.java"
+)
 _SETTLE_RCV_VERIFY = f"{_SETTLE}/receiptverification/service/ReceiptVerificationAdminService.java"
 _SETTLE_COLLECTION = f"{_SETTLE}/collection/service/CollectionAdminService.java"
 _SETTLE_ADVANCE = f"{_SETTLE}/advancepayment/service/AdvancePaymentAdminService.java"
@@ -487,6 +504,7 @@ _MEMBER_AUTH_DETAIL = (
 )
 _MEMBER_USER_AUTH_ADMIN = f"{_MEMBER}/userauthinfo/service/UserAuthInfoAdminService.java"
 _MEMBER_CONTRACT = f"{_MEMBER}/contract/service/ContractAdminService.java"
+_MEMBER_CONTRACT_IMPORT = f"{_MEMBER}/contract/service/ContractImportService.java"
 _MEMBER_CONTRACT_OP = f"{_MEMBER}/contract/service/ContractOperationAdminService.java"
 _MEMBER_LEVEL = f"{_MEMBER}/userinfo/service/ShipperLevelAdminService.java"
 _MEMBER_LEVEL_HISTORY_CTRL = (
@@ -494,6 +512,7 @@ _MEMBER_LEVEL_HISTORY_CTRL = (
 )
 _MEMBER_INVOICE = f"{_MEMBER}/invoice/service/InvoicePortalService.java"
 _MEMBER_MSG = f"{_MEMBER}/messageRecipient/service/MessageRecipientBasicService.java"
+_MEMBER_MSG_PORTAL = f"{_MEMBER}/messageRecipient/service/MessageRecipientPortalService.java"
 _MEMBER_COMPLAIN = f"{_MEMBER}/complain/service/EntrustedOrderComplainPortalService.java"
 _MEMBER_COMPLAIN_ADMIN = f"{_MEMBER}/complain/service/EntrustedOrderComplainAdminService.java"
 _MEMBER_EVAL_CTRL = f"{_MEMBER}/evaluation/controller/EntrustedOrderEvaluationPortalController.java"
@@ -518,6 +537,11 @@ _COCKPIT_ACCIDENT_CTRL = f"{_COCKPIT}/controller/CockpitAccidentController.java"
 _WMS_SYNC = f"{_HIGHWAY}/inboundorder/service/WmsInboundOrderSyncService.java"
 _RISK_TASK = f"{_HIGHWAY}/risk/service/HighwayRiskEvaluationTaskService.java"
 _RISK_GATE = f"{_HIGHWAY}/risk/service/HighwayLoadRiskGateService.java"
+_RCC = "backend/c12-rcc/c12-rcc-biz/src/main/java/com/chinaservices/rcc/module"
+_RCC_CARGO_SAFETY = f"{_RCC}/logisticsriskcontrol/cargosafety/service/CargoSafetyService.java"
+_RCC_WAYBILL = (
+    f"{_RCC}/logisticsriskcontrol/waybillexecution/service/WaybillExecutionService.java"
+)
 _SHIPPING_ADMIN = f"{_SHIPPING}/carrier/service/ShippingCarrierOrderAdminService.java"
 _SHIPPING_PORTAL = f"{_SHIPPING}/carrier/service/ShippingCarrierOrderPortalService.java"
 _SHIPPING_BASE = f"{_SHIPPING}/carrier/service/CarrierOrderBaseService.java"
@@ -550,6 +574,7 @@ _RW_SETTLEMENT_ADMIN = f"{_RAILWAY}/settlement/service/RailwayCarrierSettlementA
 _RW_DAILY_BASIC = f"{_RAILWAY}/dailyplan/service/RailwayDailyPlanBasicService.java"
 _RW_MANIFEST_BASIC = f"{_RAILWAY}/manifest/service/RailwayDispatchManifestBasicService.java"
 _RW_ATTACHMENT_BASIC = f"{_RAILWAY}/attachment/service/RailwayAttachmentBasicService.java"
+_RW_RISK_TASK = f"{_RAILWAY}/risk/service/RailwayRiskEvaluationTaskService.java"
 
 SEED_TABLES: tuple[str, ...] = (
     f"{MTP}.cs_dsly_highway_cargo",
@@ -638,10 +663,12 @@ SEED_TABLES: tuple[str, ...] = (
     f"{MTP}.cs_dsly_railway_carrier_order_container",
     f"{MTP}.cs_dsly_railway_attachment",
     # No relation at all: proves the "只看有关联的表" filter really hides tables.
-    # attachment/container source_id is polymorphic (承运单/运单/集装箱)，不能建单一父表边。
+    # attachment/container source_id is polymorphic; source-specific edges below keep the
+    # other source values visible as measured orphans instead of pretending it is one FK.
     f"{MTP}.cs_dsly_basic_port",
     f"{MTP}.cs_dsly_basic_billing_template",
     f"{MTP}.cs_dsly_basic_business_info",
+    f"{MTP}.cs_basic_package",
     f"{MTP}.cs_dsly_basic_cargo_base_price_config",
     f"{MTP}.cs_dsly_basic_cargo_external",
     f"{MTP}.cs_dsly_basic_driver",
@@ -654,6 +681,7 @@ SEED_TABLES: tuple[str, ...] = (
     f"{MTP}.cs_dsly_basic_site_fee_item_business",
     f"{MTP}.cs_dsly_basic_site_fee_item_range",
     f"{MTP}.cs_dsly_basic_vehicle",
+    f"{MTP}.sys_administrative_region",
     f"{MTP}.cs_bt_route",
     f"{MTP}.cs_bt_route_station",
     f"{MTP}.cs_bt_daily_plan",
@@ -726,6 +754,7 @@ SEED_TABLES: tuple[str, ...] = (
     f"{PORTAL}.cs_portal_member_message_recipient",
     f"{PORTAL}.cs_portal_member_entrusted_order_complain",
     f"{PORTAL}.cs_portal_member_entrusted_order_evaluation",
+    f"{PORTAL}.cs_portal_member_problem_feedback",
     f"{PORTAL}.cs_portal_cockpit_kpi",
     f"{PORTAL}.cs_portal_cockpit_cargo_summary",
     f"{PORTAL}.cs_portal_cockpit_cargo_category",
@@ -739,6 +768,20 @@ SEED_TABLES: tuple[str, ...] = (
     f"{PORTAL}.cs_portal_cockpit_ontime_route",
     f"{PORTAL}.cs_portal_cockpit_congestion",
     f"{PORTAL}.cs_portal_cockpit_accident",
+    f"{MTP}.cs_dsly_member_contract",
+    f"{WMS}.cs_warehouse",
+    f"{WMS}.cs_asn_receive",
+    f"{PARK}.cs_park_assets_park",
+    f"{PARK}.cs_entry_exit_report",
+    f"{RCC}.cs_logistics_waybill_execution",
+    f"{RCC}.cs_logistics_cargo_safety",
+    f"{ADMIN}.sys_goods",
+    f"{ADMIN}.sys_vehicle",
+    f"{ADMIN}.sys_vehicle_type",
+    f"{AUTH}.sys_user",
+    f"{AUTH}.sys_role",
+    f"{WMS}.cs_outbound_box_header",
+    f"{WMS}.cs_so_header",
 )
 
 SEED_EDGES: tuple[SeedEdge, ...] = (
@@ -1523,6 +1566,25 @@ SEED_EDGES: tuple[SeedEdge, ...] = (
         ),
     ),
     SeedEdge(
+        parent=f"{MTP}.cs_dsly_basic_cargo.cargo_code",
+        child=f"{MTP}.cs_dsly_railway_cargo.cargo_code",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 52, 52, 13, 50, 50),
+        reason=(
+            "铁路承运货物和运输货物都保留基础商品编码；"
+            "UAT 52 行的 13 个键全部命中，避开同表 cargo_id 的多态语义"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_RW_CARRIER_ADMIN,
+                method="buildCarrierCargo",
+                snippet="cargoQuery.setCargoCode(cargoAdminQuery.getCargoCode());",
+            ),
+        ),
+    ),
+    SeedEdge(
         parent=f"{MTP}.cs_dsly_railway_carrier_order.carrier_order_no",
         child=f"{MTP}.cs_dsly_railway_carrier_settlement.railway_carrier_no",
         code_cardinality="one_to_many",
@@ -1574,6 +1636,30 @@ SEED_EDGES: tuple[SeedEdge, ...] = (
         ),
     ),
     SeedEdge(
+        parent=f"{MTP}.cs_dsly_member_contract.contract_no",
+        child=f"{MTP}.cs_dsly_railway_carrier_order.contract_no",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 31, 30, 3, 0, 0, orphan_keys=3),
+        reason=(
+            "铁路承运单从有效承运商合同回填合同号，同一合同可服务多张承运单；"
+            "UAT 30 个已填值属于 3 份合同，但本地合同同步表当前为空"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_RW_CARRIER_ADMIN,
+                method="batchCreateCarrierOrder",
+                snippet=(
+                    "ContractValidAdminQuery contractValidAdminQuery = "
+                    "contractMap.get(carrierOrderChildItem.getCarrierId());\n"
+                    "            carrierOrder.setContractNo("
+                    "contractValidAdminQuery.getContractNo());"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
         parent=f"{MTP}.cs_dsly_railway_dispatch_order.dispatch_order_no",
         child=f"{MTP}.cs_dsly_railway_dispatch_record.dispatch_order_no",
         code_cardinality="one_to_many",
@@ -1606,6 +1692,29 @@ SEED_EDGES: tuple[SeedEdge, ...] = (
         ),
     ),
     SeedEdge(
+        parent=f"{MTP}.cs_dsly_line_station.id",
+        child=f"{MTP}.cs_dsly_railway_dispatch_order_line.station_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 48, 48, 9, 22, 22, orphan_keys=2),
+        reason=(
+            "铁路运输线路复制线路主数据的站点主键，同一站点可出现在多张运输单；"
+            "UAT 9 个站点键中 7 个命中，西安站和太原站两个历史主键已缺失"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_RW_CARRIER_BASIC,
+                method="saveDispatchOrderLine",
+                snippet=(
+                    "deliverLine.setStationId(station.getStationId());\n"
+                    "                            newLineItem.setStationId("
+                    "lineItem.getStationId());"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
         parent=f"{MTP}.cs_dsly_railway_dispatch_order.id",
         child=f"{MTP}.cs_dsly_railway_dispatch_manifest.dispatch_id",
         code_cardinality="one_to_many",
@@ -1634,6 +1743,72 @@ SEED_EDGES: tuple[SeedEdge, ...] = (
                 file=_RW_DISPATCH_ADMIN,
                 method="updateOrCreateManifest",
                 snippet="newManifest.setCategoryId(query.getCategoryId());",
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_basic_cargo.id",
+        child=f"{MTP}.cs_dsly_railway_dispatch_manifest.cargo_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 3, 3, 3, 50, 50),
+        reason="铁路舱单按货物名称查基础货物并回填主键；UAT 3 行全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_RW_DISPATCH_ADMIN,
+                method="updateOrCreateManifest",
+                snippet=(
+                    "CargoAdminQuery query = remoteAdminService.findByCargoName(condition);\n"
+                    "                    if(ObjectUtil.isNotEmpty(query)){\n"
+                    "                        newManifest.setCargoId(query.getId());"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_railway_dispatch_order.id",
+        child=f"{MTP}.cs_dsly_railway_attachment.source_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 139, 139, 21, 21, 21),
+        reason=(
+            "铁路装货、卸货、签收和单证附件均挂运输订单主键；"
+            "UAT 139 行的 21 个来源键全部命中"
+        ),
+        sites=(
+            SeedSite(
+                kind="shared_key_fanout",
+                file=_RW_DISPATCH_BASIC,
+                method="addAttachmentsToList",
+                snippet=(
+                    "attachments.forEach(attachment -> {\n"
+                    "            attachment.setSourceId(sourceId);\n"
+                    "            attachment.setType(type.getCode());"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_railway_carrier_order.id",
+        child=f"{MTP}.cs_dsly_railway_attachment.source_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 139, 139, 21, 31, 31, orphan_keys=21),
+        reason=(
+            "type=9（承运合同确认函）时附件挂铁路承运单主键；"
+            "UAT 当前 139 行均为运输节点附件，尚无 type=9 样本，整列 21 个键因此均属另一来源"
+        ),
+        sites=(
+            SeedSite(
+                kind="shared_key_fanout",
+                file=_ENTRUSTED_ORDER_ADMIN,
+                method="upload",
+                snippet=(
+                    "railwayCarrierAttachmentAdminItem.setSourceId(carrierOrderId);\n"
+                    "                railwayCarrierAttachmentAdminItem.setType("
+                    "OrderHighwayAttachmentEnum.CARRIER_CONTRACT_DOCUMENTATION.getCode());"
+                ),
             ),
         ),
     ),
@@ -4618,7 +4793,7 @@ SEED_EDGES: tuple[SeedEdge, ...] = (
             ),
         ),
     ),
-    # ---- cs_portal_cockpit_*（UAT 全空；仅两条模块内 FK）
+    # ---- cs_portal_cockpit_*（UAT 全空；关系由写入链路确认）
     SeedEdge(
         parent=f"{PORTAL}.cs_portal_cockpit_city_flow.id",
         child=f"{PORTAL}.cs_portal_cockpit_city_flow_cargo.flow_id",
@@ -4649,6 +4824,2371 @@ SEED_EDGES: tuple[SeedEdge, ...] = (
                 method="saveCategories",
                 snippet="entity.setSummaryId(summaryId);",
             ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{PORTAL}.cs_portal_cockpit_cargo_summary.id",
+        child=f"{PORTAL}.cs_portal_cockpit_cargo_category.owner_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 0, 0, 0, 0, 0),
+        reason=(
+            "汇总和区域维度把货量汇总主键作为 ownerId 传给货类循环；"
+            "ownerType=summary/region 时同一归属可挂多条货类"
+        ),
+        sites=(
+            SeedSite(
+                kind="shared_key_fanout",
+                file=_COCKPIT_DATA,
+                method="saveSummaryCategories",
+                snippet=(
+                    "saveCategories(summaryId, OWNER_SUMMARY, summaryId, summary.getCats());"
+                ),
+            ),
+            SeedSite(
+                kind="shared_key_fanout",
+                file=_COCKPIT_DATA,
+                method="saveDimension",
+                snippet=(
+                    'Long regionId = saveSummary("region_item", region, sort++);\n'
+                    "            saveOwnerCategories(OWNER_REGION, regionId, region.getCats());"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{PORTAL}.cs_portal_cockpit_enterprise_rank.id",
+        child=f"{PORTAL}.cs_portal_cockpit_cargo_category.owner_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 0, 0, 0, 0, 0),
+        reason=(
+            "企业排行落库取得主键后以 ownerType=enterprise 写入货类；"
+            "同一企业排行可挂多条货类"
+        ),
+        sites=(
+            SeedSite(
+                kind="shared_key_fanout",
+                file=_COCKPIT_DATA,
+                method="saveDimension",
+                snippet=(
+                    "enterpriseRankService.saveOrUpdate(entity);\n"
+                    "            saveOwnerCategories(OWNER_ENTERPRISE, entity.getId(), enterpriseItem.getCats());"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.sys_administrative_region.code",
+        child=f"{PORTAL}.cs_portal_cockpit_city_flow.city_code",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 0, 0, 0, 0, 0),
+        reason=(
+            "城市流向保存前由行政区选择器传入城市 code；同一城市可分别出现在流入、流出行"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_COCKPIT_DATA,
+                method="saveCityFlow",
+                snippet="entity.setCityCode(item.getCityCode());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{MTP}.sys_administrative_region.code",
+        child=f"{PORTAL}.cs_portal_cockpit_map_flow.city_code",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 0, 0, 0, 0, 0),
+        reason=(
+            "地图流向保存前由行政区选择器传入城市 code；同一城市可用于多条方向节点，"
+            "境外区域允许不填 cityCode"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_COCKPIT_DATA,
+                method="saveMapFlow",
+                snippet="entity.setCityCode(item.getCityCode());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    # ---- cs_portal_cockpit_* 第二优先级稳定业务键（新增列由 Portal 迁移提供）
+    SeedEdge(
+        parent=f"{AUTH}.sys_user.id",
+        child=f"{PORTAL}.cs_portal_cockpit_enterprise_rank.enterprise_user_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 0, 0, 0, 302, 302),
+        reason="企业排行可保存认证用户主键，同一企业用户可出现在多期或多维度排行中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_COCKPIT_DATA,
+                method="saveDimension",
+                snippet="entity.setEnterpriseUserId(enterpriseItem.getEnterpriseUserId());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_line_route.id",
+        child=f"{PORTAL}.cs_portal_cockpit_timeliness_route.route_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 0, 0, 0, 277, 277),
+        reason="运输时效按周期重复展示同一线路，线路主键由维护请求写入每条周期记录",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_COCKPIT_DATA,
+                method="saveTimeliness",
+                snippet="entity.setRouteId(item.getRouteId());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_line_route.route_no",
+        child=f"{PORTAL}.cs_portal_cockpit_timeliness_route.route_no",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 0, 0, 0, 277, 277),
+        reason="运输时效同步保存唯一线路编号，作为跨库可读业务键和主键关系的校验快照",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_COCKPIT_DATA,
+                method="saveTimeliness",
+                snippet="entity.setRouteNo(item.getRouteNo());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_line_route.id",
+        child=f"{PORTAL}.cs_portal_cockpit_ontime_route.route_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 0, 0, 0, 277, 277),
+        reason="线路准点率保存内部线路主键，同一线路可形成多条运输方式或统计记录",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_COCKPIT_DATA,
+                method="saveOnTime",
+                snippet="entity.setRouteId(item.getRouteId());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_line_route.route_no",
+        child=f"{PORTAL}.cs_portal_cockpit_ontime_route.route_no",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 0, 0, 0, 277, 277),
+        reason="线路准点率同步保存唯一线路编号，支持按业务编号跨库定位线路",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_COCKPIT_DATA,
+                method="saveOnTime",
+                snippet="entity.setRouteNo(item.getRouteNo());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_line_station.id",
+        child=f"{PORTAL}.cs_portal_cockpit_station_turnover.station_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 0, 0, 0, 24, 24),
+        reason=(
+            "场站周转率保存线路场站主键；station_code 在 UAT 24 行仅 23 个唯一值，"
+            "因此仅把 station_id 建成关系"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_COCKPIT_DATA,
+                method="saveTurnover",
+                snippet="entity.setStationId(item.getStationId());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_basic_cargo.id",
+        child=f"{PORTAL}.cs_portal_cockpit_cargo_category.cargo_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 0, 0, 0, 50, 50),
+        reason="货类占比保存基础货物主键，同一货物可出现在多个汇总、区域和企业维度",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_COCKPIT_DATA,
+                method="saveCategories",
+                snippet="entity.setCargoId(item.getCargoId());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_basic_cargo.cargo_code",
+        child=f"{PORTAL}.cs_portal_cockpit_cargo_category.cargo_code",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 0, 0, 0, 50, 50),
+        reason="货类占比同步保存唯一货物编码，支持按业务编码跨库查询和校验",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_COCKPIT_DATA,
+                method="saveCategories",
+                snippet="entity.setCargoCode(item.getCargoCode());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_basic_cargo.id",
+        child=f"{PORTAL}.cs_portal_cockpit_city_flow_cargo.cargo_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 0, 0, 0, 50, 50),
+        reason="城市流向货物明细保存基础货物主键，同一货物可出现在多个城市流向中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_COCKPIT_DATA,
+                method="saveCityFlowCargo",
+                snippet="entity.setCargoId(item.getCargoId());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_basic_cargo.cargo_code",
+        child=f"{PORTAL}.cs_portal_cockpit_city_flow_cargo.cargo_code",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 0, 0, 0, 50, 50),
+        reason="城市流向货物明细同步保存唯一货物编码，便于按编码定位基础货物",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_COCKPIT_DATA,
+                method="saveCityFlowCargo",
+                snippet="entity.setCargoCode(item.getCargoCode());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{MTP}.sys_administrative_region.code",
+        child=f"{PORTAL}.cs_portal_cockpit_accident.region_code",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 0, 0, 0, 0, 0),
+        reason="车辆事故率保存行政区划编码，同一行政区可保留多期事故率记录",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_COCKPIT_DATA,
+                method="saveAnomaly",
+                snippet="entity.setRegionCode(item.getRegionCode());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_line_route.id",
+        child=f"{PORTAL}.cs_portal_cockpit_congestion.route_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 0, 0, 0, 277, 277),
+        reason=(
+            "sourceType=line_route 时拥堵记录保存内部线路主键；external 来源改存"
+            " externalRoadCode，不伪造内部关系"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_COCKPIT_DATA,
+                method="saveAnomaly",
+                snippet="entity.setRouteId(item.getRouteId());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_line_route.route_no",
+        child=f"{PORTAL}.cs_portal_cockpit_congestion.route_no",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 0, 0, 0, 277, 277),
+        reason="内部线路拥堵同步保存唯一线路编号，外部道路编码保持为独立来源字段",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_COCKPIT_DATA,
+                method="saveAnomaly",
+                snippet="entity.setRouteNo(item.getRouteNo());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    # ---- cs_dsly_line_* 第一、第二优先级补充关系（2026-08-25 UAT 实测）
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_line_route_snapshot_quote.id",
+        child=f"{MTP}.cs_dsly_line_route.snapshot_id",
+        code_cardinality="one_to_one",
+        code_evidence="single_write",
+        measured=SeedMeasurement("numeric", 277, 212, 212, 243, 243),
+        reason=(
+            "复制需求报价快照时每条线路新建一条报价快照并回填 snapshotId；UAT 212 个已填键全部命中"
+        ),
+        sites=(
+            SeedSite(
+                kind="fresh_key_per_row",
+                file=_LINE_ROUTE_BASIC,
+                method="copyAndSaveSnapshot",
+                snippet=(
+                    "routeSnapshotQuoteBasicService.saveOrUpdate(routeSnapshotQuote);\n"
+                    "                        routeItem.setSnapshotId(routeSnapshotQuote.getId());"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_line_route_inquiry_quote.id",
+        child=f"{MTP}.cs_dsly_line_route.snapshot_id",
+        code_cardinality="one_to_one",
+        code_evidence="single_write",
+        measured=SeedMeasurement("numeric", 277, 212, 212, 0, 0, orphan_keys=212),
+        reason=(
+            "询价改价路径保存报价后把其主键回填线路 snapshotId；该列按业务类型复用，"
+            "当前 UAT 212 个已填键均属于普通报价快照，因此对询价报价表表现为孤儿键"
+        ),
+        sites=(
+            SeedSite(
+                kind="single_write",
+                file=_LINE_ROUTE_ADMIN,
+                method="saveAndModify",
+                snippet=(
+                    "routeInquiryQuoteDao.saveOrUpdate(routeInquiryQuote);\n"
+                    "        item.setSnapshotId(routeInquiryQuote.getId());"
+                ),
+            ),
+            SeedSite(
+                kind="single_write",
+                file=_LINE_ROUTE_PORTAL,
+                method="saveAndModify",
+                snippet=(
+                    "routeInquiryQuoteDao.saveOrUpdate(routeInquiryQuote);\n"
+                    "        item.setSnapshotId(routeInquiryQuote.getId());"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_line_route.id",
+        child=f"{MTP}.cs_dsly_line_approval_history.source_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 66, 66, 48, 277, 277, orphan_keys=23),
+        reason=(
+            "approvalSource=route_library 时 sourceId 保存线路主键，同一线路可累积多条审批历史；"
+            "sourceId 为多态列，整列复算会把产品审批键计为对线路表的孤儿"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_LINE_ROUTE_ADMIN,
+                method="recordHistory",
+                snippet=(
+                    "history.setSourceId(route.getId());\n"
+                    "        history.setApprovalSource("
+                    "ApprovalSourceTypeEnum.ROUTE_LIBRARY.getCode());"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_line_route_product.id",
+        child=f"{MTP}.cs_dsly_line_approval_history.source_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 66, 66, 48, 150, 150, orphan_keys=30),
+        reason=(
+            "approvalSource=route_product_library 时 sourceId 保存线路产品主键，"
+            "同一产品可累积多条审批历史；"
+            "sourceId 为多态列，整列复算会把线路审批键计为对产品表的孤儿"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_LINE_ROUTE_PRODUCT_ADMIN,
+                method="recordHistory",
+                snippet=(
+                    "history.setSourceId(route.getId());\n"
+                    "        history.setApprovalSource("
+                    "ApprovalSourceTypeEnum.ROUTE_PRODUCT_LIBRARY.getCode());"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_member_contract.contract_no",
+        child=f"{MTP}.cs_dsly_line_route.contract_no",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 277, 247, 5, 0, 0, orphan_keys=5),
+        reason="线路导入从有效承运商合同回填合同号，同一合同可用于多条线路；UAT 合同同步表当前为空",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_LINE_ROUTE_ADMIN,
+                method="validateImportData",
+                snippet="routeAdminItem.setContractNo(carrier.getContractNo());",
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_member_contract.contract_no",
+        child=f"{MTP}.cs_dsly_line_route_carrier.contract_no",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 516, 516, 5, 0, 0, orphan_keys=5),
+        reason=(
+            "保存线路承运商明细时复用线路合同号，同一合同可挂到多条线路承运商记录；"
+            "UAT 合同同步表当前为空"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_LINE_ROUTE_ADMIN,
+                method="saveRouteDetails",
+                snippet="routeCarrier.setContractNo(route.getContractNo());",
+            ),
+        ),
+    ),
+    # ---- cs_dsly_order_* 第一优先级补充关系（2026-08-25 UAT 实测）
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_line_route_product.route_product_no",
+        child=f"{MTP}.cs_dsly_order_entrusted.route_product_snapshot_no",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 130, 126, 104, 150, 150),
+        reason="委托需求保存线路服务新建的产品快照编号；UAT 126 个已填值全部命中产品表",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_ORDER_ENTRUSTED_ADMIN,
+                method="saveOrUpdateEntrusted",
+                snippet=(
+                    "String routeProductSnapshotNo = remoteAdminService.routeSaveSnapshot(routeProductItem);\n"
+                    "            converted.setRouteProductSnapshotNo(routeProductSnapshotNo);"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_line_route_product.route_product_no",
+        child=f"{MTP}.cs_dsly_order_entrusted_quote.route_product_snapshot_no",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 130, 130, 111, 150, 150),
+        reason="报价时保存线路产品快照并把快照编号写入报价行；UAT 全部命中产品表",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_ORDER_QUOTE_ADMIN,
+                method="saveQuote",
+                snippet=(
+                    "String routeProductSnapshotNo =\n"
+                    "                routeProductLocalApi.saveSnapshot(routeProductItem);\n"
+                    "        entrustedQuoteSaveItem.setRouteProductSnapshotNo(routeProductSnapshotNo);"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_line_route_product.route_product_no",
+        child=f"{MTP}.cs_dsly_order_entrusted_order.route_product_snapshot_no",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 94, 94, 80, 150, 150),
+        reason="作业计划生成委托订单时复用需求上的线路产品快照编号；UAT 全部命中产品表",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_ORDER_WORK_PLAN_ADMIN,
+                method="createEntrustedOrder",
+                snippet=(
+                    "entrustedOrderItem.setRouteProductSnapshotNo("
+                    "entrustedQuery.getRouteProductSnapshotNo());"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_order_entrusted.id",
+        child=f"{MTP}.cs_dsly_order_entrusted_cargo.source_id",
+        code_cardinality="one_to_one",
+        code_evidence="single_write",
+        measured=SeedMeasurement("numeric", 236, 236, 236, 130, 130, orphan_keys=106),
+        reason=(
+            "source=ENTRUSTED 时 sourceId 保存委托需求主键且一条需求写一条货物；"
+            "sourceId 为多态列，整列复算包含委托订单来源"
+        ),
+        sites=(
+            SeedSite(
+                kind="single_write",
+                file=_ORDER_ENTRUSTED_ADMIN,
+                method="saveOrUpdateEntrusted",
+                snippet=(
+                    "entrustedCargoItem.setSourceId(converted.getId());\n"
+                    "            entrustedCargoItem.setSource(EntrustedCargoSourceEnum.ENTRUSTED.getCode());"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_order_entrusted_order.id",
+        child=f"{MTP}.cs_dsly_order_entrusted_cargo.source_id",
+        code_cardinality="one_to_one",
+        code_evidence="single_write",
+        measured=SeedMeasurement("numeric", 236, 236, 236, 94, 94, orphan_keys=142),
+        reason=(
+            "source=ENTRUSTED_ORDER 时 sourceId 保存委托订单主键且一张订单写一条货物；"
+            "sourceId 为多态列，整列复算包含委托需求来源"
+        ),
+        sites=(
+            SeedSite(
+                kind="single_write",
+                file=_ORDER_WORK_PLAN_ADMIN,
+                method="save",
+                snippet=(
+                    "entrustedCargoItem.setSourceId(entrustedOrder.getId());\n"
+                    "        entrustedCargoItem.setSource(ENTRUSTED_ORDER.getCode());"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_order_entrusted.id",
+        child=f"{MTP}.cs_dsly_order_container.source_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 225, 225, 225, 130, 130, orphan_keys=161),
+        reason=(
+            "source=ENTRUSTED 时循环把委托需求主键写到其集装箱；"
+            "整列复算还包含委托订单和作业计划来源"
+        ),
+        sites=(
+            SeedSite(
+                kind="shared_key_fanout",
+                file=_ORDER_ENTRUSTED_PORTAL,
+                method="saveOrUpdateEntrusted",
+                snippet=(
+                    "for (OrderContainer containerItem : containerList) {\n"
+                    "                containerItem.setSource(EntrustedCargoSourceEnum.ENTRUSTED.getCode());\n"
+                    "                containerItem.setSourceId(entrusted.getId());"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_order_entrusted_order.id",
+        child=f"{MTP}.cs_dsly_order_container.source_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 225, 225, 225, 94, 94, orphan_keys=175),
+        reason=(
+            "source=ENTRUSTED_ORDER 时复制订单下的集装箱并复用订单主键；整列复算还包含其他来源"
+        ),
+        sites=(
+            SeedSite(
+                kind="shared_key_fanout",
+                file=_ORDER_WORK_PLAN_ADMIN,
+                method="save",
+                snippet=(
+                    "container.setSource(EntrustedSettlementSourceEnum.ENTRUSTED_ORDER.getCode());\n"
+                    "                        container.setSourceId(entrustedOrder.getId());"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_order_work_plan.id",
+        child=f"{MTP}.cs_dsly_order_container.source_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 225, 225, 225, 205, 205, orphan_keys=120),
+        reason=("source=WORK_PLAN 时签约流程把作业计划主键写到计划集装箱；整列复算还包含其他来源"),
+        sites=(
+            SeedSite(
+                kind="shared_key_fanout",
+                file=_ORDER_ENTRUSTED_ADMIN,
+                method="generatePlanFromContract",
+                snippet=(
+                    "workPlanContainer.setSource(EntrustedSettlementSourceEnum.WORK_PLAN.getCode());\n"
+                    "                            workPlanContainer.setSourceId(workPlan.getId());"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_order_entrusted_order.id",
+        child=f"{MTP}.cs_dsly_order_entrusted_order_settlement.source_id",
+        code_cardinality="one_to_one",
+        code_evidence="single_write",
+        measured=SeedMeasurement("numeric", 199, 199, 199, 94, 94, orphan_keys=105),
+        reason=(
+            "source=ENTRUSTED_ORDER 时一张委托订单保存一条结算快照；整列复算还包含作业计划来源"
+        ),
+        sites=(
+            SeedSite(
+                kind="single_write",
+                file=_ORDER_WORK_PLAN_ADMIN,
+                method="save",
+                snippet=(
+                    "entrustedOrderSettlement.setSourceId(entrustedOrder.getId());\n"
+                    "        entrustedOrderSettlement.setSource("
+                    "EntrustedSettlementSourceEnum.ENTRUSTED_ORDER.getCode());"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_order_work_plan.id",
+        child=f"{MTP}.cs_dsly_order_entrusted_order_settlement.source_id",
+        code_cardinality="one_to_one",
+        code_evidence="single_write",
+        measured=SeedMeasurement("numeric", 199, 199, 199, 205, 205, orphan_keys=94),
+        reason=("source=WORK_PLAN 时一条作业计划保存一条结算快照；整列复算还包含委托订单来源"),
+        sites=(
+            SeedSite(
+                kind="single_write",
+                file=_ORDER_ENTRUSTED_ADMIN,
+                method="generatePlanFromContract",
+                snippet=(
+                    "entrustedOrderSettlement.setSourceId(workPlan.getId());\n"
+                    "                    entrustedOrderSettlementAdminService.setSettlementSource("
+                    "entrustedOrderSettlement, EntrustedSettlementSourceEnum.WORK_PLAN);"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_highway_carrier_order.carrier_order_no",
+        child=f"{MTP}.cs_dsly_order_entrusted_order_relate.carrier_order_no",
+        code_cardinality="one_to_one",
+        code_evidence="single_write",
+        measured=SeedMeasurement("text", 143, 143, 143, 112, 112, orphan_keys=31),
+        reason=("routeType=公路时每个公路承运单号生成一条订单关联；整列复算的 31 个孤儿键属于铁路"),
+        sites=(
+            SeedSite(
+                kind="single_write",
+                file=_ENTRUSTED_ORDER_ADMIN,
+                method="processHighwayOrders",
+                snippet=(
+                    "EntrustedOrderRelate entrustedOrderRelate = createEntrustedOrderRelate("
+                    "entrustedOrderSplitAdminQuery, RouteTypeConstant.HIGHWAY_TRANSPORT);"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_railway_carrier_order.carrier_order_no",
+        child=f"{MTP}.cs_dsly_order_entrusted_order_relate.carrier_order_no",
+        code_cardinality="one_to_one",
+        code_evidence="single_write",
+        measured=SeedMeasurement("text", 143, 143, 143, 31, 31, orphan_keys=112),
+        reason=(
+            "routeType=铁路时每个铁路承运单号生成一条订单关联；整列复算的 112 个孤儿键属于公路"
+        ),
+        sites=(
+            SeedSite(
+                kind="single_write",
+                file=_ENTRUSTED_ORDER_ADMIN,
+                method="processRailwayOrders",
+                snippet=(
+                    "EntrustedOrderRelate entrustedOrderRelate = createEntrustedOrderRelate("
+                    "entrustedOrderSplitAdminQuery, RouteTypeConstant.RAILWAY_TRANSPORT);"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_shipping_carrier_order.carrier_order_no",
+        child=f"{MTP}.cs_dsly_order_entrusted_order_relate.carrier_order_no",
+        code_cardinality="one_to_one",
+        code_evidence="single_write",
+        measured=SeedMeasurement("text", 143, 143, 143, 0, 0, orphan_keys=143),
+        reason="routeType=水路的写入链路已实现，但 UAT 暂无水路承运单；整列现有键均来自公路或铁路",
+        sites=(
+            SeedSite(
+                kind="single_write",
+                file=_ENTRUSTED_ORDER_ADMIN,
+                method="processWaterwayOrders",
+                snippet=(
+                    "EntrustedOrderRelate entrustedOrderRelate = createEntrustedOrderRelate("
+                    "entrustedOrderSplitAdminQuery, RouteTypeConstant.WATERWAY_TRANSPORT);"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_highway_carrier_order.carrier_order_no",
+        child=f"{MTP}.cs_dsly_order_outbound_transport_relation.carrier_order_no",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 25, 25, 25, 112, 112),
+        reason="公路发运完成时把承运单号写到每条出库明细履约关系；UAT 25 个键全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_HIGHWAY_OUTBOUND_SHIPMENT,
+                method="buildLoadItem",
+                snippet="loadItem.setCarrierOrderNo(dispatchOrder.getCarrierOrderNo());",
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_highway_dispatch_order.id",
+        child=f"{MTP}.cs_dsly_order_outbound_transport_relation.transport_order_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 25, 25, 25, 98, 98),
+        reason="公路发运把调度单主键作为运输单主键写到出库履约关系；UAT 全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_HIGHWAY_OUTBOUND_SHIPMENT,
+                method="buildLoadItem",
+                snippet="loadItem.setTransportOrderId(dispatchOrder.getId());",
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_highway_dispatch_order.dispatch_order_no",
+        child=f"{MTP}.cs_dsly_order_outbound_transport_relation.transport_order_no",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 25, 25, 25, 98, 98),
+        reason="公路发运同时把调度单号写成运输单号；UAT 25 个键全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_HIGHWAY_OUTBOUND_SHIPMENT,
+                method="buildLoadItem",
+                snippet="loadItem.setTransportOrderNo(dispatchOrder.getDispatchOrderNo());",
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{PORTAL}.cs_portal_member_contract.id",
+        child=f"{MTP}.cs_dsly_order_entrusted.contract_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 130, 102, 14, 29, 29),
+        reason="委托需求签约时从 Portal 合同服务按合同号取得合同主键并回填；UAT 全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_ORDER_ENTRUSTED_ADMIN,
+                method="generatePlanFromContract",
+                snippet=(
+                    "ContractInfoAdminQuery contract = remoteAdminService.contractGetByContractNo(contractCondition);\n"
+                    "                    lockedEntrusted.setContractId(contract.getId());"
+                ),
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{PORTAL}.cs_portal_member_contract.id",
+        child=f"{MTP}.cs_dsly_order_entrusted_order.contract_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 94, 94, 11, 29, 29),
+        reason="创建委托订单时把 Portal 合同主键从作业计划入参写入订单；UAT 全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_ORDER_WORK_PLAN_ADMIN,
+                method="createEntrustedOrder",
+                snippet="entrustedOrderItem.setContractId(entrustedCreateOrder.getContractId());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_order_outbound_order.outbound_order_no",
+        child=f"{MTP}.cs_dsly_order_outbound_entrusted_relation.outbound_order_no",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 66, 66, 32, 32, 32),
+        reason="出库单按商品生成多条委托需求关联并冗余出库单号；UAT 66 行的 32 个键全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_ORDER_WMS,
+                method="saveEntrustedRelation",
+                snippet="relation.setOutboundOrderNo(outboundOrder.getOutboundOrderNo());",
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_order_entrusted.entrusted_no",
+        child=f"{MTP}.cs_dsly_order_outbound_entrusted_relation.entrusted_no",
+        code_cardinality="one_to_one",
+        code_evidence="single_write",
+        measured=SeedMeasurement("text", 66, 66, 66, 130, 130, orphan_keys=10),
+        reason="每条出库关联冗余对应委托需求单号；UAT 66 个键中有 10 个找不到存活需求",
+        sites=(
+            SeedSite(
+                kind="single_write",
+                file=_ORDER_WMS,
+                method="saveEntrustedRelation",
+                snippet="relation.setEntrustedNo(entrusted.getEntrustedNo());",
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_order_outbound_order.outbound_order_no",
+        child=f"{MTP}.cs_dsly_order_outbound_transport_relation.outbound_order_no",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 25, 25, 10, 32, 32),
+        reason="运输履约关系从装货分配冗余出库单号；UAT 25 行的 10 个键全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_ORDER_TRANSPORT,
+                method="bindLoadedTransport",
+                snippet=(
+                    "relation.setOutboundOrderNo(\n"
+                    "                    StrUtil.blankToDefault(allocation.getOutboundOrderNo(), \"\"));"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_order_entrusted_order.id",
+        child=f"{MTP}.cs_dsly_order_file.source_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 18, 18, 14, 94, 94, orphan_keys=7),
+        reason=(
+            "source=entrusted_order 时文件挂委托订单主键，UAT 11 行 7 个键全部命中；"
+            "整列复算的 7 个孤儿键来自 receipt_confirmation 来源"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_ORDER_FILE,
+                method="upload",
+                snippet=(
+                    "entrustedOrderFile.setSourceId(id);\n"
+                    "        entrustedOrderFile.setSource("
+                    "OrderAddressSourceTypeEnum.ENTRUSTED_ORDER.getCode());"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_settlement_receipt_confirmation.id",
+        child=f"{MTP}.cs_dsly_order_file.source_id",
+        code_cardinality="one_to_one",
+        code_evidence="enforced",
+        measured=SeedMeasurement("numeric", 18, 18, 14, 10, 10, orphan_keys=8),
+        reason=(
+            "source=receipt_confirmation 时每张收款确认单只保留一条有效凭证；"
+            "UAT 7 个来源键有 1 个历史孤儿，整列另含 7 个 entrusted_order 来源键"
+        ),
+        sites=(
+            SeedSite(
+                kind="unique_guard",
+                file=_SETTLE_RCV_ATTACHMENT,
+                method="replaceRequiredAttachment",
+                snippet=(
+                    "ConditionRule condition = new ConditionRule()\n"
+                    "                .andEqual(ReceiptConfirmationAttachment::getSourceId, "
+                    "receiptConfirmationId)\n"
+                    "                .andEqual(ReceiptConfirmationAttachment::getSource, SOURCE);\n"
+                    "        delete(condition);"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_highway_dispatch_order.id",
+        child=f"{MTP}.cs_dsly_highway_attachment.source_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 318, 318, 114, 98, 98, orphan_keys=40),
+        reason=(
+            "source=DISPATCH 时附件挂运输订单主键，UAT 259 行 74 个来源键全部命中；"
+            "整列的 40 个孤儿键来自 CONTAINER 和历史未标来源数据"
+        ),
+        sites=(
+            SeedSite(
+                kind="shared_key_fanout",
+                file=_ATTACHMENT_BASIC,
+                method="batchInsertWithDispatchId",
+                snippet=(
+                    "attachment.setSourceId(dispatchId);\n"
+                    "                attachment.setSource("
+                    "HighwaySourceTypeEnum.DISPATCH.getCode());"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_highway_dispatch_order.id",
+        child=f"{MTP}.cs_dsly_highway_container.source_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 104, 49, 49, 98, 98),
+        reason=(
+            "source=DISPATCH 时集装箱挂运输订单主键；UAT 49 个来源键全部命中，"
+            "source=CARRIER 的 55 行 source_id 均为 0"
+        ),
+        sites=(
+            SeedSite(
+                kind="shared_key_fanout",
+                file=_CONTAINER_PORTAL,
+                method="reDispatchModifyContainerInfo",
+                snippet=(
+                    "for(int i = 0;i<containerCount;i++){\n"
+                    "            HighwayContainer container = new HighwayContainer();\n"
+                    "            container.setSource(HighwaySourceTypeEnum.DISPATCH.getCode());\n"
+                    "            container.setSourceId(redispatchItem.getDispatchId());"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_highway_container.id",
+        child=f"{MTP}.cs_dsly_highway_attachment.source_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 318, 318, 114, 104, 104, orphan_keys=75),
+        reason=(
+            "source=CONTAINER 时附件挂集装箱主键，UAT 51 行 39 个来源键全部命中；"
+            "整列的 75 个孤儿键来自 DISPATCH 和历史未标来源数据"
+        ),
+        sites=(
+            SeedSite(
+                kind="shared_key_fanout",
+                file=_CONTAINER_PORTAL,
+                method="saveContainerAttachment",
+                snippet=(
+                    "dispatchAttachment.get(i).setSourceId(container.getId());\n"
+                    "                dispatchAttachment.get(i).setSource("
+                    "HighwaySourceTypeEnum.CONTAINER.getCode());"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_basic_outbound_box.box_id",
+        child=f"{MTP}.cs_dsly_highway_dispatch_box_relation.data_box_id",
+        code_cardinality="one_to_one",
+        code_evidence="enforced",
+        measured=SeedMeasurement("numeric", 34, 34, 34, 65, 65),
+        reason="箱明细主键由 WMS 出库箱档案带入，唯一约束禁止同一箱重复绑定运输订单",
+        sites=(
+            SeedSite(
+                kind="unique_guard",
+                file=_DISPATCH_BOX,
+                method="sync",
+                snippet=(
+                    "relation.setDataBoxId(query.getDataBoxId());\n"
+                    "            relation.setBoxNo(query.getBoxNo());\n"
+                    "        } catch (DataIntegrityViolationException ex) {\n"
+                    "            throw new BusinessException(\"所选箱码已关联其他运输订单\");"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_basic_outbound_box.box_no",
+        child=f"{MTP}.cs_dsly_highway_dispatch_box_relation.box_no",
+        code_cardinality="one_to_one",
+        code_evidence="enforced",
+        measured=SeedMeasurement("text", 34, 34, 34, 65, 65),
+        reason="箱码由 WMS 出库箱档案带入，唯一约束禁止同一箱码重复绑定运输订单",
+        sites=(
+            SeedSite(
+                kind="unique_guard",
+                file=_DISPATCH_BOX,
+                method="sync",
+                snippet=(
+                    "relation.setDataBoxId(query.getDataBoxId());\n"
+                    "            relation.setBoxNo(query.getBoxNo());\n"
+                    "        } catch (DataIntegrityViolationException ex) {\n"
+                    "            throw new BusinessException(\"所选箱码已关联其他运输订单\");"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_order_outbound_order.upstream_order_no",
+        child=f"{MTP}.cs_dsly_highway_dispatch_box_relation.upstream_order_no",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 34, 34, 13, 32, 32),
+        reason="一个上游出库单可以拆成多个箱码关联；UAT 34 行的 13 个键全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_DISPATCH_BOX,
+                method="sync",
+                snippet="relation.setUpstreamOrderNo(query.getUpstreamOrderNo());",
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_basic_cargo.cargo_code",
+        child=f"{MTP}.cs_dsly_highway_dispatch_box_relation.sku_code",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 34, 34, 13, 50, 50),
+        reason="箱码明细的 SKU 编码对应基础商品编码，同一商品可出现在多个箱码中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_DISPATCH_BOX,
+                method="sync",
+                snippet="relation.setSkuCode(query.getSkuCode());",
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_basic_cargo.cargo_code",
+        child=f"{MTP}.cs_dsly_highway_cargo.cargo_code",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 210, 210, 27, 50, 50),
+        reason="公路承运及运输货物均保留基础商品编码；UAT 210 行的 27 个键全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_CARRIER_ADMIN,
+                method="buildCarrierCargo",
+                snippet="cargoQuery.setCargoCode(cargoAdminQuery.getCargoCode());",
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_basic_cargo.cargo_code",
+        child=f"{MTP}.cs_dsly_highway_inbound_order_cargo.cargo_code",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 7, 7, 4, 50, 50),
+        reason="平台仓库入库商品快照沿用公路货物的基础商品编码；UAT 全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_INBOUND_CREATE,
+                method="buildInboundCargo",
+                snippet="inboundCargo.setCargoCode(cargo.getCargoCode());",
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_basic_cargo.cargo_code",
+        child=f"{MTP}.cs_dsly_highway_inbound_receipt_sync_record.cargo_code",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 2, 2, 2, 50, 50),
+        reason="WMS 收货回执记录沿用入库商品的基础商品编码；UAT 两个键全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_WMS_SYNC,
+                method="buildReceiptRecord",
+                snippet="record.setCargoCode(cargo.getCargoCode());",
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{WMS}.cs_warehouse.id",
+        child=f"{MTP}.cs_dsly_highway_inbound_order.warehouse_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 7, 7, 4, 25, 25),
+        reason="入库订单保存 WMS 平台仓库主键；UAT 4 个仓库键全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_INBOUND_CREATE,
+                method="buildInboundOrder",
+                snippet="inboundOrder.setWarehouseId(source.getPlatformWarehouseId());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{WMS}.cs_warehouse.warehouse_code",
+        child=f"{MTP}.cs_dsly_highway_inbound_order.warehouse_code",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 7, 7, 4, 25, 25),
+        reason="入库订单同时保存 WMS 平台仓库编码；UAT 4 个仓库键全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_INBOUND_CREATE,
+                method="buildInboundOrder",
+                snippet="inboundOrder.setWarehouseCode(source.getPlatformWarehouseCode());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{WMS}.cs_asn_receive.receive_no",
+        child=f"{MTP}.cs_dsly_highway_inbound_receipt_sync_record.receive_no",
+        code_cardinality="one_to_one",
+        code_evidence="enforced",
+        measured=SeedMeasurement("text", 2, 2, 2, 246, 246),
+        reason="WMS 收货记录号是消费幂等键，写前查重且唯一索引拦截并发重复；UAT 全部命中",
+        sites=(
+            SeedSite(
+                kind="unique_guard",
+                file=_WMS_SYNC,
+                method="processReceipt",
+                snippet=(
+                    "if (receiptSyncRecordDao.findByReceiveNo(message.getReceiveNo()) != null) {\n"
+                    "            return false;\n"
+                    "        }"
+                ),
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{PARK}.cs_park_assets_park.id",
+        child=f"{MTP}.cs_dsly_highway_park_appointment.park_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 11, 11, 6, 18, 18),
+        reason="园区预约保存园区服务返回的园区主键，同一园区可接收多次预约；UAT 全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_PARK_PORTAL,
+                method="buildAppointment",
+                snippet="appointment.setParkId(park.getParkId());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{PARK}.cs_entry_exit_report.id",
+        child=f"{MTP}.cs_dsly_highway_park_appointment.park_report_id",
+        code_cardinality="one_to_one",
+        code_evidence="single_write",
+        measured=SeedMeasurement("numeric", 11, 11, 11, 45, 45),
+        reason="园区报备成功后将单次报备主键写入一条 MTP 预约记录；UAT 11 个键全部命中",
+        sites=(
+            SeedSite(
+                kind="single_write",
+                file=_PARK_PORTAL,
+                method="buildAppointment",
+                snippet="appointment.setParkReportId(parkReportId);",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_highway_dispatch_order.dispatch_order_no",
+        child=f"{RCC}.cs_logistics_waybill_execution.waybill_no",
+        code_cardinality="one_to_one",
+        code_evidence="single_write",
+        measured=SeedMeasurement("text", 75, 75, 75, 98, 98, orphan_keys=10),
+        reason=(
+            "RCC 按运单号查找并更新唯一运单执行快照；UAT 65 个公路键全部命中，"
+            "整表 10 个孤儿键来自铁路或手工来源"
+        ),
+        sites=(
+            SeedSite(
+                kind="single_write",
+                file=_RCC_WAYBILL,
+                method="upsertFromOpenRisk",
+                snippet=(
+                    "WaybillExecution data = dao.findFirst(ConditionRule.getInstance()\n"
+                    "                .andEqual(WaybillExecution::getWaybillNo, waybillNo));\n"
+                    "        data.setWaybillNo(waybillNo);"
+                ),
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_highway_dispatch_order.dispatch_order_no",
+        child=f"{RCC}.cs_logistics_cargo_safety.waybill_no",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 51, 51, 50, 98, 98, orphan_keys=10),
+        reason=(
+            "RCC 货物安全按来源与外部主键幂等，运单号可随多条业务记录复用；"
+            "UAT 40 个公路键全部命中，整表 10 个孤儿键来自铁路或手工来源"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_RCC_CARGO_SAFETY,
+                method="syncFromMtp",
+                snippet="data.setWaybillNo(item.getWaybillNo());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{AUTH}.sys_user.id",
+        child=f"{MTP}.cs_dsly_highway_carrier_order.shipper_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 112, 112, 8, 302, 302),
+        reason="承运订单从拆段入参保存 Auth 托运人用户主键；UAT 112 行的 8 个键全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_CARRIER_ADMIN,
+                method="batchCreateCarrierOrder",
+                snippet=(
+                    "for(CarrierOrderAdminChildItem carrierOrderChildItem : "
+                    "carrierOrderAdminChildItemList){\n"
+                    "            HighwayCarrierOrder carrierOrder = "
+                    "GenericBeanConverter.convert(carrierOrderChildItem, HighwayCarrierOrder.class);"
+                ),
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{AUTH}.sys_user.id",
+        child=f"{MTP}.cs_dsly_highway_carrier_order.carrier_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 112, 111, 5, 302, 302),
+        reason="承运订单从拆段入参保存 Auth 承运商用户主键；UAT 111 行的 5 个键全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_CARRIER_ADMIN,
+                method="batchCreateCarrierOrder",
+                snippet=(
+                    "for(CarrierOrderAdminChildItem carrierOrderChildItem : "
+                    "carrierOrderAdminChildItemList){\n"
+                    "            HighwayCarrierOrder carrierOrder = "
+                    "GenericBeanConverter.convert(carrierOrderChildItem, HighwayCarrierOrder.class);"
+                ),
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{AUTH}.sys_user.id",
+        child=f"{MTP}.cs_dsly_highway_dispatch_order.carrier_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 98, 97, 5, 302, 302),
+        reason="创建运输订单时沿用承运订单的 Auth 承运商用户主键；UAT 97 行的 5 个键全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_CARRIER_PORTAL,
+                method="buildDispatchOrder",
+                snippet="dispatchOrder.setCarrierId(carrierOrder.getCarrierId());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{AUTH}.sys_user.id",
+        child=f"{MTP}.cs_dsly_highway_inbound_order.carrier_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 7, 7, 3, 302, 302),
+        reason="创建平台仓库入库单时沿用运输订单的 Auth 承运商用户主键；UAT 全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_INBOUND_CREATE,
+                method="buildInboundOrder",
+                snippet="inboundOrder.setCarrierId(dispatchOrder.getCarrierId());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{AUTH}.sys_user.id",
+        child=f"{MTP}.cs_dsly_highway_inbound_order.shipper_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 7, 7, 3, 302, 302),
+        reason="创建平台仓库入库单时保存来源或承运订单的 Auth 托运人用户主键；UAT 全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_INBOUND_CREATE,
+                method="buildInboundOrder",
+                snippet=(
+                    "inboundOrder.setShipperId(\n"
+                    "                ObjectUtil.defaultIfNull(\n"
+                    "                        source.getShipperId(),\n"
+                    "                        carrierOrder.getShipperId()));"
+                ),
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_railway_dispatch_order.dispatch_order_no",
+        child=f"{RCC}.cs_logistics_waybill_execution.waybill_no",
+        code_cardinality="one_to_one",
+        code_evidence="single_write",
+        measured=SeedMeasurement("text", 75, 75, 75, 21, 21, orphan_keys=66),
+        reason=(
+            "铁路风控把运输单号作为 RCC 运单执行模块的 businessId；"
+            "UAT RCC 现有键中 9 个命中铁路运单，其余主要属于公路或手工来源"
+        ),
+        sites=(
+            SeedSite(
+                kind="single_write",
+                file=_RW_RISK_TASK,
+                method="evaluateOpenRisk",
+                snippet=(
+                    "request.setBusinessId(dispatchOrderNo);\n"
+                    "        request.setExternalId(dispatchOrderNo);\n"
+                    "        request.setBusinessModuleCode(moduleCode);"
+                ),
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_railway_dispatch_order.dispatch_order_no",
+        child=f"{RCC}.cs_logistics_cargo_safety.waybill_no",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 51, 51, 50, 21, 21, orphan_keys=42),
+        reason=(
+            "铁路货物安全同步直接把运输单号写为 RCC waybillNo；"
+            "UAT 8 个铁路键已命中，其余键主要属于公路或手工来源"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_RW_RISK_TASK,
+                method="buildCargoSafetySyncItem",
+                snippet="item.setWaybillNo(data.getWaybillNo());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{AUTH}.sys_user.id",
+        child=f"{MTP}.cs_dsly_railway_carrier_order.shipper_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 31, 31, 6, 302, 302),
+        reason="铁路承运单从拆段入参保存 Auth 托运人主键；UAT 31 行的 6 个键全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_RW_CARRIER_ADMIN,
+                method="batchCreateCarrierOrder",
+                snippet=(
+                    "RailwayCarrierOrder carrierOrder = GenericBeanConverter.convert("
+                    "carrierOrderChildItem, RailwayCarrierOrder.class);"
+                ),
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{AUTH}.sys_user.id",
+        child=f"{MTP}.cs_dsly_railway_carrier_order.carrier_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 31, 30, 3, 302, 302),
+        reason="铁路承运单保存 Auth 承运商主键；UAT 30 个已填值的 3 个键全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_RW_CARRIER_ADMIN,
+                method="batchCreateCarrierOrder",
+                snippet=(
+                    "RailwayCarrierOrder carrierOrder = GenericBeanConverter.convert("
+                    "carrierOrderChildItem, RailwayCarrierOrder.class);"
+                ),
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{AUTH}.sys_user.id",
+        child=f"{MTP}.cs_dsly_railway_dispatch_order.carrier_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 21, 21, 3, 302, 302),
+        reason="铁路运输单沿用承运单的 Auth 承运商主键；UAT 21 行全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_RW_CARRIER_BASIC,
+                method="buildDispatchOrder",
+                snippet="dispatchOrder.setCarrierId(carrierOrder.getCarrierId());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{AUTH}.sys_user.id",
+        child=f"{MTP}.cs_dsly_railway_dispatch_record.operator_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 138, 138, 6, 302, 302),
+        reason="铁路节点轨迹保存当前操作人的 Auth 用户主键；UAT 138 行的 6 个键全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_RW_RECORD_BASIC,
+                method="buildRouteItem",
+                snippet="route.setOperatorId(operatorId);",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{AUTH}.sys_user.id",
+        child=f"{MTP}.cs_dsly_basic_driver.user_id",
+        code_cardinality="one_to_one",
+        code_evidence="single_write",
+        measured=SeedMeasurement("numeric", 12, 12, 12, 302, 302),
+        reason="司机主数据保存 Auth 司机用户主键，并在新增前按 user_id 拒绝重复；UAT 12 个键全部命中",
+        sites=(
+            SeedSite(
+                kind="single_write",
+                file=_DRIVER_BASIC,
+                method="saveExistsDriver",
+                snippet=(
+                    "conditionRule.andEqual(Driver::getUserId, userId);\n"
+                    "        item.setUserId(userId);\n"
+                    "        saveOrUpdate(driver);"
+                ),
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{AUTH}.sys_user.id",
+        child=f"{MTP}.cs_dsly_basic_driver.carrier_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 12, 12, 4, 302, 302),
+        reason="承运商新增司机时把当前 Auth 用户主键写为 carrier_id；同一承运商可维护多名司机，UAT 全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_DRIVER_ADMIN_CTRL,
+                method="carrierSave",
+                snippet="item.setCarrierId(sessionUserInfo.getUserId());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{AUTH}.sys_user.id",
+        child=f"{MTP}.cs_dsly_basic_driver_info.driver_user_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 9, 9, 9, 302, 302),
+        reason=(
+            "司机资料保存 Auth 司机用户主键，并按用户与手机号组合判重；"
+            "同一用户理论上可保留多条手机号资料，UAT 当前 9 个键均为一对一且全部命中"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_DRIVER_INFO,
+                method="saveIfAbsent",
+                snippet=(
+                    "if (CollUtil.isNotEmpty(dao.getByDriverUserIdAndMobile("
+                    "driverUserId, item.getMobile()))) {\n"
+                    "            return;\n"
+                    "        }\n"
+                    "        driverInfo.setDriverUserId(driverUserId);"
+                ),
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{AUTH}.sys_user.id",
+        child=f"{MTP}.cs_dsly_basic_driver_info.carrier_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 9, 9, 4, 302, 302),
+        reason="司机资料沿用司机入参中的 Auth 承运商主键；同一承运商可有多条司机资料，UAT 全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_DRIVER_INFO,
+                method="saveIfAbsent",
+                snippet=(
+                    "driverInfo.setCarrierId("
+                    "ObjectUtil.defaultIfNull(item.getCarrierId(), 0L));"
+                ),
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{AUTH}.sys_user.id",
+        child=f"{MTP}.cs_dsly_basic_vehicle.carrier_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 25, 25, 7, 302, 302),
+        reason="门户保存车辆时把当前 Auth 用户主键写为承运商；同一承运商可维护多辆车，UAT 25 行全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_VEHICLE_PORTAL_CTRL,
+                method="save",
+                snippet="item.setCarrierId(sessionUserInfo.getUserId());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_basic_package.wms_package_id",
+        child=f"{MTP}.cs_dsly_basic_cargo.wms_package_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 50, 32, 8, 14, 14),
+        reason="货物按 WMS 包装同步消息批量回填包装业务主键；UAT 32 行的 8 个键全部命中本地包装镜像",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_CARGO_BASIC_SVC,
+                method="syncWmsSkuPackage",
+                snippet=(
+                    "WmsPackage wmsPackage =\n"
+                    "                wmsPackageBasicService.findActiveByWmsPackageId("
+                    "message.getPackageId());\n"
+                    "                    cargo.setWmsPackageId(message.getPackageId());"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_basic_cargo.cargo_code",
+        child=f"{MTP}.cs_dsly_basic_outbound_box.sku_code",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 65, 65, 14, 50, 50, orphan_keys=1),
+        reason="WMS 出库箱明细把货物编码写入 sku_code；UAT 63 行命中货物主数据，仅 1 个历史 SKU 键孤立",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_OUTBOUND_BOX_SYNC,
+                method="fill",
+                snippet="outboundBox.setSkuCode(detail.getSkuCode());",
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{ADMIN}.sys_goods.id",
+        child=f"{MTP}.cs_dsly_basic_cargo.goods_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 50, 50, 50, 73, 73, orphan_keys=25),
+        reason=(
+            "Admin 商品审核事件按 goods_id 更新全部 MTP 货物镜像；"
+            "UAT 当前 50 个键中 25 个命中，另 25 个是历史主数据缺口"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_CARGO_BASIC_SVC,
+                method="applyGoodsAuditResult",
+                snippet="cargo.setGoodsId(event.getGoodsId());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{ADMIN}.sys_vehicle.id",
+        child=f"{MTP}.cs_dsly_basic_vehicle.admin_vehicle_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 25, 16, 15, 6, 6, orphan_keys=9),
+        reason=(
+            "MTP 保存车辆前同步 Admin 车辆并回填返回主键；"
+            "UAT 15 个已填键中 6 个命中，9 个历史键已不在当前 Admin 主数据"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_VEHICLE_BASIC,
+                method="save",
+                snippet="item.setAdminVehicleId(syncAdminVehicle(item));",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{ADMIN}.sys_vehicle_type.id",
+        child=f"{MTP}.cs_dsly_basic_vehicle.vehicle_type_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 25, 25, 6, 1, 1, orphan_keys=5),
+        reason=(
+            "车辆保存时按 Admin 车辆类型主键读取并补齐类型快照；"
+            "UAT 当前只有 1 个类型仍存在，另 5 个历史类型键待清理"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_VEHICLE_BASIC,
+                method="fillVehicleType",
+                snippet="VehicleTypeQuery vehicleType = getAdminVehicleType(item.getVehicleTypeId());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{ADMIN}.sys_vehicle_type.vehicle_type_code",
+        child=f"{MTP}.cs_dsly_basic_vehicle.vehicle_type_code",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 25, 25, 5, 1, 1, orphan_keys=4),
+        reason=(
+            "车辆保存时同时固化 Admin 车辆类型编码；"
+            "UAT 当前 5 个编码中只有 1 个仍在主数据，4 个为历史编码"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_VEHICLE_BASIC,
+                method="fillVehicleType",
+                snippet="item.setVehicleTypeCode(vehicleType.getVehicleTypeCode());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{WMS}.cs_outbound_box_header.id",
+        child=f"{MTP}.cs_dsly_basic_outbound_box.box_id",
+        code_cardinality="one_to_one",
+        code_evidence="single_write",
+        measured=SeedMeasurement("numeric", 65, 65, 65, 72, 72, orphan_keys=33),
+        reason=(
+            "WMS 箱头发布事件时把自身主键写为 boxId，MTP 按该键幂等更新；"
+            "UAT 32 个键仍命中，33 个为历史箱头"
+        ),
+        sites=(
+            SeedSite(
+                kind="single_write",
+                file=_WMS_OUTBOUND_BOX_SVC,
+                method="buildMtpOutboundBoxEvent",
+                snippet="event.setBoxId(header.getId());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{WMS}.cs_outbound_box_header.box_no",
+        child=f"{MTP}.cs_dsly_basic_outbound_box.box_no",
+        code_cardinality="one_to_one",
+        code_evidence="single_write",
+        measured=SeedMeasurement("text", 65, 65, 65, 72, 72, orphan_keys=33),
+        reason=(
+            "WMS 箱头事件同步唯一箱码，MTP 同时按 box_no 防止重复；"
+            "UAT 32 个箱码仍命中，33 个属于历史箱头"
+        ),
+        sites=(
+            SeedSite(
+                kind="single_write",
+                file=_WMS_OUTBOUND_BOX_SVC,
+                method="buildMtpOutboundBoxEvent",
+                snippet="event.setBoxNo(header.getBoxNo());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{WMS}.cs_so_header.so_no",
+        child=f"{MTP}.cs_dsly_basic_outbound_box.so_no",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 65, 65, 15, 182, 182, orphan_keys=2),
+        reason=(
+            "WMS 出库单主表的唯一单号可拆为多个箱头并同步到 MTP；"
+            "UAT 65 行中 44 行命中，只有 2 个历史出库单号孤立"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_WMS_OUTBOUND_BOX_SVC,
+                method="buildMtpOutboundBoxEvent",
+                snippet="event.setSoNo(header.getSoNo());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_line_station.id",
+        child=f"{MTP}.cs_dsly_basic_address.delivery_site_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 1023, 675, 14, 24, 24, orphan_keys=2),
+        reason=(
+            "地址起点在场站类型为铁路时保存线路场站主键；字段同时允许港口，"
+            "因此整列保留 2 个非场站键为多态孤儿"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_LINE_ROUTE_ADMIN,
+                method="validateImportData",
+                snippet=(
+                    "address.setDeliverySiteId(deliverySite.getId());\n"
+                    "                address.setDeliverySiteType(deliverySite.getSiteType());"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_line_station.id",
+        child=f"{MTP}.cs_dsly_basic_address.consignee_site_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 1023, 683, 18, 24, 24, orphan_keys=2),
+        reason=(
+            "地址终点在场站类型为铁路时保存线路场站主键；字段同时允许港口，"
+            "因此整列保留 2 个非场站键为多态孤儿"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_LINE_ROUTE_ADMIN,
+                method="validateImportData",
+                snippet=(
+                    "address.setConsigneeSiteId(consigneeSite.getId());\n"
+                    "                address.setConsigneeSiteType(consigneeSite.getSiteType());"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_order_entrusted_order.id",
+        child=f"{MTP}.cs_dsly_basic_address.source_id",
+        code_cardinality="one_to_one",
+        code_evidence="single_write",
+        measured=SeedMeasurement("numeric", 1023, 117, 111, 94, 94, orphan_keys=17),
+        reason=(
+            "生成作业计划时给委托订单地址写入订单主键和 entrusted_order 类型；"
+            "该列是多态来源，整列另有 17 个非委托单键"
+        ),
+        sites=(
+            SeedSite(
+                kind="single_write",
+                file=_ORDER_WORK_PLAN_ADMIN,
+                method="save",
+                snippet=(
+                    "addressAdminItem.setSourceId(entrustedOrder.getId());\n"
+                    "        addressAdminItem.setSourceType("
+                    "OrderAddressSourceTypeEnum.ENTRUSTED_ORDER.getCode());\n"
+                    "        remoteAdminService.addressSaveOrEdit(addressAdminItem);"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_line_route.id",
+        child=f"{MTP}.cs_dsly_basic_address.source_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 1023, 117, 111, 277, 277, orphan_keys=94),
+        reason=(
+            "线路库保存地址时写入 route.id 和 route_library 类型；"
+            "该列同时承载委托订单来源，整列因此有 94 个非线路键"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_LINE_ROUTE_ADMIN,
+                method="saveRouteRailway",
+                snippet=(
+                    "address.setSourceId(route.getId());\n"
+                    "        address.setSourceType("
+                    "LineAddressSourceTypeEnum.ROUTE_LIBRARY.getCode());"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_basic_port.id",
+        child=f"{MTP}.cs_dsly_basic_site_fee_item.site_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 0, 0, 0, 0, 0),
+        reason="site_type=1 时收费项目复用港口主键；UAT 港口和收费项目当前都没有有效行",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_SITE_FEE_ADMIN,
+                method="save",
+                snippet=(
+                    "siteFeeCargoAdminItem.setSiteType(siteType);\n"
+                    "            siteFeeCargoAdminItem.setSiteId(id);"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_line_station.id",
+        child=f"{MTP}.cs_dsly_basic_site_fee_item.site_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 0, 0, 0, 24, 24),
+        reason="site_type=2 时收费项目复用铁路场站主键；UAT 暂无收费项目行",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_SITE_FEE_ADMIN,
+                method="save",
+                snippet=(
+                    "siteFeeCargoAdminItem.setSiteType(siteType);\n"
+                    "            siteFeeCargoAdminItem.setSiteId(id);"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{AUTH}.sys_user.id",
+        child=f"{MTP}.cs_dsly_basic_ship.carrier_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 0, 0, 0, 302, 302),
+        reason="门户保存船舶时把当前 Auth 用户主键写为承运商；UAT 暂无船舶行",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_SHIP_PORTAL_CTRL,
+                method="save",
+                snippet="item.setCarrierId(sessionUserInfo.getUserId());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{AUTH}.sys_user.id",
+        child=f"{MTP}.cs_dsly_basic_ship_owner.carrier_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 0, 0, 0, 302, 302),
+        reason="门户保存船东时把当前 Auth 用户主键写为承运商；UAT 暂无船东行",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_SHIP_OWNER_PORTAL_CTRL,
+                method="save",
+                snippet="shipOwner.setCarrierId(sessionUserInfo.getUserId());",
+            ),
+        ),
+        cross_database=True,
+    ),
+    # ---- cs_portal_member_* 第一优先级补全（Portal 会员域）
+    SeedEdge(
+        parent=f"{AUTH}.sys_user.id",
+        child=f"{PORTAL}.cs_portal_member_user_info.user_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 226, 226, 225, 302, 302, orphan_keys=1),
+        reason=(
+            "Portal 会员档案保存 Auth 用户主键；同一用户可能保留多个角色档案，"
+            "UAT 225 个键中 224 个命中，1 个历史键已失效"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_MEMBER_USER_PORTAL,
+                method="createAndSaveUserInfo",
+                snippet=(
+                    "newUserInfo.setUserId(registeredUser.getId());\n"
+                    "saveOrUpdate(newUserInfo);"
+                ),
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{AUTH}.sys_user.id",
+        child=f"{PORTAL}.cs_portal_member_contract.client_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 29, 29, 18, 302, 302, orphan_keys=6),
+        reason=(
+            "合同导入从会员引用取 Auth 用户主键写入委托方/承运方；"
+            "UAT 18 个客户键中 12 个命中，6 个为早期历史用户"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_MEMBER_CONTRACT_IMPORT,
+                method="importContracts",
+                snippet=(
+                    "for (ImportRow row : rows) {\n"
+                    "    ContractAdminItem item = new ContractAdminItem();\n"
+                    "    item.setClientId(member.userId());\n"
+                    "    contracts.add(item);\n"
+                    "}"
+                ),
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{AUTH}.sys_user.id",
+        child=f"{PORTAL}.cs_portal_member_entrusted_order_complain.user_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 7, 7, 4, 302, 302),
+        reason="投诉保存当前 Auth 用户主键作为投诉人；UAT 7 行的 4 个键全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_MEMBER_COMPLAIN,
+                method="save",
+                snippet=(
+                    "entrustedOrderComplainPortalItem.setUserId("
+                    "sessionUserInfo.getUserId());\n"
+                    "dao.saveOrUpdate(entrustedOrderComplainPortalItem);"
+                ),
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{AUTH}.sys_user.id",
+        child=f"{PORTAL}.cs_portal_member_entrusted_order_complain.audit_user_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 7, 3, 3, 302, 302),
+        reason="投诉审核保存当前 Auth 用户主键作为处理人；UAT 3 个已填键全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_MEMBER_COMPLAIN_ADMIN,
+                method="audit",
+                snippet=(
+                    "complain.setAuditUserId(sessionUserInfo.getUserId());\n"
+                    "dao.saveOrUpdate(complain);"
+                ),
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{AUTH}.sys_user.id",
+        child=f"{PORTAL}.cs_portal_member_entrusted_order_evaluation.shipper_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 2, 2, 1, 302, 302),
+        reason="评价保存当前 Auth 用户主键作为托运人；UAT 2 行全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_MEMBER_EVAL_CTRL,
+                method="save",
+                snippet=(
+                    "item.setShipperId(sessionUserInfo.getUserId());\n"
+                    "entrustedOrderEvaluationPortalService.saveOrUpdate(item);"
+                ),
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{AUTH}.sys_user.id",
+        child=f"{PORTAL}.cs_portal_member_invoice.user_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 8, 8, 7, 302, 302),
+        reason="发票信息保存当前 Auth 用户主键；UAT 8 行的 7 个键全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_MEMBER_INVOICE,
+                method="saveOrEdit",
+                snippet=(
+                    "item.setUserId(sessionUserInfo.getUserId());\n"
+                    "return dao.saveOrUpdate(item);"
+                ),
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{AUTH}.sys_user.id",
+        child=f"{PORTAL}.cs_portal_member_message_recipient.user_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 1, 1, 1, 302, 302),
+        reason="消息接收人保存当前 Auth 用户主键；UAT 当前 1 条存活记录已命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_MEMBER_MSG_PORTAL,
+                method="saveOrUpdate",
+                snippet=(
+                    "recipient.setUserId(sessionUserInfo.getUserId());\n"
+                    "return super.saveOrUpdateMessageRecipient(item);"
+                ),
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{AUTH}.sys_user.id",
+        child=f"{PORTAL}.cs_portal_member_problem_feedback.user_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 2, 2, 1, 302, 302),
+        reason=(
+            "问题反馈按用户主键归属 Auth 用户；UAT 2 行全部命中，"
+            "当前源码分支未包含该模块写入实现"
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{AUTH}.sys_user.id",
+        child=f"{PORTAL}.cs_portal_member_problem_feedback.processor_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 2, 0, 0, 302, 302),
+        reason=(
+            "问题处理人字段按 Auth 用户主键设计；UAT 暂无已处理记录，"
+            "当前源码分支未包含该模块写入实现"
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{AUTH}.sys_user.id",
+        child=f"{PORTAL}.cs_portal_member_shipper_level.shipper_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 2, 2, 2, 302, 302, orphan_keys=2),
+        reason=(
+            "客户等级按会员列表传入的 Auth 用户主键保存；"
+            "UAT 两条旧评级均已找不到现存用户"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_MEMBER_LEVEL,
+                method="save",
+                snippet=(
+                    "if(ObjectUtil.isEmpty(shipperLevelItem.getShipperId())){\n"
+                    "    throw new BusinessException(\"货主id不能为空\");\n"
+                    "}\n"
+                    "dao.saveOrUpdate(shipperLevelItem);"
+                ),
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{AUTH}.sys_user.id",
+        child=f"{PORTAL}.cs_portal_member_shipper_level_history.shipper_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 0, 0, 0, 302, 302),
+        reason="客户等级历史复制当前评级中的 Auth 用户主键；UAT 暂无历史行",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_MEMBER_LEVEL,
+                method="save",
+                snippet=(
+                    "BeanUtil.copyProperties(shipperLevelItem, shipperLevelHistory);\n"
+                    "shipperLevelHistoryDao.saveOrUpdate(shipperLevelHistory);"
+                ),
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{AUTH}.sys_role.role_code",
+        child=f"{PORTAL}.cs_portal_member_user_auth_info.role_code",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 411, 411, 12, 16, 16),
+        reason="会员认证按 Auth 角色编码拆成多条角色记录；UAT 411 行的 12 个键全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_MEMBER_USER_PORTAL,
+                method="buildUserAuthInfo",
+                snippet=(
+                    "authInfo.setRoleCode(roleCode);\n"
+                    "authInfo.setAuthStatus(UserAuthInfoEnum.UNVERIFIED.getCode());"
+                ),
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{AUTH}.sys_role.role_code",
+        child=f"{PORTAL}.cs_portal_member_user_identity_auth_detail.role_code",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 325, 325, 12, 16, 16),
+        reason="会员身份认证快照按 Auth 角色编码分行保存；UAT 325 行全部命中",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_MEMBER_AUTH_DETAIL,
+                method="saveOrUpdateByAdminItem",
+                snippet=(
+                    "for (String roleCode : roleCodes) {\n"
+                    "    target.setRoleCode(roleCode);\n"
+                    "    toInsert.add(target);\n"
+                    "}"
+                ),
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{PORTAL}.cs_portal_member_contract.id",
+        child=f"{PORTAL}.cs_portal_member_attachment.source_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 19, 19, 11, 29, 29, orphan_keys=8),
+        reason=(
+            "source=1/type=1 时附件挂合同主键；UAT 3 条合同附件全部命中，"
+            "全列其余 8 个键属于投诉或其他多态来源"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_MEMBER_ATTACH,
+                method="uploadByContractId",
+                snippet=(
+                    "attachment.setSourceId(Long.parseLong(contractId));\n"
+                    "attachment.setSource(MemberAttachmentSourceEnum.CONTRACT_MANAGE.getCode());\n"
+                    "dao.saveOrUpdate(attachment);"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{PORTAL}.cs_portal_member_entrusted_order_complain.id",
+        child=f"{PORTAL}.cs_portal_member_attachment.source_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 19, 19, 11, 7, 7, orphan_keys=4),
+        reason=(
+            "source=3/type=3 时附件挂投诉主键；UAT 15 条投诉附件的 7 个键全部命中，"
+            "全列其余 4 个键属于合同或其他多态来源"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_MEMBER_COMPLAIN,
+                method="save",
+                snippet=(
+                    "attachmentPortalService.batchSave("
+                    "entrustedOrderComplainPortalItem.getId(), "
+                    "MemberAttachmentSourceEnum.FEEDBACK, "
+                    "AttachmentTypeEnum.COMPLAIN_IMG, "
+                    "entrustedOrderComplainPortalItem.getAttachmentList());"
+                ),
+            ),
+        ),
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_order_entrusted_order.entrusted_order_no",
+        child=f"{PORTAL}.cs_portal_member_entrusted_order_complain.entrusted_order_no",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 7, 7, 7, 94, 94, orphan_keys=5),
+        reason=(
+            "Portal 投诉沿用 MTP 委托订单号；UAT 7 个键中 2 个命中，"
+            "5 个历史订单已不在当前存活订单中"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_MEMBER_COMPLAIN,
+                method="save",
+                snippet=(
+                    "dao.saveOrUpdate(entrustedOrderComplainPortalItem);\n"
+                    "attachmentPortalService.batchSave("
+                    "entrustedOrderComplainPortalItem.getId(), "
+                    "MemberAttachmentSourceEnum.FEEDBACK, "
+                    "AttachmentTypeEnum.COMPLAIN_IMG, "
+                    "entrustedOrderComplainPortalItem.getAttachmentList());"
+                ),
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_order_entrusted_order.entrusted_order_no",
+        child=f"{PORTAL}.cs_portal_member_entrusted_order_evaluation.entrusted_order_no",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 2, 2, 2, 94, 94, orphan_keys=1),
+        reason="Portal 评价沿用 MTP 委托订单号；UAT 2 个键中 1 个命中、1 个为历史订单",
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_MEMBER_EVAL_CTRL,
+                method="save",
+                snippet=(
+                    "entrustedOrderEvaluationPortalService.saveOrUpdate(item);\n"
+                    "rocketMQProducer.sendFeedBackStatusUpdate("
+                    "item.getEntrustedOrderNo(), "
+                    "FeedBackTypeEnum.EVALUATION.getCode(), "
+                    "MemberYesNoConstant.YES);"
+                ),
+            ),
+        ),
+        cross_database=True,
+    ),
+    # ---- cs_portal_member_* 第二优先级补全（合同与港口作业）
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_basic_billing_template.id",
+        child=f"{PORTAL}.cs_portal_member_contract.template_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 29, 0, 0, 0, 0),
+        reason=(
+            "Portal 合同保存 MTP 计费模板主键，并通知模板服务维护关联合同数；"
+            "UAT 合同表已有 29 行但尚未使用模板，模板表也为空"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_MEMBER_CONTRACT,
+                method="save",
+                snippet=(
+                    "if(ObjectUtil.isNotEmpty(item.getTemplateId())){\n"
+                    "    templateRelateContractAdminItem.setThisTemplateId("
+                    "item.getTemplateId());\n"
+                    "}\n"
+                    "remoteTemplateAdminService.modifyRelateContractCount("
+                    "templateRelateContractAdminItem);\n"
+                    "saveOrUpdate(item);"
+                ),
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_operation_entrusted.id",
+        child=f"{PORTAL}.cs_portal_member_contract.operation_entrusted_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 29, 0, 0, 0, 0),
+        reason=(
+            "港口委托需求接受报价后通过 MQ 把需求主键回填 Portal 合同；"
+            "UAT 两端当前均无已填关联值"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_MEMBER_CONTRACT,
+                method="syncContractInfo",
+                snippet=(
+                    "contract.setOperationEntrustedId("
+                    "syncDTO.getOperationEntrustedId());\n"
+                    "dao.saveOrUpdate(contract);"
+                ),
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_operation_entrusted.operation_entrusted_no",
+        child=f"{PORTAL}.cs_portal_member_contract.operation_entrusted_no",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("text", 29, 0, 0, 0, 0),
+        reason=(
+            "港口委托需求接受报价后同时回填需求编号，供合同与作业需求按业务号互查；"
+            "UAT 两端当前均无已填关联值"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_MEMBER_CONTRACT,
+                method="syncContractInfo",
+                snippet=(
+                    "contract.setOperationEntrustedNo("
+                    "syncDTO.getOperationEntrustedNo());\n"
+                    "dao.saveOrUpdate(contract);"
+                ),
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{MTP}.cs_dsly_basic_port.id",
+        child=f"{PORTAL}.cs_portal_member_contract_quote_info.port_id",
+        code_cardinality="one_to_many",
+        code_evidence="batch_allowed",
+        measured=SeedMeasurement("numeric", 0, 0, 0, 0, 0),
+        reason=(
+            "港口委托报价同步时把 MTP 港口主键写入 Portal 合同报价明细；"
+            "UAT 港口和合同报价表当前均为空"
+        ),
+        sites=(
+            SeedSite(
+                kind="caller_key_reuse",
+                file=_OP_ENTRUSTED_ADMIN,
+                method="associationContractAdmin",
+                snippet=(
+                    "for (EntrustedQuoteInfoQuery query : "
+                    "entrustedQuoteInfoQueries) {\n"
+                    "    ContractQuoteInfoSyncDTO dto = "
+                    "new ContractQuoteInfoSyncDTO();\n"
+                    "    dto.setPortId(query.getPortId());\n"
+                    "    quoteSyncList.add(dto);\n"
+                    "}"
+                ),
+            ),
+        ),
+        cross_database=True,
+    ),
+    SeedEdge(
+        parent=f"{PORTAL}.cs_portal_member_contract.id",
+        child=f"{PORTAL}.cs_portal_member_contract_attachment.contract_id",
+        code_cardinality="unknown",
+        code_evidence="no_write_path",
+        measured=SeedMeasurement("numeric", 0, 0, 0, 29, 29),
+        reason=(
+            "旧合同附件表声明 contract_id，但当前 Portal 代码实际使用 member_attachment；"
+            "该表 UAT 为空且没有写入路径，关系仅保留为待启用声明"
         ),
     ),
 )

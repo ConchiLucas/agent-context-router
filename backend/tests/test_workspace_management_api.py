@@ -190,7 +190,13 @@ def test_workspace_projects_and_data_source_summary(tmp_path: Path) -> None:
     assert tree.status_code == 200
     assert tree.json()["children"] == []
     assert preview.status_code == 200
-    assert set(preview.json()) == {"task_id", "documents", "access"}
+    assert set(preview.json()) == {
+        "task_id",
+        "documents",
+        "execution_contract",
+        "access",
+    }
+    assert preview.json()["execution_contract"]["intent_source"] == "system_default"
     assert set(preview.json()["documents"]) == {"document_id", "summary", "children"}
     assert removed_project_preview.status_code == 404
     assert removed_project_tree.status_code == 404

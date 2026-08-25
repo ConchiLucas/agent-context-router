@@ -29,6 +29,10 @@ def _item() -> AiTaskVisualizationListItem:
         workspace_name="攀枝花开发工作空间",
         environment="uat",
         agent_name="codex",
+        intent_type="bug_fix",
+        intent_error_signal=True,
+        intent_summary="修复分页接口报错",
+        intent_source="agent_declared",
         status="resolved",
         created_at=now,
         last_activity_at=now,
@@ -194,3 +198,49 @@ def test_chain_health_does_not_treat_unused_chains_as_failures() -> None:
         "unused",
         "attention",
     ]
+
+
+class _IntentClosureCursor:
+    def __init__(self, row: dict[str, object] | None) -> None:
+        self.row = row
+
+    def execute(self, *_: object) -> None:
+        return None
+
+    def fetchone(self) -> dict[str, object] | None:
+        return self.row
+
+
+def test_intent_closure_requires_matching_visualization_and_runtime_evidence() -> None:
+    with pytest.raises(Exception, match="任务意图要求的步骤尚未完成"):
+        AiTaskVisualizationService._validate_intent_closure(
+            _IntentClosureCursor(
+                {
+                    "intent_type": "bug_fix",
+                    "intent_error_signal": True,
+                    "has_data_record": False,
+                    "has_interface_record": False,
+                    "inspected_container_errors": False,
+                    "applied_workspace_changes": False,
+                }
+            ),
+            42,
+            "resolved",
+        )
+
+
+def test_intent_closure_accepts_data_query_after_condition_is_saved() -> None:
+    AiTaskVisualizationService._validate_intent_closure(
+        _IntentClosureCursor(
+            {
+                "intent_type": "data_query",
+                "intent_error_signal": False,
+                "has_data_record": True,
+                "has_interface_record": False,
+                "inspected_container_errors": False,
+                "applied_workspace_changes": False,
+            }
+        ),
+        42,
+        "resolved",
+    )

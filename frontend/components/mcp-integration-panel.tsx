@@ -145,6 +145,13 @@ export function McpIntegrationPanel({
         role="dialog"
         aria-modal="true"
         aria-label="MCP 接入与测试"
+        data-workspace-detail-subdialog
+        onKeyDown={(event) => {
+          if (event.key !== "Escape") return;
+          event.preventDefault();
+          event.stopPropagation();
+          onClose();
+        }}
       >
         <header className="mcp-integration-header">
           <div>

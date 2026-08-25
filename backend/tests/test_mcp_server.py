@@ -252,10 +252,15 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "cwd",
         "agent_name",
         "environment",
+        "intent_type",
+        "error_signal",
+        "intent_summary",
     }
     environment_schema = str(prepare_schema["properties"]["environment"])
     assert "^[a-z][a-z0-9_-]{0,31}$" in environment_schema
     assert "Omit to use local" in environment_schema
+    assert "bug_investigate" in str(prepare_schema["properties"]["intent_type"])
+    assert "execution_contract" in PREPARE_TOOL_DESCRIPTION
     assert "read_task_context" in PREPARE_TOOL_DESCRIPTION
     assert "sensitive" in READ_TASK_CONTEXT_TOOL_DESCRIPTION
     assert "not the authoritative or live source" in READ_TASK_CONTEXT_TOOL_DESCRIPTION
@@ -362,8 +367,10 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "environment",
         "keyword",
         "limit",
+        "selection",
     }
     assert mapping_resolve_schema["properties"]["limit"]["maximum"] == 10
+    assert mapping_resolve_schema["properties"]["selection"]["default"] == "default"
     forwarding_history_schema = tools[16].inputSchema
     assert forwarding_history_schema["required"] == ["task_id", "interface_id"]
     assert set(forwarding_history_schema["properties"]) == {
@@ -423,6 +430,7 @@ def test_value_mapping_tools_forward_only_task_scoped_arguments() -> None:
                 "mapping_id": "mapping-1",
                 "keyword": "攀枝花",
                 "limit": 3,
+                "selection": "random",
             },
         )
     )
@@ -449,6 +457,7 @@ def test_value_mapping_tools_forward_only_task_scoped_arguments() -> None:
                 "environment": None,
                 "keyword": "攀枝花",
                 "limit": 3,
+                "selection": "random",
             },
         ),
     ]
@@ -526,7 +535,7 @@ def test_workspace_runtime_tools_forward_only_task_scoped_arguments() -> None:
     ]
 
 
-def test_prepare_forwards_optional_task_environment() -> None:
+def test_prepare_forwards_environment_and_declared_intent() -> None:
     preparation = RecordingPreparationService()
     document_service = UnusedService()
     server = create_context_router_mcp(  # type: ignore[arg-type]
@@ -542,6 +551,9 @@ def test_prepare_forwards_optional_task_environment() -> None:
                 "cwd": "/workspace/project",
                 "agent_name": "codex",
                 "environment": "test",
+                "intent_type": "bug_investigate",
+                "error_signal": True,
+                "intent_summary": "只查询报错，不修改代码",
             },
         )
     )
@@ -552,6 +564,9 @@ def test_prepare_forwards_optional_task_environment() -> None:
         "cwd": "/workspace/project",
         "agent_name": "codex",
         "environment": "test",
+        "intent_type": "bug_investigate",
+        "error_signal": True,
+        "intent_summary": "只查询报错，不修改代码",
     }
 
 

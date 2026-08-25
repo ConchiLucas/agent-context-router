@@ -1,5 +1,26 @@
 # 前后端链路速查
 
+## AI 意图路由与可视化
+
+```text
+用户描述
+  -> Codex / Antigravity 识别 intent_type 与 error_signal
+  -> MCP prepare_task_context
+  -> ContextPreparationService 校验并写入 mcp_tasks.intent_*
+  -> 返回 execution_contract
+  -> 按实际动作调用数据 / 接口 / 日志 / Runtime MCP
+  -> 各业务 Service 自动写对应可视化记录
+  -> save_task_visualization_result
+  -> AiTaskVisualizationService 按 intent_type 校验完成证据
+```
+
+- 任务字段和执行契约：`schemas/context.py`、`services/task_intent.py`、`repositories/task_repository.py`。
+- 接口执行记录：`InterfaceForwardingContextService.execute` 写既有统一接口日志。
+- 数据条件记录：`AiDataVisualizationService.create_for_task`。
+- 注册容器错误记录：`AiLogVisualizationService.inspect_container_errors`，无真实错误不落库。
+- 只查询 Bug 的运行写保护：`WorkspaceRuntimeOrchestrationService`。
+- 终态证据校验和页面意图展示：`AiTaskVisualizationService`、`task-visualization-workbench.tsx`。
+
 ## 总体链路
 
 ```text
@@ -172,7 +193,8 @@ prepare 和文档搜索不建立业务数据库连接。业务数据库离线时
 | 查看单表关联 | `table-relation-detail.tsx`、`table-relation-edge-row.tsx` | `GET /api/workspaces/{id}/table-relations/table` |
 | 按关联字段关键词查看一层关联记录 | `relation-record-explorer.tsx` | 安全只读 `POST /api/workspaces/{id}/relation-records/search` |
 | 管理并测试接口转发 | `interface-forwarding-manager.tsx` | 浏览器使用 `GET /api/interface-forwarding/overview` 只读展示 Workspace 环境下“接口服务 + 具名基础 URL”映射及每个地址的登录账号、角色标识和请求头；overview 聚合接口最近请求时间，有请求记录的接口优先按时间倒序，未请求接口按路径和请求方式稳定排序；前端对当前服务或全部接口的实际展示集合复用同一排序；写入接口保留给 AI/运维调用；execute 同时校验接口与地址的服务归属，测试下拉只显示同服务地址；MCP 执行优先经 Host Runner 单次租约访问宿主机 VPN 网络并统一落日志；接口 state/logs/schema |
-| 查看与使用业务值映射 | `value-mapping-manager.tsx` | 页面通过 `GET /api/value-mappings/overview` 只读展示；AI/运维接口保留结构化规则维护和预览；MCP 使用 `search_value_mappings` 定位已发布规则，再由 `resolve_value_candidates` 按 task 环境执行最多 10 条的服务端生成只读查询 |
+| 查看与使用业务值映射 | `value-mapping-manager.tsx` | 页面通过 `GET /api/value-mappings/overview` 只读展示；AI/运维接口保留结构化规则维护和预览；数据查询与接口参数都优先使用 `search_value_mappings` 定位已发布规则，再由 `resolve_value_candidates` 按 task 环境执行最多 10 条的服务端生成只读查询；无接口范围时不展开绑定明细，随机选择只在有界候选池内执行 |
+| 数据查询映射短链路 | `task_intent.py`、`mcp_server.py` | `prepare_task_context -> search_value_mappings -> resolve_value_candidates` 不需要先读数据库列表；只有映射未命中才进入 `read_task_context -> search_relation_tables/search_database_objects -> execute_database_query`。随机请求固定传 `selection=random` 和准确 `limit`，禁止映射解析后再用 `ORDER BY RAND()` 重复取值 |
 | 查看单表插入入口 | `table-relation-write-modal.tsx` | `GET /api/workspaces/{id}/table-relations/table/writes` |
 | 查看单表更新入口 | `table-relation-write-modal.tsx` | `GET /api/workspaces/{id}/table-relations/table/updates` |
 | 搜索表名、只看有关联的表、折叠多对多 | `table-relation-table-list.tsx`、`table-relations.ts` | 无请求，复用已加载数据在前端过滤 |

@@ -19,6 +19,8 @@ from context_router.schemas.context import (
     PrepareTaskContextResult,
     ReadTaskContextResult,
     TaskEnvironmentContext,
+    TaskIntentSource,
+    TaskIntentType,
 )
 from context_router.services.database_access import (
     DatabaseAccessError,
@@ -30,6 +32,7 @@ from context_router.services.project_registry import (
     ProjectRegistryError,
     WorkspaceSnapshot,
 )
+from context_router.services.task_intent import build_task_execution_contract
 
 PREPARE_DOCUMENT_TREE_LEVELS = 3
 _ENVIRONMENT_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
@@ -203,9 +206,18 @@ class ContextPreparationService:
         cwd: str,
         agent_name: str | None = None,
         environment: DatabaseEnvironment | None = None,
+        intent_type: TaskIntentType | None = None,
+        error_signal: bool = False,
+        intent_summary: str | None = None,
     ) -> PrepareTaskContextResult:
         normalized_task, normalized_agent = self._validate_input(task, agent_name)
         normalized_environment = self._validate_environment(environment)
+        (
+            normalized_intent,
+            normalized_error_signal,
+            normalized_intent_summary,
+            intent_source,
+        ) = self._validate_intent(intent_type, error_signal, intent_summary)
         try:
             workspace = self._registry.find_workspace_for_cwd(cwd)
         except ProjectRegistryError as exc:
@@ -221,6 +233,10 @@ class ContextPreparationService:
             agent_name=normalized_agent,
             environment=resolved_environment,
             requested_selection=environment_selection,
+            intent_type=normalized_intent,
+            error_signal=normalized_error_signal,
+            intent_summary=normalized_intent_summary,
+            intent_source=intent_source,
         )
 
     def prepare_for_workspace(
@@ -246,6 +262,10 @@ class ContextPreparationService:
             agent_name="web-preview",
             environment=resolved_environment,
             requested_selection=environment_selection,
+            intent_type="task_execute",
+            error_signal=False,
+            intent_summary="查看工作空间 MCP JSON",
+            intent_source="system_default",
         )
 
     def prepare_for_project(self, project_id: str) -> PrepareTaskContextResult:
@@ -269,6 +289,10 @@ class ContextPreparationService:
             agent_name="web-preview",
             environment=resolved_environment,
             requested_selection=environment_selection,
+            intent_type="task_execute",
+            error_signal=False,
+            intent_summary="查看项目 MCP JSON",
+            intent_source="system_default",
         )
 
     def _resolve_prepare_environment(
@@ -304,6 +328,31 @@ class ContextPreparationService:
             )
         return environment
 
+    @staticmethod
+    def _validate_intent(
+        intent_type: TaskIntentType | None,
+        error_signal: bool,
+        intent_summary: str | None,
+    ) -> tuple[TaskIntentType, bool, str | None, TaskIntentSource]:
+        normalized_intent: TaskIntentType = intent_type or "task_execute"
+        normalized_summary = intent_summary.strip() if intent_summary else None
+        if normalized_summary and len(normalized_summary) > 1000:
+            raise ContextPreparationError(
+                "intent_summary 不能超过 1000 个字符",
+                code="invalid_task_intent",
+            )
+        if error_signal and normalized_intent not in {"bug_investigate", "bug_fix"}:
+            raise ContextPreparationError(
+                "只有 bug_investigate 或 bug_fix 可以声明 error_signal",
+                code="invalid_task_intent",
+            )
+        return (
+            normalized_intent,
+            error_signal,
+            normalized_summary,
+            "agent_declared" if intent_type is not None else "compatibility_default",
+        )
+
     def _prepare_snapshot(
         self,
         workspace: WorkspaceSnapshot,
@@ -313,6 +362,10 @@ class ContextPreparationService:
         agent_name: str | None,
         environment: DatabaseEnvironment | None,
         requested_selection: DatabaseEnvironmentSelection | None,
+        intent_type: TaskIntentType = "task_execute",
+        error_signal: bool = False,
+        intent_summary: str | None = None,
+        intent_source: TaskIntentSource = "compatibility_default",
     ) -> PrepareTaskContextResult:
         database_environment = None
         selected_database_environment: DatabaseEnvironment | None = None
@@ -384,6 +437,10 @@ class ContextPreparationService:
                     "task": task,
                     "cwd": cwd,
                     "agent_name": agent_name,
+                    "intent_type": intent_type,
+                    "intent_error_signal": error_signal,
+                    "intent_summary": intent_summary,
+                    "intent_source": intent_source,
                     "active_project_id": (
                         active_project.id if active_project is not None else None
                     ),
@@ -423,6 +480,11 @@ class ContextPreparationService:
 
         try:
             warning_items = [warning for warning in (database_environment_warning,) if warning]
+            if intent_source == "compatibility_default":
+                warning_items.append(
+                    "未声明 intent_type，已按 task_execute 兼容处理；"
+                    "新客户端应先识别用户意图并显式传入"
+                )
             document_root = self._registry.get_prepare_document_root(workspace)
             documents = self._context_node(
                 document_root,
@@ -433,6 +495,12 @@ class ContextPreparationService:
             return PrepareTaskContextResult(
                 task_id=task_id,
                 documents=documents,
+                execution_contract=build_task_execution_contract(
+                    intent_type=intent_type,
+                    error_signal=error_signal,
+                    intent_summary=intent_summary,
+                    intent_source=intent_source,
+                ),
                 access=(
                     ["documents"]
                     if documents_only

@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
+import { WorkspaceMcpEnvironmentDefaults } from "@/components/workspace-mcp-environment-defaults";
 import {
   ProjectDashboard,
   type ProjectDashboardHandle,
@@ -17,6 +17,17 @@ interface WorkspaceDetailProps {
 
 type WorkspaceDetailTab = ProjectKind;
 
+function focusableElements(container: HTMLElement): HTMLElement[] {
+  return Array.from(
+    container.querySelectorAll<HTMLElement>(
+      'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+    ),
+  ).filter(
+    (element) =>
+      element.getAttribute("aria-hidden") !== "true" && element.offsetParent !== null,
+  );
+}
+
 export function WorkspaceDetail({
   workspace,
   onBack,
@@ -28,6 +39,20 @@ export function WorkspaceDetail({
     backend: 0,
   });
   const projectDashboardRef = useRef<ProjectDashboardHandle>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const detailRef = useRef<HTMLElement>(null);
+  const environmentButtonRef = useRef<HTMLButtonElement>(null);
+  const [showEnvironmentDetails, setShowEnvironmentDetails] = useState(false);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeButtonRef.current?.focus();
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
 
   const updateProjectCounts = useCallback(
     (counts: Record<ProjectKind, number>) => {
@@ -37,13 +62,45 @@ export function WorkspaceDetail({
   );
 
   return (
-    <section className="workspace-detail">
+    <section
+      className="workspace-detail"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${currentWorkspace.name} 工作空间详情`}
+      onKeyDown={(event) => {
+        if (
+          event.target instanceof Element &&
+          event.target.closest("[data-workspace-detail-subdialog]")
+        ) {
+          return;
+        }
+        if (event.key === "Escape") onBack();
+        if (event.key !== "Tab") return;
+
+        const focusable = detailRef.current
+          ? focusableElements(detailRef.current)
+          : [];
+        if (focusable.length === 0) return;
+
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }}
+      ref={detailRef}
+    >
       <header className="workspace-detail-header">
         <button
           type="button"
           className="close-button workspace-detail-close-button"
           aria-label="关闭工作空间详情"
           onClick={onBack}
+          ref={closeButtonRef}
         >
           ×
         </button>
@@ -65,13 +122,15 @@ export function WorkspaceDetail({
         >
           MCP 接入
         </button>
-        <Link
+        <button
+          ref={environmentButtonRef}
+          type="button"
           className="secondary-button workspace-environment-button"
           data-environment="local"
-          href={`/workspaces/${encodeURIComponent(currentWorkspace.id)}/mcp-environments`}
+          onClick={() => setShowEnvironmentDetails(true)}
         >
           环境详情
-        </Link>
+        </button>
         <button
           type="button"
           className="secondary-button"
@@ -133,6 +192,15 @@ export function WorkspaceDetail({
         visible
         onProjectCountsChanged={updateProjectCounts}
       />
+      {showEnvironmentDetails ? (
+        <WorkspaceMcpEnvironmentDefaults
+          workspaceId={currentWorkspace.id}
+          onClose={() => {
+            setShowEnvironmentDetails(false);
+            window.requestAnimationFrame(() => environmentButtonRef.current?.focus());
+          }}
+        />
+      ) : null}
     </section>
   );
 }

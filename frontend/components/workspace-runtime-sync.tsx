@@ -93,6 +93,13 @@ export function WorkspaceRuntimeSync({ workspaceId }: WorkspaceRuntimeSyncProps)
             role="dialog"
             aria-modal="true"
             aria-labelledby="workspace-shared-files-title"
+            data-workspace-detail-subdialog
+            onKeyDown={(event) => {
+              if (event.key !== "Escape") return;
+              event.preventDefault();
+              event.stopPropagation();
+              close();
+            }}
           >
             <header>
               <div>

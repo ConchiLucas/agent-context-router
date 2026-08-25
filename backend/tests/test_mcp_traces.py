@@ -180,13 +180,15 @@ class RecordingValueMappings:
             "truncated": False,
         }
 
-    def resolve_for_task(self, mapping_id: str, **_: object) -> dict[str, object]:
+    def resolve_for_task(self, mapping_id: str, **arguments: object) -> dict[str, object]:
         return {
             "task_id": 77,
             "mapping_id": mapping_id,
             "environment": "local",
             "candidates": [{"value": "secret-id", "label": "secret-label"}],
             "returned_count": 1,
+            "candidate_pool_count": 10,
+            "selection": arguments.get("selection", "default"),
             "truncated": False,
         }
 
@@ -401,6 +403,7 @@ def test_value_mapping_tools_trace_only_hashed_keywords_and_bounded_metadata() -
                 "mapping_id": "mapping-1",
                 "keyword": "攀枝花公司",
                 "limit": 3,
+                "selection": "random",
             },
         )
 
@@ -432,7 +435,16 @@ def test_value_mapping_tools_trace_only_hashed_keywords_and_bounded_metadata() -
         "mapping_id": "mapping-1",
         "returned_count": 1,
         "environment": "local",
+        "selection": "random",
+        "candidate_pool_count": 10,
         "truncated": False,
+    }
+    assert calls[1].request_summary == {
+        "mapping_id": "mapping-1",
+        "environment": None,
+        "keyword_sha256": "13113fa47460d96027f65b27df151977c6de423da93727785707b3356ce7a506",
+        "limit": 3,
+        "selection": "random",
     }
 
 

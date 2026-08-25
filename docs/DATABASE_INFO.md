@@ -59,7 +59,7 @@ docker compose exec backend uv run alembic current
 | `workspace_table_relation_junctions` | 保存中间表折叠，指向两条子端同为该中间表的边 |
 
 > 表关联这一组表只支撑“方向是什么”。状态、证据来源、命中率等实测指标以及表的估算行数、主键列和逻辑删除标识都不落库，设计保留在 `docs/development-details/table_relation_design.md`，等实现探测流水线时再加回对应的列。
-| `mcp_tasks` | 保存 prepare 产生的自增 task_id、`project/workspace` scope、Workspace ID/key/name、可选活动项目快照、动态环境、共享 revision 与 `workspace_default/task_explicit` 选择模式，以及兼容旧 Project task 的 project_id/project_key/name |
+| `mcp_tasks` | 保存 prepare 产生的自增 task_id、`project/workspace` scope、Workspace ID/key/name、可选活动项目快照、动态环境、共享 revision 与 `workspace_default/task_explicit` 选择模式、AI 主意图/错误信号/摘要/来源，以及兼容旧 Project task 的 project_id/project_key/name |
 | `mcp_document_read_calls` | 保存每次 read 的自增 read_call_id、task_id 和创建时间 |
 | `mcp_document_read_items` | 保存单次 read 内的 position、文档 ID、相对路径、章节、状态和错误码 |
 | `mcp_database_calls` | 保存对象搜索或只读查询的 task_id、数据库 alias、Engine、SQL SHA-256、状态、耗时、返回规模、截断和错误码；不保存 SQL 正文和结果集 |
@@ -93,6 +93,8 @@ task_id、tool_call_id 和 read_call_id 都由 PostgreSQL identity 自动生成�
 `20260730_0020` 增加 `workspace_environment_payloads` JSONB 表。两条环境 JSON 引用同一 Workspace 环境选择器，可在没有数据库映射时独立建立选择器，此时数据库继续使用原有 Workspace alias；存在数据库映射记录后才进入严格的环境目标解析。保存 JSON、保存数据库映射和切换环境共用 revision。迁移不自动读取 Nacos 或其他配置中心，也不复制任何凭据。
 
 `20260730_0021` 为 `mcp_tasks` 增加 `database_environment_selection`。升级时先把半截环境/revision 快照归一为空，再把完整的既有环境 task 回填为 `workspace_default`。`20260820_0040` 将环境列扩展为动态键，历史 `tool_default` 归一为 `workspace_default`，并强化检查约束：环境、revision 和选择模式必须同时为空或同时有效。
+
+`20260825_0063` 为 `mcp_tasks` 增加 `intent_type`、`intent_error_signal`、`intent_summary` 和 `intent_source`。历史任务按 `task_execute / compatibility_default` 回填；只有 `bug_investigate` 和 `bug_fix` 可以声明错误信号。
 
 `20260730_0022` 删除 `workspaces`、`data_sources`、`project_databases` 和 `workspace_database_environment_configs` 的 `enabled` 列，并把相关查询索引重建为不含启停字段的索引。当前状态模型中记录存在即生效；数据库是否可供 MCP 查询继续由数据库 `available/system_database`、授权 `readonly`、MCP 别名和 Connector 能力共同决定。
 

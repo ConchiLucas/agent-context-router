@@ -86,6 +86,10 @@ WITH tool_stats AS (
            COALESCE(task.workspace_name, task.project_name) AS workspace_name,
            COALESCE(task.database_environment, 'local') AS environment,
            COALESCE(NULLIF(task.agent_name, ''), 'agent') AS agent_name,
+           task.intent_type,
+           task.intent_error_signal,
+           task.intent_summary,
+           task.intent_source,
            CASE
                WHEN result.status IS NOT NULL THEN result.status
                WHEN COALESCE(tool.running_call_count, 0) > 0 THEN 'investigating'
@@ -300,6 +304,7 @@ class AiTaskVisualizationService:
         tool_call_id = current_tool_call_id()
         try:
             with self._connect() as connection, connection.cursor() as db_cursor:
+                self._validate_intent_closure(db_cursor, task_id, str(safe["status"]))
                 db_cursor.execute(
                     """
                     INSERT INTO ai_task_visualization_results (
@@ -365,6 +370,12 @@ class AiTaskVisualizationService:
             workspace_name=str(row["workspace_name"]),
             environment=str(row["environment"]),
             agent_name=str(row["agent_name"]),
+            intent_type=str(row["intent_type"]),
+            intent_error_signal=bool(row["intent_error_signal"]),
+            intent_summary=(
+                redact_text(str(row["intent_summary"])) if row["intent_summary"] else None
+            ),
+            intent_source=str(row["intent_source"]),
             status=str(row["display_status"]),
             created_at=row["created_at"],
             last_activity_at=row["last_activity_at"],
@@ -376,6 +387,63 @@ class AiTaskVisualizationService:
             interface_failed_count=int(row["interface_failed_count"]),
             error_event_count=int(row["error_event_count"]),
         )
+
+    @staticmethod
+    def _validate_intent_closure(db_cursor: Any, task_id: int, status: str) -> None:
+        db_cursor.execute(
+            """
+            SELECT task.intent_type,
+                   task.intent_error_signal,
+                   EXISTS (
+                       SELECT 1 FROM ai_data_query_records AS data_record
+                       WHERE data_record.task_id = task.id
+                   ) AS has_data_record,
+                   EXISTS (
+                       SELECT 1 FROM interface_forwarding_logs AS interface_log
+                       WHERE interface_log.task_id = task.id
+                   ) AS has_interface_record,
+                   EXISTS (
+                       SELECT 1 FROM mcp_tool_calls AS inspect_call
+                       WHERE inspect_call.task_id = task.id
+                         AND inspect_call.tool_name = 'inspect_container_errors'
+                         AND inspect_call.status = 'ok'
+                   ) AS inspected_container_errors,
+                   EXISTS (
+                       SELECT 1 FROM mcp_tool_calls AS apply_call
+                       WHERE apply_call.task_id = task.id
+                         AND apply_call.tool_name = 'apply_workspace_changes'
+                         AND apply_call.status = 'ok'
+                   ) AS applied_workspace_changes
+            FROM mcp_tasks AS task
+            WHERE task.id = %s AND task.workspace_id IS NOT NULL
+            """,
+            (task_id,),
+        )
+        row = db_cursor.fetchone()
+        if row is None:
+            raise AiTaskVisualizationError("任务不存在", code="task_not_found")
+        if status != "resolved":
+            return
+
+        intent_type = str(row["intent_type"])
+        missing: list[str] = []
+        if intent_type == "interface_execute" and not row["has_interface_record"]:
+            missing.append("execute_forwarding_request 产生的接口执行记录")
+        if intent_type == "data_query" and not row["has_data_record"]:
+            missing.append("save_data_visualization_query 产生的数据条件记录")
+        if (
+            intent_type in {"bug_investigate", "bug_fix"}
+            and bool(row["intent_error_signal"])
+            and not row["inspected_container_errors"]
+        ):
+            missing.append("inspect_container_errors 完成的注册容器错误检查")
+        if intent_type == "bug_fix" and not row["applied_workspace_changes"]:
+            missing.append("apply_workspace_changes 完成的工作空间更新")
+        if missing:
+            raise AiTaskVisualizationError(
+                "任务意图要求的步骤尚未完成：" + "；".join(missing),
+                code="intent_required_steps_missing",
+            )
 
     @staticmethod
     def _chain_health(

@@ -16,6 +16,7 @@ import {
 } from "@/lib/api";
 import type {
   AiTaskChainHealthStatus,
+  AiTaskIntentType,
   AiTaskTimelineEvent,
   AiTaskVisualizationDetail,
   AiTaskVisualizationListItem,
@@ -52,6 +53,14 @@ const chainStatusLabels: Record<AiTaskChainHealthStatus, string> = {
   attention: "需关注",
   failed: "失败",
   unused: "未使用",
+};
+
+const intentLabels: Record<AiTaskIntentType, string> = {
+  interface_execute: "执行接口",
+  data_query: "查询数据",
+  task_execute: "执行任务",
+  bug_investigate: "查询 Bug",
+  bug_fix: "修改 Bug",
 };
 
 function formatTime(value: string) {
@@ -241,7 +250,7 @@ export function TaskVisualizationWorkbench({
           {items.map((item) => (
             <button key={item.task_id} type="button" className="interface-request-list-item task-visualization-list-item" data-active={selectedTaskId === item.task_id} onClick={() => setSelectedTaskId(item.task_id)}>
               <span className="interface-request-list-line"><strong>#{item.task_id} · {item.description}</strong><span className={`request-status task-status--${item.status}`}>{statusLabels[item.status]}</span></span>
-              <span className="interface-request-list-description">{item.workspace_name} · {item.environment} · {item.agent_name}</span>
+              <span className="interface-request-list-description">{intentLabels[item.intent_type]} · {item.workspace_name} · {item.environment} · {item.agent_name}</span>
               <small>{taskCounts(item)}</small>
               <span className="interface-request-list-meta"><span>最近活动</span><time dateTime={item.last_activity_at}>{formatTime(item.last_activity_at)}</time></span>
             </button>
@@ -263,6 +272,7 @@ export function TaskVisualizationWorkbench({
                 <div><dt>工作空间</dt><dd>{detail.workspace_name}</dd></div>
                 <div><dt>环境</dt><dd>{detail.environment}</dd></div>
                 <div><dt>AI 工具</dt><dd>{detail.agent_name}</dd></div>
+                <div><dt>任务意图</dt><dd>{intentLabels[detail.intent_type]}{detail.intent_error_signal ? " · 有错误信号" : ""}</dd></div>
                 <div><dt>工具调用</dt><dd>{detail.tool_call_count} 次</dd></div>
                 <div><dt>接口结果</dt><dd>{detail.interface_success_count} 成功 / {detail.interface_failed_count} 失败</dd></div>
                 <div><dt>错误事件</dt><dd>{detail.error_event_count} 个</dd></div>

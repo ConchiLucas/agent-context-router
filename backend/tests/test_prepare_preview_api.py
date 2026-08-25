@@ -95,7 +95,8 @@ summary: 项目导航。
     assert response.status_code == 200
     payload = response.json()
     assert payload["task_id"] == 77
-    assert set(payload) == {"task_id", "documents", "access"}
+    assert set(payload) == {"task_id", "documents", "execution_contract", "access"}
+    assert payload["execution_contract"]["intent_source"] == "system_default"
     project_root = payload["documents"]
     assert project_root["summary"] == "项目导航。"
     assert project_root["children"][0]["summary"] == "子文档"

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { WorkspaceDataSourceOverview } from "@/components/workspace-data-source-overview";
 import {
@@ -18,10 +18,12 @@ import type {
 
 interface WorkspaceMcpEnvironmentDefaultsProps {
   workspaceId: string;
+  onClose?: () => void;
 }
 
 export function WorkspaceMcpEnvironmentDefaults({
   workspaceId,
+  onClose,
 }: WorkspaceMcpEnvironmentDefaultsProps) {
   const [workspace, setWorkspace] = useState<WorkspaceSummary | null>(null);
   const [configuration, setConfiguration] =
@@ -31,6 +33,7 @@ export function WorkspaceMcpEnvironmentDefaults({
   const [environment, setEnvironment] = useState("local");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -59,6 +62,10 @@ export function WorkspaceMcpEnvironmentDefaults({
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (onClose) closeButtonRef.current?.focus();
+  }, [onClose]);
+
   const selected = useMemo(
     () => configuration?.environments.find((item) => item.key === environment),
     [configuration, environment],
@@ -68,9 +75,8 @@ export function WorkspaceMcpEnvironmentDefaults({
     [environment, nacosProfiles],
   );
 
-  return (
-    <main className="mcp-environment-page">
-      <div className="mcp-environment-page-shell">
+  const content = (
+    <div className="mcp-environment-page-shell">
         <header className="mcp-environment-page-header workspace-environment-detail-header">
           <div>
             <span className="section-eyebrow">Workspace environment</span>
@@ -95,9 +101,21 @@ export function WorkspaceMcpEnvironmentDefaults({
                 ))}
               </select>
             </label>
-            <Link className="secondary-button mcp-environment-back-link" href="/">
-              返回工作空间
-            </Link>
+            {onClose ? (
+              <button
+                ref={closeButtonRef}
+                type="button"
+                className="close-button workspace-environment-close-button"
+                aria-label="关闭环境详情"
+                onClick={onClose}
+              >
+                ×
+              </button>
+            ) : (
+              <Link className="secondary-button mcp-environment-back-link" href="/">
+                返回工作空间
+              </Link>
+            )}
           </div>
         </header>
 
@@ -185,7 +203,28 @@ export function WorkspaceMcpEnvironmentDefaults({
             </section>
           </>
         ) : null}
-      </div>
-    </main>
+    </div>
   );
+
+  if (onClose) {
+    return (
+      <section
+        className="workspace-environment-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="工作空间环境详情"
+        data-workspace-detail-subdialog
+        onKeyDown={(event) => {
+          if (event.key !== "Escape") return;
+          event.preventDefault();
+          event.stopPropagation();
+          onClose();
+        }}
+      >
+        {content}
+      </section>
+    );
+  }
+
+  return <main className="mcp-environment-page">{content}</main>;
 }
