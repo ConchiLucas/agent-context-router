@@ -37,6 +37,7 @@ def test_workspace_starts_with_local_only_and_can_add_its_own_environment() -> N
     assert saved.json() == {
         "key": "test",
         "display_name": "测试环境",
+        "aliases": ["test", "测试", "测试环境"],
         "is_default": False,
         "sort_order": 10,
     }

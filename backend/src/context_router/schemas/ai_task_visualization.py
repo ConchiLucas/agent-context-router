@@ -22,6 +22,7 @@ class AiTaskVerificationItem(BaseModel):
     type: str = Field(min_length=1, max_length=64)
     description: str = Field(min_length=1, max_length=1000)
     result: str = Field(min_length=1, max_length=2000)
+    tool_call_id: int | None = Field(default=None, ge=1)
 
 
 class AiTaskResultWrite(BaseModel):

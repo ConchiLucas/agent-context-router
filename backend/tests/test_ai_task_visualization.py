@@ -160,13 +160,14 @@ def test_chain_health_explains_failures_partial_success_and_log_evidence() -> No
     )
 
     assert [(entry.key, entry.status) for entry in health] == [
-        ("mcp", "failed"),
+        ("mcp", "attention"),
         ("data", "attention"),
         ("interface", "attention"),
         ("log", "attention"),
         ("conclusion", "healthy"),
     ]
     assert health[-1].summary == "已完成并记录 1 项验证"
+    assert "失败后恢复" in health[0].summary
 
 
 def test_chain_health_does_not_treat_unused_chains_as_failures() -> None:

@@ -72,8 +72,8 @@ Codex / Antigravity
   -> 只投影入口及显式下两级（总高度三层）
   -> 返回 task_id + access + 三层文档投影 + 必要 warnings
   -> read_task_context(task_id, sections[])
-  -> 按需返回 Workspace 数据库别名或 task 所选环境 JSON
-  -> read_middleware_context(task_id, environment?, components?, reveal_secrets?)
+  -> 按需返回 Workspace 数据库摘要或 task 所选环境 JSON
+  -> read_middleware_context(task_id, components?, reveal_secrets?)
   -> 显式 environment 优先；省略时继承 task 环境
   -> 拉取规则声明的 dataId/group，解析并抽取组件字段
   -> 本机默认明文；显式 reveal=false 时脱敏，Trace 不保存响应值
@@ -106,7 +106,8 @@ Codex / Antigravity
   -> 显式参数记录 task_explicit；省略时固定 local 并记录 workspace_default
   -> 环境选择只写 task 快照，不修改 Workspace 配置
   -> 返回 task_id + 可选 database_environment/selection/revision + databases[].database(mcp_alias)
-  -> search_database_objects / execute_database_query
+  -> resolve_database_target
+  -> search_database_objects / execute_database_query（只接收 database_context_id）
   -> DatabaseAccessService 读取 task_id 绑定的稳定 workspace_id/workspace_key
   -> ProjectRegistry 校验当前 Workspace
   -> 校验共享 revision，再按 task 环境和稳定 mcp_alias 解析既有项目授权
@@ -142,7 +143,7 @@ Codex / Antigravity
 
 `prepare_forwarding_request` 先解析转发配置。显式 `address_id`、`login_account`、`role_name` 优先；省略时在当前接口、task 环境和仍存在的候选中选择最近成功日志的地址与身份；没有成功记录但仅有一个候选时自动选择；其余情况返回 `needs_selection`。显式账号或角色会先排除不包含该身份的地址。`selection_evidence` 分别记录地址和身份来自 `caller`、`successful_history` 或 `single_candidate`；调用摘要只记录来源，不记录登录请求头。配置确定后，再按同接口、同环境、同转发地址、同身份选择最近一条成功日志，并在合并前移除验证码、临时令牌、时间戳等易失字段，把历史页码重置为 1、历史分页大小限制到 20。默认 `value_strategy=reuse_successful`，不会因为存在映射就查询业务数据库。用户要求更换指定业务值时使用 `refresh_selected + refresh_value_keys`；要求所有业务值重新造数时使用 `refresh_mapped`；明确拒绝历史时才使用 `ignore_history`。刷新只处理当前接口的精确参数绑定，先移除对应历史值，再从最多 10 个候选中稳定选择一个与旧值不同的值；调用方显式值最后覆盖且会跳过该字段的映射查询。返回的 `parameter_evidence` 标记 `caller`、`successful_history`、`value_mapping`、Schema 默认/示例或安全分页默认，`value_resolutions` 说明哪些映射被刷新或由 caller 覆盖；无法安全刷新时返回 `needs_value_resolution`，不生成计划。
 
-业务值取值链路既可由 AI 显式调用 `search_value_mappings -> resolve_value_candidates`，也可由 `prepare_forwarding_request` 在刷新策略下按接口绑定自动完成。搜索工具只读取当前 task Workspace 的已发布映射，可按中文业务词、`value_key`、别名或精确的 `interface_id + location + parameter_path` 定位规则；绑定列表每条映射最多返回 20 条并标记是否截断。解析工具不接收 SQL、连接信息或任意数据源，只执行映射中保存的数据库别名、表、字段和固定等值过滤；省略环境时继承 task 环境，显式环境必须与 task 一致，结果最多 10 条并携带来源字段。两类调用均进入 MCP 链路，日志中的搜索词只保存 SHA-256 摘要；接口准备日志另外记录策略和刷新 key 数量，不记录候选原文。
+业务值取值链路既可由 AI 调用 `search_value_mappings -> execute_mapped_data_query` 原子完成查询和数据可视化落库，也可由 `prepare_forwarding_request` 在刷新策略下按接口绑定自动完成。搜索工具只读取当前 task Workspace 的已发布映射；原子工具不接收环境、SQL、连接信息或任意数据源，只执行映射中保存的受限规则并继承 task 环境，结果最多 10 条。`resolve_value_candidates` 保留给接口组参等只需候选、不需要创建数据可视化的场景。
 
 ```text
 Codex / Antigravity
@@ -194,7 +195,7 @@ prepare 和文档搜索不建立业务数据库连接。业务数据库离线时
 | 按关联字段关键词查看一层关联记录 | `relation-record-explorer.tsx` | 安全只读 `POST /api/workspaces/{id}/relation-records/search` |
 | 管理并测试接口转发 | `interface-forwarding-manager.tsx` | 浏览器使用 `GET /api/interface-forwarding/overview` 只读展示 Workspace 环境下“接口服务 + 具名基础 URL”映射及每个地址的登录账号、角色标识和请求头；overview 聚合接口最近请求时间，有请求记录的接口优先按时间倒序，未请求接口按路径和请求方式稳定排序；前端对当前服务或全部接口的实际展示集合复用同一排序；写入接口保留给 AI/运维调用；execute 同时校验接口与地址的服务归属，测试下拉只显示同服务地址；MCP 执行优先经 Host Runner 单次租约访问宿主机 VPN 网络并统一落日志；接口 state/logs/schema |
 | 查看与使用业务值映射 | `value-mapping-manager.tsx` | 页面通过 `GET /api/value-mappings/overview` 只读展示；AI/运维接口保留结构化规则维护和预览；数据查询与接口参数都优先使用 `search_value_mappings` 定位已发布规则，再由 `resolve_value_candidates` 按 task 环境执行最多 10 条的服务端生成只读查询；无接口范围时不展开绑定明细，随机选择只在有界候选池内执行 |
-| 数据查询映射短链路 | `task_intent.py`、`mcp_server.py` | `prepare_task_context -> search_value_mappings -> resolve_value_candidates` 不需要先读数据库列表；只有映射未命中才进入 `read_task_context -> search_relation_tables/search_database_objects -> execute_database_query`。随机请求固定传 `selection=random` 和准确 `limit`，禁止映射解析后再用 `ORDER BY RAND()` 重复取值 |
+| 数据查询映射短链路 | `task_intent.py`、`mcp_server.py` | `prepare_task_context -> search_value_mappings -> resolve_value_candidates` 不需要先读数据库列表；成功 MCP 响应统一返回 `tool_call_id`，候选解析同时返回可直接复制的 `next_action.arguments`。解析显示字段足够时直接据此调用 `save_data_visualization_query`，由服务端补齐目标并继承成功调用摘要，跳过 Schema、表关系和原始 SQL。只有映射未命中或确需映射未提供的完整字段时才进入数据库探索。随机请求固定传 `selection=random` 和准确 `limit`，禁止映射解析后再用 `ORDER BY RAND()` 重复取值 |
 | 查看单表插入入口 | `table-relation-write-modal.tsx` | `GET /api/workspaces/{id}/table-relations/table/writes` |
 | 查看单表更新入口 | `table-relation-write-modal.tsx` | `GET /api/workspaces/{id}/table-relations/table/updates` |
 | 搜索表名、只看有关联的表、折叠多对多 | `table-relation-table-list.tsx`、`table-relations.ts` | 无请求，复用已加载数据在前端过滤 |
@@ -249,7 +250,7 @@ api/table_relations.py
 - `markdown_search_parser.py` 剥离 Front Matter、按 fenced-code-aware ATX 章节解析并生成有界、带重叠的规范化分块。
 - `document_search_repository.py` 使用 PostgreSQL `simple` FTS、`pg_trgm` 和短词精确子串查询 Workspace 或 Project 的当前索引版本；两类索引分别持久化，避免使用伪 Project。
 - `ContextDocumentSearchService` 按 task scope 选择 Workspace 或旧 Project 兼容链路，校验 Workspace 根入口和各项目 index_version，将分块命中聚合为文档结果；只返回定位信息，不返回 Markdown 正文。
-- `ContextPreparationService` 为 MCP 和本机 Workspace MCP JSON 预览生成同一精简返回模型。调用方可选传当前 Workspace 已登记的任意环境；显式选择写 `task_explicit`，省略固定 `local` 并写 `workspace_default`。数据库别名与通用 JSON 由 `read_task_context` 按需获取，Nacos 中间件由 `read_middleware_context` 实时获取。
+- `ContextPreparationService` 为 MCP 和本机 Workspace MCP JSON 预览生成同一返回模型。服务端按环境 key、展示名称和别名从任务描述确定环境并写 `task_description`；显式断言写 `task_explicit`，无任何环境语义才用 `local/workspace_default`。prepare 返回最终环境快照，所有下游工具只能继承。
 - `NacosMiddlewareService` 复用 task 的 Workspace 边界；`read_middleware_context` 的显式已登记环境优先，省略时继承 task 环境，并读取同名唯一 Nacos 配置。MCP 参数不能覆盖 Nacos 地址、命名空间或字段路径；本机工具默认返回明文，显式 `reveal_secrets=false` 时脱敏。
 - `task_repository.py` 为新 prepare 写入 `scope='workspace'`、Workspace 快照、可选活动项目快照、动态环境、共享 revision 和 `database_environment_selection`。新任务显式环境写 `task_explicit`，省略环境写 `workspace_default`。
 - `ContextDocumentReadService` 按 task scope 校验 Workspace 聚合缓存或旧 Project 缓存，批量读取文档或章节，并在返回正文前记录调用。
@@ -327,9 +328,9 @@ Workspace 调用记录通过 `task-history.ts` 保留文档读取批次和单批
 
 表关联页由 `table-relation-explorer.tsx` 拉取 Workspace 唯一发布版本、表清单和单表详情，不接收任务或页面环境。后端按当前选中的表完成基数视角翻转、过滤和折叠标记，前端只负责呈现。关联数据页另外携带页面环境：关系结构仍取唯一发布版本，实际数据连接由该环境映射解析。关联数据的生成尚未实现，示例数据由后端种子脚本写入。
 
-数据可视化页不复用关联数据页的 React 状态，只复用表清单和有界查询 API。`save_data_visualization_query` 从已验证 task 补全 Workspace、动态环境、来源和 tool call 关联，`AiDataVisualizationService` 继续校验已发布关联表并按 task 条件生成稳定幂等键。关联查询携带 `ai_query_record_id`，完成后回写成功/失败、耗时、结果规模和短错误摘要；浏览器写入仍由 `BrowserReadOnlyMiddleware` 拒绝。四个可视化页面使用 task 筛选互相跳转，不共享数据管理页面状态。
+数据可视化页不复用关联数据页的 React 状态，只复用表清单和有界查询 API。`save_data_visualization_query` 从已验证 task 补全 Workspace、动态环境、来源和 tool call 关联；映射的 `schema_name` 为空时，`ValueMappingService` 只从任务环境解析出的数据库命名空间或唯一允许 Schema 补全，不能唯一确定时明确失败。`AiDataVisualizationService` 继续校验已发布关联表并按 task 条件生成稳定幂等键。关联查询携带 `ai_query_record_id`，完成后回写成功/失败、耗时、结果规模和短错误摘要；浏览器写入仍由 `BrowserReadOnlyMiddleware` 拒绝。四个可视化页面使用 task 筛选互相跳转，不共享数据管理页面状态。
 
-任务可视化页不建立第二套任务状态机。`AiTaskVisualizationService` 直接以 `mcp_tasks.id` 聚合最近 30 天的统一工具调用、数据查询、接口转发日志和容器错误快照；详情接口同时把真实计数归一为 MCP、数据、接口、日志和结论五项链路健康状态。数据查询区分 pending/succeeded/failed，接口区分全部成功、部分失败和全部失败，未产生记录统一标记为 `unused` 而不是故障。`save_task_visualization_result` 对摘要、根因、代码位置、后续建议和验证结果递归脱敏后按 task 覆盖更新并记录 revision。列表、详情和最新在前的时间线均只读，关联按钮只在对应记录存在时显示，并带同一个 task_id 进入其他可视化页面。
+任务可视化页不建立第二套任务状态机。`AiTaskVisualizationService` 直接以 `mcp_tasks.id` 聚合最近 30 天的统一工具调用、数据查询、接口转发日志和容器错误快照；详情接口同时把真实计数归一为 MCP、数据、接口、日志和结论五项链路健康状态。数据查询区分 pending/succeeded/failed，接口区分全部成功、部分失败和全部失败，未产生记录统一标记为 `unused` 而不是故障；已解决任务中的历史失败调用标为 `attention` 并说明已经恢复。`save_task_visualization_result` 的 `resolved` 路径只接受 `verification_call_ids` 校验并引用同一 task 的成功调用，服务端生成验证项，不向 MCP 客户端暴露手写 verification 对象。Trace 对常见参数错误保存缺失字段、非法字段和允许值，不保存敏感原文。列表、详情和最新在前的时间线均只读，关联按钮只在对应记录存在时显示，并带同一个 task_id 进入其他可视化页面。
 
 接口可视化页由 `AiInterfaceVisualizationService` 聚合真实 `interface_forwarding_logs`、`mcp_tasks`、接口元数据和请求计划证据。列表使用 `created_at + id` 不透明游标，支持 task 筛选并限制为最近 30 天；请求预览、详情和复制内容统一递归脱敏。Codex/Antigravity 调用顺序为 `search_forwarding_interfaces`，按需调用 `read_forwarding_request_history`、业务值映射或只读数据库工具，再调用 `prepare_forwarding_request -> execute_forwarding_request`；页面仅观察最终真实请求。
 
@@ -337,4 +338,4 @@ Workspace 调用记录通过 `task-history.ts` 保留文档读取批次和单批
 
 ClickHouse 连接详情展示 secure、verify、bootstrap database、connect timeout 和 send/receive timeout；项目数据源详情展示 `mcp_alias` 和只读策略。AI/运维通过既有批量 API 维护时，后端仍校验同 Workspace 其他项目的别名占用，因此支持合法的别名互换且不会部分保存。历史非只读关联会明确提示不暴露给 MCP。
 
-MCP 接入信息和测试结果通过 `lib/api.ts` 获取；公开 MCP URL 由后端配置统一提供，前端不按浏览器地址猜测。面板展示固定工具，并说明文档搜索绑定 prepare 创建的 Workspace task，真正可用的数据库以 `read_task_context` 的 `databases` 为准；中间件信息由 `read_middleware_context` 按“显式 environment 优先、省略时继承 task 环境”的规则读取。测试请求发送当前 `workspace_id`；端到端测试任务的 `agent_name` 固定为 `connection-test`，任务列表默认过滤这类记录。
+MCP 接入信息和测试结果通过 `lib/api.ts` 获取；公开 MCP URL 由后端配置统一提供，前端不按浏览器地址猜测。面板分别展示 Codex、Gemini CLI、Antigravity 配置并为其注入固定 `X-Agent-Name` 请求头，prepare 服务端据此记录可筛选的客户端名称。面板展示固定工具，并说明文档搜索绑定 prepare 创建的 Workspace task，真正可用的数据库以 `read_task_context` 的 `databases` 为准；中间件信息由 `read_middleware_context` 按“显式 environment 优先、省略时继承 task 环境”的规则读取。测试请求发送当前 `workspace_id`；端到端测试任务的 `agent_name` 固定为 `connection-test`，任务列表默认过滤这类记录。

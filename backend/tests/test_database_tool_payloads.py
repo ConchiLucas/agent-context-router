@@ -61,6 +61,11 @@ class StaticQuery:
         return {"rows": [[1]], "returned_rows": 1}
 
 
+class StaticDatabaseContext:
+    def alias_for_context(self, **_: object) -> str:
+        return "analytics"
+
+
 class LeakyFailingQuery:
     def execute(self, **_: object) -> dict[str, object]:
         raise DatabaseAccessError(
@@ -340,12 +345,17 @@ def test_payload_persistence_failure_does_not_change_database_tool_result() -> N
         database_query_service=StaticQuery(),  # type: ignore[arg-type]
         trace_service=_trace_service(tool_calls, payload_service),
         database_payload_service=payload_service,
+        database_context_service=StaticDatabaseContext(),  # type: ignore[arg-type]
     )
 
     result = asyncio.run(
         server.call_tool(
             "execute_database_query",
-            {"task_id": 77, "database": "analytics", "sql": "SELECT 1"},
+            {
+                "task_id": 77,
+                "database_context_id": "00000000-0000-0000-0000-000000000077",
+                "sql": "SELECT 1",
+            },
         )
     )
     payload = _result_payload(result)
@@ -364,13 +374,18 @@ def test_database_error_payload_uses_stable_public_message_without_exception_tex
         database_query_service=LeakyFailingQuery(),  # type: ignore[arg-type]
         trace_service=_trace_service(tool_calls, payload_service),
         database_payload_service=payload_service,
+        database_context_service=StaticDatabaseContext(),  # type: ignore[arg-type]
     )
 
     with pytest.raises(ToolError, match="connection_failed"):
         asyncio.run(
             server.call_tool(
                 "execute_database_query",
-                {"task_id": 77, "database": "analytics", "sql": "SELECT 1"},
+                {
+                    "task_id": 77,
+                    "database_context_id": "00000000-0000-0000-0000-000000000077",
+                    "sql": "SELECT 1",
+                },
             )
         )
 

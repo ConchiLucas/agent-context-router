@@ -10,19 +10,20 @@
 - 导航树不等于全部可搜索文档，更不等于完整正文；不要一次读取所有 Markdown 内容。
 - 明确文件、符号或纯源码定位可以直接检索项目目录。
 - prepare 返回的文档树没有相关上下文时，继续使用正常源码与本地工具完成任务，不要阻塞。
-- 任务需要数据库别名或环境 JSON 时调用 `read_task_context(task_id, sections)`。`databases` 是当前 Workspace 下所有 Project 有效授权的并集；其中 `database` 字段就是后续调用的 Workspace 唯一 mcp_alias，不传 Host、DSN、账号、密码或远端数据库名。
-- 任务需要 Redis、MQ、ES、MinIO、任务调度或对象存储等中间件的实时连接、配置或故障排查信息时，必须优先调用 `read_middleware_context(task_id, environment?, components?, reveal_secrets?)`。显式环境读取该 Workspace 同名 Nacos 配置，省略时继承 task 环境。本机工具默认返回明文；需要脱敏视图时显式传 `reveal_secrets=false`。
-- `read_task_context` 只负责数据库别名和通用环境 JSON，不是 Nacos 中间件实时信息的权威来源。
-- Schema 不明确时先调用 `search_database_objects(task_id, database, object_type, pattern, detail, ...)`。优先使用 `names`，需要元数据时再升到 `summary`，只有确认目标后才用 `full`。
-- 查询数据时调用 `execute_database_query(task_id, database, sql)`；只提交一条必要的只读 SQL。即使 SQL 自带 LIMIT，仍以服务端行数、字节数、超时和安全策略为准，并检查返回的 `truncated`。
-- 数据查询或接口参数出现业务名称、ID、编码、编号时，在 prepare 后直接调用 `search_value_mappings`，不需要先读取数据库列表。命中已发布规则后直接调用 `resolve_value_candidates`，不再为确认映射来源调用 `read_task_context`、Schema 搜索或原始 SQL；只有没有合适映射时才进入这些探索链路。未指定 `interface_id` 的搜索不会返回接口绑定明细。需要“随机一个”时使用 `selection=random` 并把 `limit` 设为用户要求的数量，不再执行 `ORDER BY RAND()`。
+- prepare 会按 Workspace 环境 key、展示名称和别名识别任务文字中的环境，并返回固化后的环境快照；同一句话出现多个环境或显式断言与文字冲突时必须修正任务描述后重新 prepare。后续工具不能覆盖环境。
+- 任务需要数据库摘要或环境 JSON 时调用 `read_task_context(task_id, sections)`；不把返回的 alias 直接传给查询工具。
+- 任务需要 Redis、MQ、ES、MinIO、任务调度或对象存储等中间件的实时连接、配置或故障排查信息时，必须优先调用 `read_middleware_context(task_id, components?, reveal_secrets?)`。它只继承 task 环境。本机工具默认返回明文；需要脱敏视图时显式传 `reveal_secrets=false`。
+- 原始数据库操作先调用 `resolve_database_target(task_id, mapping_id?, table_name?, business_hint?)`。只有它返回的 `database_context_id` 可以传给数据库工具；上下文绑定 task、环境 revision 和物理库，不能跨任务复用。
+- Schema 不明确时调用 `search_database_objects(task_id, database_context_id, object_type, pattern, detail, ...)`。优先使用 `names`，需要元数据时再升到 `summary`，只有确认目标后才用 `full`。
+- 查询数据时调用 `execute_database_query(task_id, database_context_id, sql)`；只提交一条必要的只读 SQL。即使 SQL 自带 LIMIT，仍以服务端行数、字节数、超时和安全策略为准，并检查返回的 `truncated`。
+- 数据查询或接口参数出现业务名称、ID、编码、编号时，在 prepare 后直接调用 `search_value_mappings`，不需要先读取数据库列表。命中已发布规则后直接调用 `resolve_value_candidates`，不再为确认映射来源调用 `read_task_context`、Schema 搜索或原始 SQL；只有没有合适映射时才进入这些探索链路。未指定 `interface_id` 的搜索不会返回接口绑定明细。需要“随机一个”时使用 `selection=random` 并把 `limit` 设为用户要求的数量，不再执行 `ORDER BY RAND()`。解析结果的显示字段已经满足需求时，直接复制响应中的 `next_action.arguments` 调用 `save_data_visualization_query`；其中已包含 `mapping_id`、选中候选关键词和真实 `execution_tool_call_id`，由服务端补齐库、Schema、表并把记录标为已查询，不再搜索 Schema 或表关系。
 - 不尝试写操作、跨库查询、外部表函数、文件/网络读取函数或调用方 SETTINGS。工具拒绝后应调整为更小、更明确的只读查询，而不是绕过策略。
 
 ## AI 标准执行流程
 
 1. 先把用户的主意图声明给 `prepare_task_context`，创建一次任务，并在后续文档、数据库、接口、日志和运行操作中始终复用同一个 `task_id`。读取返回的 `execution_contract`；其中 `mutation_policy`、`required_steps` 和 `visualization_targets` 是当前任务的执行契约。
 2. 根据任务意图选择最短的授权链路取证或修改；不要为了填充可视化页面调用无关工具。省略 `intent_type` 只用于兼容旧客户端，服务端会按 `task_execute` 处理并返回 warning。
-3. 完成实际验证后，在最终回复用户前调用 `save_task_visualization_result`：阶段性且非终态使用 `investigating`；只有目标完成并至少有一项真实验证时使用 `resolved`；遇到明确阻塞时使用 `failed`，并记录根因和安全的下一步。
+3. 每个成功的 Trace 调用都会在结构化响应中返回 `tool_call_id`。完成实际验证后，在最终回复用户前调用 `save_task_visualization_result`：阶段性且非终态使用 `investigating`；只有目标完成并通过 `verification_call_ids` 引用至少一项当前 task 的成功调用时使用 `resolved`；遇到明确阻塞时使用 `failed`，并记录根因和安全的下一步。不要手写验证对象。
 4. 结构化结论只保存脱敏摘要、工作空间相对代码位置、建议和验证结果，不保存凭据、原始日志或推测。保存记录不能替代给用户的最终答复。
 
 ### 意图路由
@@ -49,4 +50,4 @@
 | `context-router-trace-guide` | 需要理解 Tasks 页面记录了什么 |
 | `context-router-routing-guide` | 需要按 startup/database/frontend/backend/business/debugging 路由 |
 
-MCP 的 `tools/list` 固定为 22 个当前工具。识别出数据查询条件后，可调用 `save_data_visualization_query(task_id, description, database_key, schema_name, table_name, keyword)`；完成任务或形成阶段性结论后，调用 `save_task_visualization_result` 更新同一 task 的脱敏结构化结论。`resolved` 必须包含至少一项实际验证，`failed` 必须包含明确根因。Workspace、环境和来源由 task 绑定补全。排查 Docker 服务错误时，先调用 `list_task_containers(task_id, query?)` 识别当前任务 Workspace 已注册容器，再调用 `inspect_container_errors(task_id, container_id, since_minutes?, tail?, keywords?)`。第二个工具默认读取最近 15 分钟、最多 500 行，只在发现错误时保存日志可视化记录；未注册容器、不可访问日志、关键词不匹配或没有错误均不记录，调用方不得猜测容器 ID。数据查询和接口参数中的业务 ID 都优先按 `search_value_mappings -> resolve_value_candidates` 查询；接口转发按 `search_forwarding_interfaces`、可选 `read_forwarding_request_history`、`prepare_forwarding_request -> execute_forwarding_request` 执行。直接带可选 `environment` 的工具是 `prepare_task_context`、`read_middleware_context`、`resolve_value_candidates` 和 `prepare_forwarding_request`。
+MCP 的 `tools/list` 固定为 24 个当前工具，成功调用的结构化响应统一携带可复用的 `tool_call_id`。映射命中时优先调用 `execute_mapped_data_query`，由服务端在一个工具调用内解析候选并保存成功的数据可视化记录；不再要求 AI 二次调用保存工具。只有无映射的自定义条件才使用 `save_data_visualization_query`。完成任务或形成阶段性结论后，调用 `save_task_visualization_result` 更新同一 task 的脱敏结构化结论；`resolved` 只接受 `verification_call_ids` 引用当前任务真实成功调用。排查 Docker 服务错误时，先调用 `list_task_containers`，再调用 `inspect_container_errors`。数据查询和接口参数中的业务 ID 都优先按已发布映射查询；接口转发按 `search_forwarding_interfaces`、可选 `read_forwarding_request_history`、`prepare_forwarding_request -> execute_forwarding_request` 执行。除 `prepare_task_context` 的可选环境断言外，其他环境感知工具都没有 `environment` 入参。

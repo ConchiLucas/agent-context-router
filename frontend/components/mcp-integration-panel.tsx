@@ -10,7 +10,7 @@ import type {
   WorkspaceSummary,
 } from "@/lib/types";
 
-type IntegrationTab = "connection" | "codex" | "antigravity" | "test";
+type IntegrationTab = "connection" | "codex" | "gemini" | "antigravity" | "test";
 
 interface McpIntegrationPanelProps {
   workspace: WorkspaceSummary;
@@ -20,6 +20,7 @@ interface McpIntegrationPanelProps {
 const tabs: Array<{ id: IntegrationTab; label: string }> = [
   { id: "connection", label: "连接信息" },
   { id: "codex", label: "Codex" },
+  { id: "gemini", label: "Gemini" },
   { id: "antigravity", label: "Antigravity" },
   { id: "test", label: "连接测试" },
 ];
@@ -130,6 +131,7 @@ export function McpIntegrationPanel({
   }
 
   const codex = info?.clients.find((client) => client.client === "codex");
+  const gemini = info?.clients.find((client) => client.client === "gemini");
   const antigravity = info?.clients.find(
     (client) => client.client === "antigravity",
   );
@@ -262,6 +264,14 @@ export function McpIntegrationPanel({
             <ClientConfigGuide
               client={codex}
               copied={copiedKey === "codex-config"}
+              onCopy={copy}
+            />
+          ) : null}
+
+          {!loading && info && tab === "gemini" ? (
+            <ClientConfigGuide
+              client={gemini}
+              copied={copiedKey === "gemini-config"}
               onCopy={copy}
             />
           ) : null}

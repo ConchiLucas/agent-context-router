@@ -66,6 +66,11 @@ from context_router.repositories.database_call_repository import (
     InMemoryDatabaseCallRepository,
     PostgresDatabaseCallRepository,
 )
+from context_router.repositories.database_context_repository import (
+    DatabaseContextStore,
+    InMemoryDatabaseContextRepository,
+    PostgresDatabaseContextRepository,
+)
 from context_router.repositories.database_environment_repository import (
     DatabaseEnvironmentStore,
     InMemoryDatabaseEnvironmentRepository,
@@ -179,6 +184,7 @@ from context_router.services.context_document_search import ContextDocumentSearc
 from context_router.services.context_preparation import ContextPreparationService
 from context_router.services.database_access import DatabaseAccessService
 from context_router.services.database_catalog import DatabaseCatalogService
+from context_router.services.database_context import DatabaseContextService
 from context_router.services.database_query import DatabaseQueryService
 from context_router.services.database_tool_payload import DatabaseToolPayloadService
 from context_router.services.document_chain_analytics import DocumentChainAnalyticsService
@@ -216,6 +222,7 @@ def create_app(
     project_repository: ProjectStore | None = None,
     data_source_repository: DataSourceStore | None = None,
     database_call_repository: DatabaseCallStore | None = None,
+    database_context_repository: DatabaseContextStore | None = None,
     mcp_tool_call_repository: McpToolCallStore | None = None,
     database_payload_repository: DatabaseToolPayloadStore | None = None,
     connector_registry: ConnectorRegistry | None = None,
@@ -430,6 +437,11 @@ def create_app(
         if resolved_settings.database_url
         else InMemoryDatabaseCallRepository()
     )
+    resolved_database_context_repository = database_context_repository or (
+        PostgresDatabaseContextRepository(resolved_settings.database_url)
+        if resolved_settings.database_url
+        else InMemoryDatabaseContextRepository()
+    )
     resolved_mcp_tool_call_repository = mcp_tool_call_repository or (
         PostgresMcpToolCallRepository(resolved_settings.database_url)
         if resolved_settings.database_url
@@ -485,6 +497,12 @@ def create_app(
         connector_manager=resolved_connector_manager,
         sql_policy=SqlSafetyPolicy(),
         task_repository=resolved_task_repository,
+    )
+    database_context_service = DatabaseContextService(
+        contexts=resolved_database_context_repository,
+        tasks=resolved_task_repository,
+        access=database_access_service,
+        value_mappings=value_mapping_service,
     )
     ai_data_visualization_service = AiDataVisualizationService(
         records=resolved_ai_data_query_repository,
@@ -571,6 +589,7 @@ def create_app(
         document_read_service,
         database_catalog_service,
         database_query_service,
+        database_context_service=database_context_service,
         trace_service=mcp_trace_service,
         database_payload_service=database_payload_service,
         document_search_service=document_search_service,
@@ -666,6 +685,7 @@ def create_app(
     app.state.mcp_environment_default_repository = resolved_mcp_environment_default_repository
     app.state.middleware_context_service = middleware_context_service
     app.state.database_call_repository = resolved_database_call_repository
+    app.state.database_context_repository = resolved_database_context_repository
     app.state.connector_registry = resolved_connector_registry
     app.state.connector_manager = resolved_connector_manager
     app.state.database_access_service = database_access_service

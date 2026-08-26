@@ -11,6 +11,7 @@ DatabaseEnvironmentMappingStatus = Literal["complete", "incomplete", "invalid", 
 class WorkspaceEnvironmentOption(BaseModel):
     key: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,31}$")
     display_name: str
+    aliases: list[str] = Field(default_factory=list)
     is_default: bool
     sort_order: int
 
@@ -23,12 +24,32 @@ class WorkspaceEnvironmentList(BaseModel):
 
 class WorkspaceEnvironmentUpsert(BaseModel):
     display_name: str = Field(min_length=1, max_length=80)
+    aliases: list[str] | None = Field(default=None, max_length=20)
     sort_order: int = Field(default=100, ge=-10000, le=10000)
 
     @field_validator("display_name")
     @classmethod
     def strip_display_name(cls, value: str) -> str:
         return value.strip()
+
+    @field_validator("aliases")
+    @classmethod
+    def normalize_aliases(cls, values: list[str] | None) -> list[str] | None:
+        if values is None:
+            return None
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for value in values:
+            alias = value.strip()
+            if not alias:
+                continue
+            if len(alias) > 80:
+                raise ValueError("环境别名不能超过 80 个字符")
+            folded = alias.casefold()
+            if folded not in seen:
+                seen.add(folded)
+                normalized.append(alias)
+        return normalized
 
 
 class WorkspaceEnvironmentDatabaseTargetUpdate(BaseModel):

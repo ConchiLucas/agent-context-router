@@ -49,12 +49,14 @@ CONTEXT_ROUTER_DATABASE_URL=postgresql://USER:PASSWORD@host.docker.internal:5432
 MCP 始终暴露十个无状态工具：
 
 - `prepare_task_context(task, cwd, agent_name?, environment?)`：按 cwd 定位 Workspace，创建 task_id；`environment` 可传该工作空间已登记的任意环境，省略时固定使用 `local`。
-- `read_task_context(task_id, sections)`：任务需要时才返回数据库别名或通用环境 JSON；它不是 Nacos 中间件实时信息的权威来源。
-- `read_middleware_context(task_id, environment?, components?, reveal_secrets?)`：显式环境使用同名 Nacos 配置档，省略时继承 task 环境；本机工具默认返回明文，只有显式 `reveal_secrets=false` 才脱敏。
+- `read_task_context(task_id, sections)`：任务需要时才返回数据库摘要或通用环境 JSON；它不是 Nacos 中间件实时信息的权威来源。
+- `read_middleware_context(task_id, components?, reveal_secrets?)`：始终继承 prepare 固化的 task 环境；本机工具默认返回明文，只有显式 `reveal_secrets=false` 才脱敏。
 - `search_context_documents(task_id, query, limit?)`：在 task 绑定 Workspace 的根文档和全部项目映射文档中，按路径、标题、概要、正文和章节做 PostgreSQL 全文与模糊检索；返回文档 ID、相关度、命中章节和命中原因，不返回完整正文。
 - `read_context_document(task_id, requests)`：在 task 绑定 Workspace 的聚合缓存中一次读取 1 到 10 个文档或指定章节；task_id 必须来自当前任务的 prepare，返回顺序与 requests 一致。
-- `search_database_objects(task_id, database, object_type, ...)`：按 `read_task_context` 返回的 Workspace 唯一数据库 alias 渐进搜索 schema、表、视图、列或索引。
-- `execute_database_query(task_id, database, sql)`：执行一条经过 AST、Workspace alias 作用域和数据库只读机制共同约束的查询，并按行数和最终 JSON 字节数截断。
+- `resolve_database_target(task_id, mapping_id?, table_name?, business_hint?)`：解析并签发绑定 task、环境 revision 和物理库的短期 `database_context_id`。
+- `search_database_objects(task_id, database_context_id, object_type, ...)`：按数据库上下文渐进搜索 schema、表、视图、列或索引。
+- `execute_database_query(task_id, database_context_id, sql)`：执行一条经过 AST、数据库上下文作用域和数据库只读机制共同约束的查询，并按行数和最终 JSON 字节数截断。
+- `execute_mapped_data_query(task_id, mapping_id, description, ...)`：原子执行已发布业务映射并把结果条件落到数据可视化，不需要传环境、库、Schema 或二次保存。
 - `apply_workspace_changes(task_id, changed_files)`：按 Workspace 相对变更路径自动路由到受影响 Project，并选择 fast/full 更新。
 - `start_workspace(task_id)`：通过 Workspace 唯一启动配置启动全部已登记服务。
 - `get_workspace_operation(operation_id, log_characters?)`：查询 Workspace 异步运行操作、步骤、终态和有界日志。

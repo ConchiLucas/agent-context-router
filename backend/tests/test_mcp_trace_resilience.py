@@ -90,6 +90,11 @@ class EmptyDatabaseCallStore:
         return []
 
 
+class StaticDatabaseContext:
+    def alias_for_context(self, **_: object) -> str:
+        return "private_db"
+
+
 class UnusedTaskStore:
     def get_task(self, task_id: int) -> TaskRecord:
         raise AssertionError(f"unexpected task lookup: {task_id}")
@@ -669,6 +674,7 @@ def test_trace_api_does_not_return_document_sql_results_or_connection_secrets() 
         document_store,  # type: ignore[arg-type]
         database_query_service=database_store,  # type: ignore[arg-type]
         trace_service=trace_service,
+        database_context_service=StaticDatabaseContext(),  # type: ignore[arg-type]
     )
 
     async def invoke() -> None:
@@ -684,7 +690,7 @@ def test_trace_api_does_not_return_document_sql_results_or_connection_secrets() 
             "execute_database_query",
             {
                 "task_id": 77,
-                "database": "private_db",
+                "database_context_id": "00000000-0000-0000-0000-000000000077",
                 "sql": database_store.raw_sql,
             },
         )

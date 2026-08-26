@@ -119,6 +119,7 @@ export interface WorkspaceMcpEnvironmentDefaults {
 export interface WorkspaceEnvironmentOption {
   key: string;
   display_name: string;
+  aliases: string[];
   is_default: boolean;
   sort_order: number;
 }
@@ -613,9 +614,11 @@ export type InternalMcpToolName =
   | "read_middleware_context"
   | "search_context_documents"
   | "read_context_document"
+  | "resolve_database_target"
   | "search_database_objects"
   | "execute_database_query"
   | "save_data_visualization_query"
+  | "execute_mapped_data_query"
   | "save_task_visualization_result"
   | "list_task_containers"
   | "inspect_container_errors"
@@ -815,7 +818,7 @@ export interface McpToolsListResult {
 }
 
 export interface McpClientConfig {
-  client: "codex" | "antigravity";
+  client: "codex" | "gemini" | "antigravity";
   title: string;
   config_path: string;
   project_config_path?: string;
@@ -1089,6 +1092,7 @@ export interface AiTaskVerificationItem {
   type: string;
   description: string;
   result: string;
+  tool_call_id?: number | null;
 }
 
 export interface AiTaskVisualizationResult {

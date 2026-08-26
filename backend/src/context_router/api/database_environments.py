@@ -110,6 +110,7 @@ def list_workspace_environments(
             WorkspaceEnvironmentOption(
                 key=record.key,
                 display_name=record.display_name,
+                aliases=list(record.aliases),
                 is_default=record.is_default,
                 sort_order=record.sort_order,
             )
@@ -134,6 +135,7 @@ def upsert_workspace_environment(
             workspace_id=workspace_id,
             environment=environment,
             display_name=payload.display_name,
+            aliases=payload.aliases,
             sort_order=payload.sort_order,
         )
     except (DatabaseEnvironmentRepositoryError, WorkspaceRepositoryError) as exc:
@@ -141,6 +143,7 @@ def upsert_workspace_environment(
     return WorkspaceEnvironmentOption(
         key=record.key,
         display_name=record.display_name,
+        aliases=list(record.aliases),
         is_default=record.is_default,
         sort_order=record.sort_order,
     )

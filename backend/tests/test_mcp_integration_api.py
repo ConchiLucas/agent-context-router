@@ -1,6 +1,10 @@
+import asyncio
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
+from mcp import ClientSession
+from mcp.client.streamable_http import streamable_http_client
 
 from context_router.config import Settings
 from context_router.main import create_app
@@ -23,7 +27,11 @@ from context_router.repositories.runtime_run_repository import (
 
 
 class FakeTaskRepository:
-    def create_task(self, **_: object) -> int:
+    def __init__(self) -> None:
+        self.arguments: dict[str, object] = {}
+
+    def create_task(self, **arguments: object) -> int:
+        self.arguments = arguments
         return 1
 
 
@@ -34,6 +42,7 @@ def test_mcp_integration_returns_client_configs_and_readiness(tmp_path: Path) ->
     (workspace_root / "backend" / "project").mkdir(parents=True)
     root.write_text("# 入口", encoding="utf-8")
     project_repository = InMemoryProjectRepository()
+    task_repository = FakeTaskRepository()
     app = create_app(
         Settings(
             database_url="postgresql://example.invalid/context_router",
@@ -42,7 +51,7 @@ def test_mcp_integration_returns_client_configs_and_readiness(tmp_path: Path) ->
             workspace_container_root=tmp_path,
             workspace_mapping_file=None,
         ),
-        task_repository=FakeTaskRepository(),
+        task_repository=task_repository,
         project_repository=project_repository,
         data_source_repository=InMemoryDataSourceRepository(project_repository),
         document_search_repository=InMemoryDocumentSearchRepository(),
@@ -50,6 +59,28 @@ def test_mcp_integration_returns_client_configs_and_readiness(tmp_path: Path) ->
         database_payload_repository=InMemoryDatabaseToolPayloadRepository(),
         runtime_run_repository=InMemoryRuntimeRunRepository(),
     )
+
+    async def prepare_through_mcp() -> None:
+        http_client = AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://127.0.0.1:49173",
+            headers={"X-Agent-Name": "gemini"},
+        )
+        async with http_client:
+            async with streamable_http_client(
+                "http://127.0.0.1:49173/mcp/",
+                http_client=http_client,
+            ) as (read_stream, write_stream, _):
+                async with ClientSession(read_stream, write_stream) as session:
+                    await session.initialize()
+                    result = await session.call_tool(
+                        "prepare_task_context",
+                        arguments={
+                            "task": "验证客户端名称",
+                            "cwd": str(workspace_root),
+                        },
+                    )
+                    assert result.isError is False
 
     with TestClient(app) as client:
         workspace_response = client.post(
@@ -75,6 +106,7 @@ def test_mcp_integration_returns_client_configs_and_readiness(tmp_path: Path) ->
         assert project_response.status_code == 201
         response = client.get("/api/mcp/integration")
         tools_response = client.get("/api/mcp/integration/tools")
+        asyncio.run(prepare_through_mcp())
 
     assert response.status_code == 200
     payload = response.json()
@@ -89,6 +121,7 @@ def test_mcp_integration_returns_client_configs_and_readiness(tmp_path: Path) ->
         "read_middleware_context",
         "search_context_documents",
         "read_context_document",
+        "resolve_database_target",
         "search_database_objects",
         "execute_database_query",
         "save_data_visualization_query",
@@ -99,6 +132,7 @@ def test_mcp_integration_returns_client_configs_and_readiness(tmp_path: Path) ->
         "search_relation_tables",
         "search_value_mappings",
         "resolve_value_candidates",
+        "execute_mapped_data_query",
         "search_forwarding_interfaces",
         "read_forwarding_request_history",
         "prepare_forwarding_request",
@@ -114,7 +148,11 @@ def test_mcp_integration_returns_client_configs_and_readiness(tmp_path: Path) ->
     }
     configs = {item["client"]: item["config"] for item in payload["clients"]}
     assert 'url = "https://context.example.com/mcp"' in configs["codex"]
+    assert '"X-Agent-Name" = "codex"' in configs["codex"]
+    assert '"httpUrl": "https://context.example.com/mcp"' in configs["gemini"]
+    assert '"X-Agent-Name": "gemini"' in configs["gemini"]
     assert '"serverUrl": "https://context.example.com/mcp"' in configs["antigravity"]
+    assert '"X-Agent-Name": "antigravity"' in configs["antigravity"]
     assert tools_response.status_code == 200
     listed_tools = tools_response.json()["tools"]
     assert [tool["name"] for tool in listed_tools] == [
@@ -123,6 +161,7 @@ def test_mcp_integration_returns_client_configs_and_readiness(tmp_path: Path) ->
         "read_middleware_context",
         "search_context_documents",
         "read_context_document",
+        "resolve_database_target",
         "search_database_objects",
         "execute_database_query",
         "save_data_visualization_query",
@@ -133,6 +172,7 @@ def test_mcp_integration_returns_client_configs_and_readiness(tmp_path: Path) ->
         "search_relation_tables",
         "search_value_mappings",
         "resolve_value_candidates",
+        "execute_mapped_data_query",
         "search_forwarding_interfaces",
         "read_forwarding_request_history",
         "prepare_forwarding_request",
@@ -148,3 +188,5 @@ def test_mcp_integration_returns_client_configs_and_readiness(tmp_path: Path) ->
         "idempotentHint": False,
         "openWorldHint": False,
     }
+
+    assert task_repository.arguments["agent_name"] == "gemini"

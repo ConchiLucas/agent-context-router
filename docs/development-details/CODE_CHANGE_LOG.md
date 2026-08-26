@@ -1,5 +1,7 @@
 # 代码变更记录
 
+- `2026-08-25`：完成 task 环境与数据库上下文的不兼容 MCP 改造。环境支持别名，prepare 从任务描述确定并返回固化环境，冲突或多环境直接拒绝；中间件、值映射和接口准备移除环境覆盖。新增 `resolve_database_target`，数据库搜索/查询只接收短期 `database_context_id`；新增 `execute_mapped_data_query` 原子完成已发布映射查询和数据可视化落库。新增 migration `20260825_0064`，并由 `20260825_0065` 强制任务环境三元组完整；客户端需重新连接刷新 tools/list。
+
 本文件用于记录跨模块、数据结构、接口 contract、工程约定等重要代码变更。
 
 ## 记录规则
@@ -13,6 +15,9 @@
 
 ### 2026-08-25
 
+- 收敛 AI 数据查询收尾参数：统一把持久化 `tool_call_id` 加入成功 MCP 结构化响应；`resolve_value_candidates` 返回可直接调用 `save_data_visualization_query` 的 `next_action.arguments`，包含映射、候选关键词和执行证据调用号；`save_task_visualization_result` 不再暴露手写 `verification`，`resolved` 只通过 `verification_call_ids` 生成可信验证项。
+- 修复映射短链路的空 Schema：已发布映射未配置 `schema_name` 时，按 task 环境解析数据库命名空间或唯一允许 Schema，无法唯一确定则返回 `mapping_schema_unresolved`，不再把空值转换成字符串 `None`。`execute_database_query` 缺少 `database/sql` 时返回结构化缺失字段提示。MCP 接入模板新增 Gemini CLI，并为 Codex、Gemini、Antigravity 注入固定 `X-Agent-Name`，prepare 自动记录真实客户端名称用于筛选。
+- 优化 AI 数据查询收尾链路：映射解析响应给出权威来源和短链路提示，`save_data_visualization_query` 支持直接引用 `mapping_id` 以及当前 task 成功的解析/查询调用号，跳过重复 Schema 与表关系搜索并可直接写入已查询状态；`save_task_visualization_result` 支持用成功 MCP 调用号生成真实验证项。常见参数错误在 Trace 中记录缺失字段、非法字段和允许值；最终已解决的任务即使中途有可恢复错误，MCP 健康状态也改为“需关注”而不是失败。
 - 收紧数据查询映射短链路：data_query 执行契约和 MCP 工具说明要求映射搜索/解析在 prepare 后直接执行，映射未命中才读取数据库列表和探索 Schema；随机请求必须通过 `resolve_value_candidates(selection=random, limit=...)` 完成，不再手写 `ORDER BY RAND()`。调用摘要新增 selection 与有界候选池规模，便于核对 Gemini 等客户端是否采用短链路。
 - 业务值映射扩展为数据查询的优先取值入口：`search_value_mappings` 在未指定接口时省略绑定详情，`resolve_value_candidates` 支持从最多 10 条候选中有界随机选择；data_query 执行契约和 MCP 使用说明要求先复用已发布映射，未命中再探索表关系与 Schema。工具总数、数据库结构和前端页面保持不变。
 - 增加 AI 任务意图执行契约：`prepare_task_context` 支持声明执行接口、查询数据、普通任务、查询 Bug 和修改 Bug，并持久化错误信号与摘要；prepare 返回写策略、必需步骤和可视化目标。任务收尾按意图校验数据、接口、日志检查及 Workspace 更新证据，只查询 Bug 的 Runtime 写操作由服务端拒绝；任务可视化展示意图。新增 migration `20260825_0063`，旧客户端省略意图时兼容为普通任务并返回提示。

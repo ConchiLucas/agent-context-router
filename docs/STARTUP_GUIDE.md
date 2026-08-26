@@ -126,13 +126,13 @@ CONTEXT_ROUTER_DATABASE_PAYLOAD_CLEANUP_INTERVAL_SECONDS=3600
 
 项目数据库关联自己的行数、字节数和超时限制会与查询全局值取更严格者。数据库 MCP 出入参详情默认自动采集，`DATABASE_PAYLOAD_*` 控制两个数据库 MCP 工具的本地详情快照：请求和最终 MCP 响应默认分别最多保存 1 MB，任何配置都不能超过 4 MB，默认保留 7 天，并在后端启动及调用期间按节流周期清理。授权记录归属 Project，但 `mcp_alias` 在 Workspace 内唯一，新 Workspace task 可以使用所有子项目在 prepare 中返回的 alias。修改这些值后重启 backend。
 
-每个 Workspace 独立维护环境列表，`local` 固定存在且为默认；`test`、`uat` 或其他环境只在该项目确有需要时由本机 AI/运维登记。`prepare_task_context` 可选传入任一已登记环境，显式传入记录 `task_explicit`，省略时固化 `local` 并记录 `workspace_default`。后续 `read_task_context` 和数据库工具继承 task 环境，中间件允许显式覆盖。表关联不继承 task 环境：每个 Workspace 只读取一个已发布基准快照；关联数据页面仍用当前页面环境解析实际数据库。
+每个 Workspace 独立维护环境列表和别名，`local` 固定存在且为默认；`test`、`uat` 或其他环境只在确有需要时登记。`prepare_task_context` 会从用户描述匹配已登记别名并记录 `task_description`；显式断言记录 `task_explicit`，且与描述冲突时直接拒绝；完全未提环境才固化 `local` 并记录 `workspace_default`。prepare 直接返回最终环境快照，后续中间件、映射和接口工具不再接收环境覆盖。原始数据库工具只接受 `resolve_database_target` 签发的 task 绑定上下文 ID。表关联不继承 task 环境：每个 Workspace 只读取一个已发布基准快照；关联数据页面仍用当前页面环境解析实际数据库。
 
 本机 AI 或运维通过受校验 API 调整环境与数据库关联时会递增共享 revision；task 快照 revision 不一致时数据库调用返回 `environment_changed`，需要重新 prepare。浏览器环境详情只读：页头下拉框选择查看环境，下面的 Nacos、MCP 流转和数据源汇总全部跟随切换。数据库记录自身不带环境名；环境只关联既有项目数据库授权，因此多个环境可以指向同一个数据库链接。
 
 Workspace 可按任意已登记环境保存有界 JSON 对象，不要求先配置数据库关联；task 所选环境的 JSON 作为 `environment_config` 只返回给可信本机 MCP 调用方。全部环境 JSON 合计最多 256 KiB、最多嵌套 20 层，超出 JavaScript 安全整数范围的值请改用字符串。可按明确业务需要保存组件地址和访问凭据，但严禁把实际值写入日志、开发文档、链路摘要或示例输出。
 
-需要从 Nacos 实时定位中间件时，由本机 AI/运维通过 `/api/workspaces/{workspace_id}/nacos-profiles/{environment}` 为已登记环境配置连接和声明式组件抽取规则。一个环境最多一个 Nacos 配置；`read_middleware_context` 显式环境优先，省略时继承 task 环境。由于 MCP 只绑定本机回环地址，工具默认返回账号、密码或 Token 等明文；只有明确传入 `reveal_secrets=false` 才脱敏。调用记录只保存数量、环境和警告，不保存响应值。
+需要从 Nacos 实时定位中间件时，由本机 AI/运维通过 `/api/workspaces/{workspace_id}/nacos-profiles/{environment}` 为已登记环境配置连接和声明式组件抽取规则。一个环境最多一个 Nacos 配置；`read_middleware_context` 只继承 task 环境。由于 MCP 只绑定本机回环地址，工具默认返回账号、密码或 Token 等明文；只有明确传入 `reveal_secrets=false` 才脱敏。调用记录只保存数量、环境和警告，不保存响应值。
 
 ## PostgreSQL 与 migration
 
@@ -148,7 +148,7 @@ CONTEXT_ROUTER_DATABASE_URL=postgresql://USER:PASSWORD@host.docker.internal:5432
 docker compose exec backend uv run alembic upgrade head
 ```
 
-当前 migration head 为 `20260825_0063`。`0063` 增加任务主意图、错误信号、意图摘要和来源，用于 prepare 执行契约、只查询 Bug 的运行写保护及终态证据校验；`0062` 增加按既有 task 保存的 AI 任务可视化结构化结论；`0061` 增加数据可视化任务关联、幂等键和执行摘要；`0060` 增加 AI 日志可视化错误快照表，只保存已注册容器中确认并脱敏的有界错误段。配置中心、本机 AI 默认项、业务值映射以及更早的接口转发与 Workspace 环境模型继续保持兼容。
+当前 migration head 为 `20260825_0065`。`0065` 强制任务环境、环境修订号和环境来源三者同时存在，杜绝只有环境但没有来源的残缺任务；`0064` 增加环境别名、任务描述环境来源和短期数据库上下文；这是 MCP 入参的不兼容升级，客户端必须重新连接并刷新 tools/list。`0063` 增加任务主意图、错误信号、意图摘要和来源；`0062` 增加 AI 任务可视化结构化结论；`0061` 增加数据可视化任务关联、幂等键和执行摘要；`0060` 增加 AI 日志可视化错误快照表。
 
 表关联页面的关联数据目前没有自动生成流水线，示例数据由可重复执行的种子脚本写入：
 

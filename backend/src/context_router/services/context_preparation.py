@@ -224,6 +224,7 @@ class ContextPreparationService:
             raise ContextPreparationError(str(exc)) from exc
         resolved_environment, environment_selection = self._resolve_prepare_environment(
             workspace.id,
+            normalized_task,
             normalized_environment,
         )
         return self._prepare_snapshot(
@@ -253,6 +254,7 @@ class ContextPreparationService:
 
         resolved_environment, environment_selection = self._resolve_prepare_environment(
             workspace.id,
+            f"查看工作空间 {workspace.name} 的 MCP JSON",
             normalized_environment,
         )
         return self._prepare_snapshot(
@@ -280,6 +282,7 @@ class ContextPreparationService:
             raise ContextPreparationError(str(exc)) from exc
         resolved_environment, environment_selection = self._resolve_prepare_environment(
             workspace.id,
+            f"查看工作空间 {workspace.name} 的 MCP JSON",
             None,
         )
         return self._prepare_snapshot(
@@ -298,11 +301,58 @@ class ContextPreparationService:
     def _resolve_prepare_environment(
         self,
         workspace_id: str,
+        task: str,
         environment: DatabaseEnvironment | None,
     ) -> tuple[DatabaseEnvironment | None, DatabaseEnvironmentSelection | None]:
+        environments = []
+        if self._database_access_service is not None:
+            try:
+                list_environments = getattr(
+                    self._database_access_service,
+                    "list_workspace_environments",
+                    None,
+                )
+                if callable(list_environments):
+                    environments = list_environments(workspace_id)
+            except DatabaseAccessError as exc:
+                raise ContextPreparationError(str(exc), code=exc.code) from exc
+        detected = self._detect_environment_mentions(task, environments)
+        if len(detected) > 1:
+            raise ContextPreparationError(
+                "任务描述同时命中了多个环境：" + "、".join(detected),
+                code="environment_intent_ambiguous",
+            )
         if environment is not None:
+            if detected and detected[0] != environment:
+                raise ContextPreparationError(
+                    f"显式环境 {environment} 与任务描述中的环境 {detected[0]} 冲突",
+                    code="environment_intent_conflict",
+                )
             return environment, "task_explicit"
+        if detected:
+            return detected[0], "task_description"
         return "local", "workspace_default"
+
+    @staticmethod
+    def _detect_environment_mentions(task: str, environments: list[object]) -> list[str]:
+        normalized_task = task.casefold()
+        matches: list[str] = []
+        for item in environments:
+            key = str(getattr(item, "key", "")).strip()
+            if not key:
+                continue
+            aliases = {
+                key,
+                str(getattr(item, "display_name", "")).strip(),
+                *(str(alias).strip() for alias in getattr(item, "aliases", ())),
+            }
+            if any(
+                _environment_alias_matches(normalized_task, alias.casefold())
+                for alias in aliases
+                if alias
+            ):
+                matches.append(key)
+        return list(dict.fromkeys(matches))
 
     @staticmethod
     def _validate_input(task: str, agent_name: str | None) -> tuple[str, str | None]:
@@ -494,6 +544,17 @@ class ContextPreparationService:
 
             return PrepareTaskContextResult(
                 task_id=task_id,
+                environment=(
+                    PreparedDatabaseEnvironment(
+                        key=selected_database_environment,
+                        name=selected_database_environment.upper(),
+                        revision=database_environment.revision,
+                        selection=database_environment_selection or "workspace_default",
+                    )
+                    if database_environment is not None
+                    and selected_database_environment is not None
+                    else None
+                ),
                 documents=documents,
                 execution_contract=build_task_execution_contract(
                     intent_type=intent_type,
@@ -541,3 +602,11 @@ class ContextPreparationService:
                 else []
             ),
         )
+
+
+def _environment_alias_matches(task: str, alias: str) -> bool:
+    if not alias:
+        return False
+    if any("\u4e00" <= char <= "\u9fff" for char in alias):
+        return alias in task
+    return bool(re.search(rf"(?<![a-z0-9_-]){re.escape(alias)}(?![a-z0-9_-])", task))

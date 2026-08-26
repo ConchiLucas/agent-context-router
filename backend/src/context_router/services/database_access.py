@@ -36,7 +36,7 @@ from context_router.services.local_workspace_mapping import (
 )
 from context_router.services.project_registry import ProjectRegistry, ProjectRegistryError
 
-DatabaseEnvironmentSelection = Literal["workspace_default", "task_explicit"]
+DatabaseEnvironmentSelection = Literal["workspace_default", "task_explicit", "task_description"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -666,7 +666,7 @@ class DatabaseAccessService:
                     )
                 return None
             selection = "workspace_default"
-        elif selection not in {"workspace_default", "task_explicit"}:
+        elif selection not in {"workspace_default", "task_explicit", "task_description"}:
             raise DatabaseAccessError(
                 "environment_changed",
                 "任务环境选择模式无效，请重新 prepare",
@@ -693,6 +693,18 @@ class DatabaseAccessService:
                 "工作空间已删除该环境，请重新 prepare",
             )
         return cast(DatabaseEnvironment, task_environment)
+
+    def list_workspace_environments(self, workspace_id: str):
+        repository = self._database_environment_repository
+        if repository is None:
+            return []
+        try:
+            return repository.list_environments(workspace_id)
+        except DatabaseEnvironmentRepositoryError as exc:
+            raise DatabaseAccessError(
+                "database_environment_unavailable",
+                "工作空间环境配置暂时不可用",
+            ) from exc
 
     def _current_environment_config(
         self,

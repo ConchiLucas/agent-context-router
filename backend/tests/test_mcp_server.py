@@ -1,5 +1,6 @@
 import asyncio
 import threading
+from types import SimpleNamespace
 
 import pytest
 from mcp.server.fastmcp.exceptions import ToolError
@@ -9,6 +10,7 @@ from context_router.mcp_server import (
     PREPARE_TOOL_DESCRIPTION,
     READ_MIDDLEWARE_CONTEXT_TOOL_DESCRIPTION,
     READ_TASK_CONTEXT_TOOL_DESCRIPTION,
+    _request_agent_name,
     create_context_router_mcp,
 )
 from context_router.schemas.context import SearchContextDocumentsResult
@@ -20,6 +22,28 @@ class UnusedService:
 
     def read(self, **_: object) -> None:
         raise AssertionError("tools/list must not call read")
+
+
+@pytest.mark.parametrize(
+    ("header_value", "expected"),
+    [
+        ("Codex", "codex"),
+        ("gemini", "gemini"),
+        ("ANTIGRAVITY", "antigravity"),
+        ("unknown-client", None),
+    ],
+)
+def test_request_agent_name_accepts_only_configured_clients(
+    header_value: str,
+    expected: str | None,
+) -> None:
+    ctx = SimpleNamespace(
+        request_context=SimpleNamespace(
+            request=SimpleNamespace(headers={"X-Agent-Name": header_value})
+        )
+    )
+
+    assert _request_agent_name(ctx) == expected  # type: ignore[arg-type]
 
 
 class _PrepareResult:
@@ -71,6 +95,15 @@ class RecordingQueryService:
     def execute(self, **arguments: object) -> dict[str, object]:
         self.arguments = arguments
         return {"rows": [[1]], "returned_rows": 1}
+
+
+class RecordingDatabaseContextService:
+    def __init__(self) -> None:
+        self.arguments: dict[str, object] = {}
+
+    def alias_for_context(self, **arguments: object) -> str:
+        self.arguments = arguments
+        return "analytics"
 
 
 class RecordingAiDataVisualizationService:
@@ -184,6 +217,7 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "read_middleware_context",
         "search_context_documents",
         "read_context_document",
+        "resolve_database_target",
         "search_database_objects",
         "execute_database_query",
         "save_data_visualization_query",
@@ -194,6 +228,7 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "search_relation_tables",
         "search_value_mappings",
         "resolve_value_candidates",
+        "execute_mapped_data_query",
         "search_forwarding_interfaces",
         "read_forwarding_request_history",
         "prepare_forwarding_request",
@@ -207,15 +242,25 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
     assert tools[0].annotations.destructiveHint is False
     assert tools[0].annotations.idempotentHint is False
     assert tools[0].annotations.openWorldHint is False
-    read_only_tools = (
-        tools[1],
-        tools[2],
-        tools[3],
-        tools[4],
-        tools[5],
-        tools[6],
-        tools[9],
-        *tools[11:17],
+    tool_by_name = {tool.name: tool for tool in tools}
+    read_only_tools = tuple(
+        tool_by_name[name]
+        for name in (
+            "read_task_context",
+            "read_middleware_context",
+            "search_context_documents",
+            "read_context_document",
+            "resolve_database_target",
+            "search_database_objects",
+            "execute_database_query",
+            "list_task_containers",
+            "read_table_relations",
+            "search_relation_tables",
+            "search_value_mappings",
+            "resolve_value_candidates",
+            "search_forwarding_interfaces",
+            "read_forwarding_request_history",
+        )
     )
     for tool in read_only_tools:
         assert tool.annotations is not None
@@ -223,24 +268,34 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         assert tool.annotations.destructiveHint is False
         assert tool.annotations.idempotentHint is True
         assert tool.annotations.openWorldHint is False
-    for tool in (tools[7], tools[8], tools[10]):
+    for tool in (
+        tool_by_name["save_data_visualization_query"],
+        tool_by_name["execute_mapped_data_query"],
+        tool_by_name["save_task_visualization_result"],
+        tool_by_name["inspect_container_errors"],
+    ):
         assert tool.annotations is not None
         assert tool.annotations.readOnlyHint is False
         assert tool.annotations.destructiveHint is False
         assert tool.annotations.idempotentHint is True
-    assert tools[17].annotations is not None
-    assert tools[17].annotations.readOnlyHint is True
-    assert tools[17].annotations.idempotentHint is False
-    assert tools[18].annotations is not None
-    assert tools[18].annotations.readOnlyHint is False
-    assert tools[18].annotations.destructiveHint is False
-    assert tools[18].annotations.openWorldHint is True
-    for tool in (tools[19], tools[20]):
+    forwarding_prepare = tool_by_name["prepare_forwarding_request"]
+    assert forwarding_prepare.annotations is not None
+    assert forwarding_prepare.annotations.readOnlyHint is True
+    assert forwarding_prepare.annotations.idempotentHint is False
+    forwarding_execute = tool_by_name["execute_forwarding_request"]
+    assert forwarding_execute.annotations is not None
+    assert forwarding_execute.annotations.readOnlyHint is False
+    assert forwarding_execute.annotations.destructiveHint is False
+    assert forwarding_execute.annotations.openWorldHint is True
+    for tool in (
+        tool_by_name["apply_workspace_changes"],
+        tool_by_name["start_workspace"],
+    ):
         assert tool.annotations is not None
         assert tool.annotations.readOnlyHint is False
         assert tool.annotations.destructiveHint is True
         assert tool.annotations.idempotentHint is False
-    for tool in (tools[21],):
+    for tool in (tool_by_name["get_workspace_operation"],):
         assert tool.annotations is not None
         assert tool.annotations.readOnlyHint is True
         assert tool.annotations.destructiveHint is False
@@ -258,7 +313,7 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
     }
     environment_schema = str(prepare_schema["properties"]["environment"])
     assert "^[a-z][a-z0-9_-]{0,31}$" in environment_schema
-    assert "Omit to use local" in environment_schema
+    assert "detect a registered environment alias" in environment_schema
     assert "bug_investigate" in str(prepare_schema["properties"]["intent_type"])
     assert "execution_contract" in PREPARE_TOOL_DESCRIPTION
     assert "read_task_context" in PREPARE_TOOL_DESCRIPTION
@@ -268,27 +323,38 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
     assert "returns plaintext fields by default" in READ_MIDDLEWARE_CONTEXT_TOOL_DESCRIPTION
     assert "Returning and using connection values" in READ_MIDDLEWARE_CONTEXT_TOOL_DESCRIPTION
     assert "never echo it into logs" in MCP_SERVER_INSTRUCTIONS
-    task_context_schema = tools[1].inputSchema
-    middleware_schema = tools[2].inputSchema
-    document_search_schema = tools[3].inputSchema
-    database_search_schema = tools[5].inputSchema
-    query_schema = tools[6].inputSchema
+    task_context_schema = tool_by_name["read_task_context"].inputSchema
+    middleware_schema = tool_by_name["read_middleware_context"].inputSchema
+    document_search_schema = tool_by_name["search_context_documents"].inputSchema
+    database_target_schema = tool_by_name["resolve_database_target"].inputSchema
+    database_search_schema = tool_by_name["search_database_objects"].inputSchema
+    query_schema = tool_by_name["execute_database_query"].inputSchema
     assert task_context_schema["required"] == ["task_id", "sections"]
     assert set(task_context_schema["properties"]) == {"task_id", "sections"}
     assert middleware_schema["required"] == ["task_id"]
     assert set(middleware_schema["properties"]) == {
         "task_id",
-        "environment",
         "components",
         "reveal_secrets",
     }
     assert middleware_schema["properties"]["reveal_secrets"]["default"] is True
     assert document_search_schema["required"] == ["task_id", "query"]
     assert set(document_search_schema["properties"]) == {"task_id", "query", "limit"}
-    assert database_search_schema["required"] == ["task_id", "database", "object_type"]
+    assert database_target_schema["required"] == ["task_id"]
+    assert set(database_target_schema["properties"]) == {
+        "task_id",
+        "mapping_id",
+        "table_name",
+        "business_hint",
+    }
+    assert database_search_schema["required"] == [
+        "task_id",
+        "database_context_id",
+        "object_type",
+    ]
     assert set(database_search_schema["properties"]) == {
         "task_id",
-        "database",
+        "database_context_id",
         "object_type",
         "pattern",
         "detail",
@@ -296,18 +362,25 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "table",
         "limit",
     }
-    assert query_schema["required"] == ["task_id", "database", "sql"]
-    assert set(query_schema["properties"]) == {"task_id", "database", "sql"}
-    data_visualization_schema = tools[7].inputSchema
+    assert query_schema["required"] == ["task_id", "database_context_id", "sql"]
+    assert set(query_schema["properties"]) == {"task_id", "database_context_id", "sql"}
+    data_visualization_schema = tool_by_name["save_data_visualization_query"].inputSchema
     assert data_visualization_schema["required"] == [
         "task_id",
         "description",
+        "keyword",
+    ]
+    assert set(data_visualization_schema["properties"]) == {
+        "task_id",
+        "description",
+        "keyword",
+        "mapping_id",
         "database_key",
         "schema_name",
         "table_name",
-        "keyword",
-    ]
-    task_visualization_schema = tools[8].inputSchema
+        "execution_tool_call_id",
+    }
+    task_visualization_schema = tool_by_name["save_task_visualization_result"].inputSchema
     assert task_visualization_schema["required"] == ["task_id", "status", "summary"]
     assert set(task_visualization_schema["properties"]) == {
         "task_id",
@@ -316,12 +389,12 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "root_cause",
         "code_locations",
         "suggested_actions",
-        "verification",
+        "verification_call_ids",
     }
-    container_list_schema = tools[9].inputSchema
+    container_list_schema = tool_by_name["list_task_containers"].inputSchema
     assert container_list_schema["required"] == ["task_id"]
     assert set(container_list_schema["properties"]) == {"task_id", "query"}
-    inspection_schema = tools[10].inputSchema
+    inspection_schema = tool_by_name["inspect_container_errors"].inputSchema
     assert inspection_schema["required"] == ["task_id", "container_id"]
     assert set(inspection_schema["properties"]) == {
         "task_id",
@@ -330,7 +403,7 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "tail",
         "keywords",
     }
-    relation_schema = tools[11].inputSchema
+    relation_schema = tool_by_name["read_table_relations"].inputSchema
     assert relation_schema["required"] == ["task_id", "tables"]
     assert set(relation_schema["properties"]) == {
         "task_id",
@@ -340,7 +413,7 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "evidence",
     }
     assert relation_schema["properties"]["evidence"]["default"] == "none"
-    relation_search_schema = tools[12].inputSchema
+    relation_search_schema = tool_by_name["search_relation_tables"].inputSchema
     assert relation_search_schema["required"] == ["task_id"]
     assert set(relation_search_schema["properties"]) == {
         "task_id",
@@ -349,7 +422,7 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "only_related",
         "limit",
     }
-    mapping_search_schema = tools[13].inputSchema
+    mapping_search_schema = tool_by_name["search_value_mappings"].inputSchema
     assert mapping_search_schema["required"] == ["task_id"]
     assert set(mapping_search_schema["properties"]) == {
         "task_id",
@@ -359,19 +432,18 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "parameter_path",
         "limit",
     }
-    mapping_resolve_schema = tools[14].inputSchema
+    mapping_resolve_schema = tool_by_name["resolve_value_candidates"].inputSchema
     assert mapping_resolve_schema["required"] == ["task_id", "mapping_id"]
     assert set(mapping_resolve_schema["properties"]) == {
         "task_id",
         "mapping_id",
-        "environment",
         "keyword",
         "limit",
         "selection",
     }
     assert mapping_resolve_schema["properties"]["limit"]["maximum"] == 10
     assert mapping_resolve_schema["properties"]["selection"]["default"] == "default"
-    forwarding_history_schema = tools[16].inputSchema
+    forwarding_history_schema = tool_by_name["read_forwarding_request_history"].inputSchema
     assert forwarding_history_schema["required"] == ["task_id", "interface_id"]
     assert set(forwarding_history_schema["properties"]) == {
         "task_id",
@@ -380,12 +452,11 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "success_only",
         "include_response",
     }
-    forwarding_prepare_schema = tools[17].inputSchema
+    forwarding_prepare_schema = tool_by_name["prepare_forwarding_request"].inputSchema
     assert forwarding_prepare_schema["required"] == ["task_id", "interface_id"]
     assert set(forwarding_prepare_schema["properties"]) == {
         "task_id",
         "interface_id",
-        "environment",
         "address_id",
         "login_account",
         "role_name",
@@ -658,11 +729,13 @@ def test_database_tools_forward_only_fixed_public_arguments() -> None:
     document_service = UnusedService()
     catalog = RecordingCatalogService()
     query = RecordingQueryService()
+    database_context = RecordingDatabaseContextService()
     server = create_context_router_mcp(  # type: ignore[arg-type]
         document_service,
         document_service,
         catalog,  # type: ignore[arg-type]
         query,  # type: ignore[arg-type]
+        database_context_service=database_context,  # type: ignore[arg-type]
     )
 
     _, search_result = asyncio.run(
@@ -670,7 +743,7 @@ def test_database_tools_forward_only_fixed_public_arguments() -> None:
             "search_database_objects",
             {
                 "task_id": 9,
-                "database": "analytics",
+                "database_context_id": "1" * 36,
                 "object_type": "table",
                 "pattern": "event*",
             },
@@ -681,7 +754,7 @@ def test_database_tools_forward_only_fixed_public_arguments() -> None:
             "execute_database_query",
             {
                 "task_id": 9,
-                "database": "analytics",
+                "database_context_id": "1" * 36,
                 "sql": "SELECT 1",
             },
         )
@@ -740,7 +813,7 @@ def test_data_visualization_tool_derives_scope_from_task() -> None:
     }
 
 
-def test_task_visualization_tool_saves_structured_conclusion() -> None:
+def test_task_visualization_tool_saves_structured_checkpoint() -> None:
     document_service = UnusedService()
     visualization = RecordingAiTaskVisualizationService()
     server = create_context_router_mcp(  # type: ignore[arg-type]
@@ -754,12 +827,11 @@ def test_task_visualization_tool_saves_structured_conclusion() -> None:
             "save_task_visualization_result",
             {
                 "task_id": 9,
-                "status": "resolved",
+                "status": "investigating",
                 "summary": "定位并修复环境解析问题",
                 "root_cause": "环境键未传递",
                 "code_locations": [{"path": "backend/src/context_router/main.py", "line": 10}],
                 "suggested_actions": ["补充回归测试"],
-                "verification": [{"type": "test", "description": "后端测试", "result": "通过"}],
             },
         )
     )
@@ -767,6 +839,7 @@ def test_task_visualization_tool_saves_structured_conclusion() -> None:
     assert result == {"task_id": 9, "status": "resolved", "revision": 1}
     assert visualization.task_id == 9
     assert visualization.payload is not None
+    assert visualization.payload.status == "investigating"  # type: ignore[attr-defined]
     assert visualization.payload.summary == "定位并修复环境解析问题"  # type: ignore[attr-defined]
 
 

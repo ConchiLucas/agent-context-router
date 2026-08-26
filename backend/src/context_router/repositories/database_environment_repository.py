@@ -19,6 +19,11 @@ _MAX_ENVIRONMENT_JSON_BYTES = 256 * 1024
 _MAX_ENVIRONMENT_JSON_DEPTH = 20
 _MAX_ENVIRONMENT_JSON_NODES = 10_000
 _MAX_SAFE_JSON_INTEGER = (1 << 53) - 1
+_BUILTIN_ENVIRONMENT_ALIASES: dict[str, tuple[str, ...]] = {
+    "local": ("local", "本地", "本地环境"),
+    "test": ("test", "测试", "测试环境"),
+    "uat": ("uat", "验收", "验收环境", "预发布", "预发布环境"),
+}
 
 
 class DatabaseEnvironmentRepositoryError(RuntimeError):
@@ -41,6 +46,7 @@ class WorkspaceEnvironmentRecord:
     workspace_id: str
     key: str
     display_name: str
+    aliases: tuple[str, ...]
     sort_order: int
     is_default: bool
 
@@ -114,6 +120,7 @@ class DatabaseEnvironmentStore(Protocol):
         workspace_id: str,
         environment: str,
         display_name: str,
+        aliases: list[str] | None = None,
         sort_order: int,
     ) -> WorkspaceEnvironmentRecord: ...
 
@@ -198,6 +205,7 @@ class InMemoryDatabaseEnvironmentRepository:
                     workspace_id=workspace_id,
                     key=key,
                     display_name=key.upper(),
+                    aliases=_default_environment_aliases(key),
                     sort_order={"local": 0, "test": 10, "uat": 20}.get(key, 100),
                     is_default=key == "local",
                 ),
@@ -217,6 +225,7 @@ class InMemoryDatabaseEnvironmentRepository:
         workspace_id: str,
         environment: str,
         display_name: str,
+        aliases: list[str] | None = None,
         sort_order: int,
     ) -> WorkspaceEnvironmentRecord:
         _ensure_environment(environment)
@@ -227,6 +236,7 @@ class InMemoryDatabaseEnvironmentRepository:
             workspace_id=workspace_id,
             key=environment,
             display_name=normalized_name,
+            aliases=_normalize_environment_aliases(environment, aliases),
             sort_order=sort_order,
             is_default=environment == "local",
         )
@@ -518,7 +528,8 @@ class PostgresDatabaseEnvironmentRepository:
             with psycopg.connect(self._database_url) as connection:
                 rows = connection.execute(
                     """
-                    SELECT workspace_id, environment_key, display_name, sort_order, is_default
+                    SELECT workspace_id, environment_key, display_name, aliases,
+                           sort_order, is_default
                     FROM workspace_environments
                     WHERE workspace_id = %s
                     ORDER BY sort_order, lower(display_name), environment_key
@@ -532,8 +543,9 @@ class PostgresDatabaseEnvironmentRepository:
                 workspace_id=str(row[0]),
                 key=str(row[1]),
                 display_name=str(row[2]),
-                sort_order=int(row[3]),
-                is_default=bool(row[4]),
+                aliases=tuple(str(item) for item in (row[3] or [])),
+                sort_order=int(row[4]),
+                is_default=bool(row[5]),
             )
             for row in rows
         ]
@@ -548,30 +560,36 @@ class PostgresDatabaseEnvironmentRepository:
         workspace_id: str,
         environment: str,
         display_name: str,
+        aliases: list[str] | None = None,
         sort_order: int,
     ) -> WorkspaceEnvironmentRecord:
         _ensure_environment(environment)
         normalized_name = display_name.strip()
         if not normalized_name:
             raise DatabaseEnvironmentRepositoryError("环境名称不能为空")
+        normalized_aliases = _normalize_environment_aliases(environment, aliases)
         try:
             with psycopg.connect(self._database_url) as connection:
                 self._lock_workspace(connection, workspace_id)
                 row = connection.execute(
                     """
                     INSERT INTO workspace_environments (
-                        workspace_id, environment_key, display_name, sort_order, is_default
-                    ) VALUES (%s, %s, %s, %s, %s)
+                        workspace_id, environment_key, display_name, aliases,
+                        sort_order, is_default
+                    ) VALUES (%s, %s, %s, %s, %s, %s)
                     ON CONFLICT (workspace_id, environment_key) DO UPDATE SET
                         display_name = EXCLUDED.display_name,
+                        aliases = EXCLUDED.aliases,
                         sort_order = EXCLUDED.sort_order,
                         updated_at = CURRENT_TIMESTAMP
-                    RETURNING workspace_id, environment_key, display_name, sort_order, is_default
+                    RETURNING workspace_id, environment_key, display_name, aliases,
+                              sort_order, is_default
                     """,
                     (
                         workspace_id,
                         environment,
                         normalized_name,
+                        Jsonb(list(normalized_aliases)),
                         sort_order,
                         environment == "local",
                     ),
@@ -595,8 +613,9 @@ class PostgresDatabaseEnvironmentRepository:
             workspace_id=str(row[0]),
             key=str(row[1]),
             display_name=str(row[2]),
-            sort_order=int(row[3]),
-            is_default=bool(row[4]),
+            aliases=tuple(str(item) for item in (row[3] or [])),
+            sort_order=int(row[4]),
+            is_default=bool(row[5]),
         )
 
     def delete_environment(self, *, workspace_id: str, environment: str) -> None:
@@ -1315,6 +1334,33 @@ class PostgresDatabaseEnvironmentRepository:
 def _ensure_environment(environment: str) -> None:
     if not _ENVIRONMENT_KEY_PATTERN.fullmatch(environment):
         raise DatabaseEnvironmentRepositoryError("环境标识格式不正确")
+
+
+def _default_environment_aliases(environment: str) -> tuple[str, ...]:
+    return _BUILTIN_ENVIRONMENT_ALIASES.get(environment, (environment,))
+
+
+def _normalize_environment_aliases(
+    environment: str,
+    aliases: list[str] | None,
+) -> tuple[str, ...]:
+    values = aliases if aliases is not None else list(_default_environment_aliases(environment))
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw in [environment, *values]:
+        alias = raw.strip()
+        if not alias:
+            continue
+        if len(alias) > 80:
+            raise DatabaseEnvironmentRepositoryError("环境别名不能超过 80 个字符")
+        folded = alias.casefold()
+        if folded in seen:
+            continue
+        seen.add(folded)
+        normalized.append(alias)
+    if len(normalized) > 20:
+        raise DatabaseEnvironmentRepositoryError("一个环境最多配置 20 个别名")
+    return tuple(normalized)
 
 
 def _ensure_revision(current: int, expected: int) -> None:

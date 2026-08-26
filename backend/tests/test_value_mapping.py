@@ -16,10 +16,10 @@ class _TaskRepository:
         )
 
 
-def _service() -> ValueMappingService:
+def _service(database_access: object | None = None) -> ValueMappingService:
     return ValueMappingService(
         database_url=None,
-        database_access_service=object(),  # type: ignore[arg-type]
+        database_access_service=database_access or object(),  # type: ignore[arg-type]
         connector_manager=object(),  # type: ignore[arg-type]
         sql_policy=object(),  # type: ignore[arg-type]
         task_repository=_TaskRepository(),  # type: ignore[arg-type]
@@ -73,6 +73,61 @@ def test_mcp_scope_inherits_task_environment_and_rejects_override() -> None:
         service._task_scope(9, "local")
 
     assert exc_info.value.code == "environment_mismatch"
+
+
+def test_mapping_source_resolves_empty_schema_from_task_environment_database() -> None:
+    class DatabaseAccess:
+        def resolve(self, **_: object) -> SimpleNamespace:
+            return SimpleNamespace(
+                policy=SimpleNamespace(
+                    allowed_schemas=(),
+                    engine="mysql",
+                    current_database="uat_mtp",
+                )
+            )
+
+    service = _service(DatabaseAccess())
+    service.get = lambda _mapping_id: {  # type: ignore[method-assign]
+        "workspace_id": "workspace-1",
+        "status": "published",
+        "database_alias": "c12_mtp_db",
+        "schema_name": None,
+        "table_name": "cs_dsly_highway_carrier_order",
+        "value_column": "carrier_order_no",
+    }
+
+    source = service.source_for_task("mapping-1", task_id=9)
+
+    assert source["environment"] == "uat"
+    assert source["schema_name"] == "uat_mtp"
+    assert source["schema_source"] == "environment_database_namespace"
+
+
+def test_mapping_source_rejects_ambiguous_empty_postgres_schema() -> None:
+    class DatabaseAccess:
+        def resolve(self, **_: object) -> SimpleNamespace:
+            return SimpleNamespace(
+                policy=SimpleNamespace(
+                    allowed_schemas=("public", "archive"),
+                    engine="postgresql",
+                    current_database="uat_mtp",
+                )
+            )
+
+    service = _service(DatabaseAccess())
+    service.get = lambda _mapping_id: {  # type: ignore[method-assign]
+        "workspace_id": "workspace-1",
+        "status": "published",
+        "database_alias": "c12_mtp_db",
+        "schema_name": None,
+        "table_name": "orders",
+        "value_column": "id",
+    }
+
+    with pytest.raises(ValueMappingError, match="不能唯一确定真实 Schema") as exc_info:
+        service.source_for_task("mapping-1", task_id=9)
+
+    assert exc_info.value.code == "mapping_schema_unresolved"
 
 
 def test_mcp_mapping_filters_exact_interface_parameter_and_bounds_bindings() -> None:

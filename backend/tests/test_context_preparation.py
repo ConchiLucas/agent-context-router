@@ -6,6 +6,7 @@ import pytest
 from context_router.config import Settings
 from context_router.repositories.database_environment_repository import (
     DatabaseEnvironmentConfigRecord,
+    WorkspaceEnvironmentRecord,
 )
 from context_router.repositories.mcp_environment_default_repository import (
     InMemoryMcpEnvironmentDefaultRepository,
@@ -70,6 +71,34 @@ class FakeDatabaseAccessService:
             active_environment="uat",
             revision=8,
         )
+
+    def list_workspace_environments(self, workspace_id: str) -> list[WorkspaceEnvironmentRecord]:
+        return [
+            WorkspaceEnvironmentRecord(
+                workspace_id=workspace_id,
+                key="local",
+                display_name="LOCAL",
+                aliases=("local", "本地", "本地环境"),
+                sort_order=0,
+                is_default=True,
+            ),
+            WorkspaceEnvironmentRecord(
+                workspace_id=workspace_id,
+                key="test",
+                display_name="TEST",
+                aliases=("test", "测试", "测试环境"),
+                sort_order=10,
+                is_default=False,
+            ),
+            WorkspaceEnvironmentRecord(
+                workspace_id=workspace_id,
+                key="uat",
+                display_name="UAT",
+                aliases=("uat", "验收", "预发布环境"),
+                sort_order=20,
+                is_default=False,
+            ),
+        ]
 
     def get_active_environment_payload(
         self,
@@ -305,7 +334,12 @@ def test_environment_and_database_context_are_loaded_only_when_requested(tmp_pat
     ).model_dump(exclude_none=True)
 
     assert "databases" not in payload
-    assert "environment" not in payload
+    assert payload["environment"] == {
+        "key": "local",
+        "name": "LOCAL",
+        "revision": 8,
+        "selection": "workspace_default",
+    }
     assert database_service.payload_calls == []
     assert database_service.database_calls == []
 
@@ -358,7 +392,12 @@ def test_prepare_can_select_task_environment_without_changing_workspace_default(
         environment="test",
     ).model_dump(exclude_none=True)
 
-    assert "environment" not in prepared
+    assert prepared["environment"] == {
+        "key": "test",
+        "name": "TEST",
+        "revision": 8,
+        "selection": "task_explicit",
+    }
     context = service.read_task_context(
         task_id=prepared["task_id"],
         sections=["environment"],
@@ -380,6 +419,47 @@ def test_prepare_can_select_task_environment_without_changing_workspace_default(
         ).active_environment
         == "uat"
     )
+
+
+def test_prepare_detects_registered_environment_alias_from_task_description(
+    tmp_path: Path,
+) -> None:
+    registry, _ = build_registry(tmp_path)
+    repository = FakeTaskRepository()
+    service = ContextPreparationService(
+        registry,
+        repository,
+        FakeDatabaseAccessService(),  # type: ignore[arg-type]
+    )
+
+    prepared = service.prepare(
+        task="查询预发布环境的委托订单",
+        cwd=str(tmp_path / "project"),
+    )
+
+    assert prepared.environment is not None
+    assert prepared.environment.key == "uat"
+    assert prepared.environment.selection == "task_description"
+    assert repository.created[0]["database_environment"] == "uat"
+    assert repository.created[0]["database_environment_selection"] == "task_description"
+
+
+def test_prepare_rejects_conflicting_environment_intent(tmp_path: Path) -> None:
+    registry, _ = build_registry(tmp_path)
+    service = ContextPreparationService(
+        registry,
+        FakeTaskRepository(),
+        FakeDatabaseAccessService(),  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(ContextPreparationError) as caught:
+        service.prepare(
+            task="查询 UAT 环境的委托订单",
+            cwd=str(tmp_path / "project"),
+            environment="test",
+        )
+
+    assert caught.value.code == "environment_intent_conflict"
 
 
 def test_prepare_ignores_removed_per_tool_default_when_environment_is_omitted(

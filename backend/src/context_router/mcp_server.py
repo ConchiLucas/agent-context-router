@@ -10,7 +10,7 @@ from time import perf_counter_ns
 from typing import Annotated, Any, Literal
 
 import anyio
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
@@ -60,13 +60,14 @@ from context_router.services.context_preparation import (
     TaskContextReadError,
 )
 from context_router.services.database_catalog import DatabaseCatalogService
+from context_router.services.database_context import DatabaseContextError, DatabaseContextService
 from context_router.services.database_query import DatabaseQueryService
 from context_router.services.database_tool_payload import DatabaseToolPayloadService
 from context_router.services.interface_forwarding_context import (
     InterfaceForwardingContextError,
     InterfaceForwardingContextService,
 )
-from context_router.services.mcp_trace import McpTraceService
+from context_router.services.mcp_trace import McpTraceService, current_tool_call_id
 from context_router.services.nacos_middleware import (
     MiddlewareContextError,
     MiddlewareContextService,
@@ -82,36 +83,46 @@ from context_router.services.workspace_runtime_orchestration import (
 )
 
 MCP_SERVER_NAME = "Context Router"
+MCP_CLIENT_NAME_HEADER = "X-Agent-Name"
+MCP_CLIENT_AGENT_NAMES = frozenset({"codex", "gemini", "antigravity"})
 MCP_SERVER_INSTRUCTIONS = (
     "Call prepare_task_context once at the start of a new workspace task. First classify the "
     "user's primary intent as interface_execute, data_query, task_execute, bug_investigate, or "
     "bug_fix and pass it as intent_type. Set error_signal=true only when a Bug request contains "
     "or points to actual runtime error evidence. Preserve the "
-    "returned task_id and pass it to every document or database call for that task. "
+    "returned task_id and pass it to every document or database call for that task. Every "
+    "successful traced tool response includes tool_call_id; reuse that exact ID in later "
+    "execution_tool_call_id or verification_call_ids fields instead of inventing evidence. "
     "Prepare returns the real workspace entry when present, otherwise the active project or "
     "synthetic workspace entry, plus at most two explicit descendant levels and access "
-    "capabilities. This navigation projection is not the full searchable scope. A business-value "
-    "mapping search and resolution can run immediately after prepare_task_context; do not call "
+    "capabilities. This navigation projection is not the full searchable scope. A "
+    "business-value mapping search and atomic execution can run immediately after "
+    "prepare_task_context; do not call "
     "read_task_context, search_database_objects, or execute_database_query merely to discover or "
-    "recheck the mapping source. Call read_task_context only after no suitable mapping is found "
+    "recheck the mapping source. When a mapping fits, call execute_mapped_data_query so execution "
+    "and visualization saving happen atomically; do not search schemas or relations again. Call "
+    "read_task_context only after no suitable mapping is "
+    "found "
     "and raw database aliases or generic environment configuration are needed; it is not the "
     "authoritative source for live Nacos middleware details. "
     "When the document tree is large or the target is uncertain, call "
     "search_context_documents and then read the selected document or section with "
     "read_context_document. "
-    "Use only database aliases returned by read_task_context. Search database objects before "
-    "querying "
+    "For raw database work, call resolve_database_target and pass its opaque "
+    "database_context_id to database tools. Never pass or guess a database alias. Search database "
+    "objects before querying "
     "when the schema is uncertain. Database queries are always bounded and read-only. "
     "prepare again for a new conversation when no task_id is available. "
     "Environment config returned by read_task_context may contain connection details and "
     "credentials for the "
     "environment selected by this task. Treat it as sensitive local-only context and never "
     "echo it into logs or unrelated output. "
+    "The task environment is selected once by prepare_task_context from the registered "
+    "Workspace environment aliases and is returned in the prepare result. Every later tool "
+    "inherits that immutable task snapshot and never accepts an environment override. "
     "For Redis, MQ, Elasticsearch, MinIO, job scheduler, object storage, or other live "
     "middleware connection or diagnosis tasks, call read_middleware_context with "
-    "the current task_id. For every environment-aware tool, an explicit environment argument "
-    "wins; when prepare_task_context omits it, local is used, and later tools inherit the task "
-    "environment when they omit it. Environment names come from the selected Workspace. "
+    "the current task_id. Environment names and aliases come from the selected Workspace. "
     "This local-only "
     "tool returns plaintext by default. Set reveal_secrets=false only when a redacted view is "
     "preferred. Returning and using connection values in the current authorized task is allowed; "
@@ -177,6 +188,7 @@ MCP_SERVER_INSTRUCTIONS = (
     READ_MIDDLEWARE_CONTEXT_TOOL_NAME,
     SEARCH_CONTEXT_TOOL_NAME,
     READ_TOOL_NAME,
+    RESOLVE_DATABASE_TARGET_TOOL_NAME,
     SEARCH_DATABASE_TOOL_NAME,
     EXECUTE_DATABASE_TOOL_NAME,
 ) = CONTEXT_ROUTER_CORE_TOOL_NAMES
@@ -198,7 +210,10 @@ MCP_SERVER_INSTRUCTIONS = (
     LIST_TASK_CONTAINERS_TOOL_NAME,
     INSPECT_CONTAINER_ERRORS_TOOL_NAME,
 ) = CONTEXT_ROUTER_LOG_VISUALIZATION_TOOL_NAMES
-(SAVE_DATA_VISUALIZATION_QUERY_TOOL_NAME,) = CONTEXT_ROUTER_DATA_VISUALIZATION_TOOL_NAMES
+(
+    SAVE_DATA_VISUALIZATION_QUERY_TOOL_NAME,
+    EXECUTE_MAPPED_DATA_QUERY_TOOL_NAME,
+) = CONTEXT_ROUTER_DATA_VISUALIZATION_TOOL_NAMES
 (SAVE_TASK_VISUALIZATION_RESULT_TOOL_NAME,) = CONTEXT_ROUTER_TASK_VISUALIZATION_TOOL_NAMES
 APPLY_WORKSPACE_TOOL_NAME = "apply_workspace_changes"
 START_WORKSPACE_TOOL_NAME = "start_workspace"
@@ -229,9 +244,19 @@ INSPECT_CONTAINER_ERRORS_TOOL_DESCRIPTION = (
 )
 SAVE_DATA_VISUALIZATION_QUERY_TOOL_DESCRIPTION = (
     "Save one validated data-visualization query condition for the current task. Workspace, "
-    "environment, and AI source are derived from task_id; the caller supplies only the exact "
-    "published relation table, keyword, and user-facing description. Repeated identical saves "
-    "within one task are idempotent. This tool does not execute the database query."
+    "environment, and AI source are derived from task_id. After resolve_value_candidates, pass "
+    "mapping_id instead of searching database objects or relation tables again; the saved mapping "
+    "supplies database, schema, and table. Pass execution_tool_call_id when a successful "
+    "resolve_value_candidates or execute_database_query call already produced the data, so the "
+    "visualization is recorded as succeeded instead of pending. Without mapping_id, supply the "
+    "exact published relation table explicitly. Repeated identical saves within one task are "
+    "idempotent."
+)
+EXECUTE_MAPPED_DATA_QUERY_TOOL_DESCRIPTION = (
+    "Atomically execute one published business-value mapping in the task environment and save "
+    "the resulting condition to Data Visualization. This is the preferred data-query path: it "
+    "needs no environment, database alias, schema discovery, raw SQL, or second save call. "
+    "Use selection=random only when the user's wording explicitly asks for a random result."
 )
 SAVE_TASK_VISUALIZATION_RESULT_TOOL_DESCRIPTION = (
     "Save or update the structured conclusion shown by AI Task Visualization for the current "
@@ -239,7 +264,9 @@ SAVE_TASK_VISUALIZATION_RESULT_TOOL_DESCRIPTION = (
     "was completed and verified, or failed when the task could not be completed. Resolved requires "
     "at least one real verification outcome; failed requires a concrete root cause. Include only "
     "evidence-backed summaries, Workspace-relative code locations, safe suggested actions, and "
-    "verification outcomes. Repeated calls update the same task record and increase its revision."
+    "verification outcomes. For resolved, pass verification_call_ids referencing successful calls "
+    "from this task; the server converts them into verified evidence. Do not hand-write "
+    "verification objects. Repeated calls update the same task record and increase its revision."
 )
 PREPARE_TOOL_DESCRIPTION = (
     "First classify the user's primary intent and pass intent_type. Locate the registered "
@@ -273,8 +300,8 @@ READ_MIDDLEWARE_CONTEXT_TOOL_DESCRIPTION = (
     "Authoritative live source for Redis, MQ, Elasticsearch, MinIO, job scheduler, object "
     "storage, and other Nacos-managed middleware connection or diagnosis tasks. Call this after "
     "prepare_task_context with the current task_id instead of inferring runtime values from "
-    "application files or generic environment JSON. Pass any environment registered by the "
-    "Workspace for this call; omit it to inherit the task environment. "
+    "application files or generic environment JSON. It always inherits the environment selected "
+    "and frozen by prepare_task_context. "
     "Omit components to read every configured component, or pass configured component IDs. The "
     "server derives Workspace, environment, Nacos address, namespace, dataIds, and extraction "
     "paths; callers cannot supply them. This local-only tool returns plaintext fields by default; "
@@ -295,13 +322,20 @@ SEARCH_CONTEXT_TOOL_DESCRIPTION = (
 )
 SEARCH_DATABASE_TOOL_DESCRIPTION = (
     "Search schemas, tables, views, columns, or indexes in a database authorized for the "
-    "current task. Use names first and request summary/full details only when needed."
+    "current task. Pass only a database_context_id returned by resolve_database_target. Use "
+    "names first and request summary/full details only when needed."
 )
 EXECUTE_DATABASE_TOOL_DESCRIPTION = (
-    "Execute exactly one bounded read-only SQL statement against a database alias returned "
-    "by read_task_context. Do not use this to repeat a business-value mapping resolver or to "
+    "Execute exactly one bounded read-only SQL statement against a database_context_id returned "
+    "by resolve_database_target. Do not use this to repeat a business-value mapping resolver or to "
     "implement random selection after resolve_value_candidates; use selection=random there. "
     "Connection details and query limits are enforced server-side."
+)
+RESOLVE_DATABASE_TARGET_TOOL_DESCRIPTION = (
+    "Resolve a task-bound database target before schema discovery or raw SQL. Prefer mapping_id "
+    "when a published business mapping exists; otherwise pass a table name or business hint. "
+    "The returned opaque database_context_id is bound to the task environment and physical "
+    "database, expires automatically, and is the only database selector accepted by database tools."
 )
 READ_TABLE_RELATIONS_TOOL_DESCRIPTION = (
     "Read the curated relation list for up to 10 database tables in the current task's "
@@ -351,7 +385,9 @@ RESOLVE_VALUE_CANDIDATES_TOOL_DESCRIPTION = (
     "selection=random samples from a bounded pool of at most 10 candidates and never performs an "
     "unbounded database random sort. For requests such as random/随机/任意一个, set "
     "selection=random and set limit to the number requested. This tool does not require a prior "
-    "read_task_context call. The caller cannot provide SQL, connection details, or an "
+    "read_task_context call. The response is authoritative for its database, schema, table, "
+    "display fields, and next action; after success do not call search_database_objects or "
+    "search_relation_tables. The caller cannot provide SQL, connection details, or an "
     "unconfigured data source."
 )
 SEARCH_FORWARDING_INTERFACES_TOOL_DESCRIPTION = (
@@ -481,7 +517,7 @@ class ContextRouterMCP(FastMCP):
             task_id = _positive_int(payload.get("task_id"))
             if task_id is not None:
                 finished_at = datetime.now(UTC)
-                trace_service.record_completed_call(
+                tool_call_id = trace_service.record_completed_call(
                     task_id=task_id,
                     server_name=TRACE_SERVER_NAME,
                     tool_name=name,
@@ -491,6 +527,7 @@ class ContextRouterMCP(FastMCP):
                     request_summary=request_summary,
                     result_summary=_result_summary(name, payload),
                 )
+                _attach_tool_call_id(result, tool_call_id)
             return result
 
         task_id = _positive_int(arguments.get("task_id"))
@@ -520,7 +557,10 @@ class ContextRouterMCP(FastMCP):
                 tool_name=name,
                 arguments=arguments,
             )
+        argument_error = _argument_error_summary(name, arguments)
         try:
+            if argument_error is not None:
+                raise ToolError(f"invalid_tool_arguments: {argument_error['message']}")
             result = await super().call_tool(name, arguments)
         except asyncio.CancelledError:
             if payload_service is not None:
@@ -561,6 +601,7 @@ class ContextRouterMCP(FastMCP):
                 status="error",
                 finished_at=datetime.now(UTC),
                 duration_ms=_elapsed_ms(started_ns),
+                result_summary=argument_error or _safe_error_summary(error_code),
                 error_code=error_code,
             )
             raise
@@ -602,6 +643,7 @@ class ContextRouterMCP(FastMCP):
                     duration_ms=_elapsed_ms(started_ns),
                     result_summary=_result_summary(name, payload),
                 )
+                _attach_tool_call_id(result, tool_call_id)
             return result
         finally:
             trace_service.reset_call(token)
@@ -623,6 +665,7 @@ def create_context_router_mcp(
     ai_data_visualization_service: AiDataVisualizationService | None = None,
     ai_log_visualization_service: AiLogVisualizationService | None = None,
     ai_task_visualization_service: AiTaskVisualizationService | None = None,
+    database_context_service: DatabaseContextService | None = None,
 ) -> FastMCP:
     forwarding_execution_limiter = asyncio.Semaphore(4)
     server = ContextRouterMCP(
@@ -646,13 +689,17 @@ def create_context_router_mcp(
     def prepare_task_context(
         task: Annotated[str, Field(min_length=1, max_length=4000)],
         cwd: Annotated[str, Field(min_length=1)],
+        ctx: Context,
         agent_name: Annotated[str | None, Field(max_length=64)] = None,
         environment: Annotated[
             str | None,
             Field(
                 max_length=32,
                 pattern=r"^[a-z][a-z0-9_-]{0,31}$",
-                description=("Optional task-only environment. Omit to use local."),
+                description=(
+                    "Optional task-only environment assertion. Omit to detect a registered "
+                    "environment alias in task; local is used only when none is mentioned."
+                ),
             ),
         ] = None,
         intent_type: Literal[
@@ -684,10 +731,11 @@ def create_context_router_mcp(
         ] = None,
     ) -> dict[str, Any]:
         try:
+            request_agent_name = _request_agent_name(ctx)
             result = preparation_service.prepare(
                 task=task,
                 cwd=cwd,
-                agent_name=agent_name,
+                agent_name=request_agent_name or agent_name,
                 environment=environment,
                 intent_type=intent_type,
                 error_signal=error_signal,
@@ -725,14 +773,6 @@ def create_context_router_mcp(
     )
     def read_middleware_context(
         task_id: Annotated[int, Field(ge=1, strict=True)],
-        environment: Annotated[
-            str | None,
-            Field(
-                max_length=32,
-                pattern=r"^[a-z][a-z0-9_-]{0,31}$",
-                description="Optional call environment. Omit to inherit the task environment.",
-            ),
-        ] = None,
         components: Annotated[
             list[
                 Annotated[
@@ -754,7 +794,7 @@ def create_context_router_mcp(
         try:
             result = middleware_context_service.read(
                 task_id=task_id,
-                environment=environment,
+                environment=None,
                 components=components,
                 reveal_secrets=reveal_secrets,
             )
@@ -803,15 +843,42 @@ def create_context_router_mcp(
         return result.model_dump(exclude_none=True)
 
     @server.tool(
+        name=RESOLVE_DATABASE_TARGET_TOOL_NAME,
+        description=RESOLVE_DATABASE_TARGET_TOOL_DESCRIPTION,
+        annotations=READ_TOOL_ANNOTATIONS,
+    )
+    def resolve_database_target(
+        task_id: Annotated[int, Field(ge=1, strict=True)],
+        mapping_id: Annotated[str | None, Field(min_length=1, max_length=36)] = None,
+        table_name: Annotated[str | None, Field(min_length=1, max_length=255)] = None,
+        business_hint: Annotated[str | None, Field(min_length=1, max_length=500)] = None,
+    ) -> dict[str, object]:
+        if database_context_service is None:
+            raise ToolError("database_tools_disabled: 数据库上下文工具当前不可用")
+        if mapping_id is None and table_name is None and business_hint is None:
+            raise ToolError(
+                "invalid_tool_arguments: mapping_id、table_name、business_hint 至少提供一个"
+            )
+        try:
+            return database_context_service.resolve_target(
+                task_id=task_id,
+                mapping_id=mapping_id,
+                table_name=table_name,
+                business_hint=business_hint,
+            )
+        except DatabaseContextError as exc:
+            raise ToolError(f"{exc.code}: {exc}") from exc
+
+    @server.tool(
         name=SEARCH_DATABASE_TOOL_NAME,
         description=SEARCH_DATABASE_TOOL_DESCRIPTION,
         annotations=DATABASE_TOOL_ANNOTATIONS,
     )
     def search_database_objects(
         task_id: Annotated[int, Field(ge=1, strict=True)],
-        database: Annotated[
+        database_context_id: Annotated[
             str,
-            Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_-]{0,63}$"),
+            Field(min_length=36, max_length=36),
         ],
         object_type: Literal["schema", "table", "view", "column", "index"],
         pattern: Annotated[str, Field(min_length=1, max_length=255)] = "*",
@@ -823,6 +890,12 @@ def create_context_router_mcp(
         if database_catalog_service is None:
             raise ToolError("database_tools_disabled: 数据库工具当前不可用")
         try:
+            if database_context_service is None:
+                raise ToolError("database_tools_disabled: 数据库上下文工具当前不可用")
+            database = database_context_service.alias_for_context(
+                task_id=task_id,
+                database_context_id=database_context_id,
+            )
             return database_catalog_service.search(
                 task_id=task_id,
                 database=database,
@@ -833,6 +906,8 @@ def create_context_router_mcp(
                 table=table,
                 limit=limit,
             )
+        except DatabaseContextError as exc:
+            raise ToolError(f"{exc.code}: {exc}") from exc
         except DatabaseAccessError as exc:
             raise ToolError(f"{exc.code}: {exc}") from exc
 
@@ -843,16 +918,24 @@ def create_context_router_mcp(
     )
     def execute_database_query(
         task_id: Annotated[int, Field(ge=1, strict=True)],
-        database: Annotated[
+        database_context_id: Annotated[
             str,
-            Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_-]{0,63}$"),
+            Field(min_length=36, max_length=36),
         ],
         sql: Annotated[str, Field(min_length=1, max_length=200_000)],
     ) -> dict[str, object]:
         if database_query_service is None:
             raise ToolError("database_tools_disabled: 数据库工具当前不可用")
         try:
+            if database_context_service is None:
+                raise ToolError("database_tools_disabled: 数据库上下文工具当前不可用")
+            database = database_context_service.alias_for_context(
+                task_id=task_id,
+                database_context_id=database_context_id,
+            )
             return database_query_service.execute(task_id=task_id, database=database, sql=sql)
+        except DatabaseContextError as exc:
+            raise ToolError(f"{exc.code}: {exc}") from exc
         except DatabaseAccessError as exc:
             raise ToolError(f"{exc.code}: {exc}") from exc
 
@@ -864,17 +947,45 @@ def create_context_router_mcp(
     def save_data_visualization_query(
         task_id: Annotated[int, Field(ge=1, strict=True)],
         description: Annotated[str, Field(min_length=1, max_length=2000)],
-        database_key: Annotated[
-            str,
-            Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_-]{0,63}$"),
-        ],
-        schema_name: Annotated[str, Field(min_length=1, max_length=255)],
-        table_name: Annotated[str, Field(min_length=1, max_length=255)],
         keyword: Annotated[str, Field(min_length=1, max_length=500)],
+        mapping_id: Annotated[str | None, Field(min_length=1, max_length=36)] = None,
+        database_key: Annotated[
+            str | None,
+            Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_-]{0,63}$"),
+        ] = None,
+        schema_name: Annotated[str | None, Field(min_length=1, max_length=255)] = None,
+        table_name: Annotated[str | None, Field(min_length=1, max_length=255)] = None,
+        execution_tool_call_id: Annotated[int | None, Field(ge=1, strict=True)] = None,
     ) -> dict[str, object]:
         if ai_data_visualization_service is None:
             raise ToolError("data_visualization_disabled: 数据可视化 MCP 当前不可用")
         try:
+            if mapping_id is not None:
+                if value_mapping_service is None:
+                    raise ToolError("value_mapping_disabled: 业务值映射 MCP 当前不可用")
+                source = value_mapping_service.source_for_task(mapping_id, task_id=task_id)
+                database_key = str(source["database_alias"])
+                schema_name = str(source["schema_name"])
+                table_name = str(source["table_name"])
+            if database_key is None or schema_name is None or table_name is None:
+                raise ToolError(
+                    "invalid_tool_arguments: 请传 mapping_id，或完整传入 database_key、"
+                    "schema_name、table_name"
+                )
+            source_call = None
+            if execution_tool_call_id is not None:
+                _verified_tool_calls(
+                    trace_service,
+                    task_id=task_id,
+                    call_ids=[execution_tool_call_id],
+                    allowed_tools={RESOLVE_VALUE_CANDIDATES_TOOL_NAME, EXECUTE_DATABASE_TOOL_NAME},
+                )
+                trace = trace_service.get_trace(task_id) if trace_service is not None else None
+                source_call = next(
+                    call
+                    for call in (trace.calls if trace is not None else [])
+                    if call.tool_call_id == execution_tool_call_id
+                )
             result = ai_data_visualization_service.create_for_task(
                 task_id=task_id,
                 description=description,
@@ -883,8 +994,30 @@ def create_context_router_mcp(
                 table_name=table_name,
                 keyword=keyword,
             )
+            if source_call is not None:
+                result_summary = source_call.result_summary or {}
+                result_count = result_summary.get("returned_rows")
+                if not isinstance(result_count, int):
+                    result_count = result_summary.get("returned_count")
+                ai_data_visualization_service.record_execution(
+                    record_id=result.id,
+                    workspace_id=result.workspace_id,
+                    environment=result.environment,
+                    succeeded=True,
+                    result_card_count=None,
+                    result_row_count=result_count if isinstance(result_count, int) else None,
+                    duration_ms=source_call.duration_ms or 0,
+                    error_summary=None,
+                )
+                latest = ai_data_visualization_service.latest(
+                    workspace_id=result.workspace_id,
+                    environment=result.environment,
+                    task_id=task_id,
+                ).record
+                if latest is not None:
+                    result = latest
             return result.model_dump(mode="json", exclude_none=True)
-        except AiDataVisualizationError as exc:
+        except (AiDataVisualizationError, ValueMappingError) as exc:
             raise ToolError(f"{exc.code}: {exc}") from exc
 
     @server.tool(
@@ -905,14 +1038,19 @@ def create_context_router_mcp(
             list[Annotated[str, Field(min_length=1, max_length=1000)]] | None,
             Field(default=None, max_length=50),
         ] = None,
-        verification: Annotated[
-            list[AiTaskVerificationItem] | None,
-            Field(default=None, max_length=50),
+        verification_call_ids: Annotated[
+            list[Annotated[int, Field(ge=1, strict=True)]] | None,
+            Field(default=None, min_length=1, max_length=20),
         ] = None,
     ) -> dict[str, object]:
         if ai_task_visualization_service is None:
             raise ToolError("task_visualization_disabled: 任务可视化 MCP 当前不可用")
         try:
+            verified_calls = _verified_tool_calls(
+                trace_service,
+                task_id=task_id,
+                call_ids=verification_call_ids or [],
+            )
             result = ai_task_visualization_service.save_result(
                 task_id,
                 AiTaskResultWrite(
@@ -921,7 +1059,7 @@ def create_context_router_mcp(
                     root_cause=root_cause,
                     code_locations=code_locations or [],
                     suggested_actions=suggested_actions or [],
-                    verification=verification or [],
+                    verification=verified_calls,
                 ),
             )
             return result.model_dump(mode="json", exclude_none=True)
@@ -1075,10 +1213,6 @@ def create_context_router_mcp(
     def resolve_value_candidates(
         task_id: Annotated[int, Field(ge=1, strict=True)],
         mapping_id: Annotated[str, Field(min_length=1, max_length=36)],
-        environment: Annotated[
-            str | None,
-            Field(max_length=32, pattern=r"^[a-z][a-z0-9_-]{0,31}$"),
-        ] = None,
         keyword: Annotated[str, Field(max_length=240)] = "",
         limit: Annotated[int, Field(ge=1, le=10, strict=True)] = 10,
         selection: Literal["default", "random"] = "default",
@@ -1086,15 +1220,110 @@ def create_context_router_mcp(
         if value_mapping_service is None:
             raise ToolError("value_mapping_disabled: 业务值映射 MCP 当前不可用")
         try:
-            return value_mapping_service.resolve_for_task(
+            result = value_mapping_service.resolve_for_task(
                 mapping_id,
                 task_id=task_id,
-                environment=environment,
+                environment=None,
                 keyword=keyword,
                 limit=limit,
                 selection=selection,
             )
+            candidates = result.get("candidates")
+            first_candidate = candidates[0] if isinstance(candidates, list) and candidates else None
+            candidate_value = (
+                first_candidate.get("value") if isinstance(first_candidate, dict) else None
+            )
+            visualization_keyword = (
+                str(candidate_value) if candidate_value is not None else keyword.strip()
+            )
+            call_id = current_tool_call_id()
+            next_arguments: dict[str, object] = {
+                "task_id": task_id,
+                "description": f"{str(result.get('name') or '业务数据')}查询",
+                "keyword": visualization_keyword,
+                "mapping_id": mapping_id,
+            }
+            if call_id is not None:
+                next_arguments["execution_tool_call_id"] = call_id
+            existing_next_action = result.get("next_action")
+            result["next_action"] = {
+                **(existing_next_action if isinstance(existing_next_action, dict) else {}),
+                "tool": SAVE_DATA_VISUALIZATION_QUERY_TOOL_NAME,
+                "arguments": next_arguments,
+                "ready": bool(visualization_keyword and call_id is not None),
+            }
+            return result
         except ValueMappingError as exc:
+            raise ToolError(f"{exc.code}: {exc}") from exc
+
+    @server.tool(
+        name=EXECUTE_MAPPED_DATA_QUERY_TOOL_NAME,
+        description=EXECUTE_MAPPED_DATA_QUERY_TOOL_DESCRIPTION,
+        annotations=LOG_INSPECTION_TOOL_ANNOTATIONS,
+    )
+    def execute_mapped_data_query(
+        task_id: Annotated[int, Field(ge=1, strict=True)],
+        mapping_id: Annotated[str, Field(min_length=1, max_length=36)],
+        description: Annotated[str, Field(min_length=1, max_length=2000)],
+        keyword: Annotated[str, Field(max_length=240)] = "",
+        limit: Annotated[int, Field(ge=1, le=10, strict=True)] = 10,
+        selection: Literal["default", "random"] = "default",
+    ) -> dict[str, object]:
+        if value_mapping_service is None:
+            raise ToolError("value_mapping_disabled: 业务值映射 MCP 当前不可用")
+        if ai_data_visualization_service is None:
+            raise ToolError("data_visualization_disabled: 数据可视化 MCP 当前不可用")
+        try:
+            result = value_mapping_service.resolve_for_task(
+                mapping_id,
+                task_id=task_id,
+                environment=None,
+                keyword=keyword,
+                limit=limit,
+                selection=selection,
+            )
+            candidates = result.get("candidates")
+            first = candidates[0] if isinstance(candidates, list) and candidates else None
+            selected_value = first.get("value") if isinstance(first, dict) else None
+            if selected_value is None:
+                return {
+                    **result,
+                    "status": "no_result",
+                    "visualization": None,
+                }
+            source = value_mapping_service.source_for_task(mapping_id, task_id=task_id)
+            visualization = ai_data_visualization_service.create_for_mapping_task(
+                task_id=task_id,
+                description=description,
+                database_key=str(source["database_alias"]),
+                schema_name=str(source["schema_name"]),
+                table_name=str(source["table_name"]),
+                keyword=str(selected_value),
+            )
+            returned_count = result.get("returned_count")
+            elapsed_ms = result.get("elapsed_ms")
+            ai_data_visualization_service.record_execution(
+                record_id=visualization.id,
+                workspace_id=visualization.workspace_id,
+                environment=visualization.environment,
+                succeeded=True,
+                result_card_count=None,
+                result_row_count=(returned_count if isinstance(returned_count, int) else None),
+                duration_ms=elapsed_ms if isinstance(elapsed_ms, int) else 0,
+            )
+            saved = ai_data_visualization_service.latest(
+                workspace_id=visualization.workspace_id,
+                environment=visualization.environment,
+                task_id=task_id,
+            ).record
+            return {
+                **result,
+                "status": "succeeded",
+                "visualization": (
+                    saved.model_dump(mode="json", exclude_none=True) if saved else None
+                ),
+            }
+        except (ValueMappingError, AiDataVisualizationError) as exc:
             raise ToolError(f"{exc.code}: {exc}") from exc
 
     @server.tool(
@@ -1155,10 +1384,6 @@ def create_context_router_mcp(
     def prepare_forwarding_request(
         task_id: Annotated[int, Field(ge=1, strict=True)],
         interface_id: Annotated[str, Field(min_length=1, max_length=36)],
-        environment: Annotated[
-            str | None,
-            Field(max_length=32, pattern=r"^[a-z][a-z0-9_-]{0,31}$"),
-        ] = None,
         address_id: Annotated[str | None, Field(max_length=36)] = None,
         login_account: Annotated[str | None, Field(max_length=240)] = None,
         role_name: Annotated[str | None, Field(max_length=160)] = None,
@@ -1192,7 +1417,7 @@ def create_context_router_mcp(
             return interface_forwarding_context_service.prepare(
                 task_id=task_id,
                 interface_id=interface_id,
-                environment=environment,
+                environment=None,
                 address_id=address_id,
                 login_account=login_account,
                 role_name=role_name,
@@ -1298,6 +1523,22 @@ def _positive_int(value: object) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else None
 
 
+def _request_agent_name(ctx: Context) -> str | None:
+    """Read the configured MCP client identity from the current HTTP request."""
+    try:
+        request = ctx.request_context.request
+    except ValueError:
+        return None
+    headers = getattr(request, "headers", None)
+    if headers is None:
+        return None
+    value = headers.get(MCP_CLIENT_NAME_HEADER)
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().casefold()
+    return normalized if normalized in MCP_CLIENT_AGENT_NAMES else None
+
+
 def _structured_payload(result: object) -> dict[str, Any]:
     if isinstance(result, dict):
         return result
@@ -1308,6 +1549,14 @@ def _structured_payload(result: object) -> dict[str, Any]:
         if isinstance(value, dict):
             return value
     return {}
+
+
+def _attach_tool_call_id(result: object, tool_call_id: int | None) -> None:
+    """Expose the persisted trace ID in the structured MCP response for later tool linking."""
+    if tool_call_id is None:
+        return
+    payload = _structured_payload(result)
+    payload["tool_call_id"] = tool_call_id
 
 
 def _request_summary(name: str, arguments: dict[str, Any]) -> dict[str, object] | None:
@@ -1357,8 +1606,7 @@ def _request_summary(name: str, arguments: dict[str, Any]) -> dict[str, object] 
         }
     if name == SEARCH_DATABASE_TOOL_NAME:
         return {
-            "database": _safe_string(arguments.get("database"), 64),
-            "environment": _safe_string(arguments.get("environment"), 16),
+            "database_context_id": _safe_string(arguments.get("database_context_id"), 36),
             "object_type": _safe_string(arguments.get("object_type"), 32),
             "detail": _safe_string(arguments.get("detail"), 16),
             "limit": arguments.get("limit") if isinstance(arguments.get("limit"), int) else None,
@@ -1368,17 +1616,29 @@ def _request_summary(name: str, arguments: dict[str, Any]) -> dict[str, object] 
     if name == EXECUTE_DATABASE_TOOL_NAME:
         sql = arguments.get("sql")
         return {
-            "database": _safe_string(arguments.get("database"), 64),
+            "database_context_id": _safe_string(arguments.get("database_context_id"), 36),
             "sql_sha256": (
                 hashlib.sha256(sql.strip().encode("utf-8")).hexdigest()
                 if isinstance(sql, str)
                 else None
             ),
         }
+    if name == SAVE_DATA_VISUALIZATION_QUERY_TOOL_NAME:
+        return {
+            "mapping_id": _safe_string(arguments.get("mapping_id"), 36),
+            "database": _safe_string(arguments.get("database_key"), 64),
+            "schema_scoped": bool(arguments.get("schema_name")),
+            "table_scoped": bool(arguments.get("table_name")),
+            "execution_tool_call_id": _positive_int(arguments.get("execution_tool_call_id")),
+            "keyword_characters": (
+                len(arguments["keyword"]) if isinstance(arguments.get("keyword"), str) else 0
+            ),
+        }
     if name == SAVE_TASK_VISUALIZATION_RESULT_TOOL_NAME:
         locations = arguments.get("code_locations")
         actions = arguments.get("suggested_actions")
         verification = arguments.get("verification")
+        verification_call_ids = arguments.get("verification_call_ids")
         return {
             "status": _safe_string(arguments.get("status"), 20),
             "summary_characters": (
@@ -1388,6 +1648,9 @@ def _request_summary(name: str, arguments: dict[str, Any]) -> dict[str, object] 
             "code_location_count": len(locations) if isinstance(locations, list) else 0,
             "suggested_action_count": len(actions) if isinstance(actions, list) else 0,
             "verification_count": len(verification) if isinstance(verification, list) else 0,
+            "verification_call_count": (
+                len(verification_call_ids) if isinstance(verification_call_ids, list) else 0
+            ),
         }
     if name == READ_TABLE_RELATIONS_TOOL_NAME:
         sections = arguments.get("sections")
@@ -1581,6 +1844,16 @@ def _result_summary(name: str, payload: dict[str, Any]) -> dict[str, object] | N
         return _bounded_result_metadata(payload, count_key="returned_count")
     if name == EXECUTE_DATABASE_TOOL_NAME:
         return _bounded_result_metadata(payload, count_key="returned_rows")
+    if name == SAVE_DATA_VISUALIZATION_QUERY_TOOL_NAME:
+        return {
+            "execution_status": _safe_string(payload.get("execution_status"), 16),
+            "result_row_count": (
+                payload.get("result_row_count")
+                if isinstance(payload.get("result_row_count"), int)
+                else None
+            ),
+            "task_linked": isinstance(payload.get("task_id"), int),
+        }
     if name == SAVE_TASK_VISUALIZATION_RESULT_TOOL_NAME:
         locations = payload.get("code_locations")
         verification = payload.get("verification")
@@ -1734,6 +2007,106 @@ def _bounded_result_metadata(
 
 def _safe_string(value: object, max_length: int) -> str | None:
     return value[:max_length] if isinstance(value, str) else None
+
+
+def _verified_tool_calls(
+    trace_service: McpTraceService | None,
+    *,
+    task_id: int,
+    call_ids: list[int],
+    allowed_tools: set[str] | None = None,
+) -> list[AiTaskVerificationItem]:
+    if not call_ids:
+        return []
+    if trace_service is None:
+        raise ToolError("verification_unavailable: MCP 调用记录当前不可用")
+    try:
+        trace = trace_service.get_trace(task_id)
+    except Exception as exc:
+        raise ToolError("verification_unavailable: MCP 调用记录读取失败") from exc
+    calls = {call.tool_call_id: call for call in trace.calls}
+    verified: list[AiTaskVerificationItem] = []
+    for call_id in dict.fromkeys(call_ids):
+        call = calls.get(call_id)
+        if call is None or call.status != "ok":
+            raise ToolError(f"invalid_verification_call: 调用 {call_id} 不属于当前任务或尚未成功")
+        if call.tool_name == SAVE_TASK_VISUALIZATION_RESULT_TOOL_NAME or (
+            allowed_tools is not None and call.tool_name not in allowed_tools
+        ):
+            raise ToolError(f"invalid_verification_call: 调用 {call_id} 不能作为当前结果的验证证据")
+        summary = call.result_summary or {}
+        count = summary.get("returned_rows")
+        if not isinstance(count, int):
+            count = summary.get("returned_count")
+        suffix = f"，返回 {count} 条" if isinstance(count, int) else ""
+        verified.append(
+            AiTaskVerificationItem(
+                type="mcp_call",
+                description=f"{call.tool_name} 成功调用",
+                result=f"已验证当前任务调用 #{call_id}{suffix}",
+                tool_call_id=call_id,
+            )
+        )
+    return verified
+
+
+def _argument_error_summary(name: str, arguments: dict[str, Any]) -> dict[str, object] | None:
+    missing: list[str] = []
+    invalid: list[str] = []
+    allowed_values: dict[str, list[str]] = {}
+
+    def require_text(*fields: str) -> None:
+        for field in fields:
+            value = arguments.get(field)
+            if not isinstance(value, str) or not value.strip():
+                missing.append(field)
+
+    if name == SEARCH_DATABASE_TOOL_NAME:
+        require_text("database_context_id", "object_type")
+        detail = arguments.get("detail", "names")
+        if detail not in {"names", "summary", "full"}:
+            invalid.append("detail")
+            allowed_values["detail"] = ["names", "summary", "full"]
+    elif name == EXECUTE_DATABASE_TOOL_NAME:
+        require_text("database_context_id", "sql")
+    elif name == SAVE_DATA_VISUALIZATION_QUERY_TOOL_NAME:
+        require_text("description", "keyword")
+        mapping_id = arguments.get("mapping_id")
+        if not isinstance(mapping_id, str) or not mapping_id.strip():
+            require_text("database_key", "schema_name", "table_name")
+    elif name == SAVE_TASK_VISUALIZATION_RESULT_TOOL_NAME:
+        require_text("status", "summary")
+        status = arguments.get("status")
+        if status is not None and status not in {"investigating", "resolved", "failed"}:
+            invalid.append("status")
+            allowed_values["status"] = ["investigating", "resolved", "failed"]
+        call_ids = arguments.get("verification_call_ids")
+        if status == "resolved" and not call_ids:
+            missing.append("verification_call_ids")
+
+    if not missing and not invalid:
+        return None
+    parts: list[str] = []
+    if missing:
+        parts.append("缺少必填字段：" + "、".join(missing))
+    if invalid:
+        parts.append("字段值不合法：" + "、".join(invalid))
+    if allowed_values:
+        parts.append(
+            "允许值："
+            + "；".join(f"{field}={','.join(values)}" for field, values in allowed_values.items())
+        )
+    return {
+        "reason": "invalid_tool_arguments",
+        "message": "；".join(parts),
+        "missing_fields": missing,
+        "invalid_fields": invalid,
+        "allowed_values": allowed_values,
+    }
+
+
+def _safe_error_summary(error_code: str) -> dict[str, object]:
+    return {"reason": error_code}
 
 
 def _error_code(exc: Exception) -> str:

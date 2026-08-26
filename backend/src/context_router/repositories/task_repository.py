@@ -9,7 +9,7 @@ import psycopg
 
 from context_router.schemas.context import TaskIntentSource, TaskIntentType
 
-DatabaseEnvironmentSelection = Literal["workspace_default", "task_explicit"]
+DatabaseEnvironmentSelection = Literal["workspace_default", "task_explicit", "task_description"]
 _ENVIRONMENT_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 
 
@@ -188,8 +188,11 @@ class PostgresTaskRepository:
             None,
             "workspace_default",
             "task_explicit",
+            "task_description",
         }:
-            raise TaskRepositoryError("数据库环境选择方式必须是 workspace_default 或 task_explicit")
+            raise TaskRepositoryError(
+                "数据库环境选择方式必须是 workspace_default、task_explicit 或 task_description"
+            )
         if database_environment is None and database_environment_selection is not None:
             raise TaskRepositoryError("没有数据库环境时不能指定环境选择方式")
         normalized_environment_selection = database_environment_selection

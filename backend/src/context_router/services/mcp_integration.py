@@ -20,6 +20,8 @@ from context_router.mcp_server import (
     EXECUTE_DATABASE_TOOL_NAME,
     EXECUTE_FORWARDING_REQUEST_TOOL_DESCRIPTION,
     EXECUTE_FORWARDING_REQUEST_TOOL_NAME,
+    EXECUTE_MAPPED_DATA_QUERY_TOOL_DESCRIPTION,
+    EXECUTE_MAPPED_DATA_QUERY_TOOL_NAME,
     GET_WORKSPACE_OPERATION_TOOL_DESCRIPTION,
     GET_WORKSPACE_OPERATION_TOOL_NAME,
     INSPECT_CONTAINER_ERRORS_TOOL_DESCRIPTION,
@@ -41,6 +43,8 @@ from context_router.mcp_server import (
     READ_TASK_CONTEXT_TOOL_NAME,
     READ_TOOL_DESCRIPTION,
     READ_TOOL_NAME,
+    RESOLVE_DATABASE_TARGET_TOOL_DESCRIPTION,
+    RESOLVE_DATABASE_TARGET_TOOL_NAME,
     RESOLVE_VALUE_CANDIDATES_TOOL_DESCRIPTION,
     RESOLVE_VALUE_CANDIDATES_TOOL_NAME,
     SAVE_DATA_VISUALIZATION_QUERY_TOOL_DESCRIPTION,
@@ -114,6 +118,10 @@ class McpIntegrationService:
                 ),
                 McpToolInfo(name=READ_TOOL_NAME, description=READ_TOOL_DESCRIPTION),
                 McpToolInfo(
+                    name=RESOLVE_DATABASE_TARGET_TOOL_NAME,
+                    description=RESOLVE_DATABASE_TARGET_TOOL_DESCRIPTION,
+                ),
+                McpToolInfo(
                     name=SEARCH_DATABASE_TOOL_NAME,
                     description=SEARCH_DATABASE_TOOL_DESCRIPTION,
                 ),
@@ -154,6 +162,10 @@ class McpIntegrationService:
                     description=RESOLVE_VALUE_CANDIDATES_TOOL_DESCRIPTION,
                 ),
                 McpToolInfo(
+                    name=EXECUTE_MAPPED_DATA_QUERY_TOOL_NAME,
+                    description=EXECUTE_MAPPED_DATA_QUERY_TOOL_DESCRIPTION,
+                ),
+                McpToolInfo(
                     name=SEARCH_FORWARDING_INTERFACES_TOOL_NAME,
                     description=SEARCH_FORWARDING_INTERFACES_TOOL_DESCRIPTION,
                 ),
@@ -188,7 +200,29 @@ class McpIntegrationService:
                     title="Codex",
                     config_path="~/.codex/config.toml",
                     project_config_path=".codex/config.toml",
-                    config=(f'[mcp_servers.context_router]\nurl = "{public_url}"\nenabled = true'),
+                    config=(
+                        f'[mcp_servers.context_router]\nurl = "{public_url}"\n'
+                        'http_headers = { "X-Agent-Name" = "codex" }\n'
+                        "enabled = true"
+                    ),
+                ),
+                McpClientConfig(
+                    client="gemini",
+                    title="Gemini CLI",
+                    config_path="~/.gemini/settings.json",
+                    project_config_path=".gemini/settings.json",
+                    config=json.dumps(
+                        {
+                            "mcpServers": {
+                                "context-router": {
+                                    "httpUrl": public_url,
+                                    "headers": {"X-Agent-Name": "gemini"},
+                                }
+                            }
+                        },
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
                 ),
                 McpClientConfig(
                     client="antigravity",
@@ -200,6 +234,7 @@ class McpIntegrationService:
                             "mcpServers": {
                                 "context-router": {
                                     "serverUrl": public_url,
+                                    "headers": {"X-Agent-Name": "antigravity"},
                                 }
                             }
                         },
@@ -288,8 +323,10 @@ class McpIntegrationService:
                                 READ_MIDDLEWARE_CONTEXT_TOOL_NAME,
                                 SEARCH_CONTEXT_TOOL_NAME,
                                 READ_TOOL_NAME,
+                                RESOLVE_DATABASE_TARGET_TOOL_NAME,
                                 SEARCH_DATABASE_TOOL_NAME,
                                 EXECUTE_DATABASE_TOOL_NAME,
+                                EXECUTE_MAPPED_DATA_QUERY_TOOL_NAME,
                                 SAVE_TASK_VISUALIZATION_RESULT_TOOL_NAME,
                                 SEARCH_VALUE_MAPPINGS_TOOL_NAME,
                                 RESOLVE_VALUE_CANDIDATES_TOOL_NAME,

@@ -63,6 +63,11 @@ _TABLE_REF = f"`{_DATABASE}`.`{_TABLE}`"
 _VIEW_REF = f"`{_DATABASE}`.`{_VIEW}`"
 
 
+class StaticDatabaseContext:
+    def alias_for_context(self, **_: object) -> str:
+        return "analytics"
+
+
 class IntegrationTaskRepository:
     def __init__(self, project_id: str, project_key: str) -> None:
         self._project_id = project_id
@@ -456,6 +461,7 @@ def _execute_query_through_fastmcp(
         harness.document_read,
         harness.catalog,
         harness.query,
+        database_context_service=StaticDatabaseContext(),  # type: ignore[arg-type]
     )
 
     async def exercise_protocol() -> tuple[dict[str, Any], dict[str, Any]]:
@@ -479,7 +485,7 @@ def _execute_query_through_fastmcp(
                     "execute_database_query",
                     arguments={
                         "task_id": prepared["task_id"],
-                        "database": "analytics",
+                        "database_context_id": "00000000-0000-0000-0000-000000000042",
                         "sql": sql,
                     },
                 )
@@ -635,6 +641,7 @@ def test_real_clickhouse_through_fastmcp_client_session(
         harness.document_read,
         harness.catalog,
         harness.query,
+        database_context_service=StaticDatabaseContext(),  # type: ignore[arg-type]
     )
 
     async def exercise_protocol() -> tuple[
@@ -684,7 +691,7 @@ def test_real_clickhouse_through_fastmcp_client_session(
                     "search_database_objects",
                     arguments={
                         "task_id": task_id,
-                        "database": "analytics",
+                        "database_context_id": "00000000-0000-0000-0000-000000000042",
                         "object_type": "table",
                         "pattern": "unicode_*",
                         "detail": "summary",
@@ -696,7 +703,7 @@ def test_real_clickhouse_through_fastmcp_client_session(
                     "execute_database_query",
                     arguments={
                         "task_id": task_id,
-                        "database": "analytics",
+                        "database_context_id": "00000000-0000-0000-0000-000000000042",
                         "sql": f"SELECT id, label FROM `{_TABLE}` ORDER BY id",
                     },
                 )
@@ -823,6 +830,7 @@ def test_unreachable_clickhouse_does_not_block_document_mcp_or_health(
         harness.document_read,
         harness.catalog,
         harness.query,
+        database_context_service=StaticDatabaseContext(),  # type: ignore[arg-type]
     )
 
     async def exercise_protocol() -> tuple[
@@ -870,7 +878,7 @@ def test_unreachable_clickhouse_does_not_block_document_mcp_or_health(
                 "execute_database_query",
                 arguments={
                     "task_id": prepared["task_id"],
-                    "database": "analytics",
+                    "database_context_id": "00000000-0000-0000-0000-000000000042",
                     "sql": "SELECT 1",
                 },
             )

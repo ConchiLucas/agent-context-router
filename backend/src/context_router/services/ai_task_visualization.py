@@ -451,12 +451,18 @@ class AiTaskVisualizationService:
         row: dict[str, Any],
         result: AiTaskResult | None,
     ) -> list[AiTaskChainHealthItem]:
-        if item.tool_error_count > 0:
-            mcp_status = "failed"
-            mcp_summary = f"{item.tool_error_count} 次失败 / {item.tool_call_count} 次调用"
-        elif item.running_call_count > 0:
+        if item.running_call_count > 0:
             mcp_status = "running"
             mcp_summary = f"{item.running_call_count} 次调用仍在执行"
+        elif item.tool_error_count > 0 and result is not None and result.status == "resolved":
+            mcp_status = "attention"
+            mcp_summary = (
+                f"已完成，期间 {item.tool_error_count} 次调用失败后恢复 / "
+                f"共 {item.tool_call_count} 次调用"
+            )
+        elif item.tool_error_count > 0:
+            mcp_status = "failed"
+            mcp_summary = f"{item.tool_error_count} 次失败 / {item.tool_call_count} 次调用"
         elif item.tool_call_count > 0:
             mcp_status = "healthy"
             mcp_summary = f"{item.tool_call_count} 次调用均已完成"

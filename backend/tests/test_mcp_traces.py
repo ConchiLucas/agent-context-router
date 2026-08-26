@@ -1,6 +1,7 @@
 import asyncio
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
@@ -138,6 +139,11 @@ class RecordingQuery:
         }
 
 
+class RecordingDatabaseContext:
+    def alias_for_context(self, **_: object) -> str:
+        return "analytics"
+
+
 class RecordingMiddleware:
     def read(self, **_: object) -> DumpResult:
         return DumpResult(
@@ -191,6 +197,75 @@ class RecordingValueMappings:
             "selection": arguments.get("selection", "default"),
             "truncated": False,
         }
+
+    def source_for_task(self, mapping_id: str, **_: object) -> dict[str, object]:
+        return {
+            "mapping_id": mapping_id,
+            "database_alias": "analytics",
+            "schema_name": "public",
+            "table_name": "route_product",
+            "value_column": "id",
+        }
+
+
+class _VisualizationRecord:
+    def __init__(self, *, execution_status: str = "pending") -> None:
+        self.id = "record-1"
+        self.workspace_id = "workspace-1"
+        self.environment = "local"
+        self.execution_status = execution_status
+
+    def model_dump(self, **_: object) -> dict[str, object]:
+        return {
+            "id": self.id,
+            "workspace_id": self.workspace_id,
+            "environment": self.environment,
+            "execution_status": self.execution_status,
+            "task_id": 77,
+            "result_row_count": 1 if self.execution_status == "succeeded" else None,
+        }
+
+
+class _LatestVisualization:
+    def __init__(self, record: _VisualizationRecord) -> None:
+        self.record = record
+
+
+class RecordingDataVisualization:
+    def __init__(self) -> None:
+        self.create_arguments: dict[str, object] = {}
+        self.execution_arguments: dict[str, object] = {}
+        self.record = _VisualizationRecord()
+
+    def create_for_task(self, **arguments: object) -> _VisualizationRecord:
+        self.create_arguments = arguments
+        return self.record
+
+    def record_execution(self, **arguments: object) -> None:
+        self.execution_arguments = arguments
+        self.record = _VisualizationRecord(execution_status="succeeded")
+
+    def latest(self, **_: object) -> _LatestVisualization:
+        return _LatestVisualization(self.record)
+
+
+class RecordingTaskVisualization:
+    def __init__(self) -> None:
+        self.payload: object | None = None
+
+    def save_result(self, _task_id: int, payload: object) -> DumpResult:
+        self.payload = payload
+        return DumpResult(
+            {
+                "task_id": 77,
+                "status": "resolved",
+                "revision": 1,
+                "verification": [
+                    item.model_dump(exclude_none=True)
+                    for item in getattr(payload, "verification", [])
+                ],
+            }
+        )
 
 
 class FailingQuery:
@@ -250,6 +325,33 @@ def _tracking_service(
     )
 
 
+class VerifiableTraceService(McpTraceService):
+    def __init__(self, repository: InMemoryMcpToolCallRepository) -> None:
+        self.repository = repository
+        unused = UnusedStore()
+        super().__init__(
+            tool_call_repository=repository,
+            task_repository=unused,
+            document_read_repository=unused,
+            database_call_repository=unused,
+            registry=object(),  # type: ignore[arg-type]
+        )
+
+    def get_trace(self, task_id: int) -> SimpleNamespace:
+        return SimpleNamespace(
+            calls=[
+                SimpleNamespace(
+                    tool_call_id=call.id,
+                    status=call.status,
+                    tool_name=call.tool_name,
+                    result_summary=call.result_summary,
+                    duration_ms=call.duration_ms,
+                )
+                for call in self.repository.list_calls(task_id)
+            ]
+        )
+
+
 def test_all_seven_context_and_database_tools_are_traced_without_sensitive_payloads() -> None:
     repository = InMemoryMcpToolCallRepository()
     server = create_context_router_mcp(
@@ -260,6 +362,7 @@ def test_all_seven_context_and_database_tools_are_traced_without_sensitive_paylo
         _tracking_service(repository),
         document_search_service=RecordingSearch(),
         middleware_context_service=RecordingMiddleware(),  # type: ignore[arg-type]
+        database_context_service=RecordingDatabaseContext(),  # type: ignore[arg-type]
     )
 
     async def invoke_tools() -> None:
@@ -288,13 +391,13 @@ def test_all_seven_context_and_database_tools_are_traced_without_sensitive_paylo
         )
         await server.call_tool(
             "search_database_objects",
-            {"task_id": 77, "database": "analytics", "object_type": "table"},
+            {"task_id": 77, "database_context_id": "1" * 36, "object_type": "table"},
         )
         await server.call_tool(
             "execute_database_query",
             {
                 "task_id": 77,
-                "database": "analytics",
+                "database_context_id": "1" * 36,
                 "sql": "SELECT password FROM users",
             },
         )
@@ -354,7 +457,7 @@ def test_all_seven_context_and_database_tools_are_traced_without_sensitive_paylo
     assert "middleware-secret-must-not-enter-trace" not in serialized
     assert "登录" not in serialized
     assert calls[6].request_summary == {
-        "database": "analytics",
+        "database_context_id": "1" * 36,
         "sql_sha256": "70295e581aff4b4ae56d4cfae234338844965793adc6f178c5e5f44abf05c838",
     }
 
@@ -367,19 +470,83 @@ def test_failed_mcp_tool_finishes_error_without_hiding_original_tool_error() -> 
         RecordingCatalog(),  # type: ignore[arg-type]
         FailingQuery(),  # type: ignore[arg-type]
         _tracking_service(repository),
+        database_context_service=RecordingDatabaseContext(),  # type: ignore[arg-type]
     )
 
     with pytest.raises(ToolError, match="connection_failed"):
         asyncio.run(
             server.call_tool(
                 "execute_database_query",
-                {"task_id": 77, "database": "analytics", "sql": "SELECT 1"},
+                {"task_id": 77, "database_context_id": "1" * 36, "sql": "SELECT 1"},
             )
         )
 
     call = repository.list_calls(77)[0]
     assert call.status == "error"
     assert call.error_code == "connection_failed"
+    assert call.result_summary == {"reason": "connection_failed"}
+
+
+def test_invalid_tool_arguments_are_explained_in_trace_without_guessing() -> None:
+    repository = InMemoryMcpToolCallRepository()
+    server = create_context_router_mcp(
+        RecordingPreparation(),  # type: ignore[arg-type]
+        RecordingRead(),  # type: ignore[arg-type]
+        trace_service=_tracking_service(repository),
+    )
+
+    with pytest.raises(ToolError, match="status=investigating,resolved,failed"):
+        asyncio.run(
+            server.call_tool(
+                "save_task_visualization_result",
+                {"task_id": 77, "status": "success", "summary": "完成"},
+            )
+        )
+
+    call = repository.list_calls(77)[0]
+    assert call.status == "error"
+    assert call.error_code == "invalid_tool_arguments"
+    assert call.result_summary == {
+        "reason": "invalid_tool_arguments",
+        "message": "字段值不合法：status；允许值：status=investigating,resolved,failed",
+        "missing_fields": [],
+        "invalid_fields": ["status"],
+        "allowed_values": {"status": ["investigating", "resolved", "failed"]},
+    }
+
+
+@pytest.mark.parametrize(
+    ("arguments", "missing_fields"),
+    [
+        ({"task_id": 77, "sql": "SELECT 1"}, ["database_context_id"]),
+        ({"task_id": 77, "database_context_id": "1" * 36}, ["sql"]),
+        ({"task_id": 77}, ["database_context_id", "sql"]),
+    ],
+)
+def test_execute_database_query_reports_missing_required_arguments(
+    arguments: dict[str, object],
+    missing_fields: list[str],
+) -> None:
+    repository = InMemoryMcpToolCallRepository()
+    server = create_context_router_mcp(
+        RecordingPreparation(),  # type: ignore[arg-type]
+        RecordingRead(),  # type: ignore[arg-type]
+        trace_service=_tracking_service(repository),
+    )
+
+    with pytest.raises(ToolError, match="缺少必填字段"):
+        asyncio.run(server.call_tool("execute_database_query", arguments))
+
+    call = repository.list_calls(77)[0]
+    assert call.status == "error"
+    assert call.error_code == "invalid_tool_arguments"
+    assert call.result_summary == {
+        "reason": "invalid_tool_arguments",
+        "message": "缺少必填字段：" + "、".join(missing_fields),
+        "missing_fields": missing_fields,
+        "invalid_fields": [],
+        "allowed_values": {},
+    }
 
 
 def test_value_mapping_tools_trace_only_hashed_keywords_and_bounded_metadata() -> None:
@@ -445,6 +612,76 @@ def test_value_mapping_tools_trace_only_hashed_keywords_and_bounded_metadata() -
         "keyword_sha256": "13113fa47460d96027f65b27df151977c6de423da93727785707b3356ce7a506",
         "limit": 3,
         "selection": "random",
+    }
+
+
+def test_mapping_short_path_marks_visualization_succeeded_and_verifies_real_call() -> None:
+    repository = InMemoryMcpToolCallRepository()
+    trace_service = VerifiableTraceService(repository)
+    data_visualization = RecordingDataVisualization()
+    task_visualization = RecordingTaskVisualization()
+    server = create_context_router_mcp(
+        RecordingPreparation(),  # type: ignore[arg-type]
+        RecordingRead(),  # type: ignore[arg-type]
+        trace_service=trace_service,
+        value_mapping_service=RecordingValueMappings(),  # type: ignore[arg-type]
+        ai_data_visualization_service=data_visualization,  # type: ignore[arg-type]
+        ai_task_visualization_service=task_visualization,  # type: ignore[arg-type]
+    )
+
+    async def invoke_tools() -> None:
+        _, resolution = await server.call_tool(
+            "resolve_value_candidates",
+            {
+                "task_id": 77,
+                "mapping_id": "mapping-1",
+                "limit": 1,
+                "selection": "random",
+            },
+        )
+        resolution_call_id = resolution["tool_call_id"]
+        assert resolution_call_id == repository.list_calls(77)[0].id
+        assert resolution["next_action"] == {
+            "tool": "save_data_visualization_query",
+            "arguments": {
+                "task_id": 77,
+                "description": "业务数据查询",
+                "keyword": "secret-id",
+                "mapping_id": "mapping-1",
+                "execution_tool_call_id": resolution_call_id,
+            },
+            "ready": True,
+        }
+        _, saved_query = await server.call_tool(
+            "save_data_visualization_query",
+            resolution["next_action"]["arguments"],
+        )
+        assert saved_query["tool_call_id"] == repository.list_calls(77)[1].id
+        _, task_result = await server.call_tool(
+            "save_task_visualization_result",
+            {
+                "task_id": 77,
+                "status": "resolved",
+                "summary": "已随机查询线路产品",
+                "verification_call_ids": [resolution_call_id],
+            },
+        )
+        assert task_result["tool_call_id"] == repository.list_calls(77)[2].id
+
+    asyncio.run(invoke_tools())
+
+    assert data_visualization.create_arguments["database_key"] == "analytics"
+    assert data_visualization.create_arguments["table_name"] == "route_product"
+    assert data_visualization.execution_arguments["result_row_count"] == 1
+    assert task_visualization.payload is not None
+    verification = task_visualization.payload.verification  # type: ignore[union-attr]
+    assert verification[0].tool_call_id == repository.list_calls(77)[0].id
+    calls = repository.list_calls(77)
+    assert [call.status for call in calls] == ["ok", "ok", "ok"]
+    assert calls[1].result_summary == {
+        "execution_status": "succeeded",
+        "result_row_count": 1,
+        "task_linked": True,
     }
 
 

@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 ProjectKind = Literal["frontend", "backend"]
 TaskScope = Literal["project", "workspace"]
 DatabaseEnvironment = str
-DatabaseEnvironmentSelection = Literal["workspace_default", "task_explicit"]
+DatabaseEnvironmentSelection = Literal["workspace_default", "task_explicit", "task_description"]
 TaskIntentType = Literal[
     "interface_execute",
     "data_query",
@@ -61,6 +61,7 @@ class TaskExecutionContract(BaseModel):
 
 class PrepareTaskContextResult(BaseModel):
     task_id: int
+    environment: PreparedDatabaseEnvironment | None = None
     documents: ContextDocumentNode
     execution_contract: TaskExecutionContract
     access: list[Literal["documents", "database", "environment", "middleware", "runtime"]] = Field(

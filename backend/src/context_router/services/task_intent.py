@@ -53,9 +53,12 @@ def build_task_execution_contract(
             "表或过滤条件再调用 read_task_context、search_database_objects 或原始 SQL。",
             "用户要求随机或任意一个值时，调用 resolve_value_candidates 并设置 "
             "selection=random、limit=用户要求的数量；不要使用 ORDER BY RAND()。",
+            "映射返回的显示字段已经满足请求时，直接用 mapping_id 和成功解析调用号保存"
+            "数据可视化；不要再次搜索 Schema 或表关系。",
             "没有合适的已发布映射时，才调用 read_task_context、search_relation_tables 和 "
             "search_database_objects 定位数据库与表结构。",
-            "使用解析出的业务值完成只读查询，并保存准确的数据可视化查询条件。",
+            "确需完整记录时按映射来源和值字段执行一次有界只读查询；保存数据可视化时"
+            "携带成功解析或查询的 execution_tool_call_id，使记录直接标记为已查询。",
             "不要为了填充页面伪造表名、数据库别名或查询值。",
         ]
     elif intent_type == "bug_investigate":

@@ -48,6 +48,7 @@ docker compose exec backend uv run alembic current
 | `interface_forwarding_environments` / `interface_forwarding_identities` | 为 Workspace 环境注册表中的环境保存多个具名接口转发地址，并按地址保存多个登录账号、角色标识和请求头；地址名称可不同但基础 URL 可相同，不能在此新增 Workspace 环境 |
 | `interface_forwarding_params` / `interface_forwarding_logs` | 保存每个接口最后一次测试参数/响应及有界列表使用的请求日志 |
 | `interface_value_mappings` | 按 Workspace 保存稳定业务值、草稿/发布状态，以及数据库别名、表、字段和标量等值过滤组成的结构化取值规则；不保存任意 SQL、物理地址或凭据 |
+| `mcp_database_contexts` | 保存短期、不可跨 task 复用的数据库上下文，绑定环境 revision、数据库授权链接和物理库快照；不保存凭据 |
 | `interface_value_mapping_aliases` | 保存映射的业务关键词别名；同一 Workspace 内大小写无关唯一，供未来按关键词定位取值方式 |
 | `interface_value_mapping_bindings` | 把一个业务值绑定到接口的 path/query/body 参数路径；同一接口参数只能绑定一个业务值 |
 | `shared_ai_defaults` | 单行保存本机选定的默认 AI Provider ID、乐观锁 revision 和时间戳；不复制配置中心的 Provider、模型、地址或密钥 |
@@ -95,6 +96,8 @@ task_id、tool_call_id 和 read_call_id 都由 PostgreSQL identity 自动生成�
 `20260730_0021` 为 `mcp_tasks` 增加 `database_environment_selection`。升级时先把半截环境/revision 快照归一为空，再把完整的既有环境 task 回填为 `workspace_default`。`20260820_0040` 将环境列扩展为动态键，历史 `tool_default` 归一为 `workspace_default`，并强化检查约束：环境、revision 和选择模式必须同时为空或同时有效。
 
 `20260825_0063` 为 `mcp_tasks` 增加 `intent_type`、`intent_error_signal`、`intent_summary` 和 `intent_source`。历史任务按 `task_execute / compatibility_default` 回填；只有 `bug_investigate` 和 `bug_fix` 可以声明错误信号。
+
+`20260825_0065` 强制 task 的环境、环境修订号和环境来源三元组同时存在；`20260825_0064` 为 Workspace 环境增加别名，并允许 task 记录 `task_description` 环境来源，同时增加 `mcp_database_contexts`，原始数据库 MCP 不再接收自由数据库别名。
 
 `20260730_0022` 删除 `workspaces`、`data_sources`、`project_databases` 和 `workspace_database_environment_configs` 的 `enabled` 列，并把相关查询索引重建为不含启停字段的索引。当前状态模型中记录存在即生效；数据库是否可供 MCP 查询继续由数据库 `available/system_database`、授权 `readonly`、MCP 别名和 Connector 能力共同决定。
 

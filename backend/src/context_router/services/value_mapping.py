@@ -218,11 +218,61 @@ class ValueMappingService:
                 "value_column": mapping["value_column"],
                 "display_columns": mapping["display_columns"],
             },
+            "next_action": {
+                "mapping_source_is_resolved": True,
+                "skip_schema_discovery": True,
+                "visualization_mapping_id": mapping_id,
+                "message": (
+                    "候选值及来源已经解析；显示字段足够时直接保存数据可视化，"
+                    "需要完整记录时可按 value_column 对候选 value 做一次有界只读查询，"
+                    "不要再次搜索数据库对象或表关系。"
+                ),
+            },
             "candidates": selected_candidates,
             "returned_count": len(selected_candidates),
             "candidate_pool_count": len(candidates),
             "elapsed_ms": elapsed_ms,
             "truncated": truncated,
+        }
+
+    def source_for_task(self, mapping_id: str, *, task_id: int) -> dict[str, object]:
+        """Return a published mapping source after checking the task Workspace boundary."""
+        workspace_id, environment = self._task_scope(task_id, None)
+        mapping = self.get(mapping_id)
+        if mapping["workspace_id"] != workspace_id:
+            raise ValueMappingError("映射不属于当前工作空间", code="workspace_mismatch")
+        if mapping["status"] != "published":
+            raise ValueMappingError("映射尚未发布，不能用于 MCP 取值", code="mapping_unpublished")
+        schema_name = str(mapping["schema_name"] or "").strip()
+        schema_source = "mapping"
+        if not schema_name:
+            try:
+                access = self._database_access.resolve(
+                    task_id=task_id,
+                    mcp_alias=str(mapping["database_alias"]),
+                )
+            except DatabaseAccessError as exc:
+                raise ValueMappingError(str(exc), code=exc.code) from exc
+            allowed_schemas = tuple(access.policy.allowed_schemas)
+            if len(allowed_schemas) == 1:
+                schema_name = allowed_schemas[0]
+                schema_source = "environment_allowed_schema"
+            elif access.policy.engine in {"mysql", "mariadb", "clickhouse"}:
+                schema_name = access.policy.current_database
+                schema_source = "environment_database_namespace"
+            else:
+                raise ValueMappingError(
+                    "映射未配置 Schema，且任务环境不能唯一确定真实 Schema",
+                    code="mapping_schema_unresolved",
+                )
+        return {
+            "mapping_id": mapping_id,
+            "environment": environment,
+            "database_alias": mapping["database_alias"],
+            "schema_name": schema_name,
+            "schema_source": schema_source,
+            "table_name": mapping["table_name"],
+            "value_column": mapping["value_column"],
         }
 
     def overview(self, workspace_id: str, keyword: str = "") -> dict[str, object]:

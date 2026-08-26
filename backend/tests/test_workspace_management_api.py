@@ -192,6 +192,7 @@ def test_workspace_projects_and_data_source_summary(tmp_path: Path) -> None:
     assert preview.status_code == 200
     assert set(preview.json()) == {
         "task_id",
+        "environment",
         "documents",
         "execution_contract",
         "access",

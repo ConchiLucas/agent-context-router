@@ -121,6 +121,58 @@ class AiDataVisualizationService:
             )
         )
 
+    def create_for_mapping_task(
+        self,
+        *,
+        task_id: int,
+        description: str,
+        database_key: str,
+        schema_name: str,
+        table_name: str,
+        keyword: str,
+    ) -> AiDataQueryRecord:
+        """Save a target already authorized by a published value mapping."""
+        task = self._task(task_id)
+        if task.workspace_id is None:
+            raise AiDataVisualizationError(
+                "任务没有关联工作空间",
+                code="task_workspace_mismatch",
+            )
+        payload = AiDataQueryWrite(
+            source=_source_key(task.agent_name),
+            description=description or task.task,
+            workspace_id=task.workspace_id,
+            environment=task.database_environment or "local",
+            database_key=database_key,
+            schema_name=schema_name,
+            table_name=table_name,
+            keyword=keyword,
+            task_id=task_id,
+        )
+        workspace = self._workspace(payload.workspace_id)
+        now = datetime.now(UTC)
+        record = AiDataQueryRecordData(
+            id=str(uuid4()),
+            workspace_id=payload.workspace_id,
+            source=payload.source,
+            description=payload.description.strip(),
+            environment=payload.environment,
+            database_key=payload.database_key,
+            schema_name=payload.schema_name,
+            table_name=payload.table_name,
+            keyword=payload.keyword,
+            created_at=now,
+            task_id=task_id,
+            tool_call_id=current_tool_call_id(),
+            idempotency_key=self._idempotency_key(payload),
+            updated_at=now,
+        )
+        try:
+            saved = self._records.upsert(record)
+        except AiDataQueryRepositoryError as exc:
+            raise AiDataVisualizationError(str(exc)) from exc
+        return self._view(saved, workspace.name)
+
     def latest(
         self,
         *,

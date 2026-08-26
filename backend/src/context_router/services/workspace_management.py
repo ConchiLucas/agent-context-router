@@ -119,6 +119,7 @@ class WorkspaceManagementService:
                     workspace_id=workspace_id,
                     environment="local",
                     display_name="LOCAL",
+                    aliases=["local", "本地", "本地环境"],
                     sort_order=0,
                 )
             except DatabaseEnvironmentRepositoryError as exc:

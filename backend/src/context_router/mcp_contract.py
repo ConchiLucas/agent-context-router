@@ -7,6 +7,7 @@ CONTEXT_ROUTER_CORE_TOOL_NAMES = (
     "read_middleware_context",
     "search_context_documents",
     "read_context_document",
+    "resolve_database_target",
     "search_database_objects",
     "execute_database_query",
 )
@@ -33,7 +34,10 @@ CONTEXT_ROUTER_LOG_VISUALIZATION_TOOL_NAMES = (
     "list_task_containers",
     "inspect_container_errors",
 )
-CONTEXT_ROUTER_DATA_VISUALIZATION_TOOL_NAMES = ("save_data_visualization_query",)
+CONTEXT_ROUTER_DATA_VISUALIZATION_TOOL_NAMES = (
+    "save_data_visualization_query",
+    "execute_mapped_data_query",
+)
 CONTEXT_ROUTER_TASK_VISUALIZATION_TOOL_NAMES = ("save_task_visualization_result",)
 CONTEXT_ROUTER_LEGACY_TOOL_NAMES = (
     "apply_project_changes",

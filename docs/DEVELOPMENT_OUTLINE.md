@@ -49,7 +49,7 @@
 - Context Router 只做运行控制面和快照物化；手动启动的 Host Runtime Runner 通过回环 Token 协议领取租约并执行固定 `deploy.sh`。禁止配置 Docker/launchd 开机自启，禁止从后端容器直接执行目标 Workspace。
 - 新 task 的文档搜索固定绑定 Workspace，查询工作空间根文档独立索引及各 Project 同版本索引，再聚合去重；索引不可用时显式失败，不回退到进程内全文扫描。
 - cwd 路由先按最长前缀选择最深 Workspace，再按 Project 的源码根而不是文档入口目录选择最深 Project；`active_project` 只作为元数据，不收窄 Workspace 的文档和数据库范围。任一项目缓存不可用时 prepare 明确失败。
-- prepare 只返回 task_id、可用能力、必要 warning，以及节点仅含 `document_id/summary/children` 的任务局部三层投影：存在真实 Workspace 根 `AGENTS.md` 时固定以它为第一层；缺少真实根时，才以 cwd 命中的 Project 入口或合成根为第一层。数据库别名和环境 JSON 由 `read_task_context` 按需返回。投影之外的深层或其他 Project 文档继续通过 Workspace 搜索和按 ID 读取访问。数据库访问统一按 `task_id -> workspace snapshot -> workspace mcp_alias -> 当前项目授权/连接/策略 -> Connector` 路由。
+- prepare 返回 task_id、固化后的环境快照、可用能力、必要 warning，以及节点仅含 `document_id/summary/children` 的任务局部三层投影。环境按 Workspace 已登记别名从任务描述确定；后续工具不能覆盖。数据库访问统一按 `task_id -> database_context_id -> 环境 revision/物理库快照 -> 当前项目授权/连接/策略 -> Connector` 路由，客户端不再传数据库别名。
 - 项目数据库只有在数据库可用且非系统库、关联为只读、存在 MCP 别名、Engine 已实现 Connector 时才暴露给 Workspace task；Workspace、数据源和关联均没有启停状态。
 - MySQL、MariaDB、PostgreSQL、ClickHouse 当前实现发现、对象搜索和有界只读查询；SQL Server、SQLite、Oracle 的配置仅供查看并可由 AI/运维 API 维护。
 - SQL 安全策略必须 fail-closed：只允许单条、可解析、限定当前数据库/Schema 的只读语句；不能把客户端 LIMIT 当作唯一边界，仍需服务端行数、字节数、超时和数据库侧只读限制。
@@ -61,5 +61,5 @@
 - 完整出入参只对白名单数据库工具 `search_database_objects`、`execute_database_query` 自动采集，并通过 no-store 详情 API 懒加载；prepare/search/read 不建立完整 payload 快照。
 - 新 task 使用 `scope='workspace'` 和无外键的稳定 Workspace/活动项目快照；`scope='project'` 的旧 task 继续按原 project_id/project_key 读取、搜索和解析数据库，避免升级后历史串链。后端启动会收敛遗留 running 调用，Trace API 与页面明确区分完整、运行中和可能不完整。
 - 表关联当前只实现查询展示。关联数据的生成尚未实现（没有命名候选规则、没有跨库推断、没有数据实测），页面数据由种子脚本写入示例。边按「规范化无向对加方向字段」存储，`orientation` 是候选生成期就确定的结构信息而不是实测结论；`cardinality` 统一按父到子存储，`many_to_one` 由读取侧按当前选中表翻转得到，`many_to_many` 由中间表折叠在读取时合成。翻转后的基数直接充当分组依据，页面固定四组 `1 — 1`、`1 — N`、`N — 1`、`N — N`，空组不渲染。junction 折叠是页面级视图偏好，开关在左栏；`tables` 接口按基数额外给出 `folded_*_count`，前端做减法，左栏计数、排序、隐藏判断和顶部总数都跟随折叠状态，和详情实际渲染的行数一致。八个计数由 `project_table_counters()` 走详情同一对视图构造器算出，种子脚本直接复用。`cardinality = 'unknown'` 的边在查询服务就被过滤（不放前端，因为左栏计数存在库里，两处过滤必然对不上）。页面只回答「方向是什么」：状态判定、证据来源、实测指标和表的估算行数、主键、逻辑删除标识既不落库也不展示，一行只有基数徽章和列名对两层，设计保留在 `table_relation_design.md` 等探测流水线实现时再加回。公共字段名单、可展示基数和基数翻转集中在 `services/table_relation_rules.py`，读取路径和种子脚本共用。表关联只有六个只读 GET 接口，没有 rebuild POST，因此不涉及浏览器 POST 白名单和系统任务过滤。
-- migration head 为 `20260825_0063`；`0063` 增加 AI 任务意图执行契约，`0062` 增加 AI 任务可视化结论，`0061` 增加数据查询任务关联、幂等键与执行摘要，`0060` 增加 AI 容器错误快照记录。旧项目 ID、数据库授权和调用历史保持不变。
+- migration head 为 `20260825_0065`；`0065` 强制任务环境三元组完整，`0064` 增加环境别名、任务环境语义来源和短期数据库上下文，MCP Schema 不兼容旧客户端；`0063` 增加 AI 任务意图执行契约，`0062` 增加 AI 任务可视化结论，`0061` 增加数据查询任务关联、幂等键与执行摘要。
 - 本地服务默认只绑定回环地址；真实 ClickHouse 测试使用根 Compose 的 `integration` profile 和固定镜像版本。
