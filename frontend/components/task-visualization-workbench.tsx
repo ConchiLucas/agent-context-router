@@ -56,11 +56,13 @@ const chainStatusLabels: Record<AiTaskChainHealthStatus, string> = {
 };
 
 const intentLabels: Record<AiTaskIntentType, string> = {
+  interface_discovery: "查找接口",
   interface_execute: "执行接口",
   data_query: "查询数据",
   task_execute: "执行任务",
   bug_investigate: "查询 Bug",
   bug_fix: "修改 Bug",
+  code_change: "代码开发",
 };
 
 function formatTime(value: string) {

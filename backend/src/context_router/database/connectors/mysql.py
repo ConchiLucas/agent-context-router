@@ -27,6 +27,9 @@ _MYSQL_SYSTEM_DATABASES = {"information_schema", "mysql", "performance_schema", 
 _MYSQL_TIMEOUT_ERROR_CODES = {1969, 3024}
 _MYSQL_CANCELLED_ERROR_CODES = {1317}
 _MYSQL_CONNECTION_ERROR_CODES = {1040, 1203, 2002, 2003, 2006, 2013, 2055}
+_MYSQL_UNKNOWN_COLUMN_ERROR_CODES = {1054}
+_MYSQL_UNKNOWN_TABLE_ERROR_CODES = {1051, 1146}
+_MYSQL_UNKNOWN_DATABASE_ERROR_CODES = {1049}
 
 
 class MySQLConnectionConfig(BaseModel):
@@ -213,6 +216,21 @@ class MySQLConnector:
             error_code = _mysql_error_code(exc)
             if error_code in _MYSQL_CONNECTION_ERROR_CODES:
                 raise DatabaseConnectorError("connection_failed", "MySQL 查询连接中断") from exc
+            if error_code in _MYSQL_UNKNOWN_COLUMN_ERROR_CODES:
+                raise DatabaseConnectorError(
+                    "column_not_found",
+                    "MySQL 查询引用了不存在的字段",
+                ) from exc
+            if error_code in _MYSQL_UNKNOWN_TABLE_ERROR_CODES:
+                raise DatabaseConnectorError(
+                    "table_not_found",
+                    "MySQL 查询引用了不存在的表",
+                ) from exc
+            if error_code in _MYSQL_UNKNOWN_DATABASE_ERROR_CODES:
+                raise DatabaseConnectorError(
+                    "database_not_found",
+                    "MySQL 查询目标数据库不存在",
+                ) from exc
             raise DatabaseConnectorError("query_failed", "MySQL 查询执行失败") from exc
         finally:
             if connection is not None:

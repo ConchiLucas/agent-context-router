@@ -10,11 +10,13 @@ TaskScope = Literal["project", "workspace"]
 DatabaseEnvironment = str
 DatabaseEnvironmentSelection = Literal["workspace_default", "task_explicit", "task_description"]
 TaskIntentType = Literal[
+    "interface_discovery",
     "interface_execute",
     "data_query",
     "task_execute",
     "bug_investigate",
     "bug_fix",
+    "code_change",
 ]
 TaskIntentSource = Literal["agent_declared", "compatibility_default", "system_default"]
 TaskMutationPolicy = Literal["allowed", "forbidden"]
@@ -53,6 +55,9 @@ class TaskExecutionContract(BaseModel):
     intent_source: TaskIntentSource
     mutation_policy: TaskMutationPolicy
     required_steps: list[str] = Field(default_factory=list)
+    hard_requirements: list[str] = Field(default_factory=list)
+    completion_requirements: list[str] = Field(default_factory=list)
+    recommended_flow: list[str] = Field(default_factory=list)
     visualization_targets: list[Literal["task", "data", "interface", "log"]] = Field(
         default_factory=lambda: ["task"]
     )
@@ -64,6 +69,8 @@ class PrepareTaskContextResult(BaseModel):
     environment: PreparedDatabaseEnvironment | None = None
     documents: ContextDocumentNode
     execution_contract: TaskExecutionContract
+    enabled_capabilities: list[str] | None = None
+    recommended_actions: list[dict[str, Any]] | None = None
     access: list[Literal["documents", "database", "environment", "middleware", "runtime"]] = Field(
         default_factory=lambda: [
             "documents",

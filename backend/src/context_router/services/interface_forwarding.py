@@ -18,6 +18,7 @@ from context_router.schemas.interface_forwarding import (
     InterfaceForwardingIdentityWrite,
     InterfaceForwardingImport,
     InterfaceForwardingLogWrite,
+    InterfaceSemanticsWrite,
 )
 
 
@@ -392,14 +393,17 @@ class InterfaceForwardingService:
         }
         joined = "/".join(logical_parts)
         resource_key = next(
-            (key for key in sorted(resource_subjects, key=len, reverse=True)
-             if joined == key or joined.startswith(f"{key}/")),
+            (
+                key
+                for key in sorted(resource_subjects, key=len, reverse=True)
+                if joined == key or joined.startswith(f"{key}/")
+            ),
             "",
         )
         if not resource_key:
             return ""
         subject = resource_subjects[resource_key]
-        action_key = joined[len(resource_key):].lstrip("/")
+        action_key = joined[len(resource_key) :].lstrip("/")
 
         direct_names = {
             ("attachment", "downloadUrlByFileId"): "按文件 ID 获取附件下载地址",
@@ -507,14 +511,17 @@ class InterfaceForwardingService:
         }
         joined = "/".join(logical_parts)
         resource_key = next(
-            (key for key in sorted(resource_subjects, key=len, reverse=True)
-             if joined == key or joined.startswith(f"{key}/")),
+            (
+                key
+                for key in sorted(resource_subjects, key=len, reverse=True)
+                if joined == key or joined.startswith(f"{key}/")
+            ),
             "",
         )
         if not resource_key:
             return ""
         subject = resource_subjects[resource_key]
-        action_key = joined[len(resource_key):].lstrip("/")
+        action_key = joined[len(resource_key) :].lstrip("/")
 
         direct_names = {
             ("rolePermission", "getMenuTreeByUserId"): "查询用户菜单树",
@@ -714,14 +721,17 @@ class InterfaceForwardingService:
         }
         joined = "/".join(logical_parts)
         resource_key = next(
-            (key for key in sorted(resource_subjects, key=len, reverse=True)
-             if joined == key or joined.startswith(f"{key}/")),
+            (
+                key
+                for key in sorted(resource_subjects, key=len, reverse=True)
+                if joined == key or joined.startswith(f"{key}/")
+            ),
             "",
         )
         if not resource_key:
             return ""
         subject = resource_subjects[resource_key]
-        action_key = joined[len(resource_key):].lstrip("/")
+        action_key = joined[len(resource_key) :].lstrip("/")
 
         direct_names = {
             ("attachment", "downLoad"): "下载结算附件",
@@ -779,7 +789,9 @@ class InterfaceForwardingService:
         parts = [part for part in str(path).split("/") if part and not part.startswith("{")]
         if not parts or parts[0] != "trace-api" or len(parts) < 3:
             return ""
-        logical_parts = [part for part in parts[1:] if part not in {"admin", "portal", "api", "system"}]
+        logical_parts = [
+            part for part in parts[1:] if part not in {"admin", "portal", "api", "system"}
+        ]
         logical_path = "/".join(logical_parts)
         return {
             "rolePermission/getMenuTreeByUserId": "查询用户菜单树",
@@ -893,7 +905,9 @@ class InterfaceForwardingService:
         parts = [part for part in str(path).split("/") if part and not part.startswith("{")]
         if not parts or parts[0] != "operation-api" or len(parts) < 3:
             return ""
-        logical_parts = [part for part in parts[1:] if part not in {"admin", "portal", "api", "inner"}]
+        logical_parts = [
+            part for part in parts[1:] if part not in {"admin", "portal", "api", "inner"}
+        ]
         resource_subjects = {
             "pickUpAppointment": "提货预约",
             "appointmentVehicle": "预约车辆",
@@ -910,12 +924,18 @@ class InterfaceForwardingService:
             "port": "港口",
         }
         joined = "/".join(logical_parts)
-        resource_key = next((key for key in sorted(resource_subjects, key=len, reverse=True)
-                             if joined == key or joined.startswith(f"{key}/")), "")
+        resource_key = next(
+            (
+                key
+                for key in sorted(resource_subjects, key=len, reverse=True)
+                if joined == key or joined.startswith(f"{key}/")
+            ),
+            "",
+        )
         if not resource_key:
             return ""
         subject = resource_subjects[resource_key]
-        action_key = joined[len(resource_key):].lstrip("/")
+        action_key = joined[len(resource_key) :].lstrip("/")
         direct_names = {
             ("entrusted/quote", ""): "发起委托报价",
             ("appointment", "acceptByIds"): "批量接受预约",
@@ -957,8 +977,11 @@ class InterfaceForwardingService:
         if direct_name := direct_names.get((resource_key, action_key)):
             return direct_name
         action_map = {
-            "page": "分页查询", "getById": "按 ID 查询", "deleteByIds": "批量删除",
-            "save": "保存", "update": "更新",
+            "page": "分页查询",
+            "getById": "按 ID 查询",
+            "deleteByIds": "批量删除",
+            "save": "保存",
+            "update": "更新",
         }
         action = action_map.get(action_key)
         return f"{action}{subject}" if action else ""
@@ -970,10 +993,15 @@ class InterfaceForwardingService:
             return ""
         logical_parts = [part for part in parts[1:] if part not in {"admin", "portal", "remote"}]
         subjects = {
-            "attachment": "公路运输附件", "cargo": "公路运输货物",
-            "carrierOrder": "公路承运商订单", "dispatchOrder": "公路调度订单",
-            "parkAppointment": "园区预约", "record": "公路运输记录",
-            "track": "公路运输轨迹", "inboundOrder": "入库订单", "dispatchBox": "运输订单箱码",
+            "attachment": "公路运输附件",
+            "cargo": "公路运输货物",
+            "carrierOrder": "公路承运商订单",
+            "dispatchOrder": "公路调度订单",
+            "parkAppointment": "园区预约",
+            "record": "公路运输记录",
+            "track": "公路运输轨迹",
+            "inboundOrder": "入库订单",
+            "dispatchBox": "运输订单箱码",
         }
         key = logical_parts[0] if logical_parts else ""
         subject = subjects.get(key, "")
@@ -981,32 +1009,64 @@ class InterfaceForwardingService:
             return ""
         action_key = "/".join(logical_parts[1:])
         direct = {
-            ("attachment", "downLoad"): "下载公路运输附件", ("attachment", "preview/url"): "获取公路运输附件预览地址",
-            ("attachment", "preview"): "预览公路运输附件", ("attachment", "getContractAttachmentList"): "查询合同附件列表",
-            ("attachment", "getDocumentList"): "查询单证附件列表", ("attachment", "deleteByList"): "按列表删除公路运输附件",
-            ("attachment", "upload"): "上传公路运输附件", ("attachment", "uploadAndSave"): "上传并保存公路运输附件",
+            ("attachment", "downLoad"): "下载公路运输附件",
+            ("attachment", "preview/url"): "获取公路运输附件预览地址",
+            ("attachment", "preview"): "预览公路运输附件",
+            ("attachment", "getContractAttachmentList"): "查询合同附件列表",
+            ("attachment", "getDocumentList"): "查询单证附件列表",
+            ("attachment", "deleteByList"): "按列表删除公路运输附件",
+            ("attachment", "upload"): "上传公路运输附件",
+            ("attachment", "uploadAndSave"): "上传并保存公路运输附件",
             ("cargo", "getCargoListByCarrierOrderNo"): "按承运商订单号查询公路运输货物列表",
             ("cargo", "getCargoListByDispatchOrderId"): "按调度订单 ID 查询公路运输货物列表",
             ("cargo", "getCargoListByDispatchOrderNo"): "按调度订单号查询公路运输货物列表",
-            ("carrierOrder", "batchCreateCarrierOrder"): "批量创建公路承运商订单", ("carrierOrder", "batchDispatchOrder"): "批量调度公路承运商订单",
-            ("carrierOrder", "changeCarrierOrderInfo"): "变更公路承运商订单信息", ("carrierOrder", "forceCloseOrder"): "强制关闭公路承运商订单",
-            ("carrierOrder", "getCarrierInfoList"): "查询承运商信息列表", ("carrierOrder", "getDispatchContainerListByEntrustedNo"): "按委托单号查询调度集装箱列表",
-            ("carrierOrder", "getDispatchInfoList"): "查询调度信息列表", ("carrierOrder", "getFileIdByContractNo"): "按合同号查询文件 ID",
-            ("carrierOrder", "listByEntrustedOrderNo"): "按委托订单号查询公路承运商订单", ("carrierOrder", "settlementCarrierPage"): "分页查询公路承运商结算订单",
-            ("carrierOrder", "withdrawCarrierOrder"): "撤回公路承运商订单", ("carrierOrder", "getDispatchDetail"): "查询调度详情",
-            ("dispatchOrder", "customPage"): "分页查询客户公路调度订单", ("dispatchOrder", "documentPage"): "分页查询公路调度订单单证",
-            ("dispatchOrder", "getDispatchInfo"): "查询调度信息", ("dispatchOrder", "getDocumentById"): "按 ID 查询调度单证",
-            ("dispatchOrder", "pageByCarrierNo"): "按承运商编号分页查询公路调度订单", ("dispatchOrder", "settlementDispatchPage"): "分页查询公路调度结算订单",
-            ("dispatchOrder", "sign"): "签收公路调度订单", ("dispatchOrder", "getLoadInfo"): "查询装货信息", ("dispatchOrder", "getRedispatchDetail"): "查询重新调度详情",
-            ("dispatchOrder", "getUnloadInfo"): "查询卸货信息", ("dispatchOrder", "load"): "装货", ("dispatchOrder", "modifyLoadInfo"): "修改装货信息",
-            ("dispatchOrder", "modifyUnloadInfo"): "修改卸货信息", ("dispatchOrder", "redispatch"): "重新调度", ("dispatchOrder", "unload"): "卸货",
-            ("parkAppointment", "parkList"): "查询园区列表", ("parkAppointment", "reappoint"): "重新预约园区", ("parkAppointment", "report"): "报到园区预约",
-            ("record", "getListByDispatchOrderNo"): "按调度订单号查询公路运输记录", ("track", "carrierMapTrack"): "查询承运商公路地图轨迹",
-            ("dispatchBox", "candidatePage"): "分页查询可关联箱码", ("dispatchBox", "list"): "查询运输订单已关联箱码",
+            ("carrierOrder", "batchCreateCarrierOrder"): "批量创建公路承运商订单",
+            ("carrierOrder", "batchDispatchOrder"): "批量调度公路承运商订单",
+            ("carrierOrder", "changeCarrierOrderInfo"): "变更公路承运商订单信息",
+            ("carrierOrder", "forceCloseOrder"): "强制关闭公路承运商订单",
+            ("carrierOrder", "getCarrierInfoList"): "查询承运商信息列表",
+            (
+                "carrierOrder",
+                "getDispatchContainerListByEntrustedNo",
+            ): "按委托单号查询调度集装箱列表",
+            ("carrierOrder", "getDispatchInfoList"): "查询调度信息列表",
+            ("carrierOrder", "getFileIdByContractNo"): "按合同号查询文件 ID",
+            ("carrierOrder", "listByEntrustedOrderNo"): "按委托订单号查询公路承运商订单",
+            ("carrierOrder", "settlementCarrierPage"): "分页查询公路承运商结算订单",
+            ("carrierOrder", "withdrawCarrierOrder"): "撤回公路承运商订单",
+            ("carrierOrder", "getDispatchDetail"): "查询调度详情",
+            ("dispatchOrder", "customPage"): "分页查询客户公路调度订单",
+            ("dispatchOrder", "documentPage"): "分页查询公路调度订单单证",
+            ("dispatchOrder", "getDispatchInfo"): "查询调度信息",
+            ("dispatchOrder", "getDocumentById"): "按 ID 查询调度单证",
+            ("dispatchOrder", "pageByCarrierNo"): "按承运商编号分页查询公路调度订单",
+            ("dispatchOrder", "settlementDispatchPage"): "分页查询公路调度结算订单",
+            ("dispatchOrder", "sign"): "签收公路调度订单",
+            ("dispatchOrder", "getLoadInfo"): "查询装货信息",
+            ("dispatchOrder", "getRedispatchDetail"): "查询重新调度详情",
+            ("dispatchOrder", "getUnloadInfo"): "查询卸货信息",
+            ("dispatchOrder", "load"): "装货",
+            ("dispatchOrder", "modifyLoadInfo"): "修改装货信息",
+            ("dispatchOrder", "modifyUnloadInfo"): "修改卸货信息",
+            ("dispatchOrder", "redispatch"): "重新调度",
+            ("dispatchOrder", "unload"): "卸货",
+            ("parkAppointment", "parkList"): "查询园区列表",
+            ("parkAppointment", "reappoint"): "重新预约园区",
+            ("parkAppointment", "report"): "报到园区预约",
+            ("record", "getListByDispatchOrderNo"): "按调度订单号查询公路运输记录",
+            ("track", "carrierMapTrack"): "查询承运商公路地图轨迹",
+            ("dispatchBox", "candidatePage"): "分页查询可关联箱码",
+            ("dispatchBox", "list"): "查询运输订单已关联箱码",
         }
         if name := direct.get((key, action_key)):
             return name
-        actions = {"page": "分页查询", "getById": "按 ID 查询", "deleteByIds": "批量删除", "saveOrUpdate": "保存", "edit": "修改"}
+        actions = {
+            "page": "分页查询",
+            "getById": "按 ID 查询",
+            "deleteByIds": "批量删除",
+            "saveOrUpdate": "保存",
+            "edit": "修改",
+        }
         action = actions.get(action_key)
         return f"{action}{subject}" if action else ""
 
@@ -1057,71 +1117,153 @@ class InterfaceForwardingService:
 
         groups: dict[str, dict[str, str]] = {
             "admin": {
-                "attachment": "附件", "btDailyPlan": "日计划", "btDeparturePlan": "发车计划",
-                "btDeparturePlanChangeRecord": "发车计划变更记录", "btDeparturePlanDailyPlan": "发车计划日计划",
-                "btDeparturePlanStation": "发车计划站点", "btRoute": "线路",
-                "btTrainOperationExceptionRecord": "列车运营异常记录", "btTrainOperationLog": "列车运营日志",
-                "btTrainOperationMonitor": "列车运营监控", "btTrainOperationTracking": "列车运营跟踪",
-                "btTrainPlanList": "列车计划", "btWaybill": "运单", "driver": "司机",
-                "monthlyEntrusted": "月度委托", "monthlyEntrustedSupplement": "月度委托补充单",
+                "attachment": "附件",
+                "btDailyPlan": "日计划",
+                "btDeparturePlan": "发车计划",
+                "btDeparturePlanChangeRecord": "发车计划变更记录",
+                "btDeparturePlanDailyPlan": "发车计划日计划",
+                "btDeparturePlanStation": "发车计划站点",
+                "btRoute": "线路",
+                "btTrainOperationExceptionRecord": "列车运营异常记录",
+                "btTrainOperationLog": "列车运营日志",
+                "btTrainOperationMonitor": "列车运营监控",
+                "btTrainOperationTracking": "列车运营跟踪",
+                "btTrainPlanList": "列车计划",
+                "btWaybill": "运单",
+                "driver": "司机",
+                "monthlyEntrusted": "月度委托",
+                "monthlyEntrustedSupplement": "月度委托补充单",
             },
-            "job-client-api": {"batch": "任务批次", "job": "定时任务", "log": "任务日志", "task": "任务", "job/warning/rule": "预警规则"},
+            "job-client-api": {
+                "batch": "任务批次",
+                "job": "定时任务",
+                "log": "任务日志",
+                "task": "任务",
+                "job/warning/rule": "预警规则",
+            },
             "message-api": {
-                "email/sender": "邮件发送方", "email/sign": "邮件签名", "group/robot": "群机器人",
-                "message/template": "消息模板", "message/templateGroup": "消息模板分组",
-                "message/manual": "手工消息", "sms/sender": "短信发送方", "toolbox/file": "消息文件",
+                "email/sender": "邮件发送方",
+                "email/sign": "邮件签名",
+                "group/robot": "群机器人",
+                "message/template": "消息模板",
+                "message/templateGroup": "消息模板分组",
+                "message/manual": "手工消息",
+                "sms/sender": "短信发送方",
+                "toolbox/file": "消息文件",
             },
-            "external-interface-api": {"fee": "费用账单", "feeInfo": "费用信息", "rolePermission": "角色权限"},
+            "external-interface-api": {
+                "fee": "费用账单",
+                "feeInfo": "费用信息",
+                "rolePermission": "角色权限",
+            },
         }
         subjects = groups.get(prefix, {})
         if not subjects:
             return ""
-        resource = next((key for key in sorted(subjects, key=len, reverse=True)
-                         if joined == key or joined.startswith(f"{key}/")), "")
+        resource = next(
+            (
+                key
+                for key in sorted(subjects, key=len, reverse=True)
+                if joined == key or joined.startswith(f"{key}/")
+            ),
+            "",
+        )
         if not resource:
             return ""
         subject = subjects[resource]
-        action_key = joined[len(resource):].lstrip("/")
+        action_key = joined[len(resource) :].lstrip("/")
         direct = {
-            ("admin", "attachment", "downLoad"): "下载附件", ("admin", "attachment", "upload"): "上传附件",
-            ("admin", "btDailyPlan", "confirmBooking"): "确认订舱日计划", ("admin", "btDailyPlan", "listBoxes"): "查询日计划箱码列表",
-            ("admin", "btDailyPlan", "saveBoxes"): "保存日计划箱码", ("admin", "btDeparturePlan", "exportLog"): "导出发车计划日志",
-            ("admin", "btDeparturePlan", "execute"): "执行发车计划", ("admin", "btDeparturePlan", "publish"): "发布发车计划",
-            ("admin", "btDeparturePlanDailyPlan", "availablePage"): "分页查询可用日计划", ("admin", "btDeparturePlanDailyPlan", "saveBatch"): "批量保存发车计划日计划",
-            ("admin", "btDeparturePlanStation", "listByDeparturePlanId"): "按发车计划查询站点", ("admin", "btDeparturePlanStation", "saveActualTimeList"): "保存站点实际时间",
-            ("admin", "btTrainOperationMonitor", "handleException"): "处理列车运营异常", ("admin", "btTrainOperationMonitor", "statistics"): "统计列车运营监控",
-            ("admin", "btTrainOperationTracking", "markException"): "标记列车运营异常", ("admin", "btTrainOperationTracking", "recordExportLog"): "记录导出日志",
-            ("admin", "btTrainOperationTracking", "recover"): "恢复列车运营跟踪", ("admin", "btTrainOperationTracking", "start"): "启动列车运营跟踪",
-            ("admin", "btTrainPlanList", "execute"): "执行列车计划", ("admin", "btTrainPlanList", "exportLog"): "导出列车计划日志",
-            ("admin", "btWaybill", "arrival"): "确认运单到达", ("admin", "driver", "approveAuth"): "审批司机认证",
-            ("admin", "driver", "authHistory"): "查询司机认证历史", ("admin", "driver", "bindCarrier"): "绑定司机承运商",
-            ("admin", "driver", "carrierOptions"): "查询承运商选项", ("admin", "driver", "carrierPage"): "分页查询承运商司机",
-            ("admin", "driver", "clear/carrier"): "解绑司机承运商", ("admin", "driver", "disable"): "停用司机",
-            ("admin", "driver", "enable"): "启用司机", ("admin", "driver", "mobile/current"): "查询当前司机",
-            ("admin", "driver", "mobile/currentCarrier"): "查询当前司机承运商", ("admin", "driver", "rejectAuth"): "驳回司机认证",
-            ("admin", "driver", "rejectAuthByRisk"): "因风险驳回司机认证", ("admin", "driver", "riskSnapshots"): "查询司机风险快照",
-            ("admin", "driver", "startAuth"): "发起司机认证", ("admin", "driver", "updateAuthStatus"): "更新司机认证状态",
-            ("admin", "monthlyEntrusted", "createReportPlan"): "创建月度委托报表计划", ("admin", "monthlyEntrustedSupplement", "confirm"): "确认月度委托补充单",
+            ("admin", "attachment", "downLoad"): "下载附件",
+            ("admin", "attachment", "upload"): "上传附件",
+            ("admin", "btDailyPlan", "confirmBooking"): "确认订舱日计划",
+            ("admin", "btDailyPlan", "listBoxes"): "查询日计划箱码列表",
+            ("admin", "btDailyPlan", "saveBoxes"): "保存日计划箱码",
+            ("admin", "btDeparturePlan", "exportLog"): "导出发车计划日志",
+            ("admin", "btDeparturePlan", "execute"): "执行发车计划",
+            ("admin", "btDeparturePlan", "publish"): "发布发车计划",
+            ("admin", "btDeparturePlanDailyPlan", "availablePage"): "分页查询可用日计划",
+            ("admin", "btDeparturePlanDailyPlan", "saveBatch"): "批量保存发车计划日计划",
+            ("admin", "btDeparturePlanStation", "listByDeparturePlanId"): "按发车计划查询站点",
+            ("admin", "btDeparturePlanStation", "saveActualTimeList"): "保存站点实际时间",
+            ("admin", "btTrainOperationMonitor", "handleException"): "处理列车运营异常",
+            ("admin", "btTrainOperationMonitor", "statistics"): "统计列车运营监控",
+            ("admin", "btTrainOperationTracking", "markException"): "标记列车运营异常",
+            ("admin", "btTrainOperationTracking", "recordExportLog"): "记录导出日志",
+            ("admin", "btTrainOperationTracking", "recover"): "恢复列车运营跟踪",
+            ("admin", "btTrainOperationTracking", "start"): "启动列车运营跟踪",
+            ("admin", "btTrainPlanList", "execute"): "执行列车计划",
+            ("admin", "btTrainPlanList", "exportLog"): "导出列车计划日志",
+            ("admin", "btWaybill", "arrival"): "确认运单到达",
+            ("admin", "driver", "approveAuth"): "审批司机认证",
+            ("admin", "driver", "authHistory"): "查询司机认证历史",
+            ("admin", "driver", "bindCarrier"): "绑定司机承运商",
+            ("admin", "driver", "carrierOptions"): "查询承运商选项",
+            ("admin", "driver", "carrierPage"): "分页查询承运商司机",
+            ("admin", "driver", "clear/carrier"): "解绑司机承运商",
+            ("admin", "driver", "disable"): "停用司机",
+            ("admin", "driver", "enable"): "启用司机",
+            ("admin", "driver", "mobile/current"): "查询当前司机",
+            ("admin", "driver", "mobile/currentCarrier"): "查询当前司机承运商",
+            ("admin", "driver", "rejectAuth"): "驳回司机认证",
+            ("admin", "driver", "rejectAuthByRisk"): "因风险驳回司机认证",
+            ("admin", "driver", "riskSnapshots"): "查询司机风险快照",
+            ("admin", "driver", "startAuth"): "发起司机认证",
+            ("admin", "driver", "updateAuthStatus"): "更新司机认证状态",
+            ("admin", "monthlyEntrusted", "createReportPlan"): "创建月度委托报表计划",
+            ("admin", "monthlyEntrustedSupplement", "confirm"): "确认月度委托补充单",
             ("admin", "monthlyEntrustedSupplement", "reject"): "驳回月度委托补充单",
-            ("job-client-api", "job", "add"): "新增定时任务", ("job-client-api", "job", "exportData"): "导出定时任务数据",
-            ("job-client-api", "job", "exportTemplate"): "导出定时任务模板", ("job-client-api", "job", "import"): "导入定时任务",
-            ("job-client-api", "job", "nacos/services"): "查询 Nacos 服务", ("job-client-api", "job", "query"): "查询定时任务",
-            ("job-client-api", "job", "triggerJob"): "触发定时任务", ("job-client-api", "job", "updateJobStatus"): "更新定时任务状态",
-            ("job-client-api", "job/warning/rule", "batchDelete"): "批量删除预警规则", ("job-client-api", "job/warning/rule", "batchDisable"): "批量停用预警规则",
-            ("job-client-api", "job/warning/rule", "batchEnable"): "批量启用预警规则", ("job-client-api", "job/warning/rule", "disable"): "停用预警规则",
-            ("job-client-api", "job/warning/rule", "enable"): "启用预警规则", ("job-client-api", "job/warning/rule", "getByIds"): "按 ID 批量查询预警规则",
-            ("message-api", "message/manual", "send"): "发送手工消息", ("message-api", "message/template", "appointReceiverRole"): "指定消息模板接收角色",
-            ("message-api", "message/template", "appointReceiverUserList"): "查询消息模板指定接收用户", ("message-api", "message/template", "appointReceiverUserPage"): "分页查询消息模板指定接收用户",
-            ("message-api", "toolbox/file", "download"): "下载消息文件", ("message-api", "toolbox/file", "preview"): "预览消息文件", ("message-api", "toolbox/file", "upload"): "上传消息文件",
-            ("external-interface-api", "fee", "get"): "查询费用账单", ("external-interface-api", "fee", "save"): "保存费用账单",
-            ("external-interface-api", "feeInfo", "findAll"): "查询全部费用信息", ("external-interface-api", "rolePermission", "getMenuTreeByUserId"): "查询用户菜单树",
+            ("job-client-api", "job", "add"): "新增定时任务",
+            ("job-client-api", "job", "exportData"): "导出定时任务数据",
+            ("job-client-api", "job", "exportTemplate"): "导出定时任务模板",
+            ("job-client-api", "job", "import"): "导入定时任务",
+            ("job-client-api", "job", "nacos/services"): "查询 Nacos 服务",
+            ("job-client-api", "job", "query"): "查询定时任务",
+            ("job-client-api", "job", "triggerJob"): "触发定时任务",
+            ("job-client-api", "job", "updateJobStatus"): "更新定时任务状态",
+            ("job-client-api", "job/warning/rule", "batchDelete"): "批量删除预警规则",
+            ("job-client-api", "job/warning/rule", "batchDisable"): "批量停用预警规则",
+            ("job-client-api", "job/warning/rule", "batchEnable"): "批量启用预警规则",
+            ("job-client-api", "job/warning/rule", "disable"): "停用预警规则",
+            ("job-client-api", "job/warning/rule", "enable"): "启用预警规则",
+            ("job-client-api", "job/warning/rule", "getByIds"): "按 ID 批量查询预警规则",
+            ("message-api", "message/manual", "send"): "发送手工消息",
+            ("message-api", "message/template", "appointReceiverRole"): "指定消息模板接收角色",
+            (
+                "message-api",
+                "message/template",
+                "appointReceiverUserList",
+            ): "查询消息模板指定接收用户",
+            (
+                "message-api",
+                "message/template",
+                "appointReceiverUserPage",
+            ): "分页查询消息模板指定接收用户",
+            ("message-api", "toolbox/file", "download"): "下载消息文件",
+            ("message-api", "toolbox/file", "preview"): "预览消息文件",
+            ("message-api", "toolbox/file", "upload"): "上传消息文件",
+            ("external-interface-api", "fee", "get"): "查询费用账单",
+            ("external-interface-api", "fee", "save"): "保存费用账单",
+            ("external-interface-api", "feeInfo", "findAll"): "查询全部费用信息",
+            ("external-interface-api", "rolePermission", "getMenuTreeByUserId"): "查询用户菜单树",
         }
         if name := direct.get((prefix, resource, action_key)):
             return name
         actions = {
-            "page": "分页查询", "getById": "按 ID 查询", "findById": "按 ID 查询", "deleteByIds": "批量删除",
-            "save": "保存", "update": "更新", "change": "变更", "cancel": "取消", "complete": "完成", "dispatch": "调度",
-            "remove": "删除", "findAll": "查询全部", "getByIds": "按 ID 批量查询", "delete": "删除", "get": "查询",
+            "page": "分页查询",
+            "getById": "按 ID 查询",
+            "findById": "按 ID 查询",
+            "deleteByIds": "批量删除",
+            "save": "保存",
+            "update": "更新",
+            "change": "变更",
+            "cancel": "取消",
+            "complete": "完成",
+            "dispatch": "调度",
+            "remove": "删除",
+            "findAll": "查询全部",
+            "getByIds": "按 ID 批量查询",
+            "delete": "删除",
+            "get": "查询",
         }
         action = actions.get(action_key)
         return f"{action}{subject}" if action else ""
@@ -1135,11 +1277,29 @@ class InterfaceForwardingService:
         """Rewrite only names that the original importer clearly generalized."""
         current = str(name).strip()
         broad_names = {
-            "新增用户", "分页查询用户", "查询用户", "新增订单", "分页查询订单", "查询订单",
-            "新增附件", "分页查询附件", "查询附件", "新增消息", "分页查询消息", "查询消息",
-            "保存用户", "处理账户概览", "处理会员附件", "处理合同", "查询明细合同",
+            "新增用户",
+            "分页查询用户",
+            "查询用户",
+            "新增订单",
+            "分页查询订单",
+            "查询订单",
+            "新增附件",
+            "分页查询附件",
+            "查询附件",
+            "新增消息",
+            "分页查询消息",
+            "查询消息",
+            "保存用户",
+            "处理账户概览",
+            "处理会员附件",
+            "处理合同",
+            "查询明细合同",
         }
-        if "相关" not in current and "controller" not in current.lower() and current not in broad_names:
+        if (
+            "相关" not in current
+            and "controller" not in current.lower()
+            and current not in broad_names
+        ):
             return current
 
         subjects = {
@@ -1275,37 +1435,87 @@ class InterfaceForwardingService:
             return exact
 
         action_key = next(
-            (part for part in reversed(normalized_path.split("/")) if part and not part.startswith("{")),
+            (
+                part
+                for part in reversed(normalized_path.split("/"))
+                if part and not part.startswith("{")
+            ),
             "",
         )
         action_names = {
-            "page": "分页查询", "getPageList": "分页查询", "findById": "查询", "getById": "查询",
-            "getByIdItem": "查询明细", "getByIds": "批量查询", "getByContractNo": "按合同号查询",
-            "getValidContractByClientId": "按客户查询有效", "getValidContractByContractNos": "按合同号批量查询有效",
-            "getValidShipperContractByClientId": "按客户查询有效托运人", "deleteByIds": "批量删除",
-            "deleteById": "删除", "deleteUploadFile": "删除上传文件", "deleteByIdList": "批量删除",
-            "cancelByIdList": "批量取消", "save": "保存", "saveOrEdit": "保存", "saveOrUpdate": "保存",
-            "saveUploadFile": "保存上传文件", "submit": "提交", "submitById": "提交",
-            "submitBidSubmission": "提交投标文件", "batchConfirm": "批量确认", "changeDisable": "停用",
-            "changeEnable": "启用", "updateLevelStatus": "更新状态", "getByShipperId": "按托运人查询",
-            "getNewestById": "查询最新", "createReportPlan": "创建报表计划", "confirm": "确认",
-            "reject": "驳回", "cancel": "取消", "complete": "完成", "dispatch": "调度",
-            "confirmBooking": "确认订舱", "listBoxes": "查询箱码列表", "saveBoxes": "保存箱码",
-            "arrival": "确认到达", "getBidSubmissionDetail": "查询投标文件详情",
-            "getLeaderSupplierProfile": "查询牵头供应商信息", "listProjectOptions": "查询项目选项",
-            "matchMemberSupplier": "匹配联合体成员供应商", "generateReport": "生成分析报告",
-            "getSuggestion": "查询分析建议", "statistics": "统计", "getDetail": "查询详情",
-            "getFileForDownload": "获取下载文件", "listUploadFiles": "查询上传文件列表",
-            "authorize": "授权远程解密", "getAuthDetail": "查询授权详情", "uploadInvoice": "上传发票",
-            "ship": "发货", "shipInfo": "查询发货信息", "getByUserId": "按用户查询",
-            "getPayerInvoiceInfoByUserId": "按用户查询付款方发票信息", "getAuthStatusByUserId": "查询用户认证状态",
-            "getUserInfoById": "按 ID 查询用户信息", "getUserInfoByList": "按列表查询用户信息",
-            "saveDriver": "保存司机", "syncEnterpriseUser": "同步企业用户", "register": "注册用户",
-            "saveCustomsDeclarant": "保存报关员", "updateAgentStatus": "更新代理状态",
-            "userDisable": "停用用户", "userEnable": "启用用户", "disable": "停用", "enable": "启用",
-            "getAuthById": "查询认证信息", "getCarrierById": "查询承运商信息",
-            "getCustomsDeclarantById": "查询报关员信息", "getShipperById": "查询托运人信息",
-            "generaTask": "生成盘点任务", "getByTaskNo": "按任务编号查询",
+            "page": "分页查询",
+            "getPageList": "分页查询",
+            "findById": "查询",
+            "getById": "查询",
+            "getByIdItem": "查询明细",
+            "getByIds": "批量查询",
+            "getByContractNo": "按合同号查询",
+            "getValidContractByClientId": "按客户查询有效",
+            "getValidContractByContractNos": "按合同号批量查询有效",
+            "getValidShipperContractByClientId": "按客户查询有效托运人",
+            "deleteByIds": "批量删除",
+            "deleteById": "删除",
+            "deleteUploadFile": "删除上传文件",
+            "deleteByIdList": "批量删除",
+            "cancelByIdList": "批量取消",
+            "save": "保存",
+            "saveOrEdit": "保存",
+            "saveOrUpdate": "保存",
+            "saveUploadFile": "保存上传文件",
+            "submit": "提交",
+            "submitById": "提交",
+            "submitBidSubmission": "提交投标文件",
+            "batchConfirm": "批量确认",
+            "changeDisable": "停用",
+            "changeEnable": "启用",
+            "updateLevelStatus": "更新状态",
+            "getByShipperId": "按托运人查询",
+            "getNewestById": "查询最新",
+            "createReportPlan": "创建报表计划",
+            "confirm": "确认",
+            "reject": "驳回",
+            "cancel": "取消",
+            "complete": "完成",
+            "dispatch": "调度",
+            "confirmBooking": "确认订舱",
+            "listBoxes": "查询箱码列表",
+            "saveBoxes": "保存箱码",
+            "arrival": "确认到达",
+            "getBidSubmissionDetail": "查询投标文件详情",
+            "getLeaderSupplierProfile": "查询牵头供应商信息",
+            "listProjectOptions": "查询项目选项",
+            "matchMemberSupplier": "匹配联合体成员供应商",
+            "generateReport": "生成分析报告",
+            "getSuggestion": "查询分析建议",
+            "statistics": "统计",
+            "getDetail": "查询详情",
+            "getFileForDownload": "获取下载文件",
+            "listUploadFiles": "查询上传文件列表",
+            "authorize": "授权远程解密",
+            "getAuthDetail": "查询授权详情",
+            "uploadInvoice": "上传发票",
+            "ship": "发货",
+            "shipInfo": "查询发货信息",
+            "getByUserId": "按用户查询",
+            "getPayerInvoiceInfoByUserId": "按用户查询付款方发票信息",
+            "getAuthStatusByUserId": "查询用户认证状态",
+            "getUserInfoById": "按 ID 查询用户信息",
+            "getUserInfoByList": "按列表查询用户信息",
+            "saveDriver": "保存司机",
+            "syncEnterpriseUser": "同步企业用户",
+            "register": "注册用户",
+            "saveCustomsDeclarant": "保存报关员",
+            "updateAgentStatus": "更新代理状态",
+            "userDisable": "停用用户",
+            "userEnable": "启用用户",
+            "disable": "停用",
+            "enable": "启用",
+            "getAuthById": "查询认证信息",
+            "getCarrierById": "查询承运商信息",
+            "getCustomsDeclarantById": "查询报关员信息",
+            "getShipperById": "查询托运人信息",
+            "generaTask": "生成盘点任务",
+            "getByTaskNo": "按任务编号查询",
         }
         action = action_names.get(action_key)
         if not action:
@@ -1680,9 +1890,7 @@ class InterfaceForwardingService:
         return method_cn
 
     @staticmethod
-    def _controller_metadata(
-        spec: dict[str, Any], operation: dict[str, Any]
-    ) -> tuple[str, str]:
+    def _controller_metadata(spec: dict[str, Any], operation: dict[str, Any]) -> tuple[str, str]:
         tags = operation.get("tags")
         tag = str(tags[0]).strip() if isinstance(tags, list) and tags else ""
         if not tag:
@@ -1729,7 +1937,9 @@ class InterfaceForwardingService:
                 "vehicle": "车辆",
             }
             subjects = [vocabulary[word.lower()] for word in words if word.lower() in vocabulary]
-            description = f"{'、'.join(dict.fromkeys(subjects))}管理" if subjects else f"{tag} 相关接口"
+            description = (
+                f"{'、'.join(dict.fromkeys(subjects))}管理" if subjects else f"{tag} 相关接口"
+            )
         return controller_name, description
 
     def _connect(self):
@@ -1756,9 +1966,18 @@ class InterfaceForwardingService:
                 """
                 SELECT i.id, i.service_id, i.name, i.path, i.method, i.description,
                        i.controller_name, i.controller_description,
+                       i.operation_id, i.operation_kind, i.crud_type,
                        i.request_schema, i.response_schema, i.created_at, i.updated_at,
-                       latest.last_requested_at
+                       latest.last_requested_at,
+                       profile.business_entity, profile.business_action,
+                       profile.business_scenario, profile.aliases,
+                       profile.positive_examples, profile.negative_examples,
+                       profile.source AS intent_source,
+                       profile.confidence AS intent_confidence,
+                       COALESCE(effects.items, '[]'::jsonb) AS table_effects
                 FROM interface_forwarding_interfaces i
+                LEFT JOIN interface_forwarding_intent_profiles profile
+                  ON profile.interface_id = i.id
                 LEFT JOIN LATERAL (
                     SELECT logs.created_at AS last_requested_at
                     FROM interface_forwarding_logs logs
@@ -1766,13 +1985,51 @@ class InterfaceForwardingService:
                     ORDER BY logs.created_at DESC
                     LIMIT 1
                 ) latest ON TRUE
+                LEFT JOIN LATERAL (
+                    SELECT jsonb_agg(
+                        jsonb_build_object(
+                            'database_key', effect.database_key,
+                            'schema_name', effect.schema_name,
+                            'table_name', effect.table_name,
+                            'effect_type', effect.effect_type,
+                            'response_contribution', effect.response_contribution,
+                            'source_file', effect.source_file,
+                            'source_class', effect.source_class,
+                            'source_method', effect.source_method,
+                            'call_path', effect.call_path,
+                            'evidence_type', effect.evidence_type,
+                            'confidence', effect.confidence
+                        ) ORDER BY effect.table_name, effect.effect_type
+                    ) AS items
+                    FROM interface_forwarding_table_effects effect
+                    WHERE effect.interface_id = i.id
+                ) effects ON TRUE
                 WHERE i.workspace_id = %s
                   AND (%s = '' OR i.name ILIKE %s OR i.path ILIKE %s
-                       OR i.controller_name ILIKE %s OR i.controller_description ILIKE %s)
+                       OR i.description ILIKE %s
+                       OR i.controller_name ILIKE %s OR i.controller_description ILIKE %s
+                       OR profile.business_entity ILIKE %s
+                       OR profile.business_action ILIKE %s
+                       OR profile.business_scenario ILIKE %s
+                       OR profile.aliases::text ILIKE %s
+                       OR profile.positive_examples::text ILIKE %s)
                 ORDER BY latest.last_requested_at DESC NULLS LAST,
                          lower(i.path), i.method
                 """,
-                (workspace_id, keyword.strip(), like, like, like, like),
+                (
+                    workspace_id,
+                    keyword.strip(),
+                    like,
+                    like,
+                    like,
+                    like,
+                    like,
+                    like,
+                    like,
+                    like,
+                    like,
+                    like,
+                ),
             )
             interfaces = list(cursor.fetchall())
             by_service: dict[str, list[dict[str, Any]]] = {}
@@ -1789,6 +2046,58 @@ class InterfaceForwardingService:
                 service["interfaces"] = by_service.get(str(service["id"]), [])
             environments = self.list_environments(workspace_id, connection=connection)
         return {"workspace_id": workspace_id, "services": services, "environments": environments}
+
+    def update_interface_semantics(
+        self,
+        interface_id: str,
+        payload: InterfaceSemanticsWrite,
+    ) -> dict[str, Any]:
+        with self._connect() as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT workspace_id FROM interface_forwarding_interfaces WHERE id=%s FOR UPDATE",
+                (interface_id,),
+            )
+            interface = cursor.fetchone()
+            if not interface:
+                raise InterfaceForwardingError("接口不存在")
+            cursor.execute(
+                "UPDATE interface_forwarding_interfaces SET crud_type=%s, "
+                "updated_at=CURRENT_TIMESTAMP WHERE id=%s",
+                (payload.crud_type, interface_id),
+            )
+            cursor.execute(
+                """INSERT INTO interface_forwarding_intent_profiles
+                       (interface_id, business_entity, business_action,
+                        business_scenario, aliases, positive_examples,
+                        negative_examples, source, confidence, manual_locked)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s,
+                           'manual', 100, true)
+                   ON CONFLICT (interface_id) DO UPDATE SET
+                       business_entity=EXCLUDED.business_entity,
+                       business_action=EXCLUDED.business_action,
+                       business_scenario=EXCLUDED.business_scenario,
+                       aliases=EXCLUDED.aliases,
+                       positive_examples=EXCLUDED.positive_examples,
+                       negative_examples=EXCLUDED.negative_examples,
+                       source='manual', confidence=100, manual_locked=true,
+                       updated_at=CURRENT_TIMESTAMP
+                   RETURNING business_entity, business_action, business_scenario,
+                             aliases, positive_examples, negative_examples,
+                             source AS intent_source,
+                             confidence AS intent_confidence""",
+                (
+                    interface_id,
+                    payload.business_entity,
+                    payload.business_action,
+                    payload.business_scenario,
+                    Jsonb(payload.aliases),
+                    Jsonb(payload.positive_examples),
+                    Jsonb(payload.negative_examples),
+                ),
+            )
+            result = dict(cursor.fetchone())
+        result.update({"id": interface_id, "crud_type": payload.crud_type})
+        return result
 
     def import_spec(self, payload: InterfaceForwardingImport) -> dict[str, Any]:
         service_name = payload.service_name.strip()
@@ -1807,7 +2116,7 @@ class InterfaceForwardingService:
                 (str(uuid4()), payload.workspace_id, service_name),
             )
             service_id = str(cursor.fetchone()["id"])
-            imported_ids: list[str] = []
+            imported_count = 0
             for endpoint in endpoints:
                 endpoint_id = str(uuid4())
                 controller_name = self._derive_source_controller_name(
@@ -1839,21 +2148,31 @@ class InterfaceForwardingService:
                     INSERT INTO interface_forwarding_interfaces
                         (id, workspace_id, service_id, name, path, method, description,
                          controller_name, controller_description, request_schema, response_schema,
-                         operation_kind, request_contract)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                         operation_id, operation_kind, crud_type, request_contract)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (service_id, path, method) DO UPDATE SET
                         name = EXCLUDED.name,
                         description = EXCLUDED.description,
                         controller_name = EXCLUDED.controller_name,
                         controller_description = CASE
-                            WHEN interface_forwarding_interfaces.controller_name = EXCLUDED.controller_name
+                            WHEN interface_forwarding_interfaces.controller_name
+                                 = EXCLUDED.controller_name
                                  AND interface_forwarding_interfaces.controller_description <> ''
                             THEN interface_forwarding_interfaces.controller_description
                             ELSE EXCLUDED.controller_description
                         END,
                         request_schema = EXCLUDED.request_schema,
                         response_schema = EXCLUDED.response_schema,
+                        operation_id = EXCLUDED.operation_id,
                         operation_kind = EXCLUDED.operation_kind,
+                        crud_type = CASE
+                            WHEN EXISTS (
+                                SELECT 1
+                                FROM interface_forwarding_intent_profiles profile
+                                WHERE profile.interface_id = interface_forwarding_interfaces.id
+                            ) THEN interface_forwarding_interfaces.crud_type
+                            ELSE EXCLUDED.crud_type
+                        END,
                         request_contract = EXCLUDED.request_contract,
                         updated_at = CURRENT_TIMESTAMP
                     RETURNING id
@@ -1870,15 +2189,18 @@ class InterfaceForwardingService:
                         endpoint["controller_description"],
                         Jsonb(endpoint["request_schema"]),
                         Jsonb(endpoint["response_schema"]),
+                        endpoint["operation_id"],
                         endpoint["operation_kind"],
+                        endpoint["crud_type"],
                         Jsonb(endpoint["request_contract"]),
                     ),
                 )
-                imported_ids.append(str(cursor.fetchone()["id"]))
+                cursor.fetchone()
+                imported_count += 1
         return {
             "service_id": service_id,
             "service_name": service_name,
-            "imported_count": len(imported_ids),
+            "imported_count": imported_count,
         }
 
     def rewrite_names(
@@ -1887,8 +2209,7 @@ class InterfaceForwardingService:
         service_id: str | None = None,
         path_prefix: str | None = None,
     ) -> dict[str, Any]:
-        query = (
-            """
+        query = """
             SELECT interface.id, interface.name, interface.description,
                    interface.path, interface.method, interface.controller_name,
                    interface.controller_description, service.name AS service_name
@@ -1897,7 +2218,6 @@ class InterfaceForwardingService:
               ON service.id = interface.service_id
             WHERE interface.workspace_id = %s
             """
-        )
         params: tuple[str, ...] = (workspace_id,)
         if service_id:
             query += " AND interface.service_id = %s"
@@ -2064,9 +2384,7 @@ class InterfaceForwardingService:
                 endpoints.append(
                     {
                         "name": str(
-                            operation.get("summary")
-                            or operation_id
-                            or f"{method.upper()} {path}"
+                            operation.get("summary") or operation_id or f"{method.upper()} {path}"
                         ),
                         "operation_id": operation_id,
                         "path": str(path),
@@ -2077,6 +2395,10 @@ class InterfaceForwardingService:
                         "request_schema": resolve(request_schema),
                         "response_schema": resolve(response_schema),
                         "operation_kind": InterfaceForwardingService._operation_kind(
+                            method.upper(),
+                            str(operation.get("summary") or operation_id or ""),
+                        ),
+                        "crud_type": InterfaceForwardingService._crud_type(
                             method.upper(),
                             str(operation.get("summary") or operation_id or ""),
                         ),
@@ -2136,6 +2458,36 @@ class InterfaceForwardingService:
             normalized,
         ):
             return "read"
+        return "unknown"
+
+    @staticmethod
+    def _crud_type(method: str, name: str) -> str:
+        normalized = name.strip()
+        if re.match(
+            r"^(删除|批量删除|清除|移除|作废|取消|撤销|注销)",
+            normalized,
+        ):
+            return "delete"
+        if re.match(
+            r"^(查询|分页查询|获取|统计|下载|预览|校验|检查|搜索|列出|判断|"
+            r"按.+(?:查询|获取))",
+            normalized,
+        ):
+            return "read"
+        if re.match(r"^(新增|创建|生成|上传|导入|发起|根据.+生成)", normalized):
+            return "create"
+        if re.match(
+            r"^(更新|修改|保存|编辑|提交|确认|审核|审批|接受|拒绝|驳回|启用|停用|"
+            r"同步|处理|关联|变更|撤回|签署|分配)",
+            normalized,
+        ):
+            return "update"
+        if method.upper() in {"GET", "HEAD", "OPTIONS"}:
+            return "read"
+        if method.upper() == "DELETE":
+            return "delete"
+        if method.upper() in {"PUT", "PATCH"}:
+            return "update"
         return "unknown"
 
     def rename_service(self, service_id: str, name: str) -> dict[str, Any]:
@@ -2385,7 +2737,9 @@ class InterfaceForwardingService:
             cursor.execute(
                 """SELECT id, environment_name, identity_name, identity_role,
                 request_url, request_body,
-                response_body, status_code, success, duration_ms, created_at
+                response_body, status_code, success, duration_ms,
+                intent_match_score, intent_match_evidence,
+                validation_status, validation_result, created_at
                 FROM interface_forwarding_logs WHERE interface_id=%s
                 ORDER BY created_at DESC LIMIT %s""",
                 (interface_id, max(1, min(limit, 200))),

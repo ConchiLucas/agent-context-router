@@ -268,6 +268,29 @@ def test_runner_executes_server_leased_forwarding_request(monkeypatch, tmp_path:
     assert result[3]["response_headers"] == {"content-type": "application/json"}
 
 
+@pytest.mark.parametrize("method", ["POST", "PUT", "PATCH", "DELETE"])
+def test_runner_builds_json_requests_for_standard_write_methods(method: str) -> None:
+    module = load_runner_module()
+
+    request, timeout_seconds, max_response_bytes = module.HostRuntimeRunner._forwarding_request(
+        {
+            "method": method,
+            "url": "http://127.0.0.1:9000/order",
+            "headers": {},
+            "query": {},
+            "body": {"id": "order-1"},
+            "timeout_seconds": 30,
+            "max_response_bytes": 1_048_576,
+        }
+    )
+
+    assert request.method == method
+    assert request.data == b'{"id":"order-1"}'
+    assert request.headers["Content-type"] == "application/json"
+    assert timeout_seconds == 30
+    assert max_response_bytes == 1_048_576
+
+
 def test_runner_executes_allowlisted_host_action_with_default_local(
     tmp_path: Path, monkeypatch
 ) -> None:

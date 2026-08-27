@@ -164,6 +164,26 @@ class PostgreSQLConnector:
                         description = cursor.description or ()
         except psycopg.errors.QueryCanceled as exc:
             raise DatabaseConnectorError("query_timeout", "PostgreSQL 查询超时") from exc
+        except psycopg.errors.UndefinedColumn as exc:
+            raise DatabaseConnectorError(
+                "column_not_found",
+                "PostgreSQL 查询引用了不存在的字段",
+            ) from exc
+        except psycopg.errors.UndefinedTable as exc:
+            raise DatabaseConnectorError(
+                "table_not_found",
+                "PostgreSQL 查询引用了不存在的表",
+            ) from exc
+        except psycopg.errors.InvalidSchemaName as exc:
+            raise DatabaseConnectorError(
+                "schema_not_found",
+                "PostgreSQL 查询引用了不存在的 Schema",
+            ) from exc
+        except psycopg.errors.InvalidCatalogName as exc:
+            raise DatabaseConnectorError(
+                "database_not_found",
+                "PostgreSQL 查询目标数据库不存在",
+            ) from exc
         except psycopg.Error as exc:
             raise DatabaseConnectorError("query_failed", "PostgreSQL 查询执行失败") from exc
 

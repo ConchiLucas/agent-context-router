@@ -44,6 +44,11 @@ def browser_request_allowed(
     if normalized_method == "PUT":
         prefix = re.escape(api_prefix.rstrip("/"))
         if re.fullmatch(
+            rf"{prefix}/interface-forwarding/interfaces/[^/]+/semantics",
+            path,
+        ):
+            return True
+        if re.fullmatch(
             rf"{prefix}/interface-forwarding/(services|environments|identities)/[^/]+",
             path,
         ):

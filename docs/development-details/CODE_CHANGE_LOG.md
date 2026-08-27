@@ -1,5 +1,9 @@
 # 代码变更记录
 
+- `2026-08-27`：剥离 Workspace 接口术语及动态限定标签，移除管理弹窗、关联明细、限定词匹配/质量字段和基于术语的地址身份推断；保留接口业务语义、CRUD/表影响、搜索排序证据、搜索—选择—执行闭环与响应验证。新增 migration `20260827_0071` 将旧表和列归档为 `archived_*`，运行时不再读取，历史数据仍可恢复。
+- `2026-08-27`：完成接口意图发现与执行准确性改造。新增 `interface_discovery` 任务意图、基于业务实体/CRUD/结果形态/正反例/表影响的确定性候选排序、`read_forwarding_interface_detail` 共享详情 MCP、执行前意图匹配校验和执行后响应结构/业务状态校验。接口可视化同步展示意图证据和验证结果；新增 migration `20260827_0068`，MCP 工具总数调整为 27。
+- `2026-08-26`：移除接口转发 MCP 的只读操作类型限制。`prepare_forwarding_request`、`execute_forwarding_request` 和 Host Runner 现在允许已导入接口的 read、write、destructive、unknown 四类操作；Host Runner 同步支持 POST、PUT、PATCH、DELETE JSON 请求。仍保留任务 Workspace/环境、登记路由、服务端身份头、短期计划、请求摘要、配置指纹、防重放、禁止任意 URL/方法/请求头覆盖及有界响应。
+- `2026-08-26`：收敛无记忆 AI 的接口执行尾链路。同一计划重试、同一 task 内同接口/环境/身份/请求摘要与配置指纹一致的成功请求由服务端复用既有日志，不重复发送 HTTP 或生成接口可视化记录；接口任务保存 `resolved` 结论时可自动绑定最近一次成功执行证据，避免客户端为了 `tool_call_id` 重新准备和执行。Antigravity 接入模板改为携带 `X-Agent-Name: antigravity` 的 `agy mcp add` 命令，并同步加强 MCP 执行说明。
 - `2026-08-25`：完成 task 环境与数据库上下文的不兼容 MCP 改造。环境支持别名，prepare 从任务描述确定并返回固化环境，冲突或多环境直接拒绝；中间件、值映射和接口准备移除环境覆盖。新增 `resolve_database_target`，数据库搜索/查询只接收短期 `database_context_id`；新增 `execute_mapped_data_query` 原子完成已发布映射查询和数据可视化落库。新增 migration `20260825_0064`，并由 `20260825_0065` 强制任务环境三元组完整；客户端需重新连接刷新 tools/list。
 
 本文件用于记录跨模块、数据结构、接口 contract、工程约定等重要代码变更。

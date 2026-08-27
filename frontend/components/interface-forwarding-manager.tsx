@@ -13,6 +13,7 @@ import {
   listInterfaceForwardingLogs,
   listWorkspaces,
   renameInterfaceForwardingService,
+  updateInterfaceForwardingSemantics,
 } from "@/lib/api";
 import { groupInterfaceForwardingIdentities } from "@/lib/interface-forwarding-identities";
 import { sortInterfacesByLastRequest } from "@/lib/interface-forwarding-order";
@@ -22,18 +23,54 @@ import type {
   InterfaceForwardingInterface,
   InterfaceForwardingLog,
   InterfaceForwardingOverview,
+  InterfaceSemanticsWrite,
   WorkspaceSummary,
 } from "@/lib/types";
 
 type Modal =
   | { kind: "import" }
   | { kind: "configuration" }
-  | { kind: "detail"; item: InterfaceForwardingInterface }
+  | { kind: "detail"; item: InterfaceForwardingInterface; section?: "info" | "logs" | "semantics" }
   | { kind: "test"; item: InterfaceForwardingInterface }
   | null;
 
 function methodClass(method: string) {
   return `interface-forwarding-method interface-forwarding-method--${method.toLowerCase()}`;
+}
+
+const CRUD_LABELS: Record<InterfaceForwardingInterface["crud_type"], string> = {
+  create: "新增",
+  read: "查询",
+  update: "修改",
+  delete: "删除",
+  unknown: "未识别",
+};
+
+const EFFECT_LABELS: Record<InterfaceForwardingInterface["table_effects"][number]["effect_type"], string> = {
+  select: "返回查询",
+  insert: "新增",
+  update: "修改",
+  delete: "删除",
+  soft_delete: "逻辑删除",
+  upsert: "新增或更新",
+};
+
+function visibleTableEffects(item: InterfaceForwardingInterface) {
+  const visible: string[] = {
+    read: ["select"],
+    create: ["insert", "upsert"],
+    update: ["insert", "update", "delete", "soft_delete", "upsert"],
+    delete: ["delete", "soft_delete"],
+    unknown: [],
+  }[item.crud_type];
+  return (item.table_effects ?? []).filter((effect) => (
+    visible.includes(effect.effect_type)
+    && (item.crud_type !== "read" || effect.response_contribution === "returned")
+  ));
+}
+
+function tableIdentity(effect: InterfaceForwardingInterface["table_effects"][number]) {
+  return [effect.database_key, effect.schema_name, effect.table_name].filter(Boolean).join(".");
 }
 
 function formatRequestedAt(value: string) {
@@ -79,12 +116,16 @@ export function InterfaceForwardingManager() {
 
   const load = useCallback(async (nextKeyword = keyword) => {
     if (!workspaceId) return;
+    const normalizedKeyword = nextKeyword.trim();
     setLoading(true);
     setError("");
     try {
-      const result = await getInterfaceForwardingOverview(workspaceId, nextKeyword);
+      const result = await getInterfaceForwardingOverview(workspaceId, normalizedKeyword);
       setOverview(result);
-      setActiveServiceId((current) => result.services.some((item) => item.id === current) ? current : result.services[0]?.id || "");
+      setActiveServiceId((current) => {
+        if (normalizedKeyword) return "";
+        return result.services.some((item) => item.id === current) ? current : result.services[0]?.id || "";
+      });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "接口转发数据加载失败");
     } finally {
@@ -120,11 +161,11 @@ export function InterfaceForwardingManager() {
     <section className="interface-forwarding-page">
       <header className="interface-forwarding-heading">
         <div><p className="eyebrow">INTERFACE FORWARDING</p><h1>接口转发</h1><p>管理接口文档、转发环境和请求身份，并直接测试已登记接口。</p></div>
-        <label>工作空间<select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)}>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>
+        <label>工作空间<select value={workspaceId} onChange={(event) => { setModal(null); setWorkspaceId(event.target.value); }}>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>
       </header>
 
       <div className="interface-forwarding-toolbar">
-        <div className="interface-forwarding-search"><input value={keyword} onChange={(event) => setKeyword(event.target.value)} onKeyDown={(event) => event.key === "Enter" && void load()} placeholder="搜索接口、路径或 Controller" /><button className="secondary-button" type="button" onClick={() => void load()}>搜索</button></div>
+        <div className="interface-forwarding-search"><input value={keyword} onChange={(event) => setKeyword(event.target.value)} onKeyDown={(event) => event.key === "Enter" && void load()} placeholder="搜索业务描述、接口、路径或 Controller" /><button className="secondary-button" type="button" onClick={() => void load()}>搜索</button></div>
         <div><button className="secondary-button" type="button" onClick={() => setModal({ kind: "configuration" })}>转发配置</button><button className="primary-button" type="button" onClick={() => setModal({ kind: "import" })}>导入 Swagger</button></div>
       </div>
       {error ? <p className="error-banner" role="alert">{error}</p> : null}
@@ -147,7 +188,7 @@ export function InterfaceForwardingManager() {
           {!loading && visibleInterfaces.length === 0 ? <div className="interface-forwarding-empty"><strong>还没有接口</strong><p>导入 Swagger 2 或 OpenAPI 3 JSON 后会在这里建立服务树和接口列表。</p></div> : null}
           {!loading && visibleInterfaces.length > 0 ? (
             <div className="interface-forwarding-table-wrap"><table><colgroup><col className="interface-forwarding-col-name" /><col className="interface-forwarding-col-controller" /><col className="interface-forwarding-col-path" /><col className="interface-forwarding-col-action" /></colgroup><thead><tr><th>接口名称</th><th>Controller 名称</th><th>接口路径</th><th>操作</th></tr></thead><tbody>{visibleInterfaces.map((item) => (
-              <tr key={item.id}><td><div className="interface-forwarding-name-cell"><button className="interface-forwarding-name-button" type="button" title={item.name} onClick={() => setModal({ kind: "detail", item })}>{item.name}</button>{item.last_requested_at ? <span className="interface-forwarding-requested-badge" title={`最近请求：${formatRequestedAt(item.last_requested_at)}`} aria-label={`已请求，最近请求时间 ${formatRequestedAt(item.last_requested_at)}`}>已请求</span> : null}</div></td><td><code className="interface-forwarding-cell-ellipsis" title={item.controller_name || "未提供 Controller 名称"}>{item.controller_name || "—"}</code></td><td><div className="interface-forwarding-path-cell" tabIndex={0} aria-label={`${item.method} ${item.path}`} data-full-path={item.path}><span className={methodClass(item.method)}>{item.method}</span><code>{item.path}</code></div></td><td><div className="interface-forwarding-row-actions"><button className="interface-forwarding-row-detail" type="button" onClick={() => setModal({ kind: "test", item })}>测试</button><button className="interface-forwarding-row-detail" type="button" onClick={() => setModal({ kind: "detail", item })}>详情</button></div></td></tr>
+              <tr key={item.id}><td><div className="interface-forwarding-name-cell"><button className="interface-forwarding-name-button" type="button" title={item.name} onClick={() => setModal({ kind: "detail", item })}>{item.name}</button>{item.crud_type !== "unknown" ? <span className={`interface-forwarding-crud-badge interface-forwarding-crud-badge--${item.crud_type}`}>{CRUD_LABELS[item.crud_type]}</span> : null}{item.last_requested_at ? <span className="interface-forwarding-requested-badge" title={`最近请求：${formatRequestedAt(item.last_requested_at)}`} aria-label={`已请求，最近请求时间 ${formatRequestedAt(item.last_requested_at)}`}>已请求</span> : null}</div></td><td><code className="interface-forwarding-cell-ellipsis" title={item.controller_name || "未提供 Controller 名称"}>{item.controller_name || "—"}</code></td><td><div className="interface-forwarding-path-cell" tabIndex={0} aria-label={`${item.method} ${item.path}`} data-full-path={item.path}><span className={methodClass(item.method)}>{item.method}</span><code>{item.path}</code></div></td><td><div className="interface-forwarding-row-actions"><button className="interface-forwarding-row-detail" type="button" onClick={() => setModal({ kind: "test", item })}>测试</button><button className="interface-forwarding-row-detail" type="button" onClick={() => setModal({ kind: "detail", item })}>详情</button></div></td></tr>
             ))}</tbody></table></div>
           ) : null}
         </section>
@@ -155,7 +196,7 @@ export function InterfaceForwardingManager() {
 
       {modal?.kind === "import" ? <ImportModal workspaceId={workspaceId} onClose={() => setModal(null)} onImported={async () => { setModal(null); await load(); }} /> : null}
       {modal?.kind === "configuration" && overview ? <ForwardingConfigurationModal workspaceId={workspaceId} environments={overview.environments} onClose={() => setModal(null)} /> : null}
-      {modal?.kind === "detail" && overview ? <InterfaceDetailModal item={modal.item} onClose={() => setModal(null)} onDelete={() => destructive(`确定删除接口“${modal.item.name}”及其参数和日志吗？`, async () => { await deleteInterfaceForwardingInterface(modal.item.id); setModal(null); })} /> : null}
+      {modal?.kind === "detail" && overview ? <InterfaceDetailModal item={modal.item} initialSection={modal.section} onClose={() => setModal(null)} onUpdated={() => load()} onDelete={() => destructive(`确定删除接口“${modal.item.name}”及其参数和日志吗？`, async () => { await deleteInterfaceForwardingInterface(modal.item.id); setModal(null); })} /> : null}
       {modal?.kind === "test" && overview ? <TestModal item={modal.item} environments={overview.environments} onClose={() => { setModal(null); void load(); }} /> : null}
     </section>
   );
@@ -243,13 +284,57 @@ function ForwardingConfigurationModal({ workspaceId, environments, onClose }: { 
   );
 }
 
-function InterfaceDetailModal({ item, onClose, onDelete }: { item: InterfaceForwardingInterface; onClose: () => void; onDelete: () => Promise<void> }) {
-  const [section, setSection] = useState<"info" | "logs">("logs");
-  return <ModalFrame title={item.name} onClose={onClose} wide><nav className="interface-forwarding-detail-tabs" aria-label="接口详情内容"><button type="button" data-active={section === "logs"} onClick={() => setSection("logs")}>请求日志</button><button type="button" data-active={section === "info"} onClick={() => setSection("info")}>接口信息</button></nav>{section === "logs" ? <LogsPanel item={item} /> : null}{section === "info" ? <InterfaceInfoPanel item={item} /> : null}<footer><button className="danger-text-button" type="button" onClick={() => void onDelete()}>删除接口</button><button className="secondary-button" type="button" onClick={onClose}>关闭</button></footer></ModalFrame>;
+function InterfaceDetailModal({ item, initialSection = "logs", onClose, onDelete, onUpdated }: { item: InterfaceForwardingInterface; initialSection?: "info" | "logs" | "semantics"; onClose: () => void; onDelete: () => Promise<void>; onUpdated: () => Promise<void> }) {
+  const [section, setSection] = useState<"info" | "logs" | "semantics">(initialSection);
+  const [current, setCurrent] = useState(item);
+  return <ModalFrame title={current.name} onClose={onClose} wide><nav className="interface-forwarding-detail-tabs" aria-label="接口详情内容"><button type="button" data-active={section === "logs"} onClick={() => setSection("logs")}>请求日志</button><button type="button" data-active={section === "info"} onClick={() => setSection("info")}>接口信息</button><button type="button" data-active={section === "semantics"} onClick={() => setSection("semantics")}>业务语义</button></nav>{section === "logs" ? <LogsPanel item={current} /> : null}{section === "info" ? <InterfaceInfoPanel item={current} /> : null}{section === "semantics" ? <InterfaceSemanticsEditor item={current} onSaved={async (updated) => { setCurrent((value) => ({ ...value, ...updated })); await onUpdated(); }} /> : null}<footer><button className="danger-text-button" type="button" onClick={() => void onDelete()}>删除接口</button><button className="secondary-button" type="button" onClick={onClose}>关闭</button></footer></ModalFrame>;
+}
+
+function listInput(value: string[] | null | undefined) {
+  return (value ?? []).join("；");
+}
+
+function parseListInput(value: string) {
+  return value.split(/[;；\n]/).map((item) => item.trim()).filter(Boolean);
+}
+
+function InterfaceSemanticsEditor({ item, onSaved }: { item: InterfaceForwardingInterface; onSaved: (updated: Partial<InterfaceForwardingInterface>) => Promise<void> }) {
+  const [form, setForm] = useState<InterfaceSemanticsWrite>({ business_entity: item.business_entity ?? "", business_action: item.business_action ?? "", business_scenario: item.business_scenario ?? "", crud_type: item.crud_type, aliases: item.aliases ?? [], positive_examples: item.positive_examples ?? [], negative_examples: item.negative_examples ?? [] });
+  const [saving, setSaving] = useState(false); const [error, setError] = useState(""); const [notice, setNotice] = useState("");
+  async function save() { setSaving(true); setError(""); setNotice(""); try { const updated = await updateInterfaceForwardingSemantics(item.id, form); await onSaved(updated); setNotice("业务语义显式配置已保存，接口搜索会立即使用这些结构化证据。"); } catch (reason) { setError(reason instanceof Error ? reason.message : "业务语义保存失败"); } finally { setSaving(false); } }
+  return <div className="interface-semantics-editor"><div className="interface-semantics-editor-heading"><div><h3>业务语义配置</h3><p>系统默认使用 Swagger 和源码自动分析；这里只提供可选的结构化显式配置，不是审核步骤。</p></div><span>{item.intent_source === "manual" ? "显式配置" : "自动生成"}</span></div>{error ? <p className="error-banner" role="alert">{error}</p> : null}{notice ? <p className="success-banner" role="status">{notice}</p> : null}<div className="management-form-grid"><label>业务对象<input value={form.business_entity} onChange={(event) => setForm((current) => ({ ...current, business_entity: event.target.value }))} /></label><label>业务动作<input value={form.business_action} onChange={(event) => setForm((current) => ({ ...current, business_action: event.target.value }))} /></label><label>CRUD 类型<select value={form.crud_type} onChange={(event) => setForm((current) => ({ ...current, crud_type: event.target.value as InterfaceForwardingInterface["crud_type"] }))}>{Object.entries(CRUD_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="wide-field">业务场景<input value={form.business_scenario} onChange={(event) => setForm((current) => ({ ...current, business_scenario: event.target.value }))} /></label><label className="wide-field">业务别名<textarea value={listInput(form.aliases)} placeholder="使用分号或换行分隔" onChange={(event) => setForm((current) => ({ ...current, aliases: parseListInput(event.target.value) }))} /></label><label className="wide-field">正向示例<textarea value={listInput(form.positive_examples)} placeholder="例如：分页查询委托报价" onChange={(event) => setForm((current) => ({ ...current, positive_examples: parseListInput(event.target.value) }))} /></label><label className="wide-field">负向示例<textarea value={listInput(form.negative_examples)} placeholder="输入不应命中该接口的描述" onChange={(event) => setForm((current) => ({ ...current, negative_examples: parseListInput(event.target.value) }))} /></label></div><div className="interface-forwarding-detail-actions"><button className="primary-button" type="button" disabled={saving} onClick={() => void save()}>{saving ? "保存中…" : "保存业务语义"}</button></div></div>;
 }
 
 function InterfaceInfoPanel({ item }: { item: InterfaceForwardingInterface }) {
-  return <div className="interface-forwarding-detail-info"><dl><div><dt>请求方式</dt><dd><span className={methodClass(item.method)}>{item.method}</span></dd></div><div><dt>接口路径</dt><dd><code title={item.path}>{item.path}</code></dd></div><div><dt>Controller 名称</dt><dd><code>{item.controller_name || "—"}</code></dd></div><div><dt>Controller 描述</dt><dd>{item.controller_description || "—"}</dd></div><div className="interface-forwarding-detail-wide"><dt>接口说明</dt><dd>{item.description || "当前接口文档没有提供说明"}</dd></div></dl><div className="interface-forwarding-detail-schemas"><details><summary>请求参数结构</summary><pre className="interface-forwarding-schema">{Object.keys(item.request_schema || {}).length ? JSON.stringify(item.request_schema, null, 2) : "当前接口文档没有声明请求参数结构"}</pre></details><details><summary>响应参数结构</summary><pre className="interface-forwarding-schema">{Object.keys(item.response_schema || {}).length ? JSON.stringify(item.response_schema, null, 2) : "当前接口文档没有声明响应参数结构"}</pre></details></div></div>;
+  const effects = visibleTableEffects(item);
+  return <div className="interface-forwarding-detail-info">
+    <dl>
+      <div><dt>请求方式</dt><dd><span className={methodClass(item.method)}>{item.method}</span></dd></div>
+      <div><dt>CRUD 类型</dt><dd><span className={`interface-forwarding-crud-badge interface-forwarding-crud-badge--${item.crud_type}`}>{CRUD_LABELS[item.crud_type]}</span></dd></div>
+      <div><dt>接口路径</dt><dd><code title={item.path}>{item.path}</code></dd></div>
+      <div><dt>Controller 名称</dt><dd><code>{item.controller_name || "—"}</code></dd></div>
+      <div><dt>Controller 描述</dt><dd>{item.controller_description || "—"}</dd></div>
+      <div><dt>Operation ID</dt><dd><code>{item.operation_id || "—"}</code></dd></div>
+      <div><dt>业务对象</dt><dd>{item.business_entity || "尚未分析"}</dd></div>
+      <div><dt>业务动作</dt><dd>{item.business_action || "尚未分析"}</dd></div>
+      <div className="interface-forwarding-detail-wide"><dt>业务场景</dt><dd>{item.business_scenario || "当前接口还没有业务语义档案"}</dd></div>
+      <div className="interface-forwarding-detail-wide"><dt>业务别名</dt><dd>{item.aliases?.length ? item.aliases.join("、") : "—"}</dd></div>
+      <div className="interface-forwarding-detail-wide"><dt>正向示例</dt><dd>{item.positive_examples?.length ? item.positive_examples.join("；") : "—"}</dd></div>
+      <div className="interface-forwarding-detail-wide"><dt>负向示例</dt><dd>{item.negative_examples?.length ? item.negative_examples.join("；") : "—"}</dd></div>
+      <div><dt>语义来源</dt><dd>{item.intent_source === "manual" ? "显式配置" : item.intent_source === "generated" ? "源码生成" : "—"}</dd></div>
+      <div><dt>语义置信度</dt><dd>{item.intent_confidence == null ? "—" : `${item.intent_confidence}%`}</dd></div>
+      <div className="interface-forwarding-detail-wide"><dt>接口说明</dt><dd>{item.description || "当前接口文档没有提供说明"}</dd></div>
+    </dl>
+    <section className="interface-forwarding-impact-section" aria-labelledby={`interface-impact-${item.id}`}>
+      <header><div><h3 id={`interface-impact-${item.id}`}>数据影响</h3><p>{item.crud_type === "read" ? "只展示确认参与响应返回的查询表。" : item.crud_type === "update" ? "展示新增、修改和删除表，不展示校验查询表。" : item.crud_type === "create" ? "只展示新增或新增/更新表。" : item.crud_type === "delete" ? "只展示物理删除或逻辑删除表。" : "接口类型尚未识别。"}</p></div><span>{effects.length} 张表</span></header>
+      {effects.length ? <ul>{effects.map((effect) => <li key={`${effect.database_key}:${effect.schema_name}:${effect.table_name}:${effect.effect_type}`}>
+        <div><span className={`interface-forwarding-effect-badge interface-forwarding-effect-badge--${effect.effect_type}`}>{EFFECT_LABELS[effect.effect_type]}</span><code>{tableIdentity(effect)}</code></div>
+        <p>{effect.source_class}.{effect.source_method.split(".").at(-1)} · 置信度 {effect.confidence}%</p>
+        <code className="interface-forwarding-impact-source" title={effect.source_file}>{effect.source_file}</code>
+      </li>)}</ul> : <div className="interface-forwarding-impact-empty">当前类型下还没有已确认的数据表影响。</div>}
+    </section>
+    <div className="interface-forwarding-detail-schemas"><details><summary>请求参数结构</summary><pre className="interface-forwarding-schema">{Object.keys(item.request_schema || {}).length ? JSON.stringify(item.request_schema, null, 2) : "当前接口文档没有声明请求参数结构"}</pre></details><details><summary>响应参数结构</summary><pre className="interface-forwarding-schema">{Object.keys(item.response_schema || {}).length ? JSON.stringify(item.response_schema, null, 2) : "当前接口文档没有声明响应参数结构"}</pre></details></div>
+  </div>;
 }
 
 function TestPanel({ item, environments }: { item: InterfaceForwardingInterface; environments: InterfaceForwardingEnvironment[] }) {
@@ -268,5 +353,5 @@ function TestModal({ item, environments, onClose }: { item: InterfaceForwardingI
 function LogsPanel({ item }: { item: InterfaceForwardingInterface }) {
   const [logs, setLogs] = useState<InterfaceForwardingLog[]>([]); const [error, setError] = useState("");
   useEffect(() => { listInterfaceForwardingLogs(item.id).then(setLogs).catch((reason: Error) => setError(reason.message)); }, [item.id]);
-  return <div>{error ? <p className="error-banner">{error}</p> : null}<div className="interface-forwarding-log-list">{logs.length === 0 ? <p>暂无请求日志</p> : logs.map((log) => <details key={log.id}><summary><span data-success={log.success}>{log.status_code ?? "ERR"}</span><strong>{log.environment_name}{log.identity_name ? ` · ${log.identity_name}` : ""}{log.identity_role ? ` · ${log.identity_role}` : ""}</strong><code>{log.duration_ms} ms</code><time>{new Date(log.created_at).toLocaleString("zh-CN")}</time></summary><dl><dt>URL</dt><dd><code>{log.request_url}</code></dd><dt>请求</dt><dd><pre>{log.request_body}</pre></dd><dt>响应</dt><dd><pre>{log.response_body}</pre></dd></dl></details>)}</div></div>;
+  return <div>{error ? <p className="error-banner">{error}</p> : null}<div className="interface-forwarding-log-list">{logs.length === 0 ? <p>暂无请求日志</p> : logs.map((log) => <details key={log.id}><summary><span data-success={log.success}>{log.status_code ?? "ERR"}</span><strong>{log.environment_name}{log.identity_name ? ` · ${log.identity_name}` : ""}{log.identity_role ? ` · ${log.identity_role}` : ""}</strong><code>{log.duration_ms} ms</code><time>{new Date(log.created_at).toLocaleString("zh-CN")}</time></summary><dl><dt>意图匹配</dt><dd><strong>{log.intent_match_score} 分</strong>{log.intent_match_evidence?.match_reasons?.length ? <p>{log.intent_match_evidence.match_reasons.join("；")}</p> : null}{log.intent_match_evidence?.mismatches?.length ? <p>不一致：{log.intent_match_evidence.mismatches.join("；")}</p> : null}</dd><dt>响应验证</dt><dd><strong>{log.validation_status}</strong>{log.validation_result?.warnings?.length ? <p>{log.validation_result.warnings.join("；")}</p> : null}</dd><dt>URL</dt><dd><code>{log.request_url}</code></dd><dt>请求</dt><dd><pre>{log.request_body}</pre></dd><dt>响应</dt><dd><pre>{log.response_body}</pre></dd></dl></details>)}</div></div>;
 }

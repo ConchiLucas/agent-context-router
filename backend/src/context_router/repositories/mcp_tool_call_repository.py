@@ -342,37 +342,11 @@ class PostgresMcpToolCallRepository:
                     FROM mcp_tool_calls
                     WHERE task_id = %s
                       AND server_name = 'context-router'
-                      AND tool_name IN (
-                            'prepare_task_context',
-                            'read_task_context',
-                            'read_middleware_context',
-                            'search_context_documents',
-                            'read_context_document',
-                            'search_database_objects',
-                            'execute_database_query',
-                            'save_data_visualization_query',
-                            'save_task_visualization_result',
-                            'list_task_containers',
-                            'inspect_container_errors',
-                            'read_table_relations',
-                            'search_relation_tables',
-                            'search_value_mappings',
-                            'resolve_value_candidates',
-                            'search_forwarding_interfaces',
-                            'read_forwarding_request_history',
-                            'prepare_forwarding_request',
-                            'execute_forwarding_request',
-                            'prepare_table_relation_context',
-                            'apply_workspace_changes',
-                            'start_workspace',
-                            'get_workspace_operation',
-                            'apply_project_changes',
-                            'get_project_operation'
-                      )
+                      AND tool_name = ANY(%s)
                       AND source IN ('server', 'legacy')
                     ORDER BY id
                     """,
-                    (task_id,),
+                    (task_id, list(CONTEXT_ROUTER_TRACE_TOOL_NAMES)),
                 ).fetchall()
         except psycopg.Error as exc:
             raise McpToolCallRepositoryError("MCP 工具调用读取失败") from exc
@@ -398,36 +372,14 @@ class PostgresMcpToolCallRepository:
                         error_code = 'server_restarted'
                     WHERE status = 'running'
                       AND server_name = 'context-router'
-                      AND tool_name IN (
-                            'prepare_task_context',
-                            'read_task_context',
-                            'read_middleware_context',
-                            'search_context_documents',
-                            'read_context_document',
-                            'search_database_objects',
-                            'execute_database_query',
-                            'save_data_visualization_query',
-                            'save_task_visualization_result',
-                            'list_task_containers',
-                            'inspect_container_errors',
-                            'read_table_relations',
-                            'search_relation_tables',
-                            'search_value_mappings',
-                            'resolve_value_candidates',
-                            'search_forwarding_interfaces',
-                            'read_forwarding_request_history',
-                            'prepare_forwarding_request',
-                            'execute_forwarding_request',
-                            'prepare_table_relation_context',
-                            'apply_workspace_changes',
-                            'start_workspace',
-                            'get_workspace_operation',
-                            'apply_project_changes',
-                            'get_project_operation'
-                      )
+                      AND tool_name = ANY(%s)
                       AND source = 'server'
                     """,
-                    (finished_at, finished_at),
+                    (
+                        finished_at,
+                        finished_at,
+                        list(CONTEXT_ROUTER_TRACE_TOOL_NAMES),
+                    ),
                 )
                 return max(cursor.rowcount, 0)
         except psycopg.Error as exc:
@@ -550,33 +502,7 @@ class PostgresMcpToolCallRepository:
                     LEFT JOIN mcp_tool_calls AS tool_call
                       ON tool_call.task_id = task.id
                      AND tool_call.server_name = 'context-router'
-                     AND tool_call.tool_name IN (
-                            'prepare_task_context',
-                            'read_task_context',
-                            'read_middleware_context',
-                            'search_context_documents',
-                            'read_context_document',
-                            'search_database_objects',
-                            'execute_database_query',
-                            'save_data_visualization_query',
-                            'save_task_visualization_result',
-                            'list_task_containers',
-                            'inspect_container_errors',
-                            'read_table_relations',
-                            'search_relation_tables',
-                            'search_value_mappings',
-                            'resolve_value_candidates',
-                            'search_forwarding_interfaces',
-                            'read_forwarding_request_history',
-                            'prepare_forwarding_request',
-                            'execute_forwarding_request',
-                            'prepare_table_relation_context',
-                            'apply_workspace_changes',
-                            'start_workspace',
-                            'get_workspace_operation',
-                            'apply_project_changes',
-                            'get_project_operation'
-                     )
+                     AND tool_call.tool_name = ANY(%s)
                      AND tool_call.source IN ('server', 'legacy')
                     WHERE (
                             %s::text IS NULL
@@ -593,33 +519,7 @@ class PostgresMcpToolCallRepository:
                                 FROM mcp_tool_calls AS filtered_server
                                 WHERE filtered_server.task_id = task.id
                                   AND filtered_server.source IN ('server', 'legacy')
-                                  AND filtered_server.tool_name IN (
-                                        'prepare_task_context',
-                                        'read_task_context',
-                                        'read_middleware_context',
-                                        'search_context_documents',
-                                        'read_context_document',
-                                        'search_database_objects',
-                                        'execute_database_query',
-                                        'save_data_visualization_query',
-                                        'save_task_visualization_result',
-                                        'list_task_containers',
-                                        'inspect_container_errors',
-                                        'read_table_relations',
-                                        'search_relation_tables',
-                                        'search_value_mappings',
-                                        'resolve_value_candidates',
-                                        'search_forwarding_interfaces',
-                                        'read_forwarding_request_history',
-                                        'prepare_forwarding_request',
-                                        'execute_forwarding_request',
-                                        'prepare_table_relation_context',
-                                        'apply_workspace_changes',
-                                        'start_workspace',
-                                        'get_workspace_operation',
-                                        'apply_project_changes',
-                                        'get_project_operation'
-                                  )
+                                  AND filtered_server.tool_name = ANY(%s)
                                   AND lower(filtered_server.server_name) = lower(%s)
                             )
                       )
@@ -642,33 +542,7 @@ class PostgresMcpToolCallRepository:
                                 WHERE filtered_status.task_id = task.id
                                   AND filtered_status.server_name = 'context-router'
                                   AND filtered_status.source IN ('server', 'legacy')
-                                  AND filtered_status.tool_name IN (
-                                        'prepare_task_context',
-                                        'read_task_context',
-                                        'read_middleware_context',
-                                        'search_context_documents',
-                                        'read_context_document',
-                                        'search_database_objects',
-                                        'execute_database_query',
-                                        'save_data_visualization_query',
-                                        'save_task_visualization_result',
-                                        'list_task_containers',
-                                        'inspect_container_errors',
-                                        'read_table_relations',
-                                        'search_relation_tables',
-                                        'search_value_mappings',
-                                        'resolve_value_candidates',
-                                        'search_forwarding_interfaces',
-                                        'read_forwarding_request_history',
-                                        'prepare_forwarding_request',
-                                        'execute_forwarding_request',
-                                        'prepare_table_relation_context',
-                                        'apply_workspace_changes',
-                                        'start_workspace',
-                                        'get_workspace_operation',
-                                        'apply_project_changes',
-                                        'get_project_operation'
-                                  )
+                                  AND filtered_status.tool_name = ANY(%s)
                                   AND filtered_status.status = %s
                             )
                       )
@@ -683,16 +557,19 @@ class PostgresMcpToolCallRepository:
                     LIMIT %s
                     """,
                     (
+                        list(CONTEXT_ROUTER_TRACE_TOOL_NAMES),
                         project_id,
                         project_id,
                         project_key,
                         agent_name,
                         agent_name,
                         server_name,
+                        list(CONTEXT_ROUTER_TRACE_TOOL_NAMES),
                         server_name,
                         tool_name,
                         tool_name,
                         status,
+                        list(CONTEXT_ROUTER_TRACE_TOOL_NAMES),
                         status,
                         keyword_pattern,
                         keyword_pattern,

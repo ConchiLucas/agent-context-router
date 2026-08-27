@@ -148,7 +148,95 @@ CONTEXT_ROUTER_DATABASE_URL=postgresql://USER:PASSWORD@host.docker.internal:5432
 docker compose exec backend uv run alembic upgrade head
 ```
 
-当前 migration head 为 `20260825_0065`。`0065` 强制任务环境、环境修订号和环境来源三者同时存在，杜绝只有环境但没有来源的残缺任务；`0064` 增加环境别名、任务描述环境来源和短期数据库上下文；这是 MCP 入参的不兼容升级，客户端必须重新连接并刷新 tools/list。`0063` 增加任务主意图、错误信号、意图摘要和来源；`0062` 增加 AI 任务可视化结构化结论；`0061` 增加数据可视化任务关联、幂等键和执行摘要；`0060` 增加 AI 日志可视化错误快照表。
+首批接口业务语义与表影响由可重复执行的源码核对种子写入；当前先覆盖 `cs_dsly_order_entrusted`：
+
+```bash
+docker compose exec backend uv run python -m context_router.scripts.seed_interface_semantics \
+  --workspace <workspace_id> --service c12-mtp \
+  --table cs_dsly_order_entrusted
+```
+
+全部 `/order-api/`、`/line-api/`、`/basic-api/`、`/highway-api/`、`/railway-api/`、`/shipping-api/`、`/settlement-api/`、`/declaration-api/`、`/declaration-interface-api/`、`/operation-api/`、`/message-api/`、`/inner/message/`、`/external-interface-api/`、`/zhiyun/`、`/sms/`、`/job-client-api/`、`/trace-api/` 和 `/admin/` 接口使用源码扫描发布器同步业务语义、CRUD 和表影响；`/admin/` 使用 Web Service 扁平目录扫描器。发布器解析对应模块的 Controller、Service、DAO、JPA Repository 以及 `sql-ext` SQL；basic 路径下实际由 shipping 模块挂载的舱单和轨迹接口也会合并扫描 shipping 源码，内部消息 OpenAPI 中的 `*ApiController` 会回退解析源码 `*Api` 类，智运位置旧路径按真实查询调用发布，短信网关和申报集成权限调用不猜测本地表。任务模块额外按白名单识别 `xxl_job_*` 表和字符串 SQL ID；轨迹模块只发布本地 Controller 语义，不把远程公铁水聚合调用猜成本地表。没有本地源码证据的远程或文件接口只发布语义，不猜测数据表；`/api/`、`/test/`、`/internal/` 和 `/member-api/` 不执行发布：
+
+```bash
+docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+  --workspace <workspace_id> --service c12-mtp \
+  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+
+docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+  --workspace <workspace_id> --service c12-mtp --module line \
+  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+
+docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+  --workspace <workspace_id> --service c12-mtp --module basic \
+  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+
+docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+  --workspace <workspace_id> --service c12-mtp --module highway \
+  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+
+docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+  --workspace <workspace_id> --service c12-mtp --module railway \
+  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+
+docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+  --workspace <workspace_id> --service c12-mtp --module shipping \
+  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+
+docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+  --workspace <workspace_id> --service c12-mtp --module settlement \
+  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+
+docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+  --workspace <workspace_id> --service c12-mtp --module declaration \
+  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+
+docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+  --workspace <workspace_id> --service c12-mtp --module operation \
+  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+
+docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+  --workspace <workspace_id> --service c12-mtp --module message \
+  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+
+docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+  --workspace <workspace_id> --service c12-mtp --module message \
+  --path-prefix /inner/message/ \
+  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+
+docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+  --workspace <workspace_id> --service c12-mtp --module external-interface \
+  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+
+docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+  --workspace <workspace_id> --service c12-mtp --module external-interface \
+  --path-prefix /zhiyun/ \
+  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+
+docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+  --workspace <workspace_id> --service c12-mtp --module external-interface \
+  --path-prefix /sms/ \
+  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+
+docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+  --workspace <workspace_id> --service c12-mtp --module declaration-interface \
+  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+
+docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+  --workspace <workspace_id> --service c12-mtp --module web \
+  --path-prefix /admin/ \
+  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+
+docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+  --workspace <workspace_id> --service c12-mtp --module job-client \
+  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+
+docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+  --workspace <workspace_id> --service c12-mtp --module trace \
+  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+```
+
+当前 migration head 为 `20260827_0071`。`0071` 将 Workspace 接口术语和动态限定标签归档到 `archived_*`，运行时不再读取，保留接口业务语义与搜索质量闭环；`0070` 增加接口搜索质量与选择/执行结果事件；`0068` 增加接口发现意图、匹配证据、响应规则和执行验证；`0067` 增加接口业务语义、CRUD 分类和源码证据支持的表影响。客户端必须重新连接并刷新 tools/list。
 
 表关联页面的关联数据目前没有自动生成流水线，示例数据由可重复执行的种子脚本写入：
 

@@ -268,6 +268,49 @@ class RecordingTaskVisualization:
         )
 
 
+class RecordingForwardingExecution:
+    def execute(self, **_: object) -> dict[str, object]:
+        return {
+            "status": "completed",
+            "execution_mode": "direct",
+            "execution_id": "execution-1",
+            "success": True,
+            "status_code": 200,
+            "duration_ms": 12,
+            "response_body": '{"success":true}',
+            "response_headers": {},
+            "response_bytes": 16,
+            "truncated": False,
+            "error_type": None,
+            "deduplicated": False,
+        }
+
+
+class InterfaceTaskReader:
+    def get_task(self, task_id: int) -> TaskRecord:
+        assert task_id == 77
+        return TaskRecord(
+            id=77,
+            project_id=None,
+            project_key="workspace-project",
+            project_name="测试项目",
+            task="查询 UAT 合同列表",
+            cwd="/workspace/project",
+            agent_name="antigravity",
+            created_at=datetime.now(UTC),
+            scope="workspace",
+            workspace_id="workspace-1",
+            workspace_key="workspace",
+            workspace_name="测试工作空间",
+            database_environment="uat",
+            database_environment_revision=1,
+            database_environment_selection="task_explicit",
+            intent_type="interface_execute",
+            intent_summary="查询合同列表",
+            intent_source="agent_declared",
+        )
+
+
 class FailingQuery:
     def execute(self, **_: object) -> dict[str, object]:
         raise DatabaseAccessError("connection_failed", "数据库当前无法连接")
@@ -683,6 +726,47 @@ def test_mapping_short_path_marks_visualization_succeeded_and_verifies_real_call
         "result_row_count": 1,
         "task_linked": True,
     }
+
+
+def test_interface_result_infers_latest_successful_execution_as_verification() -> None:
+    repository = InMemoryMcpToolCallRepository()
+    trace_service = VerifiableTraceService(repository)
+    task_visualization = RecordingTaskVisualization()
+    server = create_context_router_mcp(
+        RecordingPreparation(),  # type: ignore[arg-type]
+        RecordingRead(),  # type: ignore[arg-type]
+        trace_service=trace_service,
+        interface_forwarding_context_service=RecordingForwardingExecution(),  # type: ignore[arg-type]
+        ai_task_visualization_service=task_visualization,  # type: ignore[arg-type]
+        task_repository=InterfaceTaskReader(),  # type: ignore[arg-type]
+    )
+
+    async def invoke_tools() -> None:
+        _, execution = await server.call_tool(
+            "execute_forwarding_request",
+            {
+                "task_id": 77,
+                "plan_id": "plan-1",
+                "request_sha256": "a" * 64,
+            },
+        )
+        execution_call_id = execution["tool_call_id"]
+        _, saved = await server.call_tool(
+            "save_task_visualization_result",
+            {
+                "task_id": 77,
+                "status": "resolved",
+                "summary": "UAT 合同列表查询成功",
+            },
+        )
+        assert saved["verification_call_ids"] == [execution_call_id]
+
+    asyncio.run(invoke_tools())
+
+    assert task_visualization.payload is not None
+    verification = task_visualization.payload.verification  # type: ignore[union-attr]
+    assert verification[0].tool_call_id == repository.list_calls(77)[0].id
+    assert [call.status for call in repository.list_calls(77)] == ["ok", "ok"]
 
 
 def test_workspace_runtime_tools_are_traced_and_operation_query_resolves_task() -> None:

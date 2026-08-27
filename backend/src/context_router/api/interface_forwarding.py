@@ -10,8 +10,9 @@ from context_router.schemas.interface_forwarding import (
     InterfaceForwardingLogWrite,
     InterfaceForwardingNamedWrite,
     InterfaceForwardingOverview,
-    InterfaceForwardingRewriteResult,
     InterfaceForwardingResult,
+    InterfaceForwardingRewriteResult,
+    InterfaceSemanticsWrite,
 )
 from context_router.services.interface_forwarding import (
     InterfaceForwardingError,
@@ -77,6 +78,18 @@ def delete_interface(interface_id: str, request: Request):
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@router.put("/interfaces/{interface_id}/semantics")
+def update_interface_semantics(
+    interface_id: str,
+    payload: InterfaceSemanticsWrite,
+    request: Request,
+):
+    try:
+        return _service(request).update_interface_semantics(interface_id, payload)
+    except InterfaceForwardingError as exc:
+        raise _error(exc) from exc
+
+
 @router.get("/interfaces/{interface_id}/state")
 def interface_state(interface_id: str, request: Request):
     try:
@@ -94,9 +107,7 @@ def logs(interface_id: str, request: Request, limit: int = Query(default=50, ge=
 
 
 @router.post("/interfaces/{interface_id}/logs", status_code=status.HTTP_201_CREATED)
-def record_external_log(
-    interface_id: str, payload: InterfaceForwardingLogWrite, request: Request
-):
+def record_external_log(interface_id: str, payload: InterfaceForwardingLogWrite, request: Request):
     try:
         return _service(request).record_external_log(interface_id, payload)
     except InterfaceForwardingError as exc:

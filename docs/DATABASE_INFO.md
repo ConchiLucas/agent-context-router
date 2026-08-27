@@ -23,7 +23,7 @@ docker compose exec backend uv run alembic upgrade head
 docker compose exec backend uv run alembic current
 ```
 
-当前 head 为 `20260824_0057`。`0057` 增加单例 `shared_ai_defaults`，仅保存本机选择的默认 Provider ID 与 revision；Provider、模型、地址和明文密钥始终从 AI 配置中心实时读取。首次读取有效的配置中心默认值时初始化该记录；本机记录指向已删除 Provider 时自动回退配置中心默认值。`0056` 增加业务值映射、关键词别名和接口参数绑定三张表；删除映射时别名和绑定级联删除，删除接口时对应绑定级联删除。若要验证 downgrade/upgrade，使用一次性测试数据库，不要在保存真实数据的控制面库上直接 downgrade。
+当前 head 为 `20260827_0070`。`0070` 增加接口搜索质量事件，并把请求计划关联到产生最终选择的搜索；事件只保存有界候选排序、意图、质量、选择与执行日志引用，不复制身份请求头或响应正文。若要验证 downgrade/upgrade，使用一次性测试数据库，不要在保存真实数据的控制面库上直接 downgrade。
 
 `system_guides` 保存 `guide_key`、JSONB 正文、菜单顺序和时间戳，没有 `enabled` 字段。历史 `include_in_prepare` 字段不再影响 MCP prepare；记录只进入系统文档菜单。
 
@@ -47,6 +47,7 @@ docker compose exec backend uv run alembic current
 | `interface_forwarding_services` / `interface_forwarding_interfaces` | 按 Workspace 保存 Swagger/OpenAPI 服务树、接口方法/路径和入参/出参结构 |
 | `interface_forwarding_environments` / `interface_forwarding_identities` | 为 Workspace 环境注册表中的环境保存多个具名接口转发地址，并按地址保存多个登录账号、角色标识和请求头；地址名称可不同但基础 URL 可相同，不能在此新增 Workspace 环境 |
 | `interface_forwarding_params` / `interface_forwarding_logs` | 保存每个接口最后一次测试参数/响应及有界列表使用的请求日志 |
+| `interface_forwarding_search_events` | 保存一次 MCP 接口搜索的解析意图、有界候选排序、自动质量、最终选择和执行结果引用，支持离线回放；不保存身份请求头或响应正文 |
 | `interface_value_mappings` | 按 Workspace 保存稳定业务值、草稿/发布状态，以及数据库别名、表、字段和标量等值过滤组成的结构化取值规则；不保存任意 SQL、物理地址或凭据 |
 | `mcp_database_contexts` | 保存短期、不可跨 task 复用的数据库上下文，绑定环境 revision、数据库授权链接和物理库快照；不保存凭据 |
 | `interface_value_mapping_aliases` | 保存映射的业务关键词别名；同一 Workspace 内大小写无关唯一，供未来按关键词定位取值方式 |

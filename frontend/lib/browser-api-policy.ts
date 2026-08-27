@@ -28,6 +28,9 @@ export function isBrowserApiRequestAllowed(
     return SAFE_BROWSER_POST_PATHS.some((pattern) => pattern.test(path));
   }
   if (normalizedMethod === "PUT") {
+    if (/^\/api\/interface-forwarding\/interfaces\/[^/]+\/semantics$/.test(path)) {
+      return true;
+    }
     if (
       /^\/api\/interface-forwarding\/(services|environments|identities)\/[^/]+$/.test(
         path,

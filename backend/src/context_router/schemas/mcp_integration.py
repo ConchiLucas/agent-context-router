@@ -18,10 +18,11 @@ class McpToolInfo(BaseModel):
 
 
 class McpClientConfig(BaseModel):
-    client: Literal["codex", "gemini", "antigravity"]
+    client: Literal["codex", "gemini", "antigravity", "cursor", "grok"]
     title: str
     config_path: str
     project_config_path: str | None = None
+    setup_kind: Literal["file", "command"] = "file"
     config: str
 
 

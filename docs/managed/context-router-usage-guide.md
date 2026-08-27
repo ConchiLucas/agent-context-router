@@ -2,7 +2,7 @@
 
 ## AI 使用原则
 
-- 新窗口遇到业务规则、启动、数据库或跨层链路任务时，先识别用户主意图，再调用 `prepare_task_context(task, cwd, agent_name, intent_type, error_signal?, intent_summary?)`。`intent_type` 只能是 `interface_execute`、`data_query`、`task_execute`、`bug_investigate` 或 `bug_fix`；只有后两类可以声明 `error_signal=true`。
+- 新窗口遇到业务规则、启动、数据库或跨层链路任务时，先识别用户主意图，再调用 `prepare_task_context(task, cwd, agent_name, intent_type, error_signal?, intent_summary?, capability_hints?)`。`intent_type` 只能是 `interface_discovery`、`interface_execute`、`data_query`、`task_execute`、`bug_investigate`、`bug_fix` 或 `code_change`；仅查找、比较、说明接口使用 `interface_discovery`，服务端也会纠正被误报为执行的接口发现描述。
 - prepare 在真实 Workspace 根 `AGENTS.md` 存在时固定以它为第一层；缺少真实根时，才以 cwd 命中的 Project 入口或合成根为第一层。只返回显式下两级，每个节点只有 `document_id`、`summary` 和 `children`。
 - 目标不明确、目标文档未进入三层投影或需要按术语定位时，调用 `search_context_documents(task_id, query, limit)`；它搜索当前 task 绑定 Workspace 的全部映射文档，返回文档与章节定位，不返回完整正文。
 - 选择文档后调用 `read_context_document(task_id, requests)`；task_id 必须来自当前 prepare，不跨任务复用。
@@ -22,21 +22,38 @@
 ## AI 标准执行流程
 
 1. 先把用户的主意图声明给 `prepare_task_context`，创建一次任务，并在后续文档、数据库、接口、日志和运行操作中始终复用同一个 `task_id`。读取返回的 `execution_contract`；其中 `mutation_policy`、`required_steps` 和 `visualization_targets` 是当前任务的执行契约。
-2. 根据任务意图选择最短的授权链路取证或修改；不要为了填充可视化页面调用无关工具。省略 `intent_type` 只用于兼容旧客户端，服务端会按 `task_execute` 处理并返回 warning。
-3. 每个成功的 Trace 调用都会在结构化响应中返回 `tool_call_id`。完成实际验证后，在最终回复用户前调用 `save_task_visualization_result`：阶段性且非终态使用 `investigating`；只有目标完成并通过 `verification_call_ids` 引用至少一项当前 task 的成功调用时使用 `resolved`；遇到明确阻塞时使用 `failed`，并记录根因和安全的下一步。不要手写验证对象。
-4. 结构化结论只保存脱敏摘要、工作空间相对代码位置、建议和验证结果，不保存凭据、原始日志或推测。保存记录不能替代给用户的最终答复。
+2. 核心文档工具始终直接调用：目标不明确时执行 `search_context_documents`，取得 document_id 后执行 `read_context_document`。它们不会出现在 `discover_task_tools` 中，也不能包装进 `invoke_task_tool`。
+3. 数据库、映射、接口、日志、中间件和表关联属于专业动作。优先使用 prepare 返回的 `recommended_actions`；当前子目标没有合适动作时执行 `discover_task_tools`，再把动作返回的 `name` 作为 `tool_name`、原样复制 `definition_revision`，通过 `invoke_task_tool` 调用。禁止使用旧字段 `action_name`。
+4. 根据任务意图选择最短的授权链路取证或修改；不要为了填充可视化页面调用无关工具。省略 `intent_type` 只用于兼容旧客户端，服务端会按 `task_execute` 处理并返回 warning。
+5. 每个成功的 Trace 调用都会在结构化响应中返回 `tool_call_id`。完成实际验证后，在最终回复用户前调用一次 `save_task_visualization_result`：阶段性且非终态使用 `investigating`；只有目标完成并引用至少一项当前 task 的成功调用时使用 `resolved`；遇到明确阻塞时使用 `failed`，并记录根因和安全的下一步。接口执行成功后可省略 `verification_call_ids`，服务端自动绑定当前 task 最近一次成功的 `execute_forwarding_request`；不要为了寻找调用号重新准备、重新执行接口或读取无关上下文。不要手写验证对象。
+6. 结构化结论只保存脱敏摘要、工作空间相对代码位置、建议和验证结果，不保存凭据、原始日志或推测。保存记录不能替代给用户的最终答复。
 
 ### 意图路由
 
 | intent_type | 执行要求 | 服务端可视化与约束 |
 | --- | --- | --- |
-| `interface_execute` | 搜索接口、按历史和映射组装参数、准备并执行只读计划 | 接口成功或失败都自动写接口可视化；没有真实执行记录不能标记 `resolved` |
+| `interface_execute` | 搜索接口、按历史和映射组装参数、准备并执行请求计划 | 已导入的读取、新增、修改、删除和未分类接口均可执行；接口成功或失败都自动写接口可视化，没有真实执行记录不能标记 `resolved` |
+| `interface_discovery` | 搜索、比较或说明接口，不执行请求 | 搜索返回结构化匹配分数和原因；歧义或详情问题才读取 `read_forwarding_interface_detail`，完成后直接保存任务结论 |
 | `data_query` | 业务值优先走现有映射；未命中时再定位关系表和 Schema，查询后调用 `save_data_visualization_query` | 初始化数据可视化查询条件；没有条件记录不能标记 `resolved` |
 | `task_execute` | 按最短授权链路完成普通任务和验证 | 正常写任务可视化结论 |
 | `bug_investigate` | 只查询和取证；有错误信号时检查当前 Workspace 已注册容器 | 禁止 `apply_workspace_changes` 和 `start_workspace`；确认真实错误才写日志可视化 |
 | `bug_fix` | 有错误信号时先查注册容器，再修改、更新 Workspace 并验证 | 缺少日志检查或 Workspace 更新证据时不能标记 `resolved` |
+| `code_change` | 使用客户端原生源码工具开发或重构，按需叠加文档、数据库、接口、日志等证据 | 允许代码修改；Context Router 不代理任意文件编辑或 Shell |
 
-主意图不排斥辅助链路：例如 `bug_fix` 可以同时查询数据或执行只读接口，并由实际工具调用分别生成数据或接口记录。MCP 只能阻止 Context Router 的运行写操作，不能拦截编码客户端自己的文件编辑能力，因此 `bug_investigate` 的只读要求还必须遵守返回的 `mutation_policy=forbidden`。
+### 多客户端验收矩阵
+
+Codex、Gemini CLI、Antigravity CLI、Cursor Agent 和 Grok CLI 使用同一套 MCP 合同。客户端配置必须发送稳定的 `X-Agent-Name`，服务端调用链据此区分客户端。
+
+| 场景 | 必验主链路 | 通过条件 |
+| --- | --- | --- |
+| 文档定位 | `prepare → search_context_documents → read_context_document` | task_id 全程一致，search 不返回正文，read 成功 |
+| 普通代码开发 | `prepare(code_change) → 客户端原生源码工具 → 验证 → save_task_visualization_result` | MCP 不限制源码编辑，结论引用真实验证调用 |
+| 数据查询 | `prepare(data_query) → 映射优先；必要时 discover/invoke 数据库动作` | 环境由 task 固化，数据库目标来自不透明 context_id |
+| 接口执行 | `prepare(interface_execute) → 搜索/历史/准备/执行` | 可执行已导入且路由可用的读取或写入计划，并生成接口可视化记录；同一 task 的同配置同请求成功后再次调用只复用结果，不发送第二次 HTTP |
+| Bug 查询 | `prepare(bug_investigate) → 日志/数据/接口只读取证` | 不执行代码或运行写操作，真实错误进入日志可视化 |
+| Bug 修复 | `prepare(bug_fix) → 取证 → 修改 → Workspace 更新 → 验证` | 主意图不因辅助取证变化，结论引用真实成功证据 |
+
+主意图不排斥辅助链路：例如 `bug_fix` 可以同时查询数据或执行接口，并由实际工具调用分别生成数据或接口记录。接口转发不再按 `operation_kind` 拦截写操作；Agent 必须让所选接口与用户明确意图一致。MCP 只能阻止 Context Router 的 Workspace 运行写操作，不能拦截编码客户端自己的文件编辑能力，因此 `bug_investigate` 的只读要求还必须遵守返回的 `mutation_policy=forbidden`。
 
 任务可视化详情中的“调用链路”只打开同一 `task_id` 的 Context Router MCP Trace；返回任务详情后仍保持原任务选择。系统中心的调用链路入口继续展示全部任务。
 
@@ -50,4 +67,4 @@
 | `context-router-trace-guide` | 需要理解 Tasks 页面记录了什么 |
 | `context-router-routing-guide` | 需要按 startup/database/frontend/backend/business/debugging 路由 |
 
-MCP 的 `tools/list` 固定为 24 个当前工具，成功调用的结构化响应统一携带可复用的 `tool_call_id`。映射命中时优先调用 `execute_mapped_data_query`，由服务端在一个工具调用内解析候选并保存成功的数据可视化记录；不再要求 AI 二次调用保存工具。只有无映射的自定义条件才使用 `save_data_visualization_query`。完成任务或形成阶段性结论后，调用 `save_task_visualization_result` 更新同一 task 的脱敏结构化结论；`resolved` 只接受 `verification_call_ids` 引用当前任务真实成功调用。排查 Docker 服务错误时，先调用 `list_task_containers`，再调用 `inspect_container_errors`。数据查询和接口参数中的业务 ID 都优先按已发布映射查询；接口转发按 `search_forwarding_interfaces`、可选 `read_forwarding_request_history`、`prepare_forwarding_request -> execute_forwarding_request` 执行。除 `prepare_task_context` 的可选环境断言外，其他环境感知工具都没有 `environment` 入参。
+MCP 的 `tools/list` 当前由运行时注册表生成，本版共 27 个工具。接口查找先调用 `search_forwarding_interfaces`，按 `match_score`、`match_reasons`、CRUD 和业务对象判断；歧义或参数、响应、影响表问题再调用 `read_forwarding_interface_detail`。`interface_discovery` 返回 `goal_completed=true` 后只保存结论，不准备或执行请求；`interface_execute` 才继续历史、映射、准备和执行链路。其他工具的终态规则保持不变。

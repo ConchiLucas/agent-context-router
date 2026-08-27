@@ -22,6 +22,7 @@ CONTEXT_ROUTER_TABLE_RELATION_TOOL_NAMES = (
 )
 CONTEXT_ROUTER_INTERFACE_FORWARDING_TOOL_NAMES = (
     "search_forwarding_interfaces",
+    "read_forwarding_interface_detail",
     "read_forwarding_request_history",
     "prepare_forwarding_request",
     "execute_forwarding_request",
@@ -39,6 +40,10 @@ CONTEXT_ROUTER_DATA_VISUALIZATION_TOOL_NAMES = (
     "execute_mapped_data_query",
 )
 CONTEXT_ROUTER_TASK_VISUALIZATION_TOOL_NAMES = ("save_task_visualization_result",)
+CONTEXT_ROUTER_PROGRESSIVE_TOOL_NAMES = (
+    "discover_task_tools",
+    "invoke_task_tool",
+)
 CONTEXT_ROUTER_LEGACY_TOOL_NAMES = (
     "apply_project_changes",
     "get_project_operation",
@@ -53,6 +58,7 @@ CONTEXT_ROUTER_TRACE_TOOL_NAMES = (
     *CONTEXT_ROUTER_LOG_VISUALIZATION_TOOL_NAMES,
     *CONTEXT_ROUTER_DATA_VISUALIZATION_TOOL_NAMES,
     *CONTEXT_ROUTER_TASK_VISUALIZATION_TOOL_NAMES,
+    *CONTEXT_ROUTER_PROGRESSIVE_TOOL_NAMES,
     *CONTEXT_ROUTER_LEGACY_TOOL_NAMES,
 )
 CONTEXT_ROUTER_TRACE_SOURCES = ("server", "legacy")

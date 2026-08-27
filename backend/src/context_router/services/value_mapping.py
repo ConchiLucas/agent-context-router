@@ -18,7 +18,11 @@ from context_router.database.policy import (
     SqlSafetyPolicy,
     policy_as_safety_context,
 )
-from context_router.database.result import ResultFormattingError, normalize_json_value
+from context_router.database.result import (
+    DatabaseResultFormatter,
+    ResultFormattingError,
+    normalize_json_value,
+)
 from context_router.repositories.task_repository import TaskReader, TaskRepositoryError
 from context_router.schemas.value_mapping import ValueMappingWrite
 from context_router.services.database_access import DatabaseAccessService
@@ -171,6 +175,7 @@ class ValueMappingService:
         keyword: str,
         limit: int,
         selection: Literal["default", "random"] = "default",
+        include_record: bool = False,
     ) -> dict[str, object]:
         """Execute one saved resolver in the database environment captured by the task."""
         workspace_id, selected_environment = self._task_scope(task_id, environment)
@@ -203,6 +208,20 @@ class ValueMappingService:
             selection=selection,
             limit=bounded_limit,
         )
+        records: list[dict[str, object]] = []
+        record_metadata: dict[str, object] = {
+            "record_columns": [],
+            "record_count": 0,
+            "record_truncated": False,
+            "record_elapsed_ms": 0,
+            "record_result_bytes": 0,
+        }
+        if include_record and selected_candidates:
+            records, record_metadata = self._execute_selected_records(
+                mapping,
+                access=access,
+                candidates=selected_candidates,
+            )
         return {
             "task_id": task_id,
             "mapping_id": mapping_id,
@@ -229,10 +248,71 @@ class ValueMappingService:
                 ),
             },
             "candidates": selected_candidates,
+            "include_record": include_record,
+            "records": records,
+            **record_metadata,
             "returned_count": len(selected_candidates),
             "candidate_pool_count": len(candidates),
             "elapsed_ms": elapsed_ms,
             "truncated": truncated,
+        }
+
+    def _execute_selected_records(
+        self,
+        mapping: dict[str, object],
+        *,
+        access: Any,
+        candidates: list[dict[str, object]],
+    ) -> tuple[list[dict[str, object]], dict[str, object]]:
+        values = [candidate.get("value") for candidate in candidates]
+        if not values:
+            return [], {
+                "record_columns": [],
+                "record_count": 0,
+                "record_truncated": False,
+                "record_elapsed_ms": 0,
+                "record_result_bytes": 0,
+            }
+        try:
+            sql = self._records_sql(
+                mapping,
+                engine=access.database.engine,
+                values=values,
+                limit=len(values),
+            )
+            validated = self._sql_policy.validate(
+                sql,
+                policy_as_safety_context(access.policy),
+            )
+            with self._connectors.lease(access.spec) as connector:
+                result = connector.execute_query(validated.sql, access.policy)
+            formatted = DatabaseResultFormatter().format_query(result, access.policy)
+        except (
+            QueryPolicyError,
+            ConnectorManagerError,
+            DatabaseConnectorError,
+            ResultFormattingError,
+        ) as exc:
+            raise ValueMappingError(
+                "完整业务记录读取失败，请检查映射表和值字段",
+                code=getattr(exc, "code", "record_query_failed"),
+            ) from exc
+
+        column_names = [str(column["name"]) for column in formatted.columns]
+        records = [dict(zip(column_names, row, strict=True)) for row in formatted.rows]
+        value_column = str(mapping["value_column"])
+        positions = {
+            str(candidate.get("value")): index for index, candidate in enumerate(candidates)
+        }
+        records.sort(
+            key=lambda record: positions.get(str(record.get(value_column)), len(positions))
+        )
+        return records, {
+            "record_columns": column_names,
+            "record_count": len(records),
+            "record_truncated": formatted.truncated,
+            "record_elapsed_ms": formatted.elapsed_ms,
+            "record_result_bytes": formatted.result_bytes,
         }
 
     def source_for_task(self, mapping_id: str, *, task_id: int) -> dict[str, object]:
@@ -991,6 +1071,44 @@ class ValueMappingService:
         return (
             f"SELECT {', '.join(select_parts)} FROM {table}{where} "
             f"ORDER BY {value_column} ASC LIMIT {max(1, min(limit, 20))}"
+        )
+
+    @classmethod
+    def _records_sql(
+        cls,
+        mapping: dict[str, object],
+        *,
+        engine: str,
+        values: list[object],
+        limit: int,
+    ) -> str:
+        quote = "`" if engine in {"mysql", "mariadb", "doris", "clickhouse"} else '"'
+
+        def identifier(value: object) -> str:
+            text = str(value)
+            if not _IDENTIFIER.fullmatch(text):
+                raise ValueMappingError("映射包含无效数据库标识符", code="invalid_identifier")
+            return f"{quote}{text}{quote}"
+
+        if not values:
+            raise ValueMappingError("完整记录查询缺少候选值", code="candidate_required")
+        table = identifier(mapping["table_name"])
+        if mapping.get("schema_name"):
+            table = f"{identifier(mapping['schema_name'])}.{table}"
+        value_column = identifier(mapping["value_column"])
+        conditions = [
+            f"{value_column} IN ({', '.join(cls._literal(value) for value in values)})"
+        ]
+        for raw_column, raw_value in dict(mapping["filters"]).items():
+            column = identifier(raw_column)
+            conditions.append(
+                f"{column} IS NULL"
+                if raw_value is None
+                else f"{column} = {cls._literal(raw_value)}"
+            )
+        return (
+            f"SELECT * FROM {table} WHERE {' AND '.join(conditions)} "
+            f"LIMIT {max(1, min(limit, 10))}"
         )
 
     @staticmethod

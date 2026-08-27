@@ -756,6 +756,11 @@ p {
 .interface-forwarding-name-cell { display: flex; min-width: 0; gap: 8px; align-items: center; }
 .interface-forwarding-name-cell .interface-forwarding-name-button { flex: 1; min-width: 0; width: auto; }
 .interface-forwarding-requested-badge { flex: none; border-radius: 9999px; padding: 2px 7px; color: var(--accent); background: var(--accent-soft); font-size: 0.68rem; font-weight: 650; line-height: 18px; white-space: nowrap; }
+.interface-forwarding-crud-badge { display: inline-flex; flex: none; align-items: center; justify-content: center; min-width: 42px; border: 1px solid var(--border); border-radius: 9999px; padding: 2px 8px; color: var(--muted); background: var(--surface); font-size: 0.68rem; font-weight: 700; line-height: 18px; white-space: nowrap; }
+.interface-forwarding-crud-badge--create,
+.interface-forwarding-crud-badge--read,
+.interface-forwarding-crud-badge--update { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.interface-forwarding-crud-badge--delete { border-color: var(--danger); color: var(--danger); background: var(--danger-soft); }
 .interface-forwarding-name-button { border: 0; padding: 4px 0; text-align: left; color: var(--foreground); background: transparent; font: inherit; font-weight: 650; cursor: pointer; }
 .interface-forwarding-name-button:focus-visible { border-radius: 6px; outline: 2px solid var(--accent); outline-offset: 2px; }
 .interface-forwarding-row-detail { border: 0; padding: 6px 8px; color: var(--accent); background: transparent; font-weight: 650; white-space: nowrap; }
@@ -794,12 +799,33 @@ p {
 .interface-forwarding-detail-info dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
 .interface-forwarding-detail-info dd code { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .interface-forwarding-detail-info .interface-forwarding-detail-wide { grid-column: 1 / -1; }
+.interface-forwarding-impact-section { overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-soft); }
+.interface-forwarding-impact-section > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 14px; border-bottom: 1px solid var(--border); }
+.interface-forwarding-impact-section > header h3 { margin: 0 0 4px; font-size: 0.96rem; }
+.interface-forwarding-impact-section > header p { margin: 0; color: var(--muted); font-size: 0.78rem; }
+.interface-forwarding-impact-section > header > span { flex: none; color: var(--muted); font-size: 0.75rem; }
+.interface-forwarding-impact-section ul { display: grid; gap: 1px; margin: 0; padding: 0; background: var(--border); list-style: none; }
+.interface-forwarding-impact-section li { min-width: 0; padding: 13px 14px; background: var(--surface); }
+.interface-forwarding-impact-section li > div { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.interface-forwarding-impact-section li > div > code { overflow-wrap: anywhere; color: var(--text); }
+.interface-forwarding-impact-section li p { margin: 7px 0 4px; color: var(--muted); font-size: 0.75rem; }
+.interface-forwarding-effect-badge { display: inline-flex; flex: none; border-radius: 6px; padding: 3px 7px; color: var(--accent); background: var(--accent-soft); font-size: 0.7rem; font-weight: 700; }
+.interface-forwarding-effect-badge--delete,
+.interface-forwarding-effect-badge--soft_delete { color: var(--danger); background: var(--danger-soft); }
+.interface-forwarding-impact-source { display: block; overflow: hidden; color: var(--muted); font-size: 0.72rem; text-overflow: ellipsis; white-space: nowrap; }
+.interface-forwarding-impact-empty { padding: 24px 14px; color: var(--muted); text-align: center; }
 .interface-forwarding-detail-schemas { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .interface-forwarding-detail-schemas details { min-width: 0; border: 1px solid var(--border); border-radius: 12px; }
 .interface-forwarding-detail-schemas summary { padding: 13px 14px; cursor: pointer; font-weight: 650; }
 .interface-forwarding-detail-schemas .interface-forwarding-schema { border: 0; border-top: 1px solid var(--border); border-radius: 0 0 12px 12px; }
 .interface-forwarding-detail-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
+.interface-semantics-editor { display: grid; gap: 18px; }
+.interface-semantics-editor-heading { display: flex; gap: 16px; align-items: flex-start; justify-content: space-between; }
+.interface-semantics-editor-heading h3,
+.interface-semantics-editor-heading p,
+.interface-semantics-editor-heading > span { flex: none; border-radius: 999px; padding: 4px 9px; color: var(--accent); background: var(--accent-soft); font-size: 0.72rem; font-weight: 700; }
 .interface-forwarding-modal > footer .danger-text-button { margin-right: auto; }
+
 .interface-forwarding-manager-grid { display: grid; grid-template-columns: minmax(260px, 0.8fr) minmax(360px, 1.2fr); gap: 24px; }
 .interface-forwarding-manager-grid form { display: grid; align-content: start; gap: 14px; }
 .interface-forwarding-manager-grid label { display: grid; gap: 7px; color: var(--muted); font-size: 0.8rem; font-weight: 650; }
@@ -875,6 +901,7 @@ p {
   .interface-forwarding-editors,
   .interface-forwarding-detail-schemas { grid-template-columns: 1fr; }
   .interface-forwarding-config-layout { min-height: 0; }
+  .interface-semantics-editor-heading { flex-direction: column; }
   .interface-forwarding-environment-list { max-height: 230px; overflow: auto; }
   .interface-forwarding-table-wrap th,
   .interface-forwarding-table-wrap td { padding: 12px 10px; }

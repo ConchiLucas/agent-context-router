@@ -818,10 +818,11 @@ export interface McpToolsListResult {
 }
 
 export interface McpClientConfig {
-  client: "codex" | "gemini" | "antigravity";
+  client: "codex" | "gemini" | "antigravity" | "cursor" | "grok";
   title: string;
   config_path: string;
   project_config_path?: string;
+  setup_kind: "file" | "command";
   config: string;
 }
 
@@ -1041,11 +1042,13 @@ export type AiTaskVisualizationStatus =
   | "unclosed";
 
 export type AiTaskIntentType =
+  | "interface_discovery"
   | "interface_execute"
   | "data_query"
   | "task_execute"
   | "bug_investigate"
-  | "bug_fix";
+  | "bug_fix"
+  | "code_change";
 
 export type AiTaskIntentSource =
   | "agent_declared"
@@ -1462,11 +1465,47 @@ export interface InterfaceForwardingInterface {
   description: string;
   controller_name: string;
   controller_description: string;
+  operation_id: string;
+  operation_kind: "read" | "write" | "destructive" | "unknown";
+  crud_type: "create" | "read" | "update" | "delete" | "unknown";
+  business_entity: string | null;
+  business_action: string | null;
+  business_scenario: string | null;
+  aliases: string[] | null;
+  positive_examples: string[] | null;
+  negative_examples: string[] | null;
+  intent_source: "generated" | "manual" | null;
+  intent_confidence: number | null;
+  table_effects: InterfaceForwardingTableEffect[];
   request_schema: Record<string, unknown>;
   response_schema: Record<string, unknown>;
   created_at: string;
   updated_at: string;
   last_requested_at: string | null;
+}
+
+export interface InterfaceSemanticsWrite {
+  business_entity: string;
+  business_action: string;
+  business_scenario: string;
+  crud_type: InterfaceForwardingInterface["crud_type"];
+  aliases: string[];
+  positive_examples: string[];
+  negative_examples: string[];
+}
+
+export interface InterfaceForwardingTableEffect {
+  database_key: string;
+  schema_name: string;
+  table_name: string;
+  effect_type: "select" | "insert" | "update" | "delete" | "soft_delete" | "upsert";
+  response_contribution: "returned" | "filter_only" | "internal_only" | "unknown" | "none";
+  source_file: string;
+  source_class: string;
+  source_method: string;
+  call_path: string[];
+  evidence_type: string;
+  confidence: number;
 }
 
 export interface InterfaceForwardingService {
@@ -1537,6 +1576,16 @@ export interface InterfaceForwardingLog {
   status_code: number | null;
   success: boolean;
   duration_ms: number;
+  intent_match_score: number;
+  intent_match_evidence: {
+    match_reasons?: string[];
+    mismatches?: string[];
+  };
+  validation_status: "passed" | "warning" | "failed" | "not_configured";
+  validation_result: {
+    checks?: Record<string, { status?: string; message?: string }>;
+    warnings?: string[];
+  };
   created_at: string;
 }
 

@@ -10,7 +10,14 @@ import type {
   WorkspaceSummary,
 } from "@/lib/types";
 
-type IntegrationTab = "connection" | "codex" | "gemini" | "antigravity" | "test";
+type IntegrationTab =
+  | "connection"
+  | "codex"
+  | "gemini"
+  | "antigravity"
+  | "cursor"
+  | "grok"
+  | "test";
 
 interface McpIntegrationPanelProps {
   workspace: WorkspaceSummary;
@@ -22,6 +29,8 @@ const tabs: Array<{ id: IntegrationTab; label: string }> = [
   { id: "codex", label: "Codex" },
   { id: "gemini", label: "Gemini" },
   { id: "antigravity", label: "Antigravity" },
+  { id: "cursor", label: "Cursor" },
+  { id: "grok", label: "Grok" },
   { id: "test", label: "连接测试" },
 ];
 
@@ -35,12 +44,13 @@ function ClientConfigGuide({
   onCopy: (value: string, key: string) => void;
 }) {
   if (!client) return <p className="empty-message">配置模板尚未加载。</p>;
+  const isCommand = client.setup_kind === "command";
 
   return (
     <section className="integration-guide">
       <div className="integration-guide-copy">
         <span className="file-chip">{client.title}</span>
-        <h3>添加一个全局 MCP 服务</h3>
+        <h3>{isCommand ? "运行 MCP 配置命令" : "添加一个全局 MCP 服务"}</h3>
         <p>
           全局配置文件：<code>{client.config_path}</code>
         </p>
@@ -56,7 +66,7 @@ function ClientConfigGuide({
           className="secondary-button integration-copy-button"
           onClick={() => onCopy(client.config, `${client.client}-config`)}
         >
-          {copied ? "已复制" : "复制配置"}
+          {copied ? "已复制" : isCommand ? "复制命令" : "复制配置"}
         </button>
         <pre>
           <code>{client.config}</code>
@@ -65,9 +75,11 @@ function ClientConfigGuide({
       <div className="integration-note">
         <strong>接入后怎么用</strong>
         <p>
-          新任务先调用 <code>prepare_task_context</code> 获取文档树、task_id 和工作空间可用数据库别名；
-          文档目标不明确时先调用 <code>search_context_documents</code>，
-          再按需读取选中的文档或章节；数据库仍按对象搜索、有界只读查询的顺序使用。
+          新任务先调用 <code>prepare_task_context</code> 获取 task_id 和文档导航。
+          文档链路直接调用 <code>search_context_documents</code> 和
+          <code> read_context_document</code>；数据库、接口、日志和映射等专业能力优先复用
+          recommended_actions，缺少动作时再执行
+          <code> discover_task_tools → invoke_task_tool</code>。
           没有匹配工作空间时，客户端继续使用普通源码检索。
         </p>
       </div>
@@ -135,6 +147,8 @@ export function McpIntegrationPanel({
   const antigravity = info?.clients.find(
     (client) => client.client === "antigravity",
   );
+  const cursor = info?.clients.find((client) => client.client === "cursor");
+  const grok = info?.clients.find((client) => client.client === "grok");
   const databaseToolsAvailable = Boolean(
     info?.tools.some((tool) => tool.name === "search_database_objects") &&
       info.tools.some((tool) => tool.name === "execute_database_query"),
@@ -249,11 +263,11 @@ export function McpIntegrationPanel({
                   </article>
                 ))}
                 <div className="integration-note">
-                  <strong>数据库可用性</strong>
+                  <strong>核心工具与专业动作</strong>
                   <p>
-                    工具列表固定不随数据源变化；当前任务真正可用的数据库，以
-                    <code> prepare_task_context </code>
-                    返回的 databases 列表为准。
+                    prepare、文档搜索和文档读取是核心直连工具，不经过统一调用入口；
+                    discover 只返回专业动作，invoke 必须复制动作的 tool_name 和
+                    definition_revision。数据库目标统一由当前 task 解析，客户端不传数据库别名。
                   </p>
                 </div>
               </section>
@@ -284,6 +298,22 @@ export function McpIntegrationPanel({
             />
           ) : null}
 
+          {!loading && info && tab === "cursor" ? (
+            <ClientConfigGuide
+              client={cursor}
+              copied={copiedKey === "cursor-config"}
+              onCopy={copy}
+            />
+          ) : null}
+
+          {!loading && info && tab === "grok" ? (
+            <ClientConfigGuide
+              client={grok}
+              copied={copiedKey === "grok-config"}
+              onCopy={copy}
+            />
+          ) : null}
+
           {!loading && info && tab === "test" ? (
             <div className="integration-test">
               <section className="integration-test-controls">
@@ -291,7 +321,8 @@ export function McpIntegrationPanel({
                   <span className="file-chip">端到端验证</span>
                   <h3>对当前工作空间执行真实 MCP 调用</h3>
                   <p>
-                    测试会创建一条隐藏的 connection-test 任务并读取入口文档，不返回正文，也不会执行任何业务数据库查询。
+                    测试会创建一条隐藏的 connection-test 任务，验证核心文档链路以及
+                    discover → invoke 专业动作链路；不会执行任何业务数据库查询。
                   </p>
                 </div>
                 <div className="integration-test-workspace">

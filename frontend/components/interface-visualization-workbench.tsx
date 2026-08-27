@@ -28,7 +28,10 @@ interface EvidenceRow {
 function sourceLabel(source: string): string {
   return {
     codex: "Codex",
+    gemini: "Gemini",
     antigravity: "Antigravity",
+    cursor: "Cursor",
+    grok: "Grok",
     agent: "本机 Agent",
     manual: "手动测试",
   }[source.toLowerCase()] ?? source;
@@ -150,7 +153,7 @@ export function InterfaceVisualizationWorkbench({
         <div>
           <p className="eyebrow">AI VISUALIZATION / INTERFACE</p>
           <h1 id="interface-visualization-title">接口可视化</h1>
-          <p>展示 Codex、Antigravity 和手动测试实际执行的接口请求，最新请求优先。</p>
+          <p>展示 AI 工具和手动测试实际执行的接口请求，最新请求优先。</p>
         </div>
         <button type="button" className="secondary-button" disabled={loading} onClick={() => void refresh()}>
           {loading ? "正在刷新…" : "刷新列表"}
@@ -193,7 +196,7 @@ export function InterfaceVisualizationWorkbench({
           {!loading && !error && items.length === 0 ? (
             <div className="interface-visualization-state">
               <strong>暂无接口请求</strong>
-              <span>Codex、Antigravity 或手动测试完成请求后会显示在这里。</span>
+              <span>AI 工具或手动测试完成请求后会显示在这里。</span>
             </div>
           ) : null}
           {items.map((item) => (

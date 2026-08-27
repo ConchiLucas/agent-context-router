@@ -1,8 +1,10 @@
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
 
+from context_router.database.models import Column, EffectiveQueryPolicy, QueryResult
 from context_router.schemas.value_mapping import ValueMappingWrite
 from context_router.services.value_mapping import ValueMappingError, ValueMappingService
 
@@ -128,6 +130,86 @@ def test_mapping_source_rejects_ambiguous_empty_postgres_schema() -> None:
         service.source_for_task("mapping-1", task_id=9)
 
     assert exc_info.value.code == "mapping_schema_unresolved"
+
+
+def test_records_sql_uses_selected_values_and_mapping_filters() -> None:
+    sql = ValueMappingService._records_sql(
+        _mapping(),
+        engine="mysql",
+        values=["SHIPPER-2", "SHIPPER-1"],
+        limit=2,
+    )
+
+    assert sql == (
+        "SELECT * FROM `member_shipper` WHERE "
+        "`id` IN ('SHIPPER-2', 'SHIPPER-1') AND `status` = 1 LIMIT 2"
+    )
+
+
+def test_records_sql_rejects_empty_candidate_values() -> None:
+    with pytest.raises(ValueMappingError, match="缺少候选值") as exc_info:
+        ValueMappingService._records_sql(
+            _mapping(),
+            engine="mysql",
+            values=[],
+            limit=1,
+        )
+
+    assert exc_info.value.code == "candidate_required"
+
+
+def test_selected_records_are_returned_as_named_objects() -> None:
+    class Connector:
+        def execute_query(self, sql: str, _policy: object) -> QueryResult:
+            assert "`id` IN ('SHIPPER-2', 'SHIPPER-1')" in sql
+            return QueryResult(
+                columns=(Column(name="id", type="varchar"), Column(name="name", type="varchar")),
+                rows=(("SHIPPER-1", "甲"), ("SHIPPER-2", "乙")),
+                elapsed_ms=8,
+            )
+
+    class ConnectorManager:
+        @contextmanager
+        def lease(self, _spec: object):
+            yield Connector()
+
+    class SqlPolicy:
+        def validate(self, sql: str, _context: object) -> SimpleNamespace:
+            return SimpleNamespace(sql=sql)
+
+    service = ValueMappingService(
+        database_url=None,
+        database_access_service=object(),  # type: ignore[arg-type]
+        connector_manager=ConnectorManager(),  # type: ignore[arg-type]
+        sql_policy=SqlPolicy(),  # type: ignore[arg-type]
+        task_repository=_TaskRepository(),  # type: ignore[arg-type]
+    )
+    access = SimpleNamespace(
+        database=SimpleNamespace(engine="mysql"),
+        spec=object(),
+        policy=EffectiveQueryPolicy(
+            engine="mysql",
+            current_database="app",
+            readonly=True,
+            allowed_schemas=(),
+            max_rows=10,
+            max_result_bytes=10_000,
+            query_timeout_ms=1_000,
+        ),
+    )
+
+    records, metadata = service._execute_selected_records(
+        _mapping(),
+        access=access,
+        candidates=[{"value": "SHIPPER-2"}, {"value": "SHIPPER-1"}],
+    )
+
+    assert records == [
+        {"id": "SHIPPER-2", "name": "乙"},
+        {"id": "SHIPPER-1", "name": "甲"},
+    ]
+    assert metadata["record_count"] == 2
+    assert metadata["record_columns"] == ["id", "name"]
 
 
 def test_mcp_mapping_filters_exact_interface_parameter_and_bounds_bindings() -> None:

@@ -15,6 +15,28 @@ class InterfaceForwardingNamedWrite(BaseModel):
     name: str = Field(min_length=1, max_length=160)
 
 
+class InterfaceSemanticsWrite(BaseModel):
+    business_entity: str = Field(default="", max_length=240)
+    business_action: str = Field(default="", max_length=240)
+    business_scenario: str = Field(default="", max_length=1000)
+    crud_type: Literal["create", "read", "update", "delete", "unknown"]
+    aliases: list[str] = Field(default_factory=list, max_length=50)
+    positive_examples: list[str] = Field(default_factory=list, max_length=30)
+    negative_examples: list[str] = Field(default_factory=list, max_length=30)
+
+    @field_validator("business_entity", "business_action", "business_scenario")
+    @classmethod
+    def trim_semantic_text(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("aliases", "positive_examples", "negative_examples")
+    @classmethod
+    def normalize_examples(cls, values: list[str]) -> list[str]:
+        normalized = [value.strip() for value in values if value.strip()]
+        if any(len(value) > 240 for value in normalized):
+            raise ValueError("业务语义条目不能超过 240 个字符")
+        return list(dict.fromkeys(normalized))
+
 class InterfaceForwardingEnvironmentWrite(BaseModel):
     workspace_id: str
     environment_key: str = Field(min_length=1, max_length=32)

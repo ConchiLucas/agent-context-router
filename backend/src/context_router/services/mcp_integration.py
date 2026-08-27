@@ -16,6 +16,8 @@ from context_router.config import Settings
 from context_router.mcp_server import (
     APPLY_WORKSPACE_TOOL_DESCRIPTION,
     APPLY_WORKSPACE_TOOL_NAME,
+    DISCOVER_TASK_TOOLS_TOOL_DESCRIPTION,
+    DISCOVER_TASK_TOOLS_TOOL_NAME,
     EXECUTE_DATABASE_TOOL_DESCRIPTION,
     EXECUTE_DATABASE_TOOL_NAME,
     EXECUTE_FORWARDING_REQUEST_TOOL_DESCRIPTION,
@@ -26,6 +28,8 @@ from context_router.mcp_server import (
     GET_WORKSPACE_OPERATION_TOOL_NAME,
     INSPECT_CONTAINER_ERRORS_TOOL_DESCRIPTION,
     INSPECT_CONTAINER_ERRORS_TOOL_NAME,
+    INVOKE_TASK_TOOL_DESCRIPTION,
+    INVOKE_TASK_TOOL_NAME,
     LIST_TASK_CONTAINERS_TOOL_DESCRIPTION,
     LIST_TASK_CONTAINERS_TOOL_NAME,
     MCP_SERVER_NAME,
@@ -182,6 +186,14 @@ class McpIntegrationService:
                     description=EXECUTE_FORWARDING_REQUEST_TOOL_DESCRIPTION,
                 ),
                 McpToolInfo(
+                    name=DISCOVER_TASK_TOOLS_TOOL_NAME,
+                    description=DISCOVER_TASK_TOOLS_TOOL_DESCRIPTION,
+                ),
+                McpToolInfo(
+                    name=INVOKE_TASK_TOOL_NAME,
+                    description=INVOKE_TASK_TOOL_DESCRIPTION,
+                ),
+                McpToolInfo(
                     name=APPLY_WORKSPACE_TOOL_NAME,
                     description=APPLY_WORKSPACE_TOOL_DESCRIPTION,
                 ),
@@ -226,20 +238,43 @@ class McpIntegrationService:
                 ),
                 McpClientConfig(
                     client="antigravity",
-                    title="Antigravity",
-                    config_path="~/.gemini/config/mcp_config.json",
-                    project_config_path=".agents/mcp_config.json",
+                    title="Antigravity CLI",
+                    config_path="agy mcp list",
+                    setup_kind="command",
+                    config=(
+                        "agy mcp add --type http "
+                        '--header "X-Agent-Name: antigravity" '
+                        f'context_router "{public_url}"'
+                    ),
+                ),
+                McpClientConfig(
+                    client="cursor",
+                    title="Cursor Agent",
+                    config_path="~/.cursor/mcp.json",
+                    project_config_path=".cursor/mcp.json",
                     config=json.dumps(
                         {
                             "mcpServers": {
-                                "context-router": {
-                                    "serverUrl": public_url,
-                                    "headers": {"X-Agent-Name": "antigravity"},
+                                "context_router": {
+                                    "url": public_url,
+                                    "headers": {"X-Agent-Name": "cursor"},
                                 }
                             }
                         },
                         ensure_ascii=False,
                         indent=2,
+                    ),
+                ),
+                McpClientConfig(
+                    client="grok",
+                    title="Grok CLI",
+                    config_path="~/.grok/config.toml",
+                    project_config_path=".grok/config.toml",
+                    setup_kind="command",
+                    config=(
+                        "grok mcp add --transport http --scope user "
+                        '--header "X-Agent-Name: grok" '
+                        f'context_router "{public_url}"'
                     ),
                 ),
             ],
@@ -264,6 +299,8 @@ class McpIntegrationService:
             ("prepare", "prepare_task_context"),
             ("search", "search_context_documents"),
             ("read", "read_context_document"),
+            ("discover", "discover_task_tools"),
+            ("invoke", "invoke_task_tool"),
         ]
 
         async def add_stage(key: str, label: str, action: StageAction) -> str:
@@ -368,6 +405,8 @@ class McpIntegrationService:
                                     "task": TEST_TASK_NAME,
                                     "cwd": snapshot.root_path,
                                     "agent_name": TEST_AGENT_NAME,
+                                    "intent_type": "code_change",
+                                    "capability_hints": ["context"],
                                 },
                             )
                             payload = self._tool_payload(result)
@@ -442,6 +481,78 @@ class McpIntegrationService:
                             )
 
                         await add_stage("read", READ_TOOL_NAME, read_document)
+
+                        action_holder: dict[str, Any] = {}
+
+                        async def discover_professional_action() -> str:
+                            result = await session.call_tool(
+                                DISCOVER_TASK_TOOLS_TOOL_NAME,
+                                arguments={
+                                    "task_id": task_id,
+                                    "query": "read_task_context 读取任务数据库摘要",
+                                    "capability_hints": ["database"],
+                                    "limit": 5,
+                                },
+                            )
+                            payload = self._tool_payload(result)
+                            actions = payload.get("actions")
+                            if not isinstance(actions, list):
+                                raise McpIntegrationError("discover 未返回专业动作列表")
+                            action = next(
+                                (
+                                    item
+                                    for item in actions
+                                    if isinstance(item, dict)
+                                    and item.get("name") == READ_TASK_CONTEXT_TOOL_NAME
+                                ),
+                                None,
+                            )
+                            if action is None:
+                                raise McpIntegrationError(
+                                    "discover 未命中 read_task_context 专业动作"
+                                )
+                            revision = action.get("definition_revision")
+                            if not isinstance(revision, str) or len(revision) != 64:
+                                raise McpIntegrationError("discover 未返回有效 definition_revision")
+                            action_holder["definition_revision"] = revision
+                            return "已发现 read_task_context，并取得不可变工具定义版本"
+
+                        await add_stage(
+                            "discover",
+                            DISCOVER_TASK_TOOLS_TOOL_NAME,
+                            discover_professional_action,
+                        )
+
+                        async def invoke_professional_action() -> str:
+                            result = await session.call_tool(
+                                INVOKE_TASK_TOOL_NAME,
+                                arguments={
+                                    "task_id": task_id,
+                                    "tool_name": READ_TASK_CONTEXT_TOOL_NAME,
+                                    "arguments": {"sections": ["databases"]},
+                                    "definition_revision": action_holder[
+                                        "definition_revision"
+                                    ],
+                                },
+                            )
+                            payload = self._tool_payload(result)
+                            if payload.get("status") != "succeeded":
+                                raise McpIntegrationError("invoke 未成功执行专业动作")
+                            if payload.get("tool_name") != READ_TASK_CONTEXT_TOOL_NAME:
+                                raise McpIntegrationError("invoke 返回了错误的专业动作名称")
+                            action_result = payload.get("result")
+                            if not isinstance(action_result, dict):
+                                raise McpIntegrationError("invoke 未返回专业动作结果")
+                            databases = action_result.get("databases", [])
+                            if not isinstance(databases, list):
+                                raise McpIntegrationError("read_task_context 数据库摘要格式错误")
+                            return f"统一入口执行成功（{len(databases)} 个数据库摘要）"
+
+                        await add_stage(
+                            "invoke",
+                            INVOKE_TASK_TOOL_NAME,
+                            invoke_professional_action,
+                        )
         except Exception as exc:
             completed_keys = {stage.key for stage in stages}
             if not any(stage.status == "failed" for stage in stages):

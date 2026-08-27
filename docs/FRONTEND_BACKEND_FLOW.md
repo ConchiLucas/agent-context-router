@@ -143,7 +143,7 @@ Codex / Antigravity
 
 `prepare_forwarding_request` 先解析转发配置。显式 `address_id`、`login_account`、`role_name` 优先；省略时在当前接口、task 环境和仍存在的候选中选择最近成功日志的地址与身份；没有成功记录但仅有一个候选时自动选择；其余情况返回 `needs_selection`。显式账号或角色会先排除不包含该身份的地址。`selection_evidence` 分别记录地址和身份来自 `caller`、`successful_history` 或 `single_candidate`；调用摘要只记录来源，不记录登录请求头。配置确定后，再按同接口、同环境、同转发地址、同身份选择最近一条成功日志，并在合并前移除验证码、临时令牌、时间戳等易失字段，把历史页码重置为 1、历史分页大小限制到 20。默认 `value_strategy=reuse_successful`，不会因为存在映射就查询业务数据库。用户要求更换指定业务值时使用 `refresh_selected + refresh_value_keys`；要求所有业务值重新造数时使用 `refresh_mapped`；明确拒绝历史时才使用 `ignore_history`。刷新只处理当前接口的精确参数绑定，先移除对应历史值，再从最多 10 个候选中稳定选择一个与旧值不同的值；调用方显式值最后覆盖且会跳过该字段的映射查询。返回的 `parameter_evidence` 标记 `caller`、`successful_history`、`value_mapping`、Schema 默认/示例或安全分页默认，`value_resolutions` 说明哪些映射被刷新或由 caller 覆盖；无法安全刷新时返回 `needs_value_resolution`，不生成计划。
 
-业务值取值链路既可由 AI 调用 `search_value_mappings -> execute_mapped_data_query` 原子完成查询和数据可视化落库，也可由 `prepare_forwarding_request` 在刷新策略下按接口绑定自动完成。搜索工具只读取当前 task Workspace 的已发布映射；原子工具不接收环境、SQL、连接信息或任意数据源，只执行映射中保存的受限规则并继承 task 环境，结果最多 10 条。`resolve_value_candidates` 保留给接口组参等只需候选、不需要创建数据可视化的场景。
+业务值取值链路既可由 AI 调用 `search_value_mappings -> execute_mapped_data_query` 原子完成查询和数据可视化落库，也可由 `prepare_forwarding_request` 在刷新策略下按接口绑定自动完成。搜索工具只读取当前 task Workspace 的已发布映射；原子工具不接收环境、SQL、连接信息或任意数据源，只执行映射中保存的受限规则并继承 task 环境，结果最多 10 条。`include_record=true` 默认按映射已经确定的表和值字段读取命中记录，成功的主数据查询返回 `goal_completed=true`、禁止继续调用的工具和唯一终态动作，客户端不再解析数据库、猜测字段或二次保存。`resolve_value_candidates` 保留给接口组参等只需候选、不需要创建数据可视化的场景。
 
 ```text
 Codex / Antigravity
@@ -160,7 +160,7 @@ Codex / Antigravity
 
 `mcp_tool_calls.id` 由 PostgreSQL Identity 生成，任务内展示顺序由后端按该 ID 计算，不依赖客户端 sequence、前端时间戳拼接或任务锁。旧文档/数据库调用由 migration 恢复为 `legacy` 节点，因此升级后仍可查看历史记录。后端启动时会把上次进程遗留的内部 `running` 调用收敛为 `error/server_restarted`，避免页面永久显示运行中。
 
-这条链路的边界固定在 Context Router 自身：只有进入 `/mcp` 并由 `ContextRouterMCP` 分发的 22 个当前工具会被记录，三个已下线工具的既有历史继续保留。客户端对 GitHub、浏览器或其他 MCP Server 的直连请求不会经过本服务，也不会通过客户端上报补录；链路页面不尝试呈现跨 Server 调用。
+这条链路的边界固定在 Context Router 自身：只有进入 `/mcp` 并由 `ContextRouterMCP` 分发的 27 个当前工具会被记录，三个已下线工具的既有历史继续保留。客户端对 GitHub、浏览器或其他 MCP Server 的直连请求不会经过本服务，也不会通过客户端上报补录；链路页面不尝试呈现跨 Server 调用。
 
 prepare 和文档搜索不建立业务数据库连接。业务数据库离线时，`/health`、文档 prepare/search/read 仍可工作；MCP 链路只有实际对象搜索或查询会尝试连接，浏览器连接测试以及 AI/运维触发的数据库同步才会显式连接。
 
@@ -193,7 +193,7 @@ prepare 和文档搜索不建立业务数据库连接。业务数据库离线时
 | 加载表关联版本与表清单 | `table-relation-explorer.tsx`、`table-relations.ts` | `GET /api/workspaces/{id}/table-relations/status`、`GET /api/workspaces/{id}/table-relations/tables` |
 | 查看单表关联 | `table-relation-detail.tsx`、`table-relation-edge-row.tsx` | `GET /api/workspaces/{id}/table-relations/table` |
 | 按关联字段关键词查看一层关联记录 | `relation-record-explorer.tsx` | 安全只读 `POST /api/workspaces/{id}/relation-records/search` |
-| 管理并测试接口转发 | `interface-forwarding-manager.tsx` | 浏览器使用 `GET /api/interface-forwarding/overview` 只读展示 Workspace 环境下“接口服务 + 具名基础 URL”映射及每个地址的登录账号、角色标识和请求头；overview 聚合接口最近请求时间，有请求记录的接口优先按时间倒序，未请求接口按路径和请求方式稳定排序；前端对当前服务或全部接口的实际展示集合复用同一排序；写入接口保留给 AI/运维调用；execute 同时校验接口与地址的服务归属，测试下拉只显示同服务地址；MCP 执行优先经 Host Runner 单次租约访问宿主机 VPN 网络并统一落日志；接口 state/logs/schema |
+| 管理并测试接口转发 | `interface-forwarding-manager.tsx` | `GET /api/interface-forwarding/overview` 展示 Workspace 环境下“接口服务 + 具名基础 URL”映射；overview 聚合最近请求时间、业务语义、CRUD 和表影响。接口详情的显式语义配置仅用于可选纠偏，不是执行前确认步骤。MCP `search_forwarding_interfaces` 返回 `search_event_id`、分项得分和匹配依据并写入候选排序，明确 CRUD 冲突硬降权。`prepare_forwarding_request` 自动绑定最终选择，优先复用最新有效成功地址和身份，只有一个当前候选时自动选择；`execute_forwarding_request` 回写真实执行日志和结果。execute 仍校验接口与地址服务归属，优先经 Host Runner 访问宿主机 VPN并统一落日志。 |
 | 查看与使用业务值映射 | `value-mapping-manager.tsx` | 页面通过 `GET /api/value-mappings/overview` 只读展示；AI/运维接口保留结构化规则维护和预览；数据查询与接口参数都优先使用 `search_value_mappings` 定位已发布规则，再由 `resolve_value_candidates` 按 task 环境执行最多 10 条的服务端生成只读查询；无接口范围时不展开绑定明细，随机选择只在有界候选池内执行 |
 | 数据查询映射短链路 | `task_intent.py`、`mcp_server.py` | `prepare_task_context -> search_value_mappings -> resolve_value_candidates` 不需要先读数据库列表；成功 MCP 响应统一返回 `tool_call_id`，候选解析同时返回可直接复制的 `next_action.arguments`。解析显示字段足够时直接据此调用 `save_data_visualization_query`，由服务端补齐目标并继承成功调用摘要，跳过 Schema、表关系和原始 SQL。只有映射未命中或确需映射未提供的完整字段时才进入数据库探索。随机请求固定传 `selection=random` 和准确 `limit`，禁止映射解析后再用 `ORDER BY RAND()` 重复取值 |
 | 查看单表插入入口 | `table-relation-write-modal.tsx` | `GET /api/workspaces/{id}/table-relations/table/writes` |
@@ -232,6 +232,23 @@ api/table_relations.py
   -> schemas/table_relations.py
 ```
 
+接口转发的语义检索与表影响链路：
+
+```text
+Swagger/OpenAPI 导入
+  -> interface_forwarding_interfaces.operation_id / crud_type
+源码核对种子 / seed_order_api_semantics.py（order / line / basic / highway / railway / shipping / settlement 模块）
+  -> interface_semantics.py 扫描对应模块 Controller -> Service -> DAO
+  -> 解析 sql-ext SQL 的 from / join / insert / update / delete 表
+  -> interface_forwarding_intent_profiles
+  -> interface_forwarding_table_effects
+接口管理概览 / MCP search_forwarding_interfaces
+  -> 业务对象、动作、场景、正负示例、CRUD 和列表/详情形态参与结构化评分
+  -> 返回匹配分数、原因、冲突和终态 next_action
+  -> 歧义候选由 read_forwarding_interface_detail 展开请求/响应合同与影响表
+  -> 按 CRUD 类型投影本次接口可见的查询或写入表
+```
+
 - `BrowserReadOnlyMiddleware` 根据任意 `Origin` 或浏览器 Fetch Metadata 拦截配置写请求；`frontend/lib/browser-api-policy.ts` 在请求发出前执行同一策略。双层限制只额外开放 `PUT /api/system-guides/{id}/content`，环境与其他 Workspace 配置完整 CRUD 只供本机 AI/运维。
 - `WorkspaceManagementService` 继续为本机 AI/运维编排受校验的工作空间 CRUD、工作空间内项目 CRUD、刷新和数据源汇总；`workspace_repository.py` 持久化工作空间根目录、类型和总开关。
 - `project_repository.py` 持久化稳定项目 ID、`workspace_id`、`frontend/backend` 的 `project_kind`、工作空间内分别唯一的源码 `relative_path`、文档入口 `document_relative_path` 和兼容字段；`document_projects` 不再有 enabled。后端启动时从独立文档入口重建缓存，路径失效项目保留配置和错误。
@@ -266,8 +283,8 @@ api/table_relations.py
 - `local_workspace_mapping.py` 读取项目本机 YAML，按 Workspace ID 决定卡片显示、主目录和 reader 目录。`project_registry.py` 以主目录构建唯一文档缓存；reader cwd 返回 `documents_only` 快照，数据库与运行服务按 task.cwd 再次拒绝越权。
 - `workspace_shared_files.py` 扫描主目录 `docs/` 和固定 deploy 目录；`workspace_shared_file_repository.py` 在同一 PostgreSQL 事务中替换源文件副本及 Workspace/Project 运行配置。恢复操作只删除并重建主目录对应的 docs/deploy 目录。
 - `runtime_runner.py` 暴露只允许 Bearer Token 且拒绝浏览器请求的注册、心跳、领取租约和完成回报协议；`scripts/context_router_host_runner.py` 是宿主机执行器。普通部署步骤只执行物化快照；`host_action` 只接受控制面和 Runner 两端共同登记的动作白名单，并把未指定环境固定为 `local`。攀枝花开机保障动作只能调用 `/Users/conchi/script/ensure-panzhihua-host-runtime.sh`，不能执行任意路径或任意命令。
-- `mcp_server.py` 固定注册 22 个上下文、数据库、中间件、表关联、值映射、数据与任务可视化收件、接口转发、容器日志和 Workspace 运行工具，并挂载到 `/mcp`。项目、数据源、中间件或容器变化不会改变工具名。
-- `mcp_server.py` 使用统一工具分发埋点记录全部 22 个当前工具；观测持久化失败只降低链路可见性，不改变 MCP 工具原始成功或失败结果。中间件调用摘要只记录数量与开关，不记录返回内容；Trace 查询仍识别三个已下线工具，以展示历史调用。
+- `mcp_server.py` 固定注册 27 个上下文、数据库、中间件、表关联、值映射、数据与任务可视化收件、接口搜索/详情/转发、容器日志和 Workspace 运行工具，并挂载到 `/mcp`。项目、数据源、中间件或容器变化不会改变工具名。
+- `mcp_server.py` 使用统一工具分发埋点记录全部 27 个当前工具；观测持久化失败只降低链路可见性，不改变 MCP 工具原始成功或失败结果。中间件调用摘要只记录数量与开关，不记录返回内容；Trace 查询仍识别三个已下线工具，以展示历史调用。
 - `mcp_tool_call_repository.py` 保存通用工具调用和任务链路摘要；文档与数据库 Repository 继续保存各自明细，并通过可空唯一 `tool_call_id` 关联。
 - `api/mcp_traces.py` 返回全局任务链路列表和单任务统一调用详情；列表支持项目、Agent、固定内部工具、调用状态和关键词的服务端过滤。普通 task 即使没有成功落下内部调用节点也能显示，`web-preview` 与 `connection-test` 系统任务除外。API 已把文档、数据库明细转换为同一 `artifacts` 数组，并返回 `complete / running / partial` 完整性状态与稳定 warning code；主详情只包含 payload 的 available/status/reason，完整 JSON 由带 `Cache-Control: no-store` 的归属校验接口懒加载。
 - `mcp_integration.py` 生成客户端配置，并接收 `workspace_id`，以 MCP Python Client 对后端自身执行 initialize、tools/list、Workspace 匹配、prepare、search 和 read，不绕过协议直接调用 service。
@@ -330,9 +347,9 @@ Workspace 调用记录通过 `task-history.ts` 保留文档读取批次和单批
 
 数据可视化页不复用关联数据页的 React 状态，只复用表清单和有界查询 API。`save_data_visualization_query` 从已验证 task 补全 Workspace、动态环境、来源和 tool call 关联；映射的 `schema_name` 为空时，`ValueMappingService` 只从任务环境解析出的数据库命名空间或唯一允许 Schema 补全，不能唯一确定时明确失败。`AiDataVisualizationService` 继续校验已发布关联表并按 task 条件生成稳定幂等键。关联查询携带 `ai_query_record_id`，完成后回写成功/失败、耗时、结果规模和短错误摘要；浏览器写入仍由 `BrowserReadOnlyMiddleware` 拒绝。四个可视化页面使用 task 筛选互相跳转，不共享数据管理页面状态。
 
-任务可视化页不建立第二套任务状态机。`AiTaskVisualizationService` 直接以 `mcp_tasks.id` 聚合最近 30 天的统一工具调用、数据查询、接口转发日志和容器错误快照；详情接口同时把真实计数归一为 MCP、数据、接口、日志和结论五项链路健康状态。数据查询区分 pending/succeeded/failed，接口区分全部成功、部分失败和全部失败，未产生记录统一标记为 `unused` 而不是故障；已解决任务中的历史失败调用标为 `attention` 并说明已经恢复。`save_task_visualization_result` 的 `resolved` 路径只接受 `verification_call_ids` 校验并引用同一 task 的成功调用，服务端生成验证项，不向 MCP 客户端暴露手写 verification 对象。Trace 对常见参数错误保存缺失字段、非法字段和允许值，不保存敏感原文。列表、详情和最新在前的时间线均只读，关联按钮只在对应记录存在时显示，并带同一个 task_id 进入其他可视化页面。
+任务可视化页不建立第二套任务状态机。`AiTaskVisualizationService` 直接以 `mcp_tasks.id` 聚合最近 30 天的统一工具调用、数据查询、接口转发日志和容器错误快照；详情接口同时把真实计数归一为 MCP、数据、接口、日志和结论五项链路健康状态。数据查询区分 pending/succeeded/failed，接口区分全部成功、部分失败和全部失败，未产生记录统一标记为 `unused` 而不是故障；已解决任务中的历史失败调用标为 `attention` 并说明已经恢复。`save_task_visualization_result` 的 `resolved` 路径只引用同一 task 的成功调用并由服务端生成验证项；`interface_execute` 可省略 `verification_call_ids`，服务端自动绑定最近一次成功执行，避免客户端为取调用号重复执行。Trace 对常见参数错误保存缺失字段、非法字段和允许值，不保存敏感原文。列表、详情和最新在前的时间线均只读，关联按钮只在对应记录存在时显示，并带同一个 task_id 进入其他可视化页面。
 
-接口可视化页由 `AiInterfaceVisualizationService` 聚合真实 `interface_forwarding_logs`、`mcp_tasks`、接口元数据和请求计划证据。列表使用 `created_at + id` 不透明游标，支持 task 筛选并限制为最近 30 天；请求预览、详情和复制内容统一递归脱敏。Codex/Antigravity 调用顺序为 `search_forwarding_interfaces`，按需调用 `read_forwarding_request_history`、业务值映射或只读数据库工具，再调用 `prepare_forwarding_request -> execute_forwarding_request`；页面仅观察最终真实请求。
+接口可视化页由 `AiInterfaceVisualizationService` 聚合真实 `interface_forwarding_logs`、`mcp_tasks`、接口元数据和请求计划证据。接口发现任务在结构化搜索后结束；接口执行任务先按业务语义评分，歧义时读取共享详情，再由 `prepare_forwarding_request` 校验任务动作与接口 CRUD、组装参数并执行。请求计划和日志保存意图匹配证据，执行结果额外记录传输、响应 Schema 和业务状态验证。页面仅观察最终真实请求，同配置同请求的成功重试继续复用既有结果。
 
 日志可视化链路为 `prepare_task_context -> list_task_containers -> inspect_container_errors`。容器列表只来自 `runtime-runner.workspace-id` 标签；快照读取前再次校验容器归属，使用非跟随 Docker logs、默认最近 15 分钟/500 行和 512000 字节硬上限。显式关键词必须命中才记录；服务端按相邻因果签名生成稳定指纹，用合并后的错误事件累计出现次数并脱敏。列表支持 task 筛选、最近 30 天窗口和 `last_seen_at + id` 不透明游标；浏览器只读，不直接访问 Docker Socket。
 

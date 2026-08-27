@@ -362,8 +362,8 @@ class HostRuntimeRunner:
         payload: dict[str, object],
     ) -> tuple[urllib.request.Request, int, int]:
         method = _required_string(payload, "method").upper()
-        if method not in {"GET", "POST"}:
-            raise RunnerSecurityError("宿主机接口转发只允许 GET 或 POST")
+        if method not in {"GET", "POST", "PUT", "PATCH", "DELETE"}:
+            raise RunnerSecurityError("宿主机接口转发方法不受支持")
         url = _required_string(payload, "url")
         parsed = urllib.parse.urlsplit(url)
         if (
@@ -399,7 +399,7 @@ class HostRuntimeRunner:
                 raise RunnerSecurityError("宿主机接口转发请求头不安全")
             request_headers[name] = raw_value
         data: bytes | None = None
-        if method == "POST":
+        if method in {"POST", "PUT", "PATCH", "DELETE"}:
             data = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode()
             if len(data) > 262_144:
                 raise RunnerSecurityError("宿主机接口转发请求体超过限制")

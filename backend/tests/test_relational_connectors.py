@@ -191,6 +191,9 @@ def test_doris_server_flavor_is_auto_detected_during_ping(
         (1969, "query_timeout", "MySQL 查询超时"),
         (1317, "query_cancelled", "MySQL 查询已取消"),
         (2013, "connection_failed", "MySQL 查询连接中断"),
+        (1054, "column_not_found", "MySQL 查询引用了不存在的字段"),
+        (1146, "table_not_found", "MySQL 查询引用了不存在的表"),
+        (1049, "database_not_found", "MySQL 查询目标数据库不存在"),
     ],
 )
 def test_mysql_family_maps_query_interruptions_to_stable_errors(

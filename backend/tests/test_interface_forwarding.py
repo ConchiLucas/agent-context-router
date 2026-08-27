@@ -117,6 +117,19 @@ def test_parse_swagger_body_and_response_schema() -> None:
     assert endpoints[0]["name"] == "health"
     assert endpoints[0]["request_schema"] == {"type": "object"}
     assert endpoints[0]["response_schema"] == {"type": "string"}
+    assert endpoints[0]["operation_id"] == "health"
+    assert endpoints[0]["crud_type"] == "read"
+
+
+def test_crud_type_does_not_treat_every_post_as_create() -> None:
+    assert InterfaceForwardingService._crud_type("POST", "分页查询委托需求") == "read"
+    assert InterfaceForwardingService._crud_type("POST", "新增门户端委托需求") == "create"
+    assert InterfaceForwardingService._crud_type("POST", "更新委托需求状态") == "update"
+    assert InterfaceForwardingService._crud_type("POST", "批量删除委托需求") == "delete"
+    assert InterfaceForwardingService._crud_type("POST", "按文件 ID 获取附件地址") == "read"
+    assert InterfaceForwardingService._crud_type("POST", "根据合同生成作业计划") == "create"
+    assert InterfaceForwardingService._crud_type("POST", "审批作业计划") == "update"
+    assert InterfaceForwardingService._crud_type("POST", "撤回委托订单") == "update"
 
 
 def test_parse_controller_metadata_with_chinese_fallback() -> None:
@@ -288,6 +301,8 @@ def test_controller_description_prefers_java_tag_description() -> None:
         )
         == "负责运营端仓配联动商品档案查询及包装单位状态维护相关功能。"
     )
+
+
 def test_coalesce_interface_name_uses_basic_api_path_before_http_method() -> None:
     assert (
         InterfaceForwardingService._coalesce_interface_name(

@@ -69,6 +69,10 @@ def _app() -> FastAPI:
     def delete_forwarding_interface() -> dict[str, bool]:
         return {"deleted": True}
 
+    @app.put("/api/interface-forwarding/interfaces/interface-1/semantics")
+    def update_forwarding_semantics() -> dict[str, bool]:
+        return {"written": True}
+
     @app.post("/api/value-mappings")
     def create_value_mapping() -> dict[str, bool]:
         return {"written": True}
@@ -173,6 +177,13 @@ def test_browser_origin_can_read_and_run_allowlisted_actions() -> None:
         assert (
             client.delete(
                 "/api/interface-forwarding/interfaces/interface-1", headers=headers
+            ).status_code
+            == 200
+        )
+        assert (
+            client.put(
+                "/api/interface-forwarding/interfaces/interface-1/semantics",
+                headers=headers,
             ).status_code
             == 200
         )

@@ -31,7 +31,14 @@ function displayValue(value: unknown): string {
 }
 
 function sourceLabel(source: string): string {
-  return { codex: "Codex", antigravity: "Antigravity", agent: "本机 Agent" }[source] ?? source;
+  return {
+    codex: "Codex",
+    gemini: "Gemini",
+    antigravity: "Antigravity",
+    cursor: "Cursor",
+    grok: "Grok",
+    agent: "本机 Agent",
+  }[source] ?? source;
 }
 
 function formatTime(value: string): string {
@@ -281,7 +288,7 @@ export function DataVisualizationWorkbench({
       ]);
       setHistory(historyPayload.items);
       if (latestPayload.record) await applyRecord(latestPayload.record);
-      else setNotice("还没有 Codex 或 Antigravity 保存的查询条件。");
+      else setNotice("还没有 AI 工具保存的查询条件。");
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : "最新查询条件读取失败");
     } finally {
@@ -395,7 +402,7 @@ export function DataVisualizationWorkbench({
       ) : (
         <div className="data-visualization-empty-source">
           <strong>还没有 AI 查询记录</strong>
-          <span>请让 Codex 或 Antigravity 调用查询条件写入接口，然后点击“加载最新”。</span>
+          <span>请让 AI 工具调用查询条件写入接口，然后点击“加载最新”。</span>
         </div>
       )}
 

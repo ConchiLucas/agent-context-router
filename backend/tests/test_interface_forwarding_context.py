@@ -3,7 +3,10 @@ from datetime import UTC, datetime
 import pytest
 
 from context_router.services.interface_forwarding import InterfaceForwardingService
-from context_router.services.interface_forwarding_context import InterfaceForwardingContextService
+from context_router.services.interface_forwarding_context import (
+    _EXECUTABLE_OPERATION_KINDS,
+    InterfaceForwardingContextService,
+)
 
 
 class _ValueMappings:
@@ -44,10 +47,23 @@ class _ValueMappings:
         }
         return {
             "candidates": [
-                {"value": value, "label": value, "labels": {}}
-                for value in values[mapping_id]
+                {"value": value, "label": value, "labels": {}} for value in values[mapping_id]
             ]
         }
+
+
+class _Cursor:
+    def __init__(self, row: dict[str, object] | None) -> None:
+        self.row = row
+        self.statement = ""
+        self.parameters: tuple[object, ...] = ()
+
+    def execute(self, statement: str, parameters: tuple[object, ...]) -> None:
+        self.statement = statement
+        self.parameters = parameters
+
+    def fetchone(self) -> dict[str, object] | None:
+        return self.row
 
 
 def _context_service(mappings: _ValueMappings) -> InterfaceForwardingContextService:
@@ -133,13 +149,21 @@ def test_operation_kind_is_conservative_for_post_requests() -> None:
     assert InterfaceForwardingService._operation_kind("GET", "取消订阅 SSE 事件") == "write"
 
 
+@pytest.mark.parametrize("operation_kind", ["read", "write", "destructive", "unknown"])
+def test_all_imported_operation_kinds_are_executable(operation_kind: str) -> None:
+    assert operation_kind in _EXECUTABLE_OPERATION_KINDS
+
+
 def test_gateway_route_path_includes_service_prefix() -> None:
-    assert InterfaceForwardingContextService._route_path(
-        {
-            "gateway_path_prefix": "data",
-            "path": "/data-api/mtp/admin/goods/selectable/page",
-        }
-    ) == "/data/data-api/mtp/admin/goods/selectable/page"
+    assert (
+        InterfaceForwardingContextService._route_path(
+            {
+                "gateway_path_prefix": "data",
+                "path": "/data-api/mtp/admin/goods/selectable/page",
+            }
+        )
+        == "/data/data-api/mtp/admin/goods/selectable/page"
+    )
 
 
 def test_existing_paths_are_added_to_the_compact_request_contract() -> None:
@@ -156,6 +180,123 @@ def test_http_success_respects_common_business_failure_fields() -> None:
     assert InterfaceForwardingContextService._response_success(200, '{"code":0}') is True
     assert InterfaceForwardingContextService._response_success(200, '{"success":false}') is False
     assert InterfaceForwardingContextService._response_success(200, '{"code":500}') is False
+
+
+def test_successful_execution_lookup_is_scoped_to_task_request_and_configuration() -> None:
+    row = {"id": "execution-1", "success": True}
+    cursor = _Cursor(row)
+    plan = {
+        "task_id": 9,
+        "interface_id": "interface-1",
+        "environment_key": "uat",
+        "address_id": "address-1",
+        "identity_id": "identity-1",
+        "request_sha256": "a" * 64,
+        "configuration_fingerprint": "b" * 64,
+    }
+
+    result = InterfaceForwardingContextService._successful_execution_for_request(cursor, plan)
+
+    assert result == row
+    assert "log.success=true" in cursor.statement
+    assert "prior_plan.configuration_fingerprint=%s" in cursor.statement
+    assert cursor.parameters == (
+        9,
+        "interface-1",
+        "uat",
+        "address-1",
+        "identity-1",
+        "a" * 64,
+        "b" * 64,
+    )
+
+
+def test_reused_execution_result_is_successful_and_explicitly_deduplicated() -> None:
+    result = InterfaceForwardingContextService._reused_execution_result(
+        {
+            "id": "execution-1",
+            "success": True,
+            "status_code": 200,
+            "duration_ms": 116,
+            "response_body": '{"success":true}',
+            "response_bytes": 16,
+            "response_truncated": False,
+        }
+    )
+
+    assert result == {
+        "status": "completed",
+        "execution_mode": "deduplicated",
+        "execution_id": "execution-1",
+        "success": True,
+        "status_code": 200,
+        "duration_ms": 116,
+        "response_body": '{"success":true}',
+        "response_headers": {},
+        "response_bytes": 16,
+        "truncated": False,
+        "error_type": None,
+        "validation_status": "not_configured",
+        "validation": {},
+        "deduplicated": True,
+    }
+
+
+def test_latest_search_selection_records_initial_rank_without_client_argument() -> None:
+    cursor = _Cursor({"id": "search-1", "selected_rank": 3})
+
+    result = InterfaceForwardingContextService._bind_latest_search_selection(
+        cursor,
+        task_id=18,
+        workspace_id="workspace-1",
+        interface_id="interface-3",
+    )
+
+    assert result == {"id": "search-1", "selected_rank": 3}
+    assert "jsonb_array_elements(event.result_ranking)" in cursor.statement
+    assert "selected_at=CURRENT_TIMESTAMP" in cursor.statement
+    assert cursor.parameters == (18, "workspace-1", "interface-3", "interface-3")
+
+
+def test_execution_completion_links_back_to_search_event() -> None:
+    cursor = _Cursor(None)
+
+    InterfaceForwardingContextService._complete_search_event(
+        cursor,
+        search_event_id="search-1",
+        execution_log_id="log-1",
+        success=True,
+    )
+
+    assert "execution_log_id=%s" in cursor.statement
+    assert cursor.parameters == ("log-1", True, "search-1")
+
+
+def test_prepare_blocks_crud_conflicts_but_not_other_soft_mismatches() -> None:
+    soft_only = type(
+        "Match",
+        (),
+        {
+            "score_breakdown": (
+                {"category": "result_shape", "delta": -25, "reason": "接口形态不匹配"},
+            )
+        },
+    )()
+    crud_conflict = type(
+        "Match",
+        (),
+        {
+            "score_breakdown": (
+                {"category": "result_shape", "delta": -25, "reason": "接口形态不匹配"},
+                {"category": "crud", "delta": -180, "reason": "期望 create，候选为 read"},
+            )
+        },
+    )()
+
+    assert InterfaceForwardingContextService._blocking_intent_mismatches(soft_only) == []
+    assert InterfaceForwardingContextService._blocking_intent_mismatches(crud_conflict) == [
+        "期望 create，候选为 read"
+    ]
 
 
 def test_successful_history_is_sanitized_and_pagination_is_bounded() -> None:
