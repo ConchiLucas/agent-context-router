@@ -21,10 +21,7 @@ type SeverityFilter = "all" | "error" | "critical";
 function sourceLabel(source: string): string {
   return {
     codex: "Codex",
-    gemini: "Gemini",
     antigravity: "Antigravity",
-    cursor: "Cursor",
-    grok: "Grok",
     agent: "本机 Agent",
   }[source.toLowerCase()] ?? source;
 }

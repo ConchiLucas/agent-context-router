@@ -236,7 +236,7 @@ docker compose exec backend uv run python -m context_router.scripts.seed_order_a
   --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
 ```
 
-当前 migration head 为 `20260827_0071`。`0071` 将 Workspace 接口术语和动态限定标签归档到 `archived_*`，运行时不再读取，保留接口业务语义与搜索质量闭环；`0070` 增加接口搜索质量与选择/执行结果事件；`0068` 增加接口发现意图、匹配证据、响应规则和执行验证；`0067` 增加接口业务语义、CRUD 分类和源码证据支持的表影响。客户端必须重新连接并刷新 tools/list。
+当前 migration head 为 `20260827_0072`。`0072` 将渐进式 MCP 能力、接口意图评分/响应验证及搜索质量事件归档到 `archived_*`，运行时不再读取；`0071` 已归档 Workspace 接口术语和动态限定标签。`0067` 的接口业务语义、CRUD 分类和源码证据支持的表影响继续保留。客户端必须重新连接并刷新 tools/list。
 
 表关联页面的关联数据目前没有自动生成流水线，示例数据由可重复执行的种子脚本写入：
 

@@ -437,7 +437,7 @@ class AiTaskVisualizationService:
             and not row["inspected_container_errors"]
         ):
             missing.append("inspect_container_errors 完成的注册容器错误检查")
-        if intent_type in {"bug_fix", "code_change"} and not row["applied_workspace_changes"]:
+        if intent_type == "bug_fix" and not row["applied_workspace_changes"]:
             missing.append("apply_workspace_changes 完成的工作空间更新")
         if missing:
             raise AiTaskVisualizationError(

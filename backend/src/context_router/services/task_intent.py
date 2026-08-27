@@ -7,13 +7,11 @@ from context_router.schemas.context import (
 )
 
 TASK_INTENT_TYPES: tuple[TaskIntentType, ...] = (
-    "interface_discovery",
     "interface_execute",
     "data_query",
     "task_execute",
     "bug_investigate",
     "bug_fix",
-    "code_change",
 )
 
 
@@ -27,23 +25,9 @@ def build_task_execution_contract(
     required_steps: list[str]
     visualization_targets: list[str]
     instructions: list[str]
-    hard_requirements: list[str] = []
-    completion_requirements: list[str] = ["task_result_saved"]
     mutation_policy = "forbidden" if intent_type == "bug_investigate" else "allowed"
 
-    if intent_type == "interface_discovery":
-        required_steps = [
-            "search_forwarding_interfaces",
-            "save_task_visualization_result",
-        ]
-        visualization_targets = ["task"]
-        instructions = [
-            "本任务只查找、比较或说明接口，不准备或执行请求。",
-            "优先使用搜索结果的 match_score、match_reasons、CRUD 和业务语义；只有候选歧义或"
-            "用户询问参数、响应、影响表时读取接口详情。",
-            "搜索结果 goal_completed=true 时直接保存任务结论，不检索项目文档。",
-        ]
-    elif intent_type == "interface_execute":
+    if intent_type == "interface_execute":
         required_steps = [
             "search_forwarding_interfaces",
             "prepare_forwarding_request",
@@ -91,7 +75,6 @@ def build_task_execution_contract(
         if error_signal:
             required_steps[0:0] = ["list_task_containers", "inspect_container_errors"]
             visualization_targets.append("log")
-            hard_requirements.append("attempt_registered_error_log_inspection_when_error_signal")
     elif intent_type == "bug_fix":
         required_steps = ["apply_workspace_changes", "save_task_visualization_result"]
         visualization_targets = ["task"]
@@ -102,25 +85,6 @@ def build_task_execution_contract(
         if error_signal:
             required_steps[0:0] = ["list_task_containers", "inspect_container_errors"]
             visualization_targets.append("log")
-            hard_requirements.append(
-                "attempt_registered_error_log_inspection_before_apply_when_error_signal"
-            )
-        completion_requirements[0:0] = [
-            "workspace_changes_applied",
-            "verified_outcome",
-        ]
-    elif intent_type == "code_change":
-        required_steps = ["apply_workspace_changes", "save_task_visualization_result"]
-        visualization_targets = ["task"]
-        instructions = [
-            "使用 Agent 原生文件和终端能力完成源码搜索、修改与项目规定的验证。",
-            "完成一轮修改后只提交一次实际 Workspace 相对路径，再等待运行操作终态。",
-            "数据库、接口、日志、中间件和表关联是可按需叠加的取证能力，不改变主意图。",
-        ]
-        completion_requirements[0:0] = [
-            "workspace_changes_applied",
-            "verified_outcome",
-        ]
     else:
         required_steps = ["save_task_visualization_result"]
         visualization_targets = ["task"]
@@ -135,7 +99,4 @@ def build_task_execution_contract(
         required_steps=required_steps,
         visualization_targets=visualization_targets,  # type: ignore[arg-type]
         instructions=instructions,
-        hard_requirements=hard_requirements,
-        completion_requirements=completion_requirements,
-        recommended_flow=required_steps,
     )

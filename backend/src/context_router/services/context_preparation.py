@@ -27,7 +27,6 @@ from context_router.services.database_access import (
     DatabaseAccessService,
 )
 from context_router.services.document_tree import CachedTreeNode
-from context_router.services.interface_intent_matching import InterfaceIntentMatcher
 from context_router.services.project_registry import (
     ProjectRegistry,
     ProjectRegistryError,
@@ -219,13 +218,6 @@ class ContextPreparationService:
             normalized_intent_summary,
             intent_source,
         ) = self._validate_intent(intent_type, error_signal, intent_summary)
-        if normalized_intent == "interface_execute" and InterfaceIntentMatcher.is_discovery_request(
-            normalized_task
-        ):
-            normalized_intent = "interface_discovery"
-            intent_source = "system_default"
-            if normalized_intent_summary is None:
-                normalized_intent_summary = "查找或说明接口，不执行请求"
         try:
             workspace = self._registry.find_workspace_for_cwd(cwd)
         except ProjectRegistryError as exc:

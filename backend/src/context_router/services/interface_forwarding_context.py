@@ -22,8 +22,6 @@ from context_router.repositories.database_environment_repository import (
     DatabaseEnvironmentStore,
 )
 from context_router.repositories.task_repository import TaskReader, TaskRepositoryError
-from context_router.services.interface_intent_matching import InterfaceIntentMatcher
-from context_router.services.interface_response_validation import InterfaceResponseValidator
 from context_router.services.mcp_trace import current_tool_call_id
 from context_router.services.value_mapping import ValueMappingError, ValueMappingService
 
@@ -110,33 +108,24 @@ class InterfaceForwardingContextService:
         normalized = query.strip()
         if not normalized:
             raise InterfaceForwardingContextError("query 不能为空", code="invalid_query")
-        # The caller's limit controls only the returned result count. Keep the
-        # semantic reranking pool stable so limit=1 cannot change the winner.
-        candidate_limit = 250
+        like = f"%{normalized}%"
         with self._connect() as connection, connection.cursor() as cursor:
-            intent = InterfaceIntentMatcher.analyze(normalized)
-            like = f"%{intent.search_term}%"
             cursor.execute(
                 """
                 SELECT interface.id, interface.name, interface.controller_name,
                        interface.controller_description, interface.path, interface.method,
                        interface.description, interface.operation_id,
                        interface.operation_kind, interface.crud_type,
-                       interface.request_schema,
                        profile.business_entity, profile.business_action,
                        profile.business_scenario, profile.aliases,
                        profile.positive_examples, profile.negative_examples,
-                       profile.source AS intent_source,
-                       profile.confidence AS intent_confidence,
                        COALESCE(effects.items, '[]'::jsonb) AS table_effects,
                        source.name AS service_name,
                        source.invocation_mode, route.name AS route_service_name,
                        count(DISTINCT address.id)::int AS address_count,
                        count(DISTINCT identity.id)::int AS identity_count,
                        max(log.created_at) AS last_requested_at,
-                       count(DISTINCT log.id)::int AS request_count,
-                       count(DISTINCT log.id) FILTER (WHERE log.success=true)::int
-                         AS successful_request_count
+                       count(DISTINCT log.id)::int AS request_count
                 FROM interface_forwarding_interfaces AS interface
                 JOIN interface_forwarding_services AS source ON source.id=interface.service_id
                 LEFT JOIN interface_forwarding_intent_profiles AS profile
@@ -157,7 +146,7 @@ class InterfaceForwardingContextService:
                             'confidence', effect.confidence
                         ) ORDER BY effect.table_name, effect.effect_type
                     ) AS items
-                    FROM interface_forwarding_table_effects effect
+                    FROM interface_forwarding_table_effects AS effect
                     WHERE effect.interface_id=interface.id
                       AND effect.effect_type=ANY(
                         CASE interface.crud_type
@@ -172,7 +161,7 @@ class InterfaceForwardingContextService:
                       )
                       AND (interface.crud_type <> 'read'
                            OR effect.response_contribution='returned')
-                ) effects ON TRUE
+                ) AS effects ON TRUE
                 LEFT JOIN interface_forwarding_services AS route
                   ON route.id=CASE WHEN source.invocation_mode='gateway'
                                    THEN source.gateway_service_id ELSE source.id END
@@ -195,11 +184,13 @@ class InterfaceForwardingContextService:
                        OR profile.business_scenario ILIKE %s
                        OR profile.aliases::text ILIKE %s
                        OR profile.positive_examples::text ILIKE %s
-                       OR effects.items::text ILIKE %s
-                       OR interface.request_schema::text ILIKE %s)
+                       OR effects.items::text ILIKE %s)
                 GROUP BY interface.id, source.id, route.id, profile.interface_id, effects.items
-                ORDER BY max(log.created_at) DESC NULLS LAST,
-                         lower(interface.path), interface.method
+                ORDER BY
+                  CASE WHEN lower(interface.name)=lower(%s) THEN 0
+                       WHEN lower(interface.path)=lower(%s) THEN 1
+                       WHEN interface.name ILIKE %s THEN 2 ELSE 3 END,
+                  max(log.created_at) DESC NULLS LAST, lower(interface.path), interface.method
                 LIMIT %s
                 """,
                 (
@@ -220,293 +211,55 @@ class InterfaceForwardingContextService:
                     like,
                     like,
                     like,
-                    like,
-                    candidate_limit,
+                    normalized,
+                    normalized,
+                    f"{normalized}%",
+                    max(1, min(limit, 50)),
                 ),
             )
             rows = list(cursor.fetchall())
-        ranked: list[tuple[int, str, dict[str, object]]] = []
+        results: list[dict[str, object]] = []
         for row in rows:
             callable_now = (
                 row["operation_kind"] in _EXECUTABLE_OPERATION_KINDS
                 and row["invocation_mode"] != "disabled"
                 and row["address_count"] > 0
             )
-            item: dict[str, object] = {
-                "interface_id": row["id"],
-                "name": row["name"],
-                "controller": row["controller_name"],
-                "controller_name": row["controller_name"],
-                "controller_description": row["controller_description"],
-                "description": row["description"],
-                "operation_id": row["operation_id"],
-                "method": row["method"],
-                "path": row["path"],
-                "service": row["service_name"],
-                "route_service": row["route_service_name"],
-                "operation_kind": row["operation_kind"],
-                "crud_type": row["crud_type"],
-                "business_entity": row["business_entity"] or "",
-                "business_action": row["business_action"] or "",
-                "business_scenario": row["business_scenario"] or "",
-                "aliases": row["aliases"] or [],
-                "positive_examples": row["positive_examples"] or [],
-                "negative_examples": row["negative_examples"] or [],
-                "intent_source": row["intent_source"],
-                "intent_confidence": row["intent_confidence"],
-                "request_schema": row["request_schema"] or {},
-                "table_effects": row["table_effects"] or [],
-                "callable": callable_now,
-                "address_count": row["address_count"],
-                "identity_count": row["identity_count"],
-                "request_count": row["request_count"],
-                "successful_request_count": row["successful_request_count"],
-                "last_requested_at": self._iso(row["last_requested_at"]),
-            }
-            match = InterfaceIntentMatcher.score(intent, item)
-            item["match_score"] = match.score
-            item["match_reasons"] = list(match.reasons)
-            item["mismatches"] = list(match.mismatches)
-            item["score_breakdown"] = list(match.score_breakdown)
-            ranked.append((match.score, str(row["path"]), item))
-        ranked.sort(key=lambda entry: (-entry[0], entry[1]))
-        bounded = ranked[: max(1, min(limit, 50))]
-        results = [entry[2] for entry in bounded]
-        top_score = bounded[0][0] if bounded else 0
-        second_score = bounded[1][0] if len(bounded) > 1 else 0
-        confidence = InterfaceIntentMatcher.confidence(top_score, top_score - second_score)
-        task_intent = self._task_intent(task_id)
-        discovery = task_intent == "interface_discovery"
-        goal_completed = bool(results) and discovery and confidence == "high"
-        next_action = (
-            "save_task_visualization_result"
-            if goal_completed
-            else "read_forwarding_interface_detail"
-            if discovery and results
-            else "prepare_forwarding_request"
-            if confidence == "high"
-            else "read_forwarding_interface_detail"
-            if results
-            else "report_no_match"
-        )
-        search_event_id = str(uuid4())
-        ranking = [
-            {
-                "rank": rank,
-                "interface_id": result["interface_id"],
-                "match_score": result["match_score"],
-            }
-            for rank, result in enumerate(results, start=1)
-        ]
-        with self._connect() as connection, connection.cursor() as cursor:
-            cursor.execute(
-                """INSERT INTO interface_forwarding_search_events
-                   (id, task_id, workspace_id, environment_key, tool_call_id,
-                    query, parsed_intent, candidate_count, returned_count,
-                    match_confidence, result_ranking, recommended_interface_id)
-                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                (
-                    search_event_id,
-                    task_id,
-                    workspace_id,
-                    environment,
-                    current_tool_call_id(),
-                    normalized,
-                    Jsonb(intent.as_dict()),
-                    len(rows),
-                    len(results),
-                    confidence,
-                    Jsonb(ranking),
-                    results[0]["interface_id"] if results else None,
-                ),
+            results.append(
+                {
+                    "interface_id": row["id"],
+                    "name": row["name"],
+                    "controller": row["controller_name"],
+                    "controller_name": row["controller_name"],
+                    "controller_description": row["controller_description"],
+                    "description": row["description"],
+                    "operation_id": row["operation_id"],
+                    "method": row["method"],
+                    "path": row["path"],
+                    "service": row["service_name"],
+                    "route_service": row["route_service_name"],
+                    "operation_kind": row["operation_kind"],
+                    "crud_type": row["crud_type"],
+                    "business_entity": row["business_entity"] or "",
+                    "business_action": row["business_action"] or "",
+                    "business_scenario": row["business_scenario"] or "",
+                    "aliases": row["aliases"] or [],
+                    "positive_examples": row["positive_examples"] or [],
+                    "negative_examples": row["negative_examples"] or [],
+                    "table_effects": row["table_effects"] or [],
+                    "callable": callable_now,
+                    "address_count": row["address_count"],
+                    "identity_count": row["identity_count"],
+                    "request_count": row["request_count"],
+                    "last_requested_at": self._iso(row["last_requested_at"]),
+                }
             )
         return {
             "status": "ok",
-            "search_event_id": search_event_id,
             "environment": environment,
             "query": normalized,
-            "parsed_intent": intent.as_dict(),
             "returned_count": len(results),
-            "candidate_count": len(rows),
-            "match_confidence": confidence,
-            "recommended_interface_id": results[0]["interface_id"] if results else None,
-            "recommended_detail_interface_ids": [result["interface_id"] for result in results[:2]]
-            if results and confidence != "high"
-            else [],
-            "goal_completed": goal_completed,
-            "next_action": next_action,
             "results": results,
-        }
-
-    def detail(self, *, task_id: int, interface_id: str) -> dict[str, object]:
-        workspace_id, environment = self._task_scope(task_id, None)
-        try:
-            task = self._tasks.get_task(task_id)
-        except TaskRepositoryError as exc:
-            raise InterfaceForwardingContextError("任务不存在", code="task_not_found") from exc
-        with self._connect() as connection, connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT interface.*, source.name AS service_name,
-                       source.invocation_mode, source.gateway_path_prefix,
-                       route.name AS route_service_name,
-                       profile.business_entity, profile.business_action,
-                       profile.business_scenario, profile.aliases,
-                       profile.positive_examples, profile.negative_examples,
-                       profile.source AS intent_source,
-                       profile.confidence AS intent_confidence,
-                       COALESCE((
-                           SELECT jsonb_agg(
-                               jsonb_build_object(
-                                   'database_key', effect.database_key,
-                                   'schema_name', effect.schema_name,
-                                   'table_name', effect.table_name,
-                                   'effect_type', effect.effect_type,
-                                   'response_contribution', effect.response_contribution,
-                                   'source_file', effect.source_file,
-                                   'source_class', effect.source_class,
-                                   'source_method', effect.source_method,
-                                   'call_path', effect.call_path,
-                                   'evidence_type', effect.evidence_type,
-                                   'confidence', effect.confidence
-                               ) ORDER BY effect.table_name, effect.effect_type
-                           )
-                           FROM interface_forwarding_table_effects AS effect
-                           WHERE effect.interface_id=interface.id
-                       ), '[]'::jsonb) AS table_effects,
-                       COALESCE((
-                           SELECT jsonb_agg(
-                               jsonb_build_object(
-                                   'mapping_id', mapping.id,
-                                   'value_key', mapping.value_key,
-                                   'name', mapping.name,
-                                   'location', binding.location,
-                                   'parameter_path', binding.parameter_path,
-                                   'required', binding.required
-                               ) ORDER BY binding.location, binding.parameter_path
-                           )
-                           FROM interface_value_mapping_bindings AS binding
-                           JOIN interface_value_mappings AS mapping
-                             ON mapping.id=binding.mapping_id
-                            AND mapping.status='published'
-                           WHERE binding.interface_id=interface.id
-                       ), '[]'::jsonb) AS parameter_mappings,
-                       COALESCE((
-                           SELECT jsonb_build_object(
-                               'success_code_paths', rule.success_code_paths,
-                               'success_values', rule.success_values,
-                               'message_paths', rule.message_paths,
-                               'data_paths', rule.data_paths,
-                               'required_result_paths', rule.required_result_paths,
-                               'source', rule.source,
-                               'confidence', rule.confidence
-                           )
-                           FROM interface_forwarding_response_rules AS rule
-                           WHERE rule.interface_id=interface.id
-                       ), '{}'::jsonb) AS response_rule,
-                       (SELECT count(*)::int
-                        FROM interface_forwarding_environments AS address
-                        WHERE address.workspace_id=interface.workspace_id
-                          AND address.environment_key=%s
-                          AND address.service_id=route.id) AS address_count,
-                       (SELECT count(*)::int
-                        FROM interface_forwarding_identities AS identity
-                        JOIN interface_forwarding_environments AS address
-                          ON address.id=identity.environment_id
-                        WHERE address.workspace_id=interface.workspace_id
-                          AND address.environment_key=%s
-                          AND address.service_id=route.id) AS identity_count,
-                       (SELECT count(*)::int FROM interface_forwarding_logs AS log
-                        WHERE log.interface_id=interface.id) AS request_count,
-                       (SELECT max(log.created_at) FROM interface_forwarding_logs AS log
-                        WHERE log.interface_id=interface.id) AS last_requested_at
-                FROM interface_forwarding_interfaces AS interface
-                JOIN interface_forwarding_services AS source ON source.id=interface.service_id
-                LEFT JOIN interface_forwarding_services AS route
-                  ON route.id=CASE WHEN source.invocation_mode='gateway'
-                                   THEN source.gateway_service_id ELSE source.id END
-                LEFT JOIN interface_forwarding_intent_profiles AS profile
-                  ON profile.interface_id=interface.id
-                WHERE interface.id=%s AND interface.workspace_id=%s
-                """,
-                (environment, environment, interface_id, workspace_id),
-            )
-            row = cursor.fetchone()
-        if not row:
-            raise InterfaceForwardingContextError("接口不存在", code="interface_not_found")
-        parsed_intent = InterfaceIntentMatcher.analyze(task.task)
-        candidate = {
-            "name": row["name"],
-            "path": row["path"],
-            "crud_type": row["crud_type"],
-            "business_entity": row["business_entity"] or "",
-            "business_action": row["business_action"] or "",
-            "business_scenario": row["business_scenario"] or "",
-            "aliases": row["aliases"] or [],
-            "positive_examples": row["positive_examples"] or [],
-            "negative_examples": row["negative_examples"] or [],
-            "intent_confidence": row["intent_confidence"],
-            "table_effects": row["table_effects"] or [],
-        }
-        match = InterfaceIntentMatcher.score(parsed_intent, candidate)
-        callable_now = (
-            row["operation_kind"] in _EXECUTABLE_OPERATION_KINDS
-            and row["invocation_mode"] != "disabled"
-            and int(row["address_count"] or 0) > 0
-        )
-        discovery = task.intent_type == "interface_discovery"
-        return {
-            "status": "ok",
-            "task_intent": task.intent_type,
-            "environment": environment,
-            "identity": {
-                "id": row["id"],
-                "name": row["name"],
-                "service": row["service_name"],
-                "route_service": row["route_service_name"],
-                "controller": row["controller_name"],
-                "operation_id": row["operation_id"],
-                "method": row["method"],
-                "path": row["path"],
-            },
-            "semantics": {
-                "business_entity": row["business_entity"] or "",
-                "business_action": row["business_action"] or "",
-                "business_scenario": row["business_scenario"] or "",
-                "crud_type": row["crud_type"],
-                "operation_kind": row["operation_kind"],
-                "aliases": row["aliases"] or [],
-                "positive_examples": row["positive_examples"] or [],
-                "negative_examples": row["negative_examples"] or [],
-                "source": row["intent_source"],
-                "confidence": row["intent_confidence"],
-            },
-            "selection_assessment": {
-                "parsed_intent": parsed_intent.as_dict(),
-                "match_score": match.score,
-                "match_reasons": list(match.reasons),
-                "mismatches": list(match.mismatches),
-            },
-            "request_contract": self._contract_summary(
-                self._normalize_contract(row["request_contract"] or {}, self._route_path(row))
-            ),
-            "response_contract": self._response_contract_summary(row["response_schema"] or {}),
-            "response_rule": row["response_rule"] or {},
-            "parameter_mappings": row["parameter_mappings"] or [],
-            "table_effects": row["table_effects"] or [],
-            "execution_readiness": {
-                "callable": callable_now,
-                "address_count": int(row["address_count"] or 0),
-                "identity_count": int(row["identity_count"] or 0),
-            },
-            "history_summary": {
-                "request_count": int(row["request_count"] or 0),
-                "last_requested_at": self._iso(row["last_requested_at"]),
-            },
-            "goal_completed": discovery,
-            "next_action": (
-                "save_task_visualization_result" if discovery else "prepare_forwarding_request"
-            ),
         }
 
     def history(
@@ -606,72 +359,8 @@ class InterfaceForwardingContextService:
             "refresh_value_keys": refresh_value_keys or [],
         }
         workspace_id, environment_key = self._task_scope(task_id, environment)
-        try:
-            task = self._tasks.get_task(task_id)
-        except TaskRepositoryError as exc:
-            raise InterfaceForwardingContextError("任务不存在", code="task_not_found") from exc
         with self._connect() as connection, connection.cursor() as cursor:
             interface = self._load_interface(cursor, workspace_id, interface_id)
-            parsed_intent = InterfaceIntentMatcher.analyze(task.task)
-            candidate = {
-                "name": interface["name"],
-                "path": interface["path"],
-                "description": interface["description"] or "",
-                "controller_name": interface["controller_name"] or "",
-                "controller_description": interface["controller_description"] or "",
-                "crud_type": interface["crud_type"],
-                "business_entity": interface["business_entity"] or "",
-                "business_action": interface["business_action"] or "",
-                "business_scenario": interface["business_scenario"] or "",
-                "aliases": interface["aliases"] or [],
-                "positive_examples": interface["positive_examples"] or [],
-                "negative_examples": interface["negative_examples"] or [],
-                "intent_confidence": interface["intent_confidence"],
-                "request_schema": interface["request_schema"] or {},
-                "table_effects": interface["table_effects"] or [],
-                "successful_request_count": interface["successful_request_count"],
-            }
-            semantic_match = InterfaceIntentMatcher.score(parsed_intent, candidate)
-            intent_assessment = {
-                "parsed_intent": parsed_intent.as_dict(),
-                "match_score": semantic_match.score,
-                "match_reasons": list(semantic_match.reasons),
-                "mismatches": list(semantic_match.mismatches),
-                "selected_interface_id": interface_id,
-            }
-            blocking_mismatches = self._blocking_intent_mismatches(semantic_match)
-            intent_assessment["blocking_mismatches"] = blocking_mismatches
-            search_selection = self._bind_latest_search_selection(
-                cursor,
-                task_id=task_id,
-                workspace_id=workspace_id,
-                interface_id=interface_id,
-            )
-            if search_selection:
-                intent_assessment["search_event_id"] = search_selection["id"]
-                intent_assessment["initial_rank"] = search_selection["selected_rank"]
-            intent["intent_assessment"] = intent_assessment
-            if task.intent_type == "interface_discovery":
-                return {
-                    "status": "intent_mismatch",
-                    **intent,
-                    "message": "当前任务只查找或说明接口，不执行请求",
-                    "next_action": "save_task_visualization_result",
-                }
-            if task.intent_type == "interface_execute" and blocking_mismatches:
-                return {
-                    "status": "intent_mismatch",
-                    **intent,
-                    "message": "所选接口与用户业务动作不一致，请重新选择搜索结果",
-                    "selected_interface": {
-                        "id": interface["id"],
-                        "name": interface["name"],
-                        "crud_type": interface["crud_type"],
-                        "business_entity": interface["business_entity"] or "",
-                        "business_action": interface["business_action"] or "",
-                    },
-                    "next_action": "search_forwarding_interfaces",
-                }
             if interface["operation_kind"] not in _EXECUTABLE_OPERATION_KINDS:
                 return {
                     "status": "operation_not_allowed",
@@ -904,9 +593,8 @@ class InterfaceForwardingContextService:
                 """INSERT INTO interface_forwarding_request_plans
                 (id, task_id, workspace_id, interface_id, environment_key, address_id,
                  identity_id, operation_kind, request_sha256, configuration_fingerprint,
-                 request_payload, parameter_evidence, intent_match_score,
-                 intent_match_evidence, search_event_id, expires_at)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                 request_payload, parameter_evidence, expires_at)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                 (
                     plan_id,
                     task_id,
@@ -920,9 +608,6 @@ class InterfaceForwardingContextService:
                     fingerprint,
                     Jsonb(request_payload),
                     Jsonb(evidence),
-                    semantic_match.score,
-                    Jsonb(intent_assessment),
-                    search_selection["id"] if search_selection else None,
                     expires_at,
                 ),
             )
@@ -967,7 +652,6 @@ class InterfaceForwardingContextService:
             cursor.execute(
                 """SELECT plan.*, interface.name, interface.path, interface.method,
                           interface.operation_kind AS current_operation_kind,
-                          interface.response_schema,
                           source.name AS service_name, source.invocation_mode,
                           source.gateway_path_prefix, source.updated_at AS service_updated_at,
                           route.id AS route_service_id, route.name AS route_service_name,
@@ -976,18 +660,7 @@ class InterfaceForwardingContextService:
                           address.updated_at AS address_updated_at,
                           identity.login_account, identity.role_name, identity.request_header,
                           identity.updated_at AS identity_updated_at,
-                          workspace_environment.display_name AS workspace_environment_name,
-                          COALESCE((
-                              SELECT jsonb_build_object(
-                                  'success_code_paths', rule.success_code_paths,
-                                  'success_values', rule.success_values,
-                                  'message_paths', rule.message_paths,
-                                  'data_paths', rule.data_paths,
-                                  'required_result_paths', rule.required_result_paths
-                              )
-                              FROM interface_forwarding_response_rules AS rule
-                              WHERE rule.interface_id=interface.id
-                          ), '{}'::jsonb) AS response_rule
+                          workspace_environment.display_name AS workspace_environment_name
                    FROM interface_forwarding_request_plans AS plan
                    JOIN interface_forwarding_interfaces AS interface
                      ON interface.id=plan.interface_id
@@ -1011,6 +684,17 @@ class InterfaceForwardingContextService:
                 raise InterfaceForwardingContextError(
                     "执行计划环境与任务环境不一致", code="environment_mismatch"
                 )
+            if plan["executed_at"] is not None:
+                existing_execution = self._existing_execution_for_plan(cursor, plan_id)
+                if existing_execution is not None:
+                    return self._reused_execution_result(existing_execution)
+                raise InterfaceForwardingContextError(
+                    "执行计划已经使用", code="plan_already_executed"
+                )
+            if plan["expires_at"] <= datetime.now(UTC):
+                raise InterfaceForwardingContextError(
+                    "执行计划已过期，请重新准备", code="plan_expired"
+                )
             if plan["request_sha256"] != request_sha256:
                 raise InterfaceForwardingContextError(
                     "请求摘要不匹配", code="request_hash_mismatch"
@@ -1029,23 +713,9 @@ class InterfaceForwardingContextService:
                 raise InterfaceForwardingContextError(
                     "转发配置已变化，请重新准备", code="configuration_changed"
                 )
-            if plan["executed_at"] is not None:
-                existing_execution = self._existing_execution_for_plan(cursor, plan_id)
-                if existing_execution is not None:
-                    self._complete_search_event(
-                        cursor,
-                        search_event_id=plan.get("search_event_id"),
-                        execution_log_id=str(existing_execution["id"]),
-                        success=bool(existing_execution["success"]),
-                    )
-                    return self._reused_execution_result(existing_execution)
-                raise InterfaceForwardingContextError(
-                    "执行计划已经使用", code="plan_already_executed"
-                )
-            if plan["expires_at"] <= datetime.now(UTC):
-                raise InterfaceForwardingContextError(
-                    "执行计划已过期，请重新准备", code="plan_expired"
-                )
+            payload = plan["request_payload"]
+            headers = self._request_headers(plan)
+            url, query_values, body_values = self._materialize_request(plan["base_url"], payload)
             successful_execution = self._successful_execution_for_request(cursor, plan)
             if successful_execution is not None:
                 cursor.execute(
@@ -1059,16 +729,7 @@ class InterfaceForwardingContextService:
                     raise InterfaceForwardingContextError(
                         "执行计划已经使用", code="plan_already_executed"
                     )
-                self._complete_search_event(
-                    cursor,
-                    search_event_id=plan.get("search_event_id"),
-                    execution_log_id=str(successful_execution["id"]),
-                    success=bool(successful_execution["success"]),
-                )
                 return self._reused_execution_result(successful_execution)
-            payload = plan["request_payload"]
-            headers = self._request_headers(plan)
-            url, query_values, body_values = self._materialize_request(plan["base_url"], payload)
             cursor.execute(
                 """UPDATE interface_forwarding_request_plans
                    SET executed_at=CURRENT_TIMESTAMP
@@ -1108,17 +769,7 @@ class InterfaceForwardingContextService:
         response_headers = result["response_headers"]
         error_type = result["error_type"]
         duration_ms = result["duration_ms"]
-        validation = InterfaceResponseValidator.validate(
-            status_code=status_code,
-            response_body=response_body,
-            response_schema=plan["response_schema"] or {},
-            response_rule=plan["response_rule"] or {},
-            response_truncated=response_truncated,
-            error_type=error_type,
-        )
         success = self._response_success(status_code, response_body)
-        if validation["status"] == "failed":
-            success = False
         log_id = str(uuid4())
         log_request = json.dumps(
             payload.get("values", {}), ensure_ascii=False, separators=(",", ":")
@@ -1129,11 +780,8 @@ class InterfaceForwardingContextService:
                 (id, workspace_id, interface_id, environment_name, identity_name,
                  identity_role, request_url, request_body, response_body, status_code,
                  success, duration_ms, task_id, tool_call_id, plan_id, environment_key,
-                 address_id, identity_id, request_sha256, response_bytes, response_truncated,
-                 intent_match_score, intent_match_evidence, validation_status,
-                 validation_result)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
-                        %s,%s,%s,%s)""",
+                 address_id, identity_id, request_sha256, response_bytes, response_truncated)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                 (
                     log_id,
                     workspace_id,
@@ -1156,10 +804,6 @@ class InterfaceForwardingContextService:
                     request_sha256,
                     response_bytes,
                     response_truncated,
-                    plan["intent_match_score"],
-                    Jsonb(plan["intent_match_evidence"] or {}),
-                    validation["status"],
-                    Jsonb(validation),
                 ),
             )
             if host_job_id:
@@ -1167,12 +811,6 @@ class InterfaceForwardingContextService:
                     "DELETE FROM interface_forwarding_host_jobs WHERE id=%s",
                     (host_job_id,),
                 )
-            self._complete_search_event(
-                cursor,
-                search_event_id=plan.get("search_event_id"),
-                execution_log_id=log_id,
-                success=success,
-            )
         return {
             "status": "completed" if error_type is None else "request_failed",
             "execution_mode": execution_mode,
@@ -1185,8 +823,6 @@ class InterfaceForwardingContextService:
             "response_bytes": response_bytes,
             "truncated": response_truncated,
             "error_type": error_type,
-            "validation_status": validation["status"],
-            "validation": validation,
             "deduplicated": False,
         }
 
@@ -1194,8 +830,7 @@ class InterfaceForwardingContextService:
     def _existing_execution_for_plan(cursor: Any, plan_id: str) -> dict[str, Any] | None:
         cursor.execute(
             """SELECT id, success, status_code, duration_ms, response_body,
-                      response_bytes, response_truncated,
-                      validation_status, validation_result
+                      response_bytes, response_truncated
                FROM interface_forwarding_logs
                WHERE plan_id=%s
                ORDER BY created_at DESC, id DESC
@@ -1211,8 +846,7 @@ class InterfaceForwardingContextService:
     ) -> dict[str, Any] | None:
         cursor.execute(
             """SELECT log.id, log.success, log.status_code, log.duration_ms,
-                      log.response_body, log.response_bytes, log.response_truncated,
-                      log.validation_status, log.validation_result
+                      log.response_body, log.response_bytes, log.response_truncated
                FROM interface_forwarding_logs AS log
                JOIN interface_forwarding_request_plans AS prior_plan
                  ON prior_plan.id=log.plan_id
@@ -1253,8 +887,6 @@ class InterfaceForwardingContextService:
             "response_bytes": int(execution["response_bytes"] or 0),
             "truncated": bool(execution["response_truncated"]),
             "error_type": None if success else "previous_request_failed",
-            "validation_status": execution.get("validation_status") or "not_configured",
-            "validation": execution.get("validation_result") or {},
             "deduplicated": True,
         }
 
@@ -1549,47 +1181,17 @@ class InterfaceForwardingContextService:
             ) from exc
         return task.workspace_id, task_environment
 
-    def _task_intent(self, task_id: int) -> str:
-        try:
-            return str(self._tasks.get_task(task_id).intent_type)
-        except TaskRepositoryError as exc:
-            raise InterfaceForwardingContextError("任务不存在", code="task_not_found") from exc
-
     @staticmethod
     def _load_interface(cursor: Any, workspace_id: str, interface_id: str) -> dict[str, Any]:
         cursor.execute(
             """SELECT interface.*, source.name AS service_name, source.invocation_mode,
                       source.gateway_path_prefix, source.updated_at AS service_updated_at,
-                      route.id AS route_service_id, route.name AS route_service_name,
-                      profile.business_entity, profile.business_action,
-                      profile.business_scenario, profile.aliases,
-                      profile.positive_examples, profile.negative_examples,
-                      profile.source AS intent_source,
-                      profile.confidence AS intent_confidence,
-                      (SELECT count(*)::int
-                       FROM interface_forwarding_logs AS log
-                       WHERE log.interface_id=interface.id AND log.success=true)
-                        AS successful_request_count,
-                      COALESCE((
-                          SELECT jsonb_agg(
-                              jsonb_build_object(
-                                  'database_key', effect.database_key,
-                                  'schema_name', effect.schema_name,
-                                  'table_name', effect.table_name,
-                                  'effect_type', effect.effect_type,
-                                  'response_contribution', effect.response_contribution,
-                                  'confidence', effect.confidence
-                              ) ORDER BY effect.table_name, effect.effect_type
-                          ) FROM interface_forwarding_table_effects AS effect
-                          WHERE effect.interface_id=interface.id
-                      ), '[]'::jsonb) AS table_effects
+                      route.id AS route_service_id, route.name AS route_service_name
                FROM interface_forwarding_interfaces AS interface
                JOIN interface_forwarding_services AS source ON source.id=interface.service_id
                LEFT JOIN interface_forwarding_services AS route
                  ON route.id=CASE WHEN source.invocation_mode='gateway'
                                   THEN source.gateway_service_id ELSE source.id END
-               LEFT JOIN interface_forwarding_intent_profiles AS profile
-                 ON profile.interface_id=interface.id
                WHERE interface.id=%s AND interface.workspace_id=%s""",
             (interface_id, workspace_id),
         )
@@ -1597,67 +1199,6 @@ class InterfaceForwardingContextService:
         if not row:
             raise InterfaceForwardingContextError("接口不存在", code="interface_not_found")
         return row
-
-    @staticmethod
-    def _bind_latest_search_selection(
-        cursor: Any,
-        *,
-        task_id: int,
-        workspace_id: str,
-        interface_id: str,
-    ) -> dict[str, Any] | None:
-        cursor.execute(
-            """WITH selected AS (
-                   SELECT event.id,
-                          COALESCE((ranked.item->>'rank')::int, ranked.position::int)
-                            AS selected_rank
-                   FROM interface_forwarding_search_events AS event
-                   CROSS JOIN LATERAL jsonb_array_elements(event.result_ranking)
-                     WITH ORDINALITY AS ranked(item, position)
-                   WHERE event.task_id=%s AND event.workspace_id=%s
-                     AND ranked.item->>'interface_id'=%s
-                   ORDER BY event.created_at DESC, event.id DESC
-                   LIMIT 1
-               )
-               UPDATE interface_forwarding_search_events AS event
-               SET selected_interface_id=%s,
-                   selected_rank=selected.selected_rank,
-                   selected_at=CURRENT_TIMESTAMP
-               FROM selected
-               WHERE event.id=selected.id
-               RETURNING event.id, event.selected_rank""",
-            (task_id, workspace_id, interface_id, interface_id),
-        )
-        return cursor.fetchone()
-
-    @staticmethod
-    def _complete_search_event(
-        cursor: Any,
-        *,
-        search_event_id: str | None,
-        execution_log_id: str,
-        success: bool,
-    ) -> None:
-        if not search_event_id:
-            return
-        cursor.execute(
-            """UPDATE interface_forwarding_search_events
-               SET execution_log_id=%s, execution_success=%s,
-                   executed_at=CURRENT_TIMESTAMP
-               WHERE id=%s""",
-            (execution_log_id, success, search_event_id),
-        )
-
-    @staticmethod
-    def _blocking_intent_mismatches(match: Any) -> list[str]:
-        """Return only contradictions that make the selected operation unsafe to execute."""
-
-        blocking_categories = {"crud", "negative_example"}
-        return [
-            str(item["reason"])
-            for item in match.score_breakdown
-            if item.get("category") in blocking_categories and int(item.get("delta") or 0) < 0
-        ]
 
     @staticmethod
     def _addresses(
@@ -2343,30 +1884,6 @@ class InterfaceForwardingContextService:
             result[location] = fields
         result["truncated"] = truncated
         return result
-
-    @staticmethod
-    def _response_contract_summary(schema: dict[str, Any]) -> dict[str, object]:
-        if not isinstance(schema, dict) or not schema:
-            return {"configured": False, "type": "unknown", "fields": []}
-        properties = schema.get("properties")
-        fields: list[dict[str, object]] = []
-        required = set(schema.get("required") or [])
-        if isinstance(properties, dict):
-            for name, raw_field in list(properties.items())[:200]:
-                field = raw_field if isinstance(raw_field, dict) else {}
-                fields.append(
-                    {
-                        "name": str(name),
-                        "type": str(field.get("type") or "unknown"),
-                        "required": name in required,
-                    }
-                )
-        return {
-            "configured": True,
-            "type": str(schema.get("type") or "object"),
-            "fields": fields,
-            "truncated": isinstance(properties, dict) and len(properties) > len(fields),
-        }
 
     @staticmethod
     def _response_success(status_code: int | None, response_body: str) -> bool:

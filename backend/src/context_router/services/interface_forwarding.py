@@ -2738,8 +2738,7 @@ class InterfaceForwardingService:
                 """SELECT id, environment_name, identity_name, identity_role,
                 request_url, request_body,
                 response_body, status_code, success, duration_ms,
-                intent_match_score, intent_match_evidence,
-                validation_status, validation_result, created_at
+                created_at
                 FROM interface_forwarding_logs WHERE interface_id=%s
                 ORDER BY created_at DESC LIMIT %s""",
                 (interface_id, max(1, min(limit, 200))),

@@ -137,8 +137,6 @@ def test_mcp_integration_returns_client_configs_and_readiness(tmp_path: Path) ->
         "read_forwarding_request_history",
         "prepare_forwarding_request",
         "execute_forwarding_request",
-        "discover_task_tools",
-        "invoke_task_tool",
         "apply_workspace_changes",
         "start_workspace",
         "get_workspace_operation",
@@ -153,16 +151,8 @@ def test_mcp_integration_returns_client_configs_and_readiness(tmp_path: Path) ->
     assert '"X-Agent-Name" = "codex"' in configs["codex"]
     assert '"httpUrl": "https://context.example.com/mcp"' in configs["gemini"]
     assert '"X-Agent-Name": "gemini"' in configs["gemini"]
-    assert "agy mcp add --type http" in configs["antigravity"]
-    assert "X-Agent-Name: antigravity" in configs["antigravity"]
-    assert '"url": "https://context.example.com/mcp"' in configs["cursor"]
-    assert '"X-Agent-Name": "cursor"' in configs["cursor"]
-    assert "grok mcp add --transport http" in configs["grok"]
-    assert "X-Agent-Name: grok" in configs["grok"]
-    client_configs = {item["client"]: item for item in payload["clients"]}
-    assert client_configs["antigravity"]["setup_kind"] == "command"
-    assert client_configs["cursor"]["setup_kind"] == "file"
-    assert client_configs["grok"]["setup_kind"] == "command"
+    assert '"serverUrl": "https://context.example.com/mcp"' in configs["antigravity"]
+    assert '"X-Agent-Name": "antigravity"' in configs["antigravity"]
     assert tools_response.status_code == 200
     listed_tools = tools_response.json()["tools"]
     assert [tool["name"] for tool in listed_tools] == [
@@ -184,12 +174,9 @@ def test_mcp_integration_returns_client_configs_and_readiness(tmp_path: Path) ->
         "resolve_value_candidates",
         "execute_mapped_data_query",
         "search_forwarding_interfaces",
-        "read_forwarding_interface_detail",
         "read_forwarding_request_history",
         "prepare_forwarding_request",
         "execute_forwarding_request",
-        "discover_task_tools",
-        "invoke_task_tool",
         "apply_workspace_changes",
         "start_workspace",
         "get_workspace_operation",

@@ -236,67 +236,8 @@ def test_reused_execution_result_is_successful_and_explicitly_deduplicated() -> 
         "response_bytes": 16,
         "truncated": False,
         "error_type": None,
-        "validation_status": "not_configured",
-        "validation": {},
         "deduplicated": True,
     }
-
-
-def test_latest_search_selection_records_initial_rank_without_client_argument() -> None:
-    cursor = _Cursor({"id": "search-1", "selected_rank": 3})
-
-    result = InterfaceForwardingContextService._bind_latest_search_selection(
-        cursor,
-        task_id=18,
-        workspace_id="workspace-1",
-        interface_id="interface-3",
-    )
-
-    assert result == {"id": "search-1", "selected_rank": 3}
-    assert "jsonb_array_elements(event.result_ranking)" in cursor.statement
-    assert "selected_at=CURRENT_TIMESTAMP" in cursor.statement
-    assert cursor.parameters == (18, "workspace-1", "interface-3", "interface-3")
-
-
-def test_execution_completion_links_back_to_search_event() -> None:
-    cursor = _Cursor(None)
-
-    InterfaceForwardingContextService._complete_search_event(
-        cursor,
-        search_event_id="search-1",
-        execution_log_id="log-1",
-        success=True,
-    )
-
-    assert "execution_log_id=%s" in cursor.statement
-    assert cursor.parameters == ("log-1", True, "search-1")
-
-
-def test_prepare_blocks_crud_conflicts_but_not_other_soft_mismatches() -> None:
-    soft_only = type(
-        "Match",
-        (),
-        {
-            "score_breakdown": (
-                {"category": "result_shape", "delta": -25, "reason": "接口形态不匹配"},
-            )
-        },
-    )()
-    crud_conflict = type(
-        "Match",
-        (),
-        {
-            "score_breakdown": (
-                {"category": "result_shape", "delta": -25, "reason": "接口形态不匹配"},
-                {"category": "crud", "delta": -180, "reason": "期望 create，候选为 read"},
-            )
-        },
-    )()
-
-    assert InterfaceForwardingContextService._blocking_intent_mismatches(soft_only) == []
-    assert InterfaceForwardingContextService._blocking_intent_mismatches(crud_conflict) == [
-        "期望 create，候选为 read"
-    ]
 
 
 def test_successful_history_is_sanitized_and_pagination_is_bounded() -> None:

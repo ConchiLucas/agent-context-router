@@ -516,13 +516,11 @@ class PostgresTaskRepository:
         intent_source: str,
     ) -> None:
         if intent_type not in {
-            "interface_discovery",
             "interface_execute",
             "data_query",
             "task_execute",
             "bug_investigate",
             "bug_fix",
-            "code_change",
         }:
             raise TaskRepositoryError("任务意图类型无效")
         if intent_source not in {

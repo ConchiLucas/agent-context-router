@@ -28,7 +28,6 @@ from context_router.mcp_contract import (
 from context_router.mcp_contract import (
     CONTEXT_ROUTER_TRACE_SERVER_NAME as TRACE_SERVER_NAME,
 )
-from context_router.mcp_tool_registry import TaskToolRegistry
 from context_router.repositories.task_repository import TaskReader, TaskRepositoryError
 from context_router.schemas.ai_task_visualization import (
     AiTaskCodeLocation,
@@ -78,7 +77,6 @@ from context_router.services.table_relation_context import (
     TableRelationContextError,
     TableRelationContextService,
 )
-from context_router.services.task_capability import TaskCapabilityError, TaskCapabilityService
 from context_router.services.value_mapping import ValueMappingError, ValueMappingService
 from context_router.services.workspace_runtime_orchestration import (
     WorkspaceRuntimeOrchestrationError,
@@ -87,29 +85,15 @@ from context_router.services.workspace_runtime_orchestration import (
 
 MCP_SERVER_NAME = "Context Router"
 MCP_CLIENT_NAME_HEADER = "X-Agent-Name"
-MCP_CLIENT_AGENT_NAMES = frozenset({"codex", "gemini", "antigravity", "cursor", "grok"})
+MCP_CLIENT_AGENT_NAMES = frozenset({"codex", "gemini", "antigravity"})
 MCP_SERVER_INSTRUCTIONS = (
     "Call prepare_task_context once at the start of a new workspace task. First classify the "
-    "user's primary intent as interface_discovery, interface_execute, data_query, task_execute, "
-    "bug_investigate, bug_fix, or code_change and pass it as intent_type. Use "
-    "interface_discovery when the user only wants to find, compare, or inspect an interface; "
-    "the server also corrects discovery wording that was declared as interface_execute. Set "
-    "error_signal=true only when a Bug "
-    "request contains "
+    "user's primary intent as interface_execute, data_query, task_execute, bug_investigate, or "
+    "bug_fix and pass it as intent_type. Set error_signal=true only when a Bug request contains "
     "or points to actual runtime error evidence. Preserve the "
     "returned task_id and pass it to every document or database call for that task. Every "
     "successful traced tool response includes tool_call_id; reuse that exact ID in later "
     "execution_tool_call_id or verification_call_ids fields instead of inventing evidence. "
-    "The document navigation tools are core direct-call tools: after prepare, call "
-    "search_context_documents directly when the target is uncertain, then call "
-    "read_context_document directly for selected IDs or sections. These core tools are never "
-    "returned by discover_task_tools and must never be wrapped in invoke_task_tool. "
-    "Use prepare_task_context.recommended_actions first for professional capabilities. When the "
-    "next technical domain is not covered, call discover_task_tools with the same task_id and "
-    "current sub-goal, then call invoke_task_tool with the returned name, arguments schema, and "
-    "definition_revision. Direct "
-    "professional tools remain available during rollout, but do not enumerate or call unrelated "
-    "tools speculatively. "
     "Prepare returns the real workspace entry when present, otherwise the active project or "
     "synthetic workspace entry, plus at most two explicit descendant levels and access "
     "capabilities. This navigation projection is not the full searchable scope. A "
@@ -226,7 +210,6 @@ MCP_SERVER_INSTRUCTIONS = (
 ) = CONTEXT_ROUTER_TABLE_RELATION_TOOL_NAMES
 (
     SEARCH_FORWARDING_INTERFACES_TOOL_NAME,
-    READ_FORWARDING_INTERFACE_DETAIL_TOOL_NAME,
     READ_FORWARDING_REQUEST_HISTORY_TOOL_NAME,
     PREPARE_FORWARDING_REQUEST_TOOL_NAME,
     EXECUTE_FORWARDING_REQUEST_TOOL_NAME,
@@ -247,8 +230,6 @@ MCP_SERVER_INSTRUCTIONS = (
 APPLY_WORKSPACE_TOOL_NAME = "apply_workspace_changes"
 START_WORKSPACE_TOOL_NAME = "start_workspace"
 GET_WORKSPACE_OPERATION_TOOL_NAME = "get_workspace_operation"
-DISCOVER_TASK_TOOLS_TOOL_NAME = "discover_task_tools"
-INVOKE_TASK_TOOL_NAME = "invoke_task_tool"
 APPLY_WORKSPACE_TOOL_DESCRIPTION = (
     "Route actual Workspace-relative changed files to registered Projects, select fast/full "
     "profiles centrally, and queue one ordered asynchronous Workspace operation."
@@ -260,35 +241,6 @@ START_WORKSPACE_TOOL_DESCRIPTION = (
 GET_WORKSPACE_OPERATION_TOOL_DESCRIPTION = (
     "Read one Workspace runtime operation, its ordered steps, and bounded log tails. Poll "
     "until status is succeeded, failed, cancelled, or interrupted."
-)
-DISCOVER_TASK_TOOLS_TOOL_DESCRIPTION = (
-    "Discover the smallest set of task-aware professional MCP actions relevant to the current "
-    "goal. Returns complete input schemas, parameter descriptions, safety annotations, readiness, "
-    "and immutable definition revisions. Use this after prepare_task_context when its recommended "
-    "actions are insufficient or the task enters a new technical domain. This tool never returns "
-    "core navigation tools prepare_task_context, search_context_documents, or "
-    "read_context_document; call those directly with the same task_id."
-)
-INVOKE_TASK_TOOL_DESCRIPTION = (
-    "Invoke one professional action returned by prepare_task_context.recommended_actions or "
-    "discover_task_tools.actions. Pass the returned action name as tool_name, not action_name, "
-    "and copy its definition_revision exactly. The server binds task_id, verifies the action "
-    "definition revision and task capability, then executes the existing professional tool with "
-    "normal tracing and policy checks. Core navigation tools are called directly and are rejected "
-    "here with a direct-call correction."
-)
-DIRECT_CALL_ONLY_TOOL_NAMES = frozenset(
-    {
-        PREPARE_TOOL_NAME,
-        SEARCH_CONTEXT_TOOL_NAME,
-        READ_TOOL_NAME,
-        DISCOVER_TASK_TOOLS_TOOL_NAME,
-        INVOKE_TASK_TOOL_NAME,
-        SAVE_TASK_VISUALIZATION_RESULT_TOOL_NAME,
-        APPLY_WORKSPACE_TOOL_NAME,
-        START_WORKSPACE_TOOL_NAME,
-        GET_WORKSPACE_OPERATION_TOOL_NAME,
-    }
 )
 LIST_TASK_CONTAINERS_TOOL_DESCRIPTION = (
     "List only Docker containers registered to the current task Workspace by Agent Context "
@@ -457,24 +409,7 @@ RESOLVE_VALUE_CANDIDATES_TOOL_DESCRIPTION = (
 )
 SEARCH_FORWARDING_INTERFACES_TOOL_DESCRIPTION = (
     "Search imported interfaces in the task Workspace and report whether each is callable in "
-    "the task environment. Pass the user's original business wording. Results may include a "
-    "curated business entity, action, scenario, aliases, CRUD type, and source-backed table "
-    "effects. Use score_breakdown, match_reasons, and mismatches to understand the ranking "
-    "instead of asking for manual confirmation. "
-    "Prefer candidates whose business action and entity both match the request instead of choosing "
-    "only by HTTP method, path, or a generic interface name. Query interfaces expose only tables "
-    "proved to contribute to the returned response; mutation interfaces omit validation reads. "
-    "search_event_id records the initial ranking and is automatically linked when a result is "
-    "prepared and executed; the caller does not pass it to later tools."
-)
-READ_FORWARDING_INTERFACE_DETAIL_TOOL_DESCRIPTION = (
-    "Read one imported interface's shared semantic detail after search. Returns business entity, "
-    "action, scenario, aliases, positive and negative examples, CRUD type, request contract, "
-    "bounded response-contract summary, published parameter mappings, source-backed table effects, "
-    "task-intent match evidence, and current environment readiness. It never returns forwarding "
-    "URLs, saved request headers, credentials, or raw request/response history. Use it when search "
-    "candidates are ambiguous or the user asks about parameters, response fields, or affected "
-    "tables."
+    "the task environment. Prefer an exact Chinese business meaning, path fragment, or Controller."
 )
 READ_FORWARDING_REQUEST_HISTORY_TOOL_DESCRIPTION = (
     "Read the newest bounded request history for one imported interface in the task Workspace "
@@ -618,7 +553,7 @@ class ContextRouterMCP(FastMCP):
                 _attach_tool_call_id(result, tool_call_id)
             return result
 
-        trace_name, trace_arguments = _effective_trace_call(name, arguments)
+        trace_name, trace_arguments = name, arguments
         request_summary = _request_summary(trace_name, trace_arguments)
         task_id = _positive_int(trace_arguments.get("task_id"))
         if task_id is None and trace_name == GET_WORKSPACE_OPERATION_TOOL_NAME:
@@ -719,11 +654,7 @@ class ContextRouterMCP(FastMCP):
                     error_code="tool_error_result",
                 )
             else:
-                effective_payload = (
-                    payload.get("result")
-                    if name == INVOKE_TASK_TOOL_NAME and isinstance(payload.get("result"), dict)
-                    else payload
-                )
+                effective_payload = payload
                 if payload_service is not None:
                     payload_service.capture_response(
                         tool_call_id,
@@ -762,10 +693,8 @@ def create_context_router_mcp(
     ai_task_visualization_service: AiTaskVisualizationService | None = None,
     database_context_service: DatabaseContextService | None = None,
     task_repository: TaskReader | None = None,
-    task_capability_service: TaskCapabilityService | None = None,
 ) -> FastMCP:
     forwarding_execution_limiter = asyncio.Semaphore(4)
-    task_tool_registry = TaskToolRegistry()
     server = ContextRouterMCP(
         name=MCP_SERVER_NAME,
         instructions=MCP_SERVER_INSTRUCTIONS,
@@ -801,13 +730,11 @@ def create_context_router_mcp(
             ),
         ] = None,
         intent_type: Literal[
-            "interface_discovery",
             "interface_execute",
             "data_query",
             "task_execute",
             "bug_investigate",
             "bug_fix",
-            "code_change",
         ]
         | None = None,
         error_signal: Annotated[
@@ -829,30 +756,6 @@ def create_context_router_mcp(
                 ),
             ),
         ] = None,
-        capability_hints: Annotated[
-            list[
-                Literal[
-                    "context",
-                    "database",
-                    "data",
-                    "interface",
-                    "logs",
-                    "middleware",
-                    "relation",
-                    "mapping",
-                ]
-            ]
-            | None,
-            Field(
-                default=None,
-                min_length=1,
-                max_length=8,
-                description=(
-                    "Optional read-domain hints explicitly implied by the user request. They may "
-                    "only expand safe read capabilities and never grant code or runtime mutation."
-                ),
-            ),
-        ] = None,
     ) -> dict[str, Any]:
         try:
             request_agent_name = _request_agent_name(ctx)
@@ -867,23 +770,7 @@ def create_context_router_mcp(
             )
         except ContextPreparationError as exc:
             raise ToolError(f"{exc.code}: {exc}") from exc
-        payload = result.model_dump(exclude_none=True)
-        if task_capability_service is not None and task_repository is not None:
-            try:
-                enabled = task_capability_service.initialize(result.task_id, capability_hints)
-                task_record = task_repository.get_task(result.task_id)
-            except (TaskCapabilityError, TaskRepositoryError) as exc:
-                code = getattr(exc, "code", "task_capabilities_unavailable")
-                raise ToolError(f"{code}: {exc}") from exc
-            payload["enabled_capabilities"] = enabled
-            payload["recommended_actions"] = task_tool_registry.discover(
-                intent_type=task_record.intent_type,
-                query=task,
-                enabled_capabilities=set(enabled),
-                limit=5,
-                task_id=result.task_id,
-            )
-        return payload
+        return result.model_dump(exclude_none=True)
 
     @server.tool(
         name=READ_TASK_CONTEXT_TOOL_NAME,
@@ -1554,25 +1441,6 @@ def create_context_router_mcp(
             raise ToolError(f"{exc.code}: {exc}") from exc
 
     @server.tool(
-        name=READ_FORWARDING_INTERFACE_DETAIL_TOOL_NAME,
-        description=READ_FORWARDING_INTERFACE_DETAIL_TOOL_DESCRIPTION,
-        annotations=READ_TOOL_ANNOTATIONS,
-    )
-    def read_forwarding_interface_detail(
-        task_id: Annotated[int, Field(ge=1, strict=True)],
-        interface_id: Annotated[str, Field(min_length=1, max_length=36)],
-    ) -> dict[str, object]:
-        if interface_forwarding_context_service is None:
-            raise ToolError("interface_forwarding_disabled: 接口转发 MCP 当前不可用")
-        try:
-            return interface_forwarding_context_service.detail(
-                task_id=task_id,
-                interface_id=interface_id,
-            )
-        except InterfaceForwardingContextError as exc:
-            raise ToolError(f"{exc.code}: {exc}") from exc
-
-    @server.tool(
         name=READ_FORWARDING_REQUEST_HISTORY_TOOL_NAME,
         description=READ_FORWARDING_REQUEST_HISTORY_TOOL_DESCRIPTION,
         annotations=READ_TOOL_ANNOTATIONS,
@@ -1678,151 +1546,6 @@ def create_context_router_mcp(
             raise ToolError(f"{exc.code}: {exc}") from exc
 
     @server.tool(
-        name=DISCOVER_TASK_TOOLS_TOOL_NAME,
-        description=DISCOVER_TASK_TOOLS_TOOL_DESCRIPTION,
-        annotations=READ_TOOL_ANNOTATIONS,
-    )
-    def discover_task_tools(
-        task_id: Annotated[
-            int,
-            Field(
-                ge=1,
-                strict=True,
-                description="prepare_task_context 返回的当前任务 ID。",
-            ),
-        ],
-        query: Annotated[
-            str,
-            Field(
-                min_length=1,
-                max_length=1000,
-                description="当前要完成的具体步骤或技术目标，保留关键业务词。",
-            ),
-        ],
-        capability_hints: Annotated[
-            list[
-                Literal[
-                    "context",
-                    "database",
-                    "data",
-                    "interface",
-                    "logs",
-                    "middleware",
-                    "relation",
-                    "mapping",
-                ]
-            ]
-            | None,
-            Field(
-                default=None,
-                min_length=1,
-                max_length=8,
-                description="用户目标明确涉及的只读能力域；不会授予代码或运行时变更能力。",
-            ),
-        ] = None,
-        limit: Annotated[
-            int,
-            Field(ge=1, le=10, strict=True, description="最多返回的相关动作数。"),
-        ] = 5,
-    ) -> dict[str, Any]:
-        if task_repository is None or task_capability_service is None:
-            raise ToolError("task_tool_discovery_disabled: 渐进式任务工具发现当前不可用")
-        try:
-            task_record = task_repository.get_task(task_id)
-            enabled = task_capability_service.initialize(task_id, capability_hints)
-        except (TaskRepositoryError, TaskCapabilityError) as exc:
-            code = getattr(exc, "code", "task_tool_discovery_failed")
-            raise ToolError(f"{code}: {exc}") from exc
-        actions = task_tool_registry.discover(
-            intent_type=task_record.intent_type,
-            query=query,
-            enabled_capabilities=set(enabled),
-            limit=limit,
-            task_id=task_id,
-        )
-        return {
-            "task_id": task_id,
-            "intent_type": task_record.intent_type,
-            "query": query,
-            "enabled_capabilities": enabled,
-            "actions": actions,
-        }
-
-    @server.tool(
-        name=INVOKE_TASK_TOOL_NAME,
-        description=INVOKE_TASK_TOOL_DESCRIPTION,
-        annotations=LOG_INSPECTION_TOOL_ANNOTATIONS,
-    )
-    async def invoke_task_tool(
-        task_id: Annotated[
-            int,
-            Field(
-                ge=1,
-                strict=True,
-                description="prepare_task_context 返回的当前任务 ID。",
-            ),
-        ],
-        tool_name: Annotated[
-            str,
-            Field(
-                min_length=1,
-                max_length=100,
-                description="recommended_actions 或 discover_task_tools 返回的动作 name。",
-            ),
-        ],
-        arguments: Annotated[
-            dict[str, Any],
-            Field(
-                description=(
-                    "目标动作的参数对象，不包含 task_id；字段必须符合发现结果中的 input_schema。"
-                ),
-            ),
-        ],
-        definition_revision: Annotated[
-            str,
-            Field(
-                min_length=64,
-                max_length=64,
-                pattern=r"^[0-9a-f]{64}$",
-                description="发现结果返回的 definition_revision，防止按过期 Schema 执行。",
-            ),
-        ],
-        ctx: Context,
-    ) -> dict[str, Any]:
-        if task_capability_service is None:
-            raise ToolError("task_tool_invocation_disabled: 渐进式任务工具调用当前不可用")
-        definition = task_tool_registry.get(tool_name)
-        if definition is None:
-            if tool_name in DIRECT_CALL_ONLY_TOOL_NAMES:
-                raise ToolError(
-                    "core_tool_direct_call_required: "
-                    f"{tool_name} 是公共直连工具，不会由 discover_task_tools 返回，也不能经 "
-                    "invoke_task_tool 调用；请使用相同 task_id 直接调用该工具"
-                )
-            raise ToolError(f"task_tool_not_found: 未发现可调用动作 {tool_name}")
-        if definition.definition_revision != definition_revision:
-            raise ToolError("task_tool_definition_changed: 工具定义已更新，请重新发现后再调用")
-        if "task_id" in arguments:
-            raise ToolError("invalid_tool_arguments: arguments 不允许包含 task_id")
-        try:
-            task_capability_service.ensure_allowed(task_id, definition.spec.capability)
-        except TaskCapabilityError as exc:
-            raise ToolError(f"{exc.code}: {exc}") from exc
-        result = await definition.tool.run(
-            {"task_id": task_id, **arguments},
-            context=ctx,
-            convert_result=False,
-        )
-        return {
-            "task_id": task_id,
-            "tool_name": tool_name,
-            "capability": definition.spec.capability,
-            "status": "succeeded",
-            "definition_revision": definition.definition_revision,
-            "result": result,
-        }
-
-    @server.tool(
         name=APPLY_WORKSPACE_TOOL_NAME,
         description=APPLY_WORKSPACE_TOOL_DESCRIPTION,
         annotations=RUNTIME_APPLY_TOOL_ANNOTATIONS,
@@ -1878,27 +1601,7 @@ def create_context_router_mcp(
             raise ToolError(f"{exc.code}: {exc}") from exc
         return result.model_dump(mode="json", exclude_none=True)
 
-    for tool_name in task_tool_registry.names:
-        tool = server._tool_manager.get_tool(tool_name)
-        if tool is None:
-            raise RuntimeError(f"渐进式 MCP 注册表引用了未注册工具：{tool_name}")
-        task_tool_registry.bind(tool_name, tool)
-
     return server
-
-
-def _effective_trace_call(
-    name: str,
-    arguments: dict[str, Any],
-) -> tuple[str, dict[str, Any]]:
-    if name != INVOKE_TASK_TOOL_NAME:
-        return name, arguments
-    target_name = arguments.get("tool_name")
-    target_arguments = arguments.get("arguments")
-    task_id = arguments.get("task_id")
-    if not isinstance(target_name, str) or not isinstance(target_arguments, dict):
-        return name, arguments
-    return target_name, {"task_id": task_id, **target_arguments}
 
 
 def _elapsed_ms(started_ns: int) -> int:
@@ -2116,8 +1819,6 @@ def _request_summary(name: str, arguments: dict[str, Any]) -> dict[str, object] 
             "role": _safe_string(arguments.get("role"), 160),
             "limit": arguments.get("limit") if isinstance(arguments.get("limit"), int) else None,
         }
-    if name == READ_FORWARDING_INTERFACE_DETAIL_TOOL_NAME:
-        return {"interface_id": _safe_string(arguments.get("interface_id"), 36)}
     if name == READ_FORWARDING_REQUEST_HISTORY_TOOL_NAME:
         return {
             "interface_id": _safe_string(arguments.get("interface_id"), 36),
@@ -2334,18 +2035,6 @@ def _result_summary(name: str, payload: dict[str, Any]) -> dict[str, object] | N
             "returned_count": payload.get("returned_count", 0),
             "environment": _safe_string(payload.get("environment"), 32),
             "match_confidence": _safe_string(payload.get("match_confidence"), 16),
-            "goal_completed": payload.get("goal_completed") is True,
-            "next_action": _safe_string(payload.get("next_action"), 64),
-        }
-    if name == READ_FORWARDING_INTERFACE_DETAIL_TOOL_NAME:
-        assessment = payload.get("selection_assessment")
-        readiness = payload.get("execution_readiness")
-        return {
-            "environment": _safe_string(payload.get("environment"), 32),
-            "match_score": (
-                assessment.get("match_score") if isinstance(assessment, dict) else None
-            ),
-            "callable": readiness.get("callable") if isinstance(readiness, dict) else None,
             "goal_completed": payload.get("goal_completed") is True,
             "next_action": _safe_string(payload.get("next_action"), 64),
         }

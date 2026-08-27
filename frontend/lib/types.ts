@@ -818,7 +818,7 @@ export interface McpToolsListResult {
 }
 
 export interface McpClientConfig {
-  client: "codex" | "gemini" | "antigravity" | "cursor" | "grok";
+  client: "codex" | "gemini" | "antigravity";
   title: string;
   config_path: string;
   project_config_path?: string;
@@ -1042,13 +1042,11 @@ export type AiTaskVisualizationStatus =
   | "unclosed";
 
 export type AiTaskIntentType =
-  | "interface_discovery"
   | "interface_execute"
   | "data_query"
   | "task_execute"
   | "bug_investigate"
-  | "bug_fix"
-  | "code_change";
+  | "bug_fix";
 
 export type AiTaskIntentSource =
   | "agent_declared"
@@ -1576,16 +1574,6 @@ export interface InterfaceForwardingLog {
   status_code: number | null;
   success: boolean;
   duration_ms: number;
-  intent_match_score: number;
-  intent_match_evidence: {
-    match_reasons?: string[];
-    mismatches?: string[];
-  };
-  validation_status: "passed" | "warning" | "failed" | "not_configured";
-  validation_result: {
-    checks?: Record<string, { status?: string; message?: string }>;
-    warnings?: string[];
-  };
   created_at: string;
 }
 

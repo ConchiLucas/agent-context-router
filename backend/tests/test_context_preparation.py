@@ -280,27 +280,6 @@ def test_prepare_persists_declared_bug_investigation_contract(tmp_path: Path) ->
     assert repository.created[0]["intent_source"] == "agent_declared"
 
 
-def test_prepare_corrects_interface_discovery_declared_as_execution(tmp_path: Path) -> None:
-    registry, _ = build_registry(tmp_path)
-    repository = FakeTaskRepository()
-    service = ContextPreparationService(registry, repository)
-
-    result = service.prepare(
-        task="查询委托需求报价的接口",
-        cwd=str(tmp_path / "project" / "src"),
-        agent_name="grok",
-        intent_type="interface_execute",
-    )
-
-    assert result.execution_contract.intent_type == "interface_discovery"
-    assert result.execution_contract.required_steps == [
-        "search_forwarding_interfaces",
-        "save_task_visualization_result",
-    ]
-    assert repository.created[0]["intent_type"] == "interface_discovery"
-    assert repository.created[0]["intent_source"] == "system_default"
-
-
 def test_data_query_contract_prefers_direct_mapping_random_selection(tmp_path: Path) -> None:
     registry, _ = build_registry(tmp_path)
     repository = FakeTaskRepository()

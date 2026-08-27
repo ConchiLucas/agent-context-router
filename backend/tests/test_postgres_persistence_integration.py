@@ -51,7 +51,7 @@ _REVISION_0020 = "20260730_0020"
 _REVISION_0022 = "20260730_0022"
 _REVISION_0023 = "20260802_0023"
 _REVISION_0024 = "20260808_0024"
-_REVISION_HEAD = "20260827_0070"
+_REVISION_HEAD = "20260827_0072"
 
 _PROJECT_A = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 _PROJECT_B = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -318,7 +318,6 @@ def test_trace_list_keeps_ordinary_tasks_without_internal_calls_and_excludes_sys
             ("ordinary-no-call", "codex"),
             ("ordinary-external-only", "codex"),
             ("ordinary-read-without-prepare", "codex"),
-            ("ordinary-progressive-calls", "antigravity"),
             ("preview", "web-preview"),
             ("connection", "connection-test"),
         ):
@@ -374,26 +373,6 @@ def test_trace_list_keeps_ordinary_tasks_without_internal_calls_and_excludes_sys
             """,
             (task_ids["ordinary-read-without-prepare"],),
         )
-        for tool_name in (
-            "resolve_database_target",
-            "execute_mapped_data_query",
-            "discover_task_tools",
-            "invoke_task_tool",
-        ):
-            connection.execute(
-                """
-                INSERT INTO mcp_tool_calls (
-                    task_id,
-                    server_name,
-                    tool_name,
-                    source,
-                    status,
-                    finished_at
-                )
-                VALUES (%s, 'context-router', %s, 'server', 'ok', CURRENT_TIMESTAMP)
-                """,
-                (task_ids["ordinary-progressive-calls"], tool_name),
-            )
 
     records = PostgresMcpToolCallRepository(database_url).list_traces(limit=100)
     records_by_task = {record.task: record for record in records}
@@ -402,7 +381,6 @@ def test_trace_list_keeps_ordinary_tasks_without_internal_calls_and_excludes_sys
         "ordinary-no-call",
         "ordinary-external-only",
         "ordinary-read-without-prepare",
-        "ordinary-progressive-calls",
     }
     assert records_by_task["ordinary-no-call"].call_count == 0
     assert records_by_task["ordinary-no-call"].prepare_call_count == 0
@@ -410,18 +388,6 @@ def test_trace_list_keeps_ordinary_tasks_without_internal_calls_and_excludes_sys
     assert records_by_task["ordinary-external-only"].server_names == []
     assert records_by_task["ordinary-read-without-prepare"].call_count == 1
     assert records_by_task["ordinary-read-without-prepare"].prepare_call_count == 0
-    assert records_by_task["ordinary-progressive-calls"].call_count == 4
-    assert {
-        call.tool_name
-        for call in PostgresMcpToolCallRepository(database_url).list_calls(
-            task_ids["ordinary-progressive-calls"]
-        )
-    } == {
-        "resolve_database_target",
-        "execute_mapped_data_query",
-        "discover_task_tools",
-        "invoke_task_tool",
-    }
 
 
 def test_workspace_alias_migration_rejects_conflicts_without_renaming(

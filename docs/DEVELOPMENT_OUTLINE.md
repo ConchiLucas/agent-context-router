@@ -43,7 +43,7 @@
 - 刷新以 Workspace 为单位全量重建可选根入口和全部子项目并统一替换；会遍历并记录全部失败项目，任一入口文档构建失败时仍保留上一版工作空间映射。
 - 前端只从 Workspace 树接口获取显式根树或合成根树，从 Workspace 文档详情接口按需获取内存正文；未出现在真实根显式树中的 Project 文档仍保留在 Workspace 搜索和按 ID 读取范围。
 - Workspace 根通过 Docker 可写挂载，仅供显式“从数据库恢复”全量覆盖；普通文档读取和扫描不写目标目录。
-- MCP `tools/list` 当前由运行时注册表生成，本版为 27 个工具，其中 `discover_task_tools` 与 `invoke_task_tool` 渐进提供专业动作；接口检索通过 `search_forwarding_interfaces` 结构化评分，歧义候选由 `read_forwarding_interface_detail` 展开共享语义、合同和影响表。工具列表不按项目、数据源、中间件、映射、容器或日志记录动态变化。
+- MCP `tools/list` 固定注册 24 个工具。接口检索使用名称、路径、Controller 和已发布业务语义做普通匹配；CRUD 与源码证据支持的表影响随候选返回，但不再执行服务端意图评分、详情辅助或搜索事件闭环。工具列表不按项目、数据源、中间件、映射、容器或日志记录动态变化。
 - c12-mtp 的 `/order-api/`、`/line-api/`、`/basic-api/`、`/highway-api/`、`/railway-api/`、`/shipping-api/`、`/settlement-api/`、`/declaration-api/`、`/declaration-interface-api/`、`/operation-api/`、`/message-api/`、`/inner/message/`、`/external-interface-api/`、`/zhiyun/`、`/sms/`、`/job-client-api/`、`/trace-api/` 和 `/admin/` 由同一源码扫描发布器维护业务语义、CRUD 与表影响；`/admin/` 使用 Web Service 扁平目录扫描器。扫描器按模块解析 Controller、Service、DAO、JPA Repository、实体表和 `sql-ext` SQL，没有源码证据的远程或文件接口不猜测本地表。内部消息 OpenAPI 中的 `*ApiController` 会映射回源码 `*Api` 类；智运位置旧路径虽被导入为“上报”，但按实际查询调用链发布为查询动作；短信发送及申报集成菜单查询只记录远程调用语义，不猜测本地表。任务模块额外按白名单识别 `xxl_job_*` 表和字符串 SQL ID；轨迹模块只发布本地 Controller 语义，不把远程公铁水聚合调用猜成本地表。剩余 `/api/`、`/test/`、`/internal/` 和 `/member-api/` 不纳入语义发布范围。
 - 接口转发准备在调用方未指定地址和身份时，先复用当前环境最近成功且仍有效的配置，再选择唯一候选，无法可靠判断才返回待选择；`selection_evidence` 只记录选择来源，不包含请求头。参数默认复用最近成功请求；只有 `refresh_selected`、`refresh_mapped`、`ignore_history` 才调用业务值映射改变历史字段。定向刷新以稳定 `value_key` 标识字段，caller 显式值优先，无法找到不同候选时不生成执行计划。
 - Workspace 是运行编排边界：`start_workspace` 始终执行 Workspace 完整启动，`apply_workspace_changes` 按一次提交的全部改动选择项目 fast/full 或 Workspace full，`get_workspace_operation` 只查询异步状态。目标根 `.env.local` 是机器差异的唯一入口，不进入 Git、控制面数据库、执行快照或日志。
@@ -56,11 +56,11 @@
 - SQL 安全策略必须 fail-closed：只允许单条、可解析、限定当前数据库/Schema 的只读语句；不能把客户端 LIMIT 当作唯一边界，仍需服务端行数、字节数、超时和数据库侧只读限制。
 - Connector 延迟创建且生命周期只归 `ConnectorManager`；数据源配置版本变化或删除时必须失效旧连接，应用退出时统一关闭。
 - `mcp_database_calls` 审计历史只保存客观元数据和 SQL SHA-256；两个数据库 MCP 工具另以独立、可过期的有界 JSON 快照保存实际请求和最终 MCP 响应，主 Trace 接口不内联这些大字段。
-- Context Router 当前 27 个 MCP 工具在统一分发入口记录到 `mcp_tool_calls`；任务内顺序由 PostgreSQL 调用 ID 生成，文档/数据库专属明细通过 `tool_call_id` 关联，观测失败不得改变工具业务结果；中间件工具只记录组件数量、脱敏模式和警告数量，不记录连接值；已下线的兼容工具历史仍可查询。
-- 调用链路页面记录 Codex、Gemini、Antigravity、Cursor、Grok 等客户端实际发送到 Context Router `/mcp` 的当前工具调用，并保留三个已下线工具的历史记录；不连接、代理、聚合或接收其他 MCP Server 的调用上报，也不建设跨 Server Trace。
+- Context Router 当前 24 个 MCP 工具在统一分发入口记录到 `mcp_tool_calls`；任务内顺序由 PostgreSQL 调用 ID 生成，文档/数据库专属明细通过 `tool_call_id` 关联，观测失败不得改变工具业务结果；中间件工具只记录组件数量、脱敏模式和警告数量，不记录连接值；已下线工具的历史仍可查询。
+- 调用链路页面记录 Codex、Gemini、Antigravity 客户端实际发送到 Context Router `/mcp` 的当前工具调用，并保留已下线工具的历史记录；不连接、代理、聚合或接收其他 MCP Server 的调用上报，也不建设跨 Server Trace。
 - 顶层页面只读展示 Workspace；进入详情后使用“前端项目 / 后端项目”两页签。环境详情、查看调用记录、查看文档树和查看 MCP JSON 位于 Workspace 工具栏；数据源汇总移动到环境详情页，并由页头环境下拉框统一切换 Nacos、流转说明和授权集合。
 - 完整出入参只对白名单数据库工具 `search_database_objects`、`execute_database_query` 自动采集，并通过 no-store 详情 API 懒加载；prepare/search/read 不建立完整 payload 快照。
 - 新 task 使用 `scope='workspace'` 和无外键的稳定 Workspace/活动项目快照；`scope='project'` 的旧 task 继续按原 project_id/project_key 读取、搜索和解析数据库，避免升级后历史串链。后端启动会收敛遗留 running 调用，Trace API 与页面明确区分完整、运行中和可能不完整。
 - 表关联当前只实现查询展示。关联数据的生成尚未实现（没有命名候选规则、没有跨库推断、没有数据实测），页面数据由种子脚本写入示例。边按「规范化无向对加方向字段」存储，`orientation` 是候选生成期就确定的结构信息而不是实测结论；`cardinality` 统一按父到子存储，`many_to_one` 由读取侧按当前选中表翻转得到，`many_to_many` 由中间表折叠在读取时合成。翻转后的基数直接充当分组依据，页面固定四组 `1 — 1`、`1 — N`、`N — 1`、`N — N`，空组不渲染。junction 折叠是页面级视图偏好，开关在左栏；`tables` 接口按基数额外给出 `folded_*_count`，前端做减法，左栏计数、排序、隐藏判断和顶部总数都跟随折叠状态，和详情实际渲染的行数一致。八个计数由 `project_table_counters()` 走详情同一对视图构造器算出，种子脚本直接复用。`cardinality = 'unknown'` 的边在查询服务就被过滤（不放前端，因为左栏计数存在库里，两处过滤必然对不上）。页面只回答「方向是什么」：状态判定、证据来源、实测指标和表的估算行数、主键、逻辑删除标识既不落库也不展示，一行只有基数徽章和列名对两层，设计保留在 `table_relation_design.md` 等探测流水线实现时再加回。公共字段名单、可展示基数和基数翻转集中在 `services/table_relation_rules.py`，读取路径和种子脚本共用。表关联只有六个只读 GET 接口，没有 rebuild POST，因此不涉及浏览器 POST 白名单和系统任务过滤。
-- migration head 为 `20260827_0071`；`0071` 将 Workspace 接口术语和动态限定标签归档到 `archived_*`，运行时不再读取，保留接口业务语义与搜索质量闭环；`0070` 增加接口搜索自动质量与选择/执行闭环事件，`0068` 增加接口发现意图、匹配证据、响应规则和执行验证，`0067` 增加接口业务语义、CRUD 分类和表影响。
+- migration head 为 `20260827_0072`；`0072` 将渐进式 MCP 能力、接口意图评分/响应验证及搜索质量事件归档到 `archived_*`，运行时不再读取；`0071` 已归档 Workspace 接口术语和动态限定标签。`0067` 的接口业务语义、CRUD 分类和表影响继续保留。
 - 本地服务默认只绑定回环地址；真实 ClickHouse 测试使用根 Compose 的 `integration` profile 和固定镜像版本。

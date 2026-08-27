@@ -153,11 +153,6 @@ from context_router.repositories.table_relation_repository import (
     PostgresTableRelationRepository,
     TableRelationStore,
 )
-from context_router.repositories.task_capability_repository import (
-    InMemoryTaskCapabilityRepository,
-    PostgresTaskCapabilityRepository,
-    TaskCapabilityStore,
-)
 from context_router.repositories.task_repository import PostgresTaskRepository, TaskStore
 from context_router.repositories.workspace_deploy_repository import (
     InMemoryWorkspaceDeployRepository,
@@ -208,7 +203,6 @@ from context_router.services.shared_ai_config import SharedAiConfigService
 from context_router.services.shared_config_client import SharedConfigCenterClient
 from context_router.services.system_guides import SystemGuideService
 from context_router.services.table_relation_context import TableRelationContextService
-from context_router.services.task_capability import TaskCapabilityService
 from context_router.services.value_mapping import ValueMappingService
 from context_router.services.workspace_containers import WorkspaceContainerService
 from context_router.services.workspace_deploy_sync import WorkspaceDeploySyncService
@@ -252,7 +246,6 @@ def create_app(
     shared_ai_default_repository: SharedAiDefaultStore | None = None,
     ai_data_query_repository: AiDataQueryStore | None = None,
     ai_log_investigation_repository: AiLogInvestigationStore | None = None,
-    task_capability_repository: TaskCapabilityStore | None = None,
 ) -> FastAPI:
     resolved_settings = settings or Settings()
     if workspace_repository is not None:
@@ -354,19 +347,6 @@ def create_app(
     )
     resolved_task_repository = task_repository or PostgresTaskRepository(
         resolved_settings.database_url
-    )
-    resolved_task_capability_repository = task_capability_repository or (
-        PostgresTaskCapabilityRepository(resolved_settings.database_url)
-        if resolved_settings.database_url
-        else InMemoryTaskCapabilityRepository()
-    )
-    task_capability_service = (
-        TaskCapabilityService(
-            resolved_task_repository,
-            resolved_task_capability_repository,
-        )
-        if hasattr(resolved_task_repository, "get_task")
-        else None
     )
     resolved_runtime_runner_repository = runtime_runner_repository or (
         PostgresRuntimeRunnerRepository(resolved_settings.database_url)
@@ -622,7 +602,6 @@ def create_app(
         ai_log_visualization_service=ai_log_visualization_service,
         ai_task_visualization_service=ai_task_visualization_service,
         task_repository=resolved_task_repository,
-        task_capability_service=task_capability_service,
     )
     mcp_app = mcp_server.streamable_http_app()
 
@@ -680,8 +659,6 @@ def create_app(
     app.state.context_document_search_service = document_search_service
     app.state.document_search_repository = resolved_document_search_repository
     app.state.task_repository = resolved_task_repository
-    app.state.task_capability_repository = resolved_task_capability_repository
-    app.state.task_capability_service = task_capability_service
     app.state.document_read_repository = resolved_read_repository
     app.state.project_repository = resolved_project_repository
     app.state.runtime_config_repository = resolved_runtime_config_repository

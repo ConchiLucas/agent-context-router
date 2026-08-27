@@ -1,6 +1,5 @@
 import asyncio
 import threading
-from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -14,12 +13,7 @@ from context_router.mcp_server import (
     _request_agent_name,
     create_context_router_mcp,
 )
-from context_router.repositories.task_capability_repository import (
-    InMemoryTaskCapabilityRepository,
-)
-from context_router.repositories.task_repository import TaskRecord
 from context_router.schemas.context import SearchContextDocumentsResult
-from context_router.services.task_capability import TaskCapabilityService
 
 
 class UnusedService:
@@ -36,8 +30,6 @@ class UnusedService:
         ("Codex", "codex"),
         ("gemini", "gemini"),
         ("ANTIGRAVITY", "antigravity"),
-        ("Cursor", "cursor"),
-        ("GROK", "grok"),
         ("unknown-client", None),
     ],
 )
@@ -55,8 +47,6 @@ def test_request_agent_name_accepts_only_configured_clients(
 
 
 class _PrepareResult:
-    task_id = 55
-
     def model_dump(self, **_: object) -> dict[str, object]:
         return {"task_id": 55}
 
@@ -72,21 +62,6 @@ class RecordingPreparationService:
     def read_task_context(self, **arguments: object) -> _PrepareResult:
         self.arguments = arguments
         return _PrepareResult()
-
-
-class _TaskReader:
-    def get_task(self, task_id: int) -> TaskRecord:
-        return TaskRecord(
-            id=task_id,
-            project_id="project-1",
-            project_key="project",
-            project_name="Project",
-            task="读取数据库配置",
-            cwd="/workspace",
-            agent_name="codex",
-            created_at=datetime.now(UTC),
-            intent_type="code_change",
-        )
 
 
 class RecordingCatalogService:
@@ -178,16 +153,6 @@ class RecordingValueMappingService:
         return {"mapping_id": mapping_id, "candidates": [], "returned_count": 0}
 
 
-class _CandidateValueMappingService(RecordingValueMappingService):
-    def resolve_for_task(self, mapping_id: str, **arguments: object) -> dict[str, object]:
-        self.calls.append(("resolve", {"mapping_id": mapping_id, **arguments}))
-        return {
-            "mapping_id": mapping_id,
-            "candidates": [{"value": "SHIPPER-1", "label": "测试货主"}],
-            "returned_count": 1,
-        }
-
-
 class BlockingForwardingService:
     def __init__(self) -> None:
         self.started = threading.Event()
@@ -265,12 +230,9 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "resolve_value_candidates",
         "execute_mapped_data_query",
         "search_forwarding_interfaces",
-        "read_forwarding_interface_detail",
         "read_forwarding_request_history",
         "prepare_forwarding_request",
         "execute_forwarding_request",
-        "discover_task_tools",
-        "invoke_task_tool",
         "apply_workspace_changes",
         "start_workspace",
         "get_workspace_operation",
@@ -297,7 +259,6 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
             "search_value_mappings",
             "resolve_value_candidates",
             "search_forwarding_interfaces",
-            "read_forwarding_interface_detail",
             "read_forwarding_request_history",
         )
     )
@@ -350,13 +311,11 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "intent_type",
         "error_signal",
         "intent_summary",
-        "capability_hints",
     }
     environment_schema = str(prepare_schema["properties"]["environment"])
     assert "^[a-z][a-z0-9_-]{0,31}$" in environment_schema
     assert "detect a registered environment alias" in environment_schema
     assert "bug_investigate" in str(prepare_schema["properties"]["intent_type"])
-    assert "interface_discovery" in str(prepare_schema["properties"]["intent_type"])
     assert "execution_contract" in PREPARE_TOOL_DESCRIPTION
     assert "read_task_context" in PREPARE_TOOL_DESCRIPTION
     assert "sensitive" in READ_TASK_CONTEXT_TOOL_DESCRIPTION
@@ -365,8 +324,6 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
     assert "returns plaintext fields by default" in READ_MIDDLEWARE_CONTEXT_TOOL_DESCRIPTION
     assert "Returning and using connection values" in READ_MIDDLEWARE_CONTEXT_TOOL_DESCRIPTION
     assert "never echo it into logs" in MCP_SERVER_INSTRUCTIONS
-    assert "core direct-call tools" in MCP_SERVER_INSTRUCTIONS
-    assert "must never be wrapped in invoke_task_tool" in MCP_SERVER_INSTRUCTIONS
     task_context_schema = tool_by_name["read_task_context"].inputSchema
     middleware_schema = tool_by_name["read_middleware_context"].inputSchema
     document_search_schema = tool_by_name["search_context_documents"].inputSchema
@@ -424,9 +381,6 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "table_name",
         "execution_tool_call_id",
     }
-    mapped_query_schema = tool_by_name["execute_mapped_data_query"].inputSchema
-    assert "include_record" in mapped_query_schema["properties"]
-    assert mapped_query_schema["properties"]["include_record"]["default"] is True
     task_visualization_schema = tool_by_name["save_task_visualization_result"].inputSchema
     assert task_visualization_schema["required"] == ["task_id", "status", "summary"]
     assert set(task_visualization_schema["properties"]) == {
@@ -518,74 +472,6 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
     )
 
 
-def test_discover_and_invoke_reuse_existing_professional_tool() -> None:
-    preparation = RecordingPreparationService()
-    tasks = _TaskReader()
-    capabilities = TaskCapabilityService(tasks, InMemoryTaskCapabilityRepository())
-    server = create_context_router_mcp(  # type: ignore[arg-type]
-        preparation,
-        UnusedService(),
-        task_repository=tasks,
-        task_capability_service=capabilities,
-    )
-
-    _, discovered = asyncio.run(
-        server.call_tool(
-            "discover_task_tools",
-            {
-                "task_id": 55,
-                "query": "读取数据库环境配置",
-                "capability_hints": ["database"],
-                "limit": 10,
-            },
-        )
-    )
-    action = next(item for item in discovered["actions"] if item["name"] == "read_task_context")
-
-    _, invoked = asyncio.run(
-        server.call_tool(
-            "invoke_task_tool",
-            {
-                "task_id": 55,
-                "tool_name": "read_task_context",
-                "arguments": {"sections": ["databases"]},
-                "definition_revision": action["definition_revision"],
-            },
-        )
-    )
-
-    assert invoked["tool_name"] == "read_task_context"
-    assert invoked["status"] == "succeeded"
-    assert invoked["result"] == {"task_id": 55}
-    assert preparation.arguments == {"task_id": 55, "sections": ["databases"]}
-
-
-def test_invoke_rejects_core_navigation_tool_with_direct_call_guidance() -> None:
-    tasks = _TaskReader()
-    capabilities = TaskCapabilityService(tasks, InMemoryTaskCapabilityRepository())
-    server = create_context_router_mcp(  # type: ignore[arg-type]
-        RecordingPreparationService(),
-        UnusedService(),
-        task_repository=tasks,
-        task_capability_service=capabilities,
-    )
-
-    with pytest.raises(ToolError, match="core_tool_direct_call_required") as exc_info:
-        asyncio.run(
-            server.call_tool(
-                "invoke_task_tool",
-                {
-                    "task_id": 55,
-                    "tool_name": "search_context_documents",
-                    "arguments": {"query": "启动规范", "limit": 1},
-                    "definition_revision": "a" * 64,
-                },
-            )
-        )
-
-    assert "使用相同 task_id 直接调用" in str(exc_info.value)
-
-
 def test_value_mapping_tools_forward_only_task_scoped_arguments() -> None:
     document_service = UnusedService()
     mappings = RecordingValueMappingService()
@@ -647,33 +533,6 @@ def test_value_mapping_tools_forward_only_task_scoped_arguments() -> None:
             },
         ),
     ]
-
-
-def test_mapped_query_is_supporting_evidence_for_code_change() -> None:
-    mappings = _CandidateValueMappingService()
-    server = create_context_router_mcp(  # type: ignore[arg-type]
-        UnusedService(),
-        UnusedService(),
-        value_mapping_service=mappings,  # type: ignore[arg-type]
-        task_repository=_TaskReader(),
-    )
-
-    _, result = asyncio.run(
-        server.call_tool(
-            "execute_mapped_data_query",
-            {
-                "task_id": 55,
-                "mapping_id": "mapping-1",
-                "description": "读取货主作为开发验证证据",
-            },
-        )
-    )
-
-    assert result["status"] == "succeeded"
-    assert result["purpose"] == "supporting_evidence"
-    assert result["goal_completed"] is False
-    assert result["visualization"] is None
-    assert mappings.calls[-1][1]["include_record"] is True
 
 
 def test_forwarding_execution_keeps_mcp_event_loop_responsive() -> None:
