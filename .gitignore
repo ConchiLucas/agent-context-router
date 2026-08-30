@@ -2,6 +2,8 @@
 .env
 .env.*
 !.env.example
+!.env.native.example
+!.env.container.example
 *.db
 
 # Python
@@ -10,6 +12,7 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .venv/
+.venv-native/
 dist/
 build/
 *.egg-info/

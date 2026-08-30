@@ -1,6 +1,6 @@
 # 开发大纲
 
-修改代码前先读取 [启动与开发规范](./STARTUP_GUIDE.md)，所有运行和验证均通过 Docker Compose。
+修改代码前先读取 [启动与开发规范](./STARTUP_GUIDE.md)。Context Router 自身使用 Native Stack；已注册 Workspace 的运行仍通过 Host Runner 和 Docker Compose。
 
 ## 任务路由
 
@@ -47,7 +47,7 @@
 - c12-mtp 的 `/order-api/`、`/line-api/`、`/basic-api/`、`/highway-api/`、`/railway-api/`、`/shipping-api/`、`/settlement-api/`、`/declaration-api/`、`/declaration-interface-api/`、`/operation-api/`、`/message-api/`、`/inner/message/`、`/external-interface-api/`、`/zhiyun/`、`/sms/`、`/job-client-api/`、`/trace-api/` 和 `/admin/` 由同一源码扫描发布器维护业务语义、CRUD 与表影响；`/admin/` 使用 Web Service 扁平目录扫描器。扫描器按模块解析 Controller、Service、DAO、JPA Repository、实体表和 `sql-ext` SQL，没有源码证据的远程或文件接口不猜测本地表。内部消息 OpenAPI 中的 `*ApiController` 会映射回源码 `*Api` 类；智运位置旧路径虽被导入为“上报”，但按实际查询调用链发布为查询动作；短信发送及申报集成菜单查询只记录远程调用语义，不猜测本地表。任务模块额外按白名单识别 `xxl_job_*` 表和字符串 SQL ID；轨迹模块只发布本地 Controller 语义，不把远程公铁水聚合调用猜成本地表。剩余 `/api/`、`/test/`、`/internal/` 和 `/member-api/` 不纳入语义发布范围。
 - 接口转发准备在调用方未指定地址和身份时，先复用当前环境最近成功且仍有效的配置，再选择唯一候选，无法可靠判断才返回待选择；`selection_evidence` 只记录选择来源，不包含请求头。参数默认复用最近成功请求；只有 `refresh_selected`、`refresh_mapped`、`ignore_history` 才调用业务值映射改变历史字段。定向刷新以稳定 `value_key` 标识字段，caller 显式值优先，无法找到不同候选时不生成执行计划。
 - Workspace 是运行编排边界：`start_workspace` 始终执行 Workspace 完整启动，`apply_workspace_changes` 按一次提交的全部改动选择项目 fast/full 或 Workspace full，`get_workspace_operation` 只查询异步状态。目标根 `.env.local` 是机器差异的唯一入口，不进入 Git、控制面数据库、执行快照或日志。
-- Context Router 只做运行控制面和快照物化；手动启动的 Host Runtime Runner 通过回环 Token 协议领取租约并执行固定 `deploy.sh`。禁止配置 Docker/launchd 开机自启，禁止从后端容器直接执行目标 Workspace。
+- Native Backend 只做运行控制面和快照物化；Host Runtime Runner 通过回环 Token 协议领取租约并执行固定 `deploy.sh`。Context Router 自身不通过 Docker 启动，Backend 禁止直接执行目标 Workspace；业务 Workspace 继续由 Docker Compose 承载。
 - 新 task 的文档搜索固定绑定 Workspace，查询工作空间根文档独立索引及各 Project 同版本索引，再聚合去重；索引不可用时显式失败，不回退到进程内全文扫描。
 - cwd 路由先按最长前缀选择最深 Workspace，再按 Project 的源码根而不是文档入口目录选择最深 Project；`active_project` 只作为元数据，不收窄 Workspace 的文档和数据库范围。任一项目缓存不可用时 prepare 明确失败。
 - prepare 返回 task_id、固化后的环境快照、可用能力、必要 warning，以及节点仅含 `document_id/summary/children` 的任务局部三层投影。环境按 Workspace 已登记别名从任务描述确定；后续工具不能覆盖。数据库访问统一按 `task_id -> database_context_id -> 环境 revision/物理库快照 -> 当前项目授权/连接/策略 -> Connector` 路由，客户端不再传数据库别名。

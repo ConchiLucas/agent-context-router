@@ -23,6 +23,7 @@ from context_router.schemas.workspace_runtime import (
 from context_router.services.interface_forwarding_context import (
     InterfaceForwardingContextError,
 )
+from context_router.services.runtime_paths import RuntimePathResolver
 
 router = APIRouter(prefix="/runtime-runner", tags=["runtime-runner"])
 
@@ -120,9 +121,7 @@ def lease_operation(payload: RunnerLeaseRequest, request: Request) -> dict[str, 
 
 
 @router.post("/forwarding/lease")
-def lease_forwarding_job(
-    payload: RunnerLeaseRequest, request: Request
-) -> dict[str, object]:
+def lease_forwarding_job(payload: RunnerLeaseRequest, request: Request) -> dict[str, object]:
     _authorize(request)
     runner = request.app.state.runtime_runner_repository.get(payload.runner_id)
     if runner is None:
@@ -290,7 +289,7 @@ def _workspace_host_root(request: Request, workspace_id: str) -> str:
             return str(repository.get_workspace(workspace_id).root_path)
         except Exception:
             pass
-    return str(request.app.state.settings.workspace_host_root)
+    return str(RuntimePathResolver(request.app.state.settings).host_root)
 
 
 def _project_relative_paths(request: Request, workspace_id: str) -> dict[str, str]:

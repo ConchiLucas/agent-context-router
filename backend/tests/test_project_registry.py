@@ -184,6 +184,7 @@ def test_missing_nested_project_does_not_fall_back_after_workspace_reload(
     project_repository = InMemoryProjectRepository(workspace_repository)
     registry = ProjectRegistry(
         Settings(
+            runtime_mode="container",
             workspace_host_root=host_root,
             workspace_container_root=container_root,
         ),

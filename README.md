@@ -22,10 +22,14 @@
 
 ## 运行方式
 
-项目只通过当前目录的 Docker Compose 管理：
+Context Router 自身使用宿主机 Native Stack；注册到系统中的业务 Workspace 继续通过 Host Runner 使用各自的 Docker Compose：
+
+本机工具链要求 Python 3.12、Node.js 22、uv、npm 和 Docker Desktop。macOS 可使用 `brew install node@22`；它无需替换系统其他 Node 版本，Native 脚本会优先发现 Homebrew 的 keg-only Node 22。
 
 ```bash
-docker compose up -d --force-recreate backend frontend
+cp .env.native.example .env.native.local
+./scripts/bootstrap-native.sh
+./scripts/start-native-stack.sh
 ```
 
 - Web：<http://127.0.0.1:49175>
@@ -33,11 +37,11 @@ docker compose up -d --force-recreate backend frontend
 - API 文档：<http://127.0.0.1:49173/docs>
 - MCP：<http://127.0.0.1:49173/mcp>
 
-Compose 默认把 `/Users/conchi/workforce` 只读挂载到后端 `/workspace`，不预置任何工作空间或项目。其他机器或服务器通过 `.env` 覆盖：
+Backend 直接读取 `CONTEXT_ROUTER_WORKSPACE_ROOT` 下的本机文档和源码，不预置任何工作空间或项目。其他机器通过 `.env.native.local` 覆盖：
 
 ```text
-CONTEXT_ROUTER_WORKSPACE_HOST_ROOT=/absolute/workspace/root
-CONTEXT_ROUTER_DATABASE_URL=postgresql://USER:PASSWORD@host.docker.internal:5432/context_router
+CONTEXT_ROUTER_WORKSPACE_ROOT=/absolute/workspace/root
+CONTEXT_ROUTER_DATABASE_URL=postgresql://USER:PASSWORD@127.0.0.1:5432/context_router
 ```
 
 页面可以长期维护多个工作空间、工作空间内的多个项目和全局物理数据源。工作空间保存绝对 `root_path` 和唯一运行时启停开关；项目只保存名称、`frontend/backend` 类型和工作空间内唯一的 `relative_path`，没有独立 enabled 状态。工作空间级入口固定为可选的 `root_path / AGENTS.md`；根项目使用 `.`，项目入口固定为 `root_path / relative_path / AGENTS.md`。工作空间/项目配置、项目数据库关联、Workspace MCP task、文档读取与数据库调用元数据保存在 PostgreSQL；后端重启时恢复配置并重新构建工作空间级及各项目缓存。真实工作空间入口严格定义导航树层级，缺少入口时合成根才列出 Project；全部项目文档始终保留在 Workspace 搜索和按 ID 读取范围。Markdown 原文仍以磁盘文件为唯一真源，数据库只额外保存用于词法检索的规范化派生分块，不保存文档工具完整出入参。数据库 MCP 工具的完整 SQL 与有界结果快照默认自动写入独立、可过期的 payload 表供本机链路页面按需查看。
@@ -68,7 +72,7 @@ MCP 始终暴露十个无状态工具：
 首次使用前执行 migration：
 
 ```bash
-docker compose exec backend uv run alembic upgrade head
+UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend alembic upgrade head
 ```
 
 ## 刷新行为

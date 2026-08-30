@@ -20,6 +20,7 @@ from context_router.services.local_workspace_mapping import (
     LocalWorkspaceMappingService,
 )
 from context_router.services.project_registry import ProjectRegistry, ProjectRegistryError
+from context_router.services.runtime_paths import RuntimePathError, RuntimePathResolver
 from context_router.services.workspace_deploy_sync import (
     CONFIG_ROOT,
     SENSITIVE_FILENAMES,
@@ -45,6 +46,7 @@ class WorkspaceSharedFilesService:
         registry: ProjectRegistry,
     ) -> None:
         self._settings = settings
+        self._paths = RuntimePathResolver(settings)
         self._mapping = local_mapping
         self._workspaces = workspace_repository
         self._projects = project_repository
@@ -105,11 +107,9 @@ class WorkspaceSharedFilesService:
         except (WorkspaceRepositoryError, LocalWorkspaceMappingError) as exc:
             raise WorkspaceSharedFilesError(str(exc)) from exc
         try:
-            relative = host_path.relative_to(self._settings.workspace_host_root)
-        except ValueError:
-            resolved = host_path.resolve()
-        else:
-            resolved = (self._settings.workspace_container_root / relative).resolve()
+            resolved = self._paths.map_host_path(host_path)
+        except RuntimePathError as exc:
+            raise WorkspaceSharedFilesError(str(exc)) from exc
         if not resolved.is_dir():
             raise WorkspaceSharedFilesError(f"找不到主映射目录：{host_path}")
         return resolved

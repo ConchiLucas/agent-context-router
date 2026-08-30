@@ -2,6 +2,7 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 
@@ -15,8 +16,16 @@ def english_workspace_root() -> Path:
     return Path("/Users/conchi/workforce/rob_english_word_workforce")
 
 
-def test_english_workspace_adopts_workspace_runtime_contract() -> None:
+def require_english_workspace() -> Path:
     root = english_workspace_root()
+    required = root / "AGENTS.md"
+    if not required.is_file():
+        pytest.skip(f"英语工作空间契约夹具不可用：缺少 {required}")
+    return root
+
+
+def test_english_workspace_adopts_workspace_runtime_contract() -> None:
+    root = require_english_workspace()
     agents = (root / "AGENTS.md").read_text()
     runtime_document = (root / "docs/shared/runtime-deployment-map.md").read_text()
     deploy = root / "deploy/context-router/workspace/start/deploy.sh"
@@ -39,7 +48,7 @@ def test_english_workspace_adopts_workspace_runtime_contract() -> None:
 
 
 def test_english_workspace_exposes_canonical_deploy_sync_tree() -> None:
-    root = english_workspace_root()
+    root = require_english_workspace()
     expected_projects = {
         "word_select_dashboard/server",
         "word_select_dashboard/word-agent",

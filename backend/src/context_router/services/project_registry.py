@@ -37,6 +37,7 @@ from context_router.services.local_workspace_mapping import (
     LocalWorkspaceMappingError,
     LocalWorkspaceMappingService,
 )
+from context_router.services.runtime_paths import RuntimePathError, RuntimePathResolver
 from context_router.services.workspace_paths import (
     WorkspacePathError,
     derive_agents_path,
@@ -126,6 +127,7 @@ class ProjectRegistry:
         local_mapping: LocalWorkspaceMappingService | None = None,
     ) -> None:
         self._settings = settings
+        self._paths = RuntimePathResolver(settings)
         self._project_repository = project_repository
         self._document_search_indexer = document_search_indexer
         self._local_mapping = local_mapping
@@ -208,14 +210,10 @@ class ProjectRegistry:
         if source.name != "AGENTS.md":
             raise ProjectRegistryError("入口文件必须命名为 AGENTS.md")
 
-        host_root = self._settings.workspace_host_root
-        container_root = self._settings.workspace_container_root
         try:
-            relative = source.relative_to(host_root)
-        except ValueError:
-            resolved = source.resolve()
-        else:
-            resolved = (container_root / relative).resolve()
+            resolved = self._paths.map_host_path(source)
+        except RuntimePathError as exc:
+            raise ProjectRegistryError(str(exc)) from exc
 
         return resolved
 
@@ -231,10 +229,9 @@ class ProjectRegistry:
             raise ProjectRegistryError("cwd 必须是绝对路径")
 
         try:
-            relative = source.relative_to(self._settings.workspace_host_root)
-        except ValueError:
-            return source.resolve()
-        return (self._settings.workspace_container_root / relative).resolve()
+            return self._paths.map_host_path(source)
+        except RuntimePathError as exc:
+            raise ProjectRegistryError(str(exc)) from exc
 
     def _build_optional_workspace_document_cache(
         self,

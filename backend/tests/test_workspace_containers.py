@@ -192,6 +192,26 @@ def test_list_containers_reports_missing_docker_socket(tmp_path: Path) -> None:
         service.list_containers("workspace-1")
 
 
+def test_default_socket_falls_back_to_docker_desktop_socket(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    desktop_socket = tmp_path / ".docker/run/docker.sock"
+    desktop_socket.parent.mkdir(parents=True)
+    desktop_socket.touch()
+    original_exists = Path.exists
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(
+        Path,
+        "exists",
+        lambda path: False if path == Path("/var/run/docker.sock") else original_exists(path),
+    )
+    service = WorkspaceContainerService(Path("/var/run/docker.sock"))
+
+    service._ensure_socket()  # noqa: SLF001
+
+    assert service._docker_socket == desktop_socket  # noqa: SLF001
+
+
 def test_docker_log_parser_decodes_fragmented_multiplexed_frames() -> None:
     payload = "2026-08-09T10:20:30.123456789Z \x1b[31m服务启动\x1b[0m\n".encode()
     frame = bytes([2, 0, 0, 0]) + len(payload).to_bytes(4, "big") + payload

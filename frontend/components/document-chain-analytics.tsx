@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { fetchChainAnalyticsOverview } from "../lib/api";
 import {
   ChainAnalyticsOverview,
@@ -19,7 +19,7 @@ export const DocumentChainAnalyticsPanel: React.FC<DocumentChainAnalyticsProps> 
   const [error, setError] = useState<string | null>(null);
   const [hours, setHours] = useState<number>(168);
 
-  const loadData = async (h: number) => {
+  const loadData = useCallback(async (h: number) => {
     setLoading(true);
     setError(null);
     try {
@@ -31,11 +31,11 @@ export const DocumentChainAnalyticsPanel: React.FC<DocumentChainAnalyticsProps> 
     } finally {
       setLoading(false);
     }
-  };
+  }, [workspaceId]);
 
   useEffect(() => {
     loadData(hours);
-  }, [workspaceId, hours]);
+  }, [hours, loadData]);
 
   if (loading && !data) {
     return (

@@ -20,8 +20,9 @@
 - 工作空间和项目路径配置由本机 AI/运维 API 管理；工作空间级刷新可由 Workspaces 页面卡片触发。不要把工作空间 `root_path` 当成单个项目文档目录，也不要向刷新接口提交任意路径。
 - 如果 MCP 不可用或没有合适候选，继续使用本索引和仓库检索，不要阻塞任务。
 - 修改代码前先阅读相关文件和开发规范。
-- 本项目只使用当前目录下的 Docker Compose 管理服务；不要用宿主机直接启动前端或后端。
-- 修改后端代码后，按开发规范使用 `docker compose restart backend` 重启后端。
-- 用户要求启动前后端时，按开发规范使用 Docker Compose 启动；如果已启动则重启。
-- 后续自测、测试、lint、build、migration 都按开发规范走 Docker Compose。
+- Context Router 自身使用宿主机 Native 方式运行；不要用 Docker Compose 启动本项目的前端或后端。
+- 已注册 Workspace 仍通过 Host Runtime Runner 执行各自的 Docker Compose 部署脚本；不要把业务 Workspace 改成 Native。
+- 修改后端代码后，开发模式依靠 Uvicorn reload；常驻模式按开发规范使用 `scripts/restart-native-stack.sh`。
+- 用户要求启动前后端时，按开发规范使用 Native Stack 脚本；如果已启动则重启。
+- 后续自测、测试、lint、build、migration 都按开发规范在宿主机隔离环境执行；ClickHouse 集成测试可以单独使用 Docker。
 - 只记录代码层面的开发内容，不记录普通聊天。

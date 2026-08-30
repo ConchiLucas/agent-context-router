@@ -21,6 +21,7 @@ from context_router.services.runtime_materialization import (
     RuntimeMaterializationError,
     RuntimeMaterializationService,
 )
+from context_router.services.runtime_paths import RuntimePathResolver
 from context_router.services.workspace_runtime_orchestration import select_runtime_mode
 
 RUNTIME_ENTRY_FILE = "deploy.sh"
@@ -43,6 +44,7 @@ class RuntimeExecutionService:
         materialization_service: RuntimeMaterializationService,
     ) -> None:
         self._settings = settings
+        self._paths = RuntimePathResolver(settings)
         self._registry = registry
         self._config_repository = config_repository
         self._run_repository = run_repository
@@ -162,7 +164,7 @@ class RuntimeExecutionService:
 
     def read_log(self, run_id: str, max_characters: int = 50_000) -> tuple[str, bool]:
         run = self.get_run(run_id)
-        log_path = Path(run.log_path)
+        log_path = self._paths.resolve_stored_runtime_path(run.log_path)
         if not log_path.exists():
             return "", False
         max_bytes = min(max(max_characters, 1), 200_000) * 4
@@ -286,7 +288,7 @@ class RuntimeExecutionService:
         for _ in document_path.parts:
             workspace_host_path = workspace_host_path.parent
         project_host_path = workspace_host_path.joinpath(PurePosixPath(str(project.relative_path)))
-        mounted_host_root = PurePosixPath(self._settings.workspace_host_root.as_posix())
+        mounted_host_root = PurePosixPath(self._paths.host_root.as_posix())
         try:
             workspace_relative = workspace_host_path.relative_to(mounted_host_root)
             project_relative = project_host_path.relative_to(mounted_host_root)
@@ -295,12 +297,12 @@ class RuntimeExecutionService:
                 "project_path_unavailable",
                 "项目源码不在 Runtime Runner 的工作区挂载范围内",
             ) from exc
-        workspace_root = self._settings.workspace_container_root.joinpath(*workspace_relative.parts)
-        project_root = self._settings.workspace_container_root.joinpath(*project_relative.parts)
+        workspace_root = self._paths.readable_root.joinpath(*workspace_relative.parts)
+        project_root = self._paths.readable_root.joinpath(*project_relative.parts)
         if not project_root.is_dir():
             raise RuntimeExecutionError(
                 "project_path_unavailable",
-                "项目源码目录在 Runtime Runner 容器中不可访问",
+                "项目源码目录对当前 Context Router 进程不可访问",
             )
         return (
             project_root,

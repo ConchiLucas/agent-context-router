@@ -139,7 +139,7 @@ Codex / Antigravity
 
 `start_workspace` 不接收 Project 参数，任何“启动”语义都执行 Workspace 完整启动。`apply_workspace_changes` 一次接收本轮全部改动路径；跨项目、Workspace 级路径、`.env.local` 或无法唯一归属时选择完整更新。`.env.local` 只存在目标机器磁盘，不进入控制面数据库和快照。Context Router 负责决策与状态，Host Runner 负责宿主机执行，目标仓库脚本负责 Docker 和依赖配置。
 
-接口转发 MCP 的执行也优先使用具备 `interface-forwarding` 能力的在线 Host Runner：控制面先完成计划、只读分类、配置指纹和单次使用校验，再创建短租约任务；Runner 只执行服务端组装的 HTTP(S) GET/POST 请求并回传有界结果。账号请求头不落任务表、不进入 MCP 响应；Runner 不可用时保留容器内直连兼容路径。c12-data 的原始 Controller 路径不直接开放，只有登记为 MTP 可调用接口的明确包装路径才能执行。
+接口转发 MCP 的执行也优先使用具备 `interface-forwarding` 能力的在线 Host Runner：控制面先完成计划、只读分类、配置指纹和单次使用校验，再创建短租约任务；Runner 只执行服务端组装的 HTTP(S) GET/POST 请求并回传有界结果。账号请求头不落任务表、不进入 MCP 响应；Runner 不可用时仅保留现有 Backend 直连兼容路径。c12-data 的原始 Controller 路径不直接开放，只有登记为 MTP 可调用接口的明确包装路径才能执行。
 
 `prepare_forwarding_request` 先解析转发配置。显式 `address_id`、`login_account`、`role_name` 优先；省略时在当前接口、task 环境和仍存在的候选中选择最近成功日志的地址与身份；没有成功记录但仅有一个候选时自动选择；其余情况返回 `needs_selection`。显式账号或角色会先排除不包含该身份的地址。`selection_evidence` 分别记录地址和身份来自 `caller`、`successful_history` 或 `single_candidate`；调用摘要只记录来源，不记录登录请求头。配置确定后，再按同接口、同环境、同转发地址、同身份选择最近一条成功日志，并在合并前移除验证码、临时令牌、时间戳等易失字段，把历史页码重置为 1、历史分页大小限制到 20。默认 `value_strategy=reuse_successful`，不会因为存在映射就查询业务数据库。用户要求更换指定业务值时使用 `refresh_selected + refresh_value_keys`；要求所有业务值重新造数时使用 `refresh_mapped`；明确拒绝历史时才使用 `ignore_history`。刷新只处理当前接口的精确参数绑定，先移除对应历史值，再从最多 10 个候选中稳定选择一个与旧值不同的值；调用方显式值最后覆盖且会跳过该字段的映射查询。返回的 `parameter_evidence` 标记 `caller`、`successful_history`、`value_mapping`、Schema 默认/示例或安全分页默认，`value_resolutions` 说明哪些映射被刷新或由 caller 覆盖；无法安全刷新时返回 `needs_value_resolution`，不生成计划。
 

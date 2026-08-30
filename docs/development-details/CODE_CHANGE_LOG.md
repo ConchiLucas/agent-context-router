@@ -1,5 +1,7 @@
 # 代码变更记录
 
+- `2026-08-30`：Native Frontend 固定为 Node.js 22，新增 `.node-version`、package engine 约束和 Homebrew keg-only 自动发现，避免系统 Node 26 被误用于构建或常驻服务。修复链路诊断组件 Hook 依赖警告；表关联测试按目标端点选择关系而不依赖排序；外部英语工作空间契约夹具缺少根入口时改为显式跳过。
+- `2026-08-30`：Context Router 自身切换为宿主机 Native Stack 主路径，新增独立 `.venv-native`、Native 环境样例及 bootstrap/start/stop/status/restart/dev 生命周期脚本；Backend、Frontend 和 Host Runner 共享本机 Runtime Root，服务继续只绑定回环地址。新增 `native/container` 运行模式和统一路径解析器，Native 直接读取真实 Workspace 路径，迁移期保留 Compose 容器路径兼容及旧 `/runtime` 历史日志映射。Docker Desktop 仅继续承载已注册 Workspace、容器状态/日志和集成测试，Workspace 的 `deploy.sh`、Compose 与 `runtime-runner.*` 标签协议不变。
 - `2026-08-27`：继续回退第 1、3、5、6 组接口识别重构：移除渐进式 MCP 工具发现/代理调用、接口发现意图与共享详情、服务端意图评分和响应规则校验、搜索—选择—执行质量事件，以及 Cursor/Grok 专用接入与页面展示。保留第 2 组接口业务语义、CRUD 与源码证据表影响，也保留写接口执行、Host Runner 扩展方法和成功请求去重。新增 migration `20260827_0072` 将旧能力、评分、校验和事件数据归档为 `archived_*`，历史数据可恢复。
 - `2026-08-27`：剥离 Workspace 接口术语及动态限定标签，移除管理弹窗、关联明细、限定词匹配/质量字段和基于术语的地址身份推断；保留接口业务语义、CRUD/表影响、搜索排序证据、搜索—选择—执行闭环与响应验证。新增 migration `20260827_0071` 将旧表和列归档为 `archived_*`，运行时不再读取，历史数据仍可恢复。
 - `2026-08-27`：完成接口意图发现与执行准确性改造。新增 `interface_discovery` 任务意图、基于业务实体/CRUD/结果形态/正反例/表影响的确定性候选排序、`read_forwarding_interface_detail` 共享详情 MCP、执行前意图匹配校验和执行后响应结构/业务状态校验。接口可视化同步展示意图证据和验证结果；新增 migration `20260827_0068`，MCP 工具总数调整为 27。

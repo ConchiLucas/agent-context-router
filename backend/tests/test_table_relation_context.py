@@ -114,6 +114,12 @@ def single_entry(result: dict[str, object]) -> dict[str, object]:
     return entries[0]
 
 
+def relation_to(entry: dict[str, object], child_suffix: str) -> dict[str, object]:
+    relations = entry["relations"]
+    assert isinstance(relations, list)
+    return next(row for row in relations if str(row["child"]).endswith(child_suffix))
+
+
 def test_read_uses_the_workspace_snapshot_instead_of_the_task_environment() -> None:
     projection = build_seed_projection(workspace_id=WORKSPACE, generation_id="generation-default")
     configured = TableRelationContextService(
@@ -183,11 +189,9 @@ def test_default_read_returns_only_structured_relations_by_bare_table_name(
         "name": "cs_portal_cockpit_city_flow",
     }
 
-    relations = entry["relations"]
-    assert isinstance(relations, list)
-    assert relations[0]["child"].endswith("cs_portal_cockpit_city_flow_cargo.flow_id")
-    assert relations[0]["parent"].endswith("cs_portal_cockpit_city_flow.id")
-    assert relations[0]["role"] == "parent"
+    row = relation_to(entry, "cs_portal_cockpit_city_flow_cargo.flow_id")
+    assert row["parent"].endswith("cs_portal_cockpit_city_flow.id")
+    assert row["role"] == "parent"
     assert "relation_count" not in entry
     assert "writes" not in entry
     assert "updates" not in entry
@@ -251,7 +255,10 @@ def test_one_settled_cardinality_reaches_the_row_with_a_flag_when_readings_diffe
         sections=["relations"],
     )
 
-    row = single_entry(result)["relations"][0]
+    row = relation_to(
+        single_entry(result),
+        "cs_portal_cockpit_city_flow_cargo.flow_id",
+    )
     # Cockpit tables are empty on UAT, so the data reading cannot confirm the code
     # reading. The row states the code verdict and admits it is soft, without
     # spending four keys on explaining a data-quality finding nobody can act on.
@@ -295,7 +302,10 @@ def test_evidence_all_adds_measurement_checks_and_code_sites(
         evidence="all",
     )
 
-    row = single_entry(result)["relations"][0]
+    row = relation_to(
+        single_entry(result),
+        "cs_portal_cockpit_city_flow_cargo.flow_id",
+    )
     evidence = row["evidence"]
     # The per-dimension breakdown the row no longer carries lives here, so asking
     # for evidence recovers everything the collapsed verdict left out.

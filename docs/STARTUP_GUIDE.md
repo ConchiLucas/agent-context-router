@@ -2,15 +2,35 @@
 
 ## 强制规则
 
-- 前后端服务、测试、lint 和 build 都通过当前目录的 `docker-compose.yml` 执行。
-- 不在宿主机直接运行 `uvicorn`、`next dev`、`pytest` 或 `npm run build`。
-- 修改后端代码后，验证前执行 `docker compose restart backend`。
-- 使用宿主机已有的 PostgreSQL；migration 仍通过后端 Docker Compose 容器执行。
+- Context Router 前端、后端和 Host Runner 使用仓库内 Native Stack 脚本在宿主机运行。
+- 已注册 Workspace 继续通过 Host Runner 执行各自固定的 `deploy.sh` 和 Docker Compose。
+- Backend 使用仓库独立的 `.venv-native`，Frontend 使用项目 `node_modules`，不得使用全局 Python 包替代锁定依赖。
+- Frontend 固定使用 Node.js 22；仓库 `.node-version`、`package.json#engines` 和 Native 脚本共同约束版本。macOS 脚本会优先使用 Homebrew keg-only 的 `node@22`，不要求替换系统默认 Node。
+- 修改后端代码后，开发模式使用 Uvicorn reload；常驻模式执行 `scripts/restart-native-stack.sh`。
+- 测试、lint、build 和 migration 使用下文的宿主机命令；ClickHouse 集成依赖可以单独使用 Docker。
 
 ## 启动
 
+首次准备：
+
 ```bash
-docker compose up -d --force-recreate backend frontend
+cp .env.native.example .env.native.local
+# 填写真实数据库、工作空间、配置中心和 Docker Socket 地址
+./scripts/bootstrap-native.sh
+```
+
+常驻启动：
+
+```bash
+./scripts/start-native-stack.sh
+./scripts/status-native-stack.sh
+./scripts/stop-native-stack.sh
+```
+
+开发启动：
+
+```bash
+./scripts/dev-native.sh
 ```
 
 服务端口：
@@ -22,36 +42,23 @@ docker compose up -d --force-recreate backend frontend
 | OpenAPI | `http://127.0.0.1:49173/docs` |
 | MCP | `http://127.0.0.1:49173/mcp` |
 
-服务均配置 `restart: unless-stopped`。
+Native Stack 不会停止或重启已注册 Workspace 的业务容器。在 macOS 上，启动脚本通过当前登录会话的 `launchd` 托管三个 Native 进程，退出终端后服务仍保持运行；这不会安装开机自启动配置。
 
-Compose 的前端和后端宿主机端口都显式绑定 `127.0.0.1`，不会默认监听局域网网卡。后端 CORS 只允许 `http://127.0.0.1:49175` 和 `http://localhost:49175`；本项目当前定位为本机工具，不提供应用层鉴权。若未来需要远程访问，应先补 HTTPS、鉴权和新的 Origin 配置，而不是直接改成公网绑定。
+Native 脚本将前端和后端显式绑定 `127.0.0.1`，不会监听局域网网卡。后端 CORS 只允许 `http://127.0.0.1:49175` 和 `http://localhost:49175`；本项目当前定位为本机工具，不提供应用层鉴权。若未来需要远程访问，应先补 HTTPS、鉴权和新的 Origin 配置，而不是直接改成公网绑定。
 
 携带任意 `Origin` 或浏览器 Fetch Metadata（`Sec-Fetch-Mode` / `Sec-Fetch-Site`）的请求由后端中间件限制为读取、既有安全操作、按 Workspace/项目类型受限的容器批量重启或停止、接口转发专用管理/执行接口，以及系统文档 JSON 正文的受校验保存。浏览器不能新建或删除系统文档，也不能修改 key、顺序或 prepare 策略；其他控制面配置写请求返回 `405 management_read_only`。本机 AI 或运维调用方不携带这些浏览器请求头，仍可使用既有受 Schema、Service 和 Repository 校验的本地 API 维护配置；这只是回环单用户部署下的调用边界，不替代身份认证。
 
 ## Docker Desktop 与 Host Runner
 
-Context Router 前后端仍只由本仓库 Docker Compose 管理，并使用
-`restart: unless-stopped` 交给 Docker Desktop 恢复。Host Runner 不执行
-`docker compose up`，也不负责启动本项目或目标 Workspace 的业务容器。需要使用运行编排时，
-统一从宿主机脚本目录执行：
+Context Router 前后端不再由 Docker Compose 管理。Docker Desktop 只为已注册 Workspace、容器状态/日志和 ClickHouse 集成测试提供运行环境。Host Runner 不负责启动 Context Router 本身；它只执行已登记 Workspace 的不可变运行快照、白名单宿主机动作和接口转发计划。
 
-```bash
-/Users/conchi/script/start-host-runner.sh start
-/Users/conchi/script/start-host-runner.sh status
-/Users/conchi/script/start-host-runner.sh stop
-```
-
-`start` 会等待 Docker Desktop 和 `http://127.0.0.1:49173/health` 就绪，随后只启动
-宿主机 Runner。Runner 注册后会提交攀枝花白名单动作
+`scripts/start-native-stack.sh` 会等待 Docker Desktop 和 `http://127.0.0.1:49173/health` 就绪后启动 Runner。不要再单独运行旧的外部 Runner 启动脚本，否则两个 Runner 会争用任务。Runner 注册后可以提交攀枝花白名单动作
 `pzh.ensure-host-runtime`，默认 `environment=local`。该动作调用固定脚本
 `/Users/conchi/script/ensure-panzhihua-host-runtime.sh`，只幂等保障已有容器、共享
 Docker 网络、数据库 TCP 转发/代理和宿主机 Nginx 网关；不会构建镜像、创建业务
 容器、拉取代码或执行 Fast/Full。
 
-当前不自动安装 macOS LaunchAgent。以后设置开机启动时，LaunchAgent 只需执行
-`/Users/conchi/script/start-host-runner.sh run`；Docker Desktop 的自动启动和容器
-恢复仍由 Docker Desktop 自身配置负责。旧的 `scripts/start-local-stack.sh` 仅保留为
-本仓库开发期手动组合入口，不作为开机入口。
+当前不安装持久化的 macOS LaunchAgent。以后设置登录后自动启动时，LaunchAgent 只需执行 `scripts/start-native-stack.sh`；Docker Desktop 的自动启动和业务容器恢复仍由 Docker Desktop 自身配置负责。旧的 `scripts/start-local-stack.sh` 仅保留为迁移期容器回退入口，不作为默认入口。
 
 Runner 会把后端重启期间的连接拒绝、连接重置和请求超时视为可重试错误，控制面恢复
 后继续心跳和领取任务。Runner 是“所有项目都在 Docker Compose 内运行”规则的唯一
@@ -66,8 +73,8 @@ Token 默认位于
 可选配置：
 
 ```text
-CONTEXT_ROUTER_RUNTIME_HOST_ROOT=/absolute/path/to/runtime
-CONTEXT_ROUTER_WORKSPACE_HOST_ROOT=/Users/conchi/workforce
+CONTEXT_ROUTER_RUNTIME_ROOT=/absolute/path/to/runtime
+CONTEXT_ROUTER_WORKSPACE_ROOT=/Users/conchi/workforce
 CONTEXT_ROUTER_CONTROL_URL=http://127.0.0.1:49173
 CONTEXT_ROUTER_RUNTIME_RUNNER_HEARTBEAT_TTL_SECONDS=30
 CONTEXT_ROUTER_RUNTIME_RUNNER_LEASE_SECONDS=30
@@ -76,36 +83,36 @@ CONTEXT_ROUTER_RUNTIME_EXECUTION_TIMEOUT_SECONDS=1800
 
 每个目标 Workspace 根目录自行保留一份被 Git 忽略的 `.env.local`，作为这台电脑唯一的数据库、Redis、MinIO 等差异配置入口。Context Router 只保存部署脚本、项目顺序和路径策略，不读取、上传、物化或记录 `.env.local` 的内容；目标仓库的启动脚本负责校验和加载它。
 
-## 工作区挂载
+## 工作区路径
 
-后端需要读取用户填写的 Workspace 绝对根目录、可选的 Workspace 根 `AGENTS.md`，以及各项目独立配置的 `document_relative_path`。新项目文档入口统一位于 Workspace 的 `docs/` 层级下，源码 `relative_path` 只用于项目定位和 cwd 路由。Compose 将宿主机工作区根目录只读挂载到容器 `/workspace`：
+后端直接读取用户填写的 Workspace 绝对根目录、可选的 Workspace 根 `AGENTS.md`，以及各项目独立配置的 `document_relative_path`。新项目文档入口统一位于 Workspace 的 `docs/` 层级下，源码 `relative_path` 只用于项目定位和 cwd 路由。Native 配置使用：
 
 ```text
-CONTEXT_ROUTER_WORKSPACE_HOST_ROOT=/Users/conchi/workforce
+CONTEXT_ROUTER_WORKSPACE_ROOT=/Users/conchi/workforce
 ```
 
-Workspace 启动配置、Project 快速/完整更新配置和运行策略以 PostgreSQL 为真源，并由后端物化到独立运行目录；浏览器页面只查看配置和历史运行状态，不提供保存、物化或执行按钮。Compose 默认把宿主机 `./.runtime-runner` 挂载到容器 `/runtime`；可以通过 `CONTEXT_ROUTER_RUNTIME_HOST_ROOT` 改为其他绝对目录，运行快照不会写入目标项目源码目录。
+Workspace 启动配置、Project 快速/完整更新配置和运行策略以 PostgreSQL 为真源，并由后端物化到 `CONTEXT_ROUTER_RUNTIME_ROOT`；Backend 和 Host Runner 必须指向同一个真实目录。运行快照不会写入目标项目源码目录。
 
 本机 AI 或运维保存 Project 运行配置时，后端会先用 PyYAML 解析非空的 `.yml/.yaml` 文件；语法错误响应只包含文件名、行号和列号，不回显文件内容，也不会覆盖数据库旧配置。Docker Compose 插值、服务定义和运行时依赖等语义仍由目标 Workspace 预检或实际执行负责。对于使用根 `.env.local` 作为唯一机器差异入口的 Workspace，推荐六个 Project 的 `fast/deploy.sh` 都保持为无凭据薄包装器，只调用目标仓库统一部署入口的单项目模式；Workspace `start/deploy.sh` 则调用同一入口的全量模式。
 
 Host Runtime Runner 只执行快照根目录下固定的 `deploy.sh`。执行前会校验 Manifest、文件哈希、Workspace/Project 相对路径、软链接边界和固定脚本名；步骤按项目顺序串行执行，首个失败后停止并把后续步骤标记 skipped，不自动清理目标容器。Workspace 容器列表可按容器携带的稳定 `project_id` 直接触发该 Project 的 Fast 或 Full profile，不按容器名额外映射。服务必须继续绑定回环地址，不得在缺少 HTTPS 和鉴权时对外暴露。
 
-容器列表中的 Fast/Full 按钮只在 Host Runtime Runner 在线时可用。浏览器提交单项目任务后，后端只校验并物化已登记的运行快照，再把 `project_update` 操作写入队列；后端容器不直接执行 Docker、Maven、JDK 或 Node 命令。宿主机 Runner 领取任务后，在项目当前本地工作树执行固定 `deploy.sh`，因此当前分支中的已提交、未提交和标准源码目录内未跟踪代码都会进入构建。
+容器列表中的 Fast/Full 按钮只在 Host Runtime Runner 在线时可用。浏览器提交单项目任务后，Backend 只校验并物化已登记的运行快照，再把 `project_update` 操作写入队列；Backend 不直接执行 Docker、Maven、JDK 或 Node 命令。宿主机 Runner 领取任务后，在项目当前本地工作树执行固定 `deploy.sh`，因此当前分支中的已提交、未提交和标准源码目录内未跟踪代码都会进入构建。
 
 Runner 会向部署脚本注入 `RUNTIME_WORKSPACE_ID`、Project 步骤的 `RUNTIME_PROJECT_ID`、`RUNTIME_PROJECT_IDS`（Workspace 相对路径与 Project ID 的制表符分隔清单）、`RUNTIME_OPERATION_ID` 和 `RUNTIME_DEPLOY_MODE`。目标 Compose 服务统一写入同名 `runtime-runner.*` 标签；容器归属直接按 Workspace/Project ID 查询，不维护容器名或端口映射表。Workspace 启动脚本从 `RUNTIME_PROJECT_IDS` 解析各子项目 ID 后再调用项目部署入口。
 
-后端收到宿主机绝对路径后，会将该前缀替换为 `/workspace` 再读取文件。目标文件必须位于挂载的工作区中。
+后端直接解析宿主机绝对路径。解析后的目标必须位于已登记工作区中，软链接不得越过允许的根目录。
 
-Compose 不声明或自动创建任何工作空间和项目；浏览器只负责查看，配置由本机 AI 或运维通过既有受校验 API 维护。MCP 接入仍可使用以下环境变量：
+Context Router 不自动创建任何工作空间和项目；浏览器只负责查看，配置由本机 AI 或运维通过既有受校验 API 维护。MCP 接入仍可使用以下环境变量：
 
 ```text
 CONTEXT_ROUTER_PUBLIC_MCP_URL=http://127.0.0.1:49173/mcp
 CONTEXT_ROUTER_MCP_TEST_TIMEOUT_SECONDS=15
 ```
 
-修改挂载路径或上述接入变量后需要重建容器。
+修改路径或上述接入变量后需要重启 Native Stack。
 
-`CONTEXT_ROUTER_PUBLIC_MCP_URL` 只用于接入面板生成 Codex 和 Antigravity 配置；后端容器通过固定的 `http://127.0.0.1:8000/mcp` 对自身执行真实协议测试。修改该变量不会改变 Compose 的回环绑定，也不会增加 HTTPS 或鉴权；当前版本不支持远程暴露。若未来设计远程部署，需要先完成安全评审和相应实现，再把公开地址设置为客户端实际可访问的 URL。
+`CONTEXT_ROUTER_PUBLIC_MCP_URL` 只用于接入面板生成 Codex 和 Antigravity 配置；Backend 通过 `CONTEXT_ROUTER_INTERNAL_MCP_URL=http://127.0.0.1:49173/mcp` 对自身执行真实协议测试。修改该变量不会改变 Native 脚本的回环绑定，也不会增加 HTTPS 或鉴权；当前版本不支持远程暴露。若未来设计远程部署，需要先完成安全评审和相应实现，再把公开地址设置为客户端实际可访问的 URL。
 
 数据库 MCP 的可选全局硬上限使用同一 `CONTEXT_ROUTER_` 前缀：
 
@@ -124,7 +131,7 @@ CONTEXT_ROUTER_DATABASE_PAYLOAD_TTL_DAYS=7
 CONTEXT_ROUTER_DATABASE_PAYLOAD_CLEANUP_INTERVAL_SECONDS=3600
 ```
 
-项目数据库关联自己的行数、字节数和超时限制会与查询全局值取更严格者。数据库 MCP 出入参详情默认自动采集，`DATABASE_PAYLOAD_*` 控制两个数据库 MCP 工具的本地详情快照：请求和最终 MCP 响应默认分别最多保存 1 MB，任何配置都不能超过 4 MB，默认保留 7 天，并在后端启动及调用期间按节流周期清理。授权记录归属 Project，但 `mcp_alias` 在 Workspace 内唯一，新 Workspace task 可以使用所有子项目在 prepare 中返回的 alias。修改这些值后重启 backend。
+项目数据库关联自己的行数、字节数和超时限制会与查询全局值取更严格者。数据库 MCP 出入参详情默认自动采集，`DATABASE_PAYLOAD_*` 控制两个数据库 MCP 工具的本地详情快照：请求和最终 MCP 响应默认分别最多保存 1 MB，任何配置都不能超过 4 MB，默认保留 7 天，并在后端启动及调用期间按节流周期清理。授权记录归属 Project，但 `mcp_alias` 在 Workspace 内唯一，新 Workspace task 可以使用所有子项目在 prepare 中返回的 alias。修改这些值后执行 `scripts/restart-native-stack.sh`。
 
 每个 Workspace 独立维护环境列表和别名，`local` 固定存在且为默认；`test`、`uat` 或其他环境只在确有需要时登记。`prepare_task_context` 会从用户描述匹配已登记别名并记录 `task_description`；显式断言记录 `task_explicit`，且与描述冲突时直接拒绝；完全未提环境才固化 `local` 并记录 `workspace_default`。prepare 直接返回最终环境快照，后续中间件、映射和接口工具不再接收环境覆盖。原始数据库工具只接受 `resolve_database_target` 签发的 task 绑定上下文 ID。表关联不继承 task 环境：每个 Workspace 只读取一个已发布基准快照；关联数据页面仍用当前页面环境解析实际数据库。
 
@@ -139,19 +146,19 @@ Workspace 可按任意已登记环境保存有界 JSON 对象，不要求先配�
 在 `.env` 中配置宿主机 PostgreSQL：
 
 ```text
-CONTEXT_ROUTER_DATABASE_URL=postgresql://USER:PASSWORD@host.docker.internal:5432/context_router
+CONTEXT_ROUTER_DATABASE_URL=postgresql://USER:PASSWORD@127.0.0.1:5432/context_router
 ```
 
 首次启动或 migration 变化后执行：
 
 ```bash
-docker compose exec backend uv run alembic upgrade head
+UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend alembic upgrade head
 ```
 
 首批接口业务语义与表影响由可重复执行的源码核对种子写入；当前先覆盖 `cs_dsly_order_entrusted`：
 
 ```bash
-docker compose exec backend uv run python -m context_router.scripts.seed_interface_semantics \
+UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_interface_semantics \
   --workspace <workspace_id> --service c12-mtp \
   --table cs_dsly_order_entrusted
 ```
@@ -159,81 +166,81 @@ docker compose exec backend uv run python -m context_router.scripts.seed_interfa
 全部 `/order-api/`、`/line-api/`、`/basic-api/`、`/highway-api/`、`/railway-api/`、`/shipping-api/`、`/settlement-api/`、`/declaration-api/`、`/declaration-interface-api/`、`/operation-api/`、`/message-api/`、`/inner/message/`、`/external-interface-api/`、`/zhiyun/`、`/sms/`、`/job-client-api/`、`/trace-api/` 和 `/admin/` 接口使用源码扫描发布器同步业务语义、CRUD 和表影响；`/admin/` 使用 Web Service 扁平目录扫描器。发布器解析对应模块的 Controller、Service、DAO、JPA Repository 以及 `sql-ext` SQL；basic 路径下实际由 shipping 模块挂载的舱单和轨迹接口也会合并扫描 shipping 源码，内部消息 OpenAPI 中的 `*ApiController` 会回退解析源码 `*Api` 类，智运位置旧路径按真实查询调用发布，短信网关和申报集成权限调用不猜测本地表。任务模块额外按白名单识别 `xxl_job_*` 表和字符串 SQL ID；轨迹模块只发布本地 Controller 语义，不把远程公铁水聚合调用猜成本地表。没有本地源码证据的远程或文件接口只发布语义，不猜测数据表；`/api/`、`/test/`、`/internal/` 和 `/member-api/` 不执行发布：
 
 ```bash
-docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
   --workspace <workspace_id> --service c12-mtp \
-  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
 
-docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
   --workspace <workspace_id> --service c12-mtp --module line \
-  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
 
-docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
   --workspace <workspace_id> --service c12-mtp --module basic \
-  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
 
-docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
   --workspace <workspace_id> --service c12-mtp --module highway \
-  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
 
-docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
   --workspace <workspace_id> --service c12-mtp --module railway \
-  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
 
-docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
   --workspace <workspace_id> --service c12-mtp --module shipping \
-  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
 
-docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
   --workspace <workspace_id> --service c12-mtp --module settlement \
-  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
 
-docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
   --workspace <workspace_id> --service c12-mtp --module declaration \
-  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
 
-docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
   --workspace <workspace_id> --service c12-mtp --module operation \
-  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
 
-docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
   --workspace <workspace_id> --service c12-mtp --module message \
-  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
 
-docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
   --workspace <workspace_id> --service c12-mtp --module message \
   --path-prefix /inner/message/ \
-  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
 
-docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
   --workspace <workspace_id> --service c12-mtp --module external-interface \
-  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
 
-docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
   --workspace <workspace_id> --service c12-mtp --module external-interface \
   --path-prefix /zhiyun/ \
-  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
 
-docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
   --workspace <workspace_id> --service c12-mtp --module external-interface \
   --path-prefix /sms/ \
-  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
 
-docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
   --workspace <workspace_id> --service c12-mtp --module declaration-interface \
-  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
 
-docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
   --workspace <workspace_id> --service c12-mtp --module web \
   --path-prefix /admin/ \
-  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
 
-docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
   --workspace <workspace_id> --service c12-mtp --module job-client \
-  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
 
-docker compose exec backend uv run python -m context_router.scripts.seed_order_api_semantics \
+UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
   --workspace <workspace_id> --service c12-mtp --module trace \
-  --workspace-root /workspace/company_workforce/panzhihua_dev_workforce
+  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
 ```
 
 当前 migration head 为 `20260827_0072`。`0072` 将渐进式 MCP 能力、接口意图评分/响应验证及搜索质量事件归档到 `archived_*`，运行时不再读取；`0071` 已归档 Workspace 接口术语和动态限定标签。`0067` 的接口业务语义、CRUD 分类和源码证据支持的表影响继续保留。客户端必须重新连接并刷新 tools/list。
@@ -241,7 +248,7 @@ docker compose exec backend uv run python -m context_router.scripts.seed_order_a
 表关联页面的关联数据目前没有自动生成流水线，示例数据由可重复执行的种子脚本写入：
 
 ```bash
-docker compose exec backend uv run python -m context_router.scripts.seed_table_relations \
+UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_table_relations \
   --workspace <workspace_id>
 ```
 
@@ -285,7 +292,7 @@ launchctl bootout "gui/$(id -u)/com.conchi.agent-context-router.vpn-relay"
 
 ```bash
 docker compose --profile integration up -d --wait clickhouse-test
-docker compose exec backend uv run --extra dev pytest -q -m clickhouse
+UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend --extra dev pytest -q -m clickhouse
 docker compose --profile integration stop clickhouse-test
 ```
 
@@ -295,7 +302,7 @@ docker compose --profile integration stop clickhouse-test
 
 ## 本机工作空间映射
 
-复制 `.context-router/workspaces.example.yaml` 为被 Git 忽略的 `.context-router/workspaces.local.yaml`。key 使用数据库 `workspaces.id`，路径相对 `CONTEXT_ROUTER_WORKSPACE_HOST_ROOT`：
+复制 `.context-router/workspaces.example.yaml` 为被 Git 忽略的 `.context-router/workspaces.local.yaml`。key 使用数据库 `workspaces.id`，路径相对 `CONTEXT_ROUTER_WORKSPACE_ROOT`：
 
 ```yaml
 version: 1
@@ -331,26 +338,28 @@ Context Router 不可用时，其他 AI 应先阅读目标根 `AGENTS.md` 和 `d
 ## 服务管理
 
 ```bash
-docker compose restart backend
-docker compose restart frontend
-docker compose logs --tail=100 backend frontend
-docker compose ps
+./scripts/restart-native-stack.sh
+./scripts/status-native-stack.sh
+tail -n 100 .runtime-runner/backend.log
+tail -n 100 .runtime-runner/frontend.log
+tail -n 100 .runtime-runner/host-runner.log
 ```
 
 ## 后端验证
 
 ```bash
-docker compose exec backend uv run --extra dev pytest -q
-docker compose exec backend uv run --extra dev ruff check .
-docker compose exec backend uv run --extra dev ruff format --check .
+UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend --extra dev pytest -q
+UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend --extra dev ruff check .
+UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend --extra dev ruff format --check .
 ```
 
 ## 前端验证
 
 ```bash
-docker compose exec frontend npm run lint
-docker compose exec frontend npm test
-docker compose exec frontend npm run build
+cd frontend
+npm run lint
+npm test
+npm run build
 ```
 
 `npm run build` 使用临时目录，不覆盖正在运行的 Next.js 开发缓存。

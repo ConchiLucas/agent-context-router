@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 from uuid import uuid4
 
 from context_router.config import Settings
@@ -29,6 +28,7 @@ from context_router.services.local_workspace_mapping import (
     LocalWorkspaceMappingService,
 )
 from context_router.services.project_registry import ProjectRegistry, ProjectRegistryError
+from context_router.services.runtime_paths import RuntimePathError, RuntimePathResolver
 from context_router.services.workspace_paths import (
     WorkspacePathError,
     normalize_workspace_root_path,
@@ -52,6 +52,7 @@ class WorkspaceManagementService:
         local_mapping: LocalWorkspaceMappingService | None = None,
     ) -> None:
         self._settings = settings
+        self._paths = RuntimePathResolver(settings)
         self._workspace_repository = workspace_repository
         self._project_repository = project_repository
         self._project_registry = project_registry
@@ -420,13 +421,10 @@ class WorkspaceManagementService:
             normalized = normalize_workspace_root_path(root_path)
         except WorkspacePathError as exc:
             raise WorkspaceManagementError(str(exc)) from exc
-        host_path = Path(normalized)
         try:
-            relative = host_path.relative_to(self._settings.workspace_host_root)
-        except ValueError:
-            resolved = host_path.resolve()
-        else:
-            resolved = (self._settings.workspace_container_root / relative).resolve()
+            resolved = self._paths.map_host_path(normalized)
+        except RuntimePathError as exc:
+            raise WorkspaceManagementError(str(exc)) from exc
         if not resolved.is_dir():
             raise WorkspaceManagementError(f"找不到工作空间目录：{normalized}")
         try:

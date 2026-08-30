@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -24,6 +25,10 @@ class Settings(BaseSettings):
     database_payload_hard_max_bytes: int = Field(default=4_000_000, ge=1_024, le=4_000_000)
     database_payload_ttl_days: int = Field(default=7, ge=1, le=90)
     database_payload_cleanup_interval_seconds: int = Field(default=3_600, ge=60)
+    runtime_mode: Literal["native", "container"] = "native"
+    workspace_root: Path | None = None
+    # Deprecated compatibility settings. Container deployments still use these
+    # while native deployments read workspaces directly from workspace_root.
     workspace_host_root: Path = Path("/Users/conchi/workforce")
     workspace_container_root: Path = Path("/workspace")
     workspace_mapping_file: Path | None = None

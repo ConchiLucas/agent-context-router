@@ -120,7 +120,7 @@ class WorkspaceContainerService:
         *,
         connection_factory: Callable[[], http.client.HTTPConnection] | None = None,
     ) -> None:
-        self._docker_socket = docker_socket
+        self._docker_socket = docker_socket.expanduser()
         self._uses_docker_socket = connection_factory is None
         self._connection_factory = connection_factory
 
@@ -393,8 +393,14 @@ class WorkspaceContainerService:
             connection.close()
 
     def _ensure_socket(self) -> None:
-        if self._uses_docker_socket and not self._docker_socket.exists():
-            raise WorkspaceContainerError("Docker Socket 当前不可用")
+        if not self._uses_docker_socket or self._docker_socket.exists():
+            return
+        if self._docker_socket == Path("/var/run/docker.sock"):
+            desktop_socket = Path.home() / ".docker" / "run" / "docker.sock"
+            if desktop_socket.exists():
+                self._docker_socket = desktop_socket
+                return
+        raise WorkspaceContainerError("Docker Socket 当前不可用")
 
     def _validated_container_config(
         self,

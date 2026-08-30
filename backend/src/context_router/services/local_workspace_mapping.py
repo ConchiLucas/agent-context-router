@@ -9,6 +9,7 @@ import yaml
 
 from context_router.config import Settings
 from context_router.repositories.workspace_repository import WorkspaceRecord
+from context_router.services.runtime_paths import RuntimePathResolver
 
 
 class LocalWorkspaceMappingError(ValueError):
@@ -36,6 +37,7 @@ class LocalWorkspaceMappingService:
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
+        self._paths = RuntimePathResolver(settings)
         self._lock = RLock()
         self._entries: dict[str, LocalWorkspaceEntry] = {}
         self.reload()
@@ -145,10 +147,10 @@ class LocalWorkspaceMappingService:
         )
 
     def _host_path(self, relative_path: str) -> Path:
-        return (self._settings.workspace_host_root / relative_path).resolve()
+        return (self._paths.host_root / relative_path).resolve()
 
     def _container_path(self, relative_path: str) -> Path:
-        return (self._settings.workspace_container_root / relative_path).resolve()
+        return self._paths.map_relative_path(relative_path)
 
     def _parse_payload(self, payload: object) -> dict[str, LocalWorkspaceEntry]:
         if not isinstance(payload, dict) or payload.get("version") != 1:
@@ -196,7 +198,7 @@ class LocalWorkspaceMappingService:
             raise LocalWorkspaceMappingError(f"{label} 不能为空")
         raw = value.strip()
         if "\\" in raw or raw.startswith(("/", "~")):
-            raise LocalWorkspaceMappingError(f"{label} 必须是相对 workspace_host_root 的路径")
+            raise LocalWorkspaceMappingError(f"{label} 必须是相对 workspace_root 的路径")
         path = PurePosixPath(raw)
         if any(part in {"", ".", ".."} for part in path.parts):
             raise LocalWorkspaceMappingError(f"{label} 不能包含 . 或 ..")
