@@ -19,6 +19,8 @@ Native Backend / Frontend
 
 Frontend 运行时固定为 Node.js 22。Native 脚本会依次使用 `CONTEXT_ROUTER_NODE_HOME`、Apple Silicon Homebrew、Intel Homebrew 和当前 `PATH` 中满足版本要求的 Node；找不到时直接失败并给出安装提示，不再用其他主版本继续启动。
 
+Host Runner 由 `launchd` 托管时不会继承交互式 Shell 的完整 `PATH`。Native 脚本会补齐 Docker Desktop、Homebrew 和系统命令目录，并在 macOS 上自动识别 IntelliJ IDEA 内置 Maven。其他工作空间工具链目录可通过 `CONTEXT_ROUTER_HOST_TOOL_PATHS` 配置，多个目录使用冒号分隔。
+
 `CONTEXT_ROUTER_WORKSPACE_ROOT` 是文档、源码定位和 cwd 路由的允许根。`CONTEXT_ROUTER_RUNTIME_ROOT` 保存快照、日志、PID 和 Runner Token。两个目录不能通过不受控软链接扩大访问范围。
 
 ## 生命周期

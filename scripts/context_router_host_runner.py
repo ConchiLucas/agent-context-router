@@ -889,7 +889,30 @@ def _controlled_environment() -> dict[str, str]:
         "SSH_AUTH_SOCK",
         "DOCKER_HOST",
     }
-    return {key: value for key, value in os.environ.items() if key in allowed}
+    environment = {key: value for key, value in os.environ.items() if key in allowed}
+    inherited_path = environment.get("PATH", "")
+    configured_path = os.environ.get("CONTEXT_ROUTER_HOST_TOOL_PATHS", "")
+    path_entries = [
+        entry
+        for value in (inherited_path, configured_path)
+        for entry in value.split(os.pathsep)
+        if entry
+    ]
+    # launchd jobs commonly receive only /usr/bin:/bin:/usr/sbin:/sbin. Keep the
+    # host-runner useful for workspace scripts that call Docker Desktop or
+    # Homebrew-installed tools without requiring every workspace to repair PATH.
+    for entry in (
+        "/usr/local/bin",
+        "/opt/homebrew/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin",
+    ):
+        if entry not in path_entries:
+            path_entries.append(entry)
+    environment["PATH"] = os.pathsep.join(path_entries)
+    return environment
 
 
 def _safe_relative(value: str, label: str) -> PurePosixPath:

@@ -26,6 +26,16 @@ export CONTEXT_ROUTER_RUNTIME_EXECUTION_ENABLED=false
 export CONTEXT_ROUTER_RUNTIME_RUNNER_API_ENABLED=true
 export UV_PROJECT_ENVIRONMENT=${UV_PROJECT_ENVIRONMENT:-"$native_repo_root/backend/.venv-native"}
 
+# launchd does not inherit the interactive shell PATH. Allow native workspace
+# operations to opt into host toolchains and recognize IntelliJ's bundled Maven
+# on macOS, which is commonly used by the registered Java workspaces.
+native_host_tool_paths=${CONTEXT_ROUTER_HOST_TOOL_PATHS:-}
+native_intellij_maven_dir="/Applications/IntelliJ IDEA.app/Contents/plugins/maven/lib/maven3/bin"
+if [[ -d "$native_intellij_maven_dir" && ":$native_host_tool_paths:" != *":$native_intellij_maven_dir:"* ]]; then
+  native_host_tool_paths="${native_host_tool_paths:+$native_host_tool_paths:}$native_intellij_maven_dir"
+fi
+export CONTEXT_ROUTER_HOST_TOOL_PATHS=$native_host_tool_paths
+
 # Native control-plane calls must never leave the host through a configured proxy.
 native_no_proxy=${NO_PROXY:-${no_proxy:-}}
 if [[ ",$native_no_proxy," != *",127.0.0.1,"* ]]; then

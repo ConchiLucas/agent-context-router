@@ -1,5 +1,6 @@
 # 代码变更记录
 
+- `2026-08-31`：修复 Native Host Runner 由 `launchd` 托管后工作空间部署脚本找不到 Docker Desktop 和 Maven 的问题。Runner 受控环境固定补齐 macOS Homebrew、Docker 常用命令目录与系统目录；新增 `CONTEXT_ROUTER_HOST_TOOL_PATHS` 扩展项，并自动识别 IntelliJ IDEA 内置 Maven，保持工作空间脚本无需感知 Context Router 的宿主机后台启动方式。
 - `2026-08-30`：Native Frontend 固定为 Node.js 22，新增 `.node-version`、package engine 约束和 Homebrew keg-only 自动发现，避免系统 Node 26 被误用于构建或常驻服务。修复链路诊断组件 Hook 依赖警告；表关联测试按目标端点选择关系而不依赖排序；外部英语工作空间契约夹具缺少根入口时改为显式跳过。
 - `2026-08-30`：Context Router 自身切换为宿主机 Native Stack 主路径，新增独立 `.venv-native`、Native 环境样例及 bootstrap/start/stop/status/restart/dev 生命周期脚本；Backend、Frontend 和 Host Runner 共享本机 Runtime Root，服务继续只绑定回环地址。新增 `native/container` 运行模式和统一路径解析器，Native 直接读取真实 Workspace 路径，迁移期保留 Compose 容器路径兼容及旧 `/runtime` 历史日志映射。Docker Desktop 仅继续承载已注册 Workspace、容器状态/日志和集成测试，Workspace 的 `deploy.sh`、Compose 与 `runtime-runner.*` 标签协议不变。
 - `2026-08-27`：继续回退第 1、3、5、6 组接口识别重构：移除渐进式 MCP 工具发现/代理调用、接口发现意图与共享详情、服务端意图评分和响应规则校验、搜索—选择—执行质量事件，以及 Cursor/Grok 专用接入与页面展示。保留第 2 组接口业务语义、CRUD 与源码证据表影响，也保留写接口执行、Host Runner 扩展方法和成功请求去重。新增 migration `20260827_0072` 将旧能力、评分、校验和事件数据归档为 `archived_*`，历史数据可恢复。

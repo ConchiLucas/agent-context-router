@@ -1,6 +1,7 @@
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -208,6 +209,20 @@ def test_runner_api_treats_connection_reset_as_recoverable(monkeypatch) -> None:
 
     with pytest.raises(module.RunnerError, match="控制面请求失败"):
         client.heartbeat_runner("runner-1")
+
+
+def test_controlled_environment_adds_host_tool_paths_for_launchd(monkeypatch) -> None:
+    module = load_runner_module()
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    monkeypatch.setenv("CONTEXT_ROUTER_HOST_TOOL_PATHS", "/Applications/IDE/bin")
+
+    environment = module._controlled_environment()
+
+    path_entries = environment["PATH"].split(os.pathsep)
+    assert "/usr/local/bin" in path_entries
+    assert "/opt/homebrew/bin" in path_entries
+    assert "/Applications/IDE/bin" in path_entries
+    assert path_entries.count("/usr/bin") == 1
 
 
 def test_runner_executes_server_leased_forwarding_request(monkeypatch, tmp_path: Path) -> None:
