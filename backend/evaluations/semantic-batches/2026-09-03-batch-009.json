@@ -1,0 +1,691 @@
+{
+  "schema_version": "context-router-interface-semantic-batch-v1",
+  "batch_id": "panzhihua-c12-sys-task-center-009",
+  "workspace_id": "b9ce65eddc27437d9615177fbd07cb0a",
+  "family_groups": {
+    "任务中心任务管理": 6,
+    "任务导入导出": 5,
+    "任务模板管理": 7,
+    "任务模板配置": 2,
+    "打印与文档生成": 3,
+    "任务回调": 1
+  },
+  "generation_policy": "按 c12-sys 完整任务中心业务家族源码闭环生成；区分当前用户任务与全局打印模板、同步与异步导入、普通异步导出与即时导出邮件、模板主体与同表 config 字段、打印取数与文档文件生成，以及共享模块的多动作业务回调。",
+  "items": [
+    {
+      "interface_id": "46d65495-20ea-43dc-b38d-90c23cc211c0",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/taskcenter/health"},
+      "semantic": {
+        "purpose": "供运维或接入端探测 c12-sys 任务中心的任务持久化、消息发布、执行引擎和回调地址构建组件是否已装配，返回 UP/DOWN、说明与探测时间且不创建任务。",
+        "audiences": ["运维探测端", "任务中心接入端"],
+        "domains": ["任务中心", "服务健康"],
+        "scenarios": ["运维或业务接入端在创建导入导出任务前检查任务中心核心组件是否就绪。"],
+        "actions": ["health", "query"],
+        "entities": ["任务中心健康状态"],
+        "aliases": ["探测任务中心健康", "检查任务服务可用性", "TaskCenterController.health"],
+        "resource": "task_center_health",
+        "lookup_keys": ["status", "checkedTime"],
+        "cardinality": "one",
+        "ownership": "all",
+        "discriminators": ["只做组件装配探测并返回状态对象；不同于 page 的当前用户任务查询，也不会写 sys_task_center 或发布执行消息。"],
+        "required_inputs": [],
+        "business_identifiers": [],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["TaskCenterController#health() -> ResponseData<TaskCenterHealthQuery>", "TaskCenterHealthQuery.status/message/checkedTime", "TaskCenterRepository#health 检查 TaskCenterService、MqMessageSender、TaskCenterEngine、CallbackUrlBuilder"]
+      }
+    },
+    {
+      "interface_id": "1fde06e9-3323-4cda-add2-98304a373997",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/taskcenter/page"},
+      "semantic": {
+        "purpose": "供任务中心前端分页查询当前登录用户在当前系统范围内的任务记录，可按业务类型、任务类型、任务状态、处理状态、文件名和开始时间筛选，返回多条任务摘要及源文件、结果文件或错误文件标识。",
+        "audiences": ["任务中心前端", "当前登录用户"],
+        "domains": ["任务中心", "任务管理"],
+        "scenarios": ["当前登录用户查看当前系统内自己的导入、导出、打印和文档生成任务及其进度、结果文件和失败信息。"],
+        "actions": ["query", "page"],
+        "entities": ["任务中心任务", "任务文件"],
+        "aliases": ["分页查询我的任务", "查看当前系统任务中心", "TaskCenterController.page"],
+        "resource": "task_center_task",
+        "lookup_keys": ["systemCode", "bizType", "taskType", "status", "processStatus", "fileName", "startTime", "endTime", "id", "taskTraceId", "fileUuid", "errorFileUuid"],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": ["Repository 强制覆盖请求中的 userId 和 systemCode：只查当前登录用户且限定 SystemCodeUtil.requiredSystemCode()；不是后台全量任务列表，也不同于 getById 的单任务详情。TaskCenterQuery 声明 callbackUrl，但分页 SQL 未选择 callback_url，分页结果该字段无法按合同填充。"],
+        "required_inputs": [],
+        "business_identifiers": [
+          {"canonical": "task_center_task_id", "display_name": "任务ID", "technical_names": ["id"], "aliases": ["任务主键"], "resource": "task_center_task", "source": "response_contract", "confidence": 0.99},
+          {"canonical": "task_center_trace_id", "display_name": "任务链路追踪ID", "technical_names": ["taskTraceId"], "aliases": ["任务追踪ID"], "resource": "task_center_task", "source": "response_contract", "confidence": 0.99},
+          {"canonical": "task_system_code", "display_name": "任务所属系统编码", "technical_names": ["systemCode"], "aliases": ["系统编码"], "resource": "task_center_task", "source": "runtime_context_and_response_contract", "confidence": 0.99},
+          {"canonical": "task_processor_system_code", "display_name": "任务处理器系统编码", "technical_names": ["processorSystemCode"], "aliases": ["处理系统编码"], "resource": "task_center_task", "source": "response_contract", "confidence": 0.98},
+          {"canonical": "task_business_type_code", "display_name": "任务业务类型", "technical_names": ["bizType"], "aliases": ["业务类型编码"], "resource": "task_center_task", "source": "request_response_contract", "confidence": 0.99},
+          {"canonical": "task_file_uuid", "display_name": "任务文件UUID", "technical_names": ["fileUuid"], "aliases": ["导入源文件或非导入结果文件UUID"], "resource": "task_center_task", "source": "response_contract", "confidence": 0.99},
+          {"canonical": "task_error_file_uuid", "display_name": "任务错误文件UUID", "technical_names": ["errorFileUuid"], "aliases": ["错误明细文件UUID"], "resource": "task_center_task", "source": "response_contract", "confidence": 0.99}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.90,
+        "semantic_evidence": ["TaskCenterController#page(TaskCenterPageCondition) -> ResponseData<PageResult<TaskCenterQuery>>", "TaskCenterPageCondition；TaskCenterQuery 声明 callbackUrl", "TaskCenterRepository#page 强制 currentUserId 与 SystemCodeUtil.requiredSystemCode；TaskCenterService#page", "task_center_query_getPageList.sql 查询 sys_task_center 并按 userId/systemCode 及可选条件过滤，但 SELECT 未包含 callback_url"]
+      }
+    },
+    {
+      "interface_id": "9da55251-9f53-4004-a408-3c37e2758abd",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/taskcenter/getById/{id}"},
+      "semantic": {
+        "purpose": "供当前登录用户按任务 id 查询属于本人的一条任务中心记录，返回任务状态、进度、追踪 ID、导入源文件或非导入结果文件 UUID、错误文件 UUID 及执行信息。",
+        "audiences": ["任务中心前端", "当前登录用户"],
+        "domains": ["任务中心", "任务管理"],
+        "scenarios": ["当前登录用户从任务列表按 id 打开一条导入、导出、打印或文档生成任务详情。"],
+        "actions": ["query", "detail"],
+        "entities": ["任务中心任务"],
+        "aliases": ["查询我的任务详情", "按任务ID查看执行结果", "TaskCenterController.getById"],
+        "resource": "task_center_task",
+        "lookup_keys": ["id", "taskTraceId", "fileUuid", "errorFileUuid"],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": ["路径 id 还必须命中当前登录 userId；不同于 page 的多任务筛选和 trace 的执行阶段事件分页。"],
+        "required_inputs": [{"name": "id", "zh_name": "任务ID", "location": "path", "required": true, "schema_type": "Long"}],
+        "business_identifiers": [
+          {"canonical": "task_center_task_id", "display_name": "任务ID", "technical_names": ["id"], "aliases": ["任务主键"], "resource": "task_center_task", "source": "path_and_response_contract", "confidence": 0.99},
+          {"canonical": "task_center_trace_id", "display_name": "任务链路追踪ID", "technical_names": ["taskTraceId"], "aliases": ["任务追踪ID"], "resource": "task_center_task", "source": "response_contract", "confidence": 0.99},
+          {"canonical": "task_file_uuid", "display_name": "任务文件UUID", "technical_names": ["fileUuid"], "aliases": ["导入源文件或非导入结果文件UUID"], "resource": "task_center_task", "source": "response_contract", "confidence": 0.99},
+          {"canonical": "task_error_file_uuid", "display_name": "任务错误文件UUID", "technical_names": ["errorFileUuid"], "aliases": ["错误明细文件UUID"], "resource": "task_center_task", "source": "response_contract", "confidence": 0.99}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["TaskCenterController#getById(Long) -> ResponseData<TaskCenterQuery>", "TaskCenterQuery", "TaskCenterRepository#getById/getOwnedEntity；TaskCenterService#getByIdAndUserId 以 id+currentUserId 查询 sys_task_center"]
+      }
+    },
+    {
+      "interface_id": "ad4bcdde-dda7-4ba7-8bef-17948feb9bea",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/taskcenter/trace/{taskTraceId}"},
+      "semantic": {
+        "purpose": "供当前登录用户按 taskTraceId 分页查询本人任务链路的多条执行阶段事件，返回阶段、成败、错误类型、错误堆栈和扩展信息。",
+        "audiences": ["任务中心前端", "当前登录用户", "任务排障人员"],
+        "domains": ["任务中心", "任务轨迹"],
+        "scenarios": ["当前登录用户或排障人员按任务链路追踪 ID 查看该用户任务从创建、MQ 发布、消费、回调到完成的阶段事件。"],
+        "actions": ["query", "trace", "page"],
+        "entities": ["任务链路事件", "任务中心任务"],
+        "aliases": ["查询我的任务轨迹", "按追踪ID查看执行事件", "TaskCenterController.trace"],
+        "resource": "task_center_trace_event",
+        "lookup_keys": ["taskTraceId", "id", "taskId", "stage", "errorType"],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": ["路径 taskTraceId 覆盖可选请求体中的同名字段，请求体可省略；SQL 关联 sys_task_center 并用当前 userId 限定归属，不返回任务主体详情。"],
+        "required_inputs": [{"name": "taskTraceId", "zh_name": "任务链路追踪ID", "location": "path", "required": true, "schema_type": "String"}],
+        "business_identifiers": [
+          {"canonical": "task_center_trace_id", "display_name": "任务链路追踪ID", "technical_names": ["taskTraceId"], "aliases": ["任务追踪ID"], "resource": "task_center_trace_event", "source": "path_and_response_contract", "confidence": 0.99},
+          {"canonical": "task_center_trace_event_id", "display_name": "任务轨迹事件ID", "technical_names": ["id"], "aliases": ["轨迹事件主键"], "resource": "task_center_trace_event", "source": "response_contract", "confidence": 0.99},
+          {"canonical": "task_center_task_id", "display_name": "任务ID", "technical_names": ["taskId"], "aliases": ["轨迹所属任务ID"], "resource": "task_center_trace_event", "source": "response_contract", "confidence": 0.99}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["TaskCenterController#trace(String, TaskCenterTraceEventPageCondition) -> ResponseData<PageResult<TaskCenterTraceEventQuery>>", "TaskCenterTraceEventPageCondition；TaskCenterTraceEventQuery", "TaskCenterRepository#tracePage 强制 currentUserId；TaskCenterTraceEventService#page", "task_center_trace_event_query_getPageList.sql 关联 sys_task_center_trace_event 与 sys_task_center 并过滤 tc.user_id、t.task_trace_id"]
+      }
+    },
+    {
+      "interface_id": "e131f692-298f-47b1-96ed-14e539e3258b",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/taskcenter/deleteByIds"},
+      "semantic": {
+        "purpose": "供当前登录用户按 ids 批量删除全部属于本人的任务记录，同时删除关联轨迹、源文件、结果文件或错误文件并返回 Boolean。",
+        "audiences": ["任务中心前端", "当前登录用户"],
+        "domains": ["任务中心", "任务管理", "文件存储"],
+        "scenarios": ["当前登录用户勾选多条自己的历史任务后，一并清理任务表记录、任务轨迹和对象存储文件。"],
+        "actions": ["delete"],
+        "entities": ["任务中心任务", "任务链路事件", "任务文件"],
+        "aliases": ["批量删除我的任务", "清理任务及结果文件", "TaskCenterController.deleteByIds"],
+        "resource": "task_center_task",
+        "lookup_keys": ["ids"],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": ["要求 ids 全部命中当前用户，否则整体报无权限或不存在；会删除 fileUuid、errorFileUuid、轨迹表和任务表，并写任务删除业务日志，不只是隐藏列表记录。"],
+        "required_inputs": [{"name": "ids", "zh_name": "任务ID数组", "location": "body", "required": true, "schema_type": "Long[]"}],
+        "business_identifiers": [{"canonical": "task_center_task_id", "display_name": "任务ID", "technical_names": ["ids"], "aliases": ["任务主键数组"], "resource": "task_center_task", "source": "request_contract", "confidence": 0.99}],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["TaskCenterController#deleteByIds(Long[]) -> ResponseData<Boolean>", "TaskCenterRepository#deleteByIds 主动校验 ids 非空、全量命中 currentUserId，调用 CustomFile#delete", "TaskCenterService#listByIdsAndUserId/delete；TaskCenterTraceEventService#listByTaskIds/delete；sys_task_center 与 sys_task_center_trace_event"]
+      }
+    },
+    {
+      "interface_id": "97db3649-8ea6-4f8f-b330-b1ed1e36fcaf",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/taskcenter/download/{id}"},
+      "semantic": {
+        "purpose": "供当前登录用户按本人任务 id 取得一个原始文件 UUID 字符串：导入任务返回错误明细文件 UUID，其他任务返回结果文件 UUID；不返回 URL 或文件流。",
+        "audiences": ["任务中心前端", "当前登录用户"],
+        "domains": ["任务中心", "文件下载"],
+        "scenarios": ["当前登录用户在任务中心按任务 id 获取后续文件服务下载所需的结果或错误文件 UUID。"],
+        "actions": ["download", "query"],
+        "entities": ["任务文件", "任务中心任务"],
+        "aliases": ["获取任务文件UUID", "下载我的任务结果", "TaskCenterController.download"],
+        "resource": "task_center_file",
+        "lookup_keys": ["id", "errorFileUuid", "fileUuid"],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": ["按 id+当前用户校验任务归属；IMPORT 只取 errorFileUuid，EXPORT/PRINT/DOCUMENT_GENERATION 取 fileUuid，缺失时返回 null。Controller 文档称下载地址 URL，但执行代码返回原始 UUID 字符串且不输出二进制。"],
+        "required_inputs": [{"name": "id", "zh_name": "任务ID", "location": "path", "required": true, "schema_type": "Long"}],
+        "business_identifiers": [{"canonical": "task_center_task_id", "display_name": "任务ID", "technical_names": ["id"], "aliases": ["任务主键"], "resource": "task_center_task", "source": "path_contract", "confidence": 0.99}],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.90,
+        "semantic_evidence": ["TaskCenterController#download(Long) 声明 ResponseData<String>，Javadoc 却称下载地址 URL", "TaskCenterRepository#getDownloadUrl 使用 getOwnedEntity(id,currentUserId)，IMPORT 返回 errorFileUuid，其他类型返回 fileUuid", "TaskCenterQuery.fileUuid/errorFileUuid；实际没有 CustomFile 下载或 HttpServletResponse 文件流调用"]
+      }
+    },
+    {
+      "interface_id": "9266b233-6c11-4384-ab37-c62798dfe099",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/taskcenter/import"},
+      "semantic": {
+        "purpose": "供当前登录用户上传 Excel 文件并创建一条异步导入任务，持久化源文件与 PENDING 任务后发布 MQ 执行消息，立即返回原始 Long 任务 ID。",
+        "audiences": ["业务系统前端", "任务中心接入端", "当前登录用户"],
+        "domains": ["任务中心", "数据导入", "文件存储"],
+        "scenarios": ["业务端提交 systemCode、bizType 和本地 Excel 文件，异步校验并分批调用业务处理器落库，稍后到任务中心查看结果。"],
+        "actions": ["import", "create", "upload", "publish"],
+        "entities": ["导入任务", "导入源文件", "任务执行消息"],
+        "aliases": ["上传文件创建异步导入", "新建导入任务", "TaskCenterController.createImport"],
+        "resource": "task_center_import_task",
+        "lookup_keys": ["systemCode", "processorSystemCode", "bizType"],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": ["multipart file 先上传对象存储，再写 sys_task_center 并向 taskcenter.execute 发布消息；不同于 importByFileUuid 复用已上传 UUID，也不同于 import/sync 在当前请求内执行并返回 SyncImportTaskResult。"],
+        "required_inputs": [
+          {"name": "systemCode", "zh_name": "任务所属系统编码", "location": "query", "required": true, "schema_type": "String"},
+          {"name": "bizType", "zh_name": "导入业务类型", "location": "query", "required": true, "schema_type": "String"},
+          {"name": "file", "zh_name": "导入文件", "location": "body", "required": true, "schema_type": "binary"}
+        ],
+        "business_identifiers": [
+          {"canonical": "task_system_code", "display_name": "任务所属系统编码", "technical_names": ["systemCode"], "aliases": ["系统编码"], "resource": "task_center_import_task", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "task_processor_system_code", "display_name": "处理器系统编码", "technical_names": ["processorSystemCode"], "aliases": ["处理系统编码"], "resource": "task_center_import_task", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "task_business_type_code", "display_name": "导入业务类型", "technical_names": ["bizType"], "aliases": ["业务类型编码"], "resource": "task_center_import_task", "source": "request_contract", "confidence": 0.99}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["TaskCenterController#createImport(String,String,String,String,MultipartFile) -> ResponseData<Long>", "CreateImportTaskItem；RequestParam systemCode/bizType/file 为必传，processorSystemCode/paramJson 可选", "TaskCenterRepository#createImportTask -> CustomFile#upload -> sys_task_center saveOrUpdate -> MqMessageSender#send(taskcenter.execute)", "TaskCenterMqConsumer#onMessage -> DefaultTaskCenterEngine#execute -> TaskCenterImportExecutor#execute -> TaskCenterCallbackClient 导入回调与 FileStorage 错误文件上传"]
+      }
+    },
+    {
+      "interface_id": "5a73abb9-13ba-48b7-b0b0-102205cf82ce",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/taskcenter/importByFileUuid"},
+      "semantic": {
+        "purpose": "供当前登录用户以已存在的 fileUuid 创建一条异步导入任务，写入 PENDING 任务并发布 MQ 执行消息，立即返回原始 Long 任务 ID且不再次上传文件。",
+        "audiences": ["业务系统前端", "任务中心接入端", "当前登录用户"],
+        "domains": ["任务中心", "数据导入", "文件存储"],
+        "scenarios": ["业务端已经通过文件服务取得文件 UUID 后，提交系统编码、业务类型和 fileUuid 发起异步导入。"],
+        "actions": ["import", "create", "publish"],
+        "entities": ["导入任务", "已上传导入文件", "任务执行消息"],
+        "aliases": ["按文件UUID创建导入", "复用已上传文件异步导入", "TaskCenterController.createImportByFileUuid"],
+        "resource": "task_center_import_task",
+        "lookup_keys": ["fileUuid", "systemCode", "processorSystemCode", "bizType"],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": ["Repository 主动要求 fileUuid 非空但不校验文件是否存在，执行器稍后从 FileStorage 读取；与 /import 的即时上传不同，与 /import/sync 的当前请求执行不同。"],
+        "required_inputs": [
+          {"name": "systemCode", "zh_name": "任务所属系统编码", "location": "body", "required": true, "schema_type": "String"},
+          {"name": "bizType", "zh_name": "导入业务类型", "location": "body", "required": true, "schema_type": "String"},
+          {"name": "fileUuid", "zh_name": "已上传导入文件UUID", "location": "body", "required": true, "schema_type": "String"}
+        ],
+        "business_identifiers": [
+          {"canonical": "import_source_file_uuid", "display_name": "导入源文件UUID", "technical_names": ["fileUuid"], "aliases": ["已上传文件UUID"], "resource": "task_center_import_task", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "task_system_code", "display_name": "任务所属系统编码", "technical_names": ["systemCode"], "aliases": ["系统编码"], "resource": "task_center_import_task", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "task_processor_system_code", "display_name": "处理器系统编码", "technical_names": ["processorSystemCode"], "aliases": ["处理系统编码"], "resource": "task_center_import_task", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "task_business_type_code", "display_name": "导入业务类型", "technical_names": ["bizType"], "aliases": ["业务类型编码"], "resource": "task_center_import_task", "source": "request_contract", "confidence": 0.99}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["TaskCenterController#createImportByFileUuid(CreateImportTaskItem) -> ResponseData<Long>", "CreateImportTaskItem.systemCode/bizType/fileUuid；sys_task_center 的 system_code、biz_type NOT NULL；Repository 主动校验 item/fileUuid", "TaskCenterRepository#createImportTaskByFileUuid -> buildImportTask -> TaskCenterService#saveOrUpdate -> MqMessageSender#send", "TaskCenterMqConsumer#onMessage；TaskCenterImportExecutor#execute 运行时以 fileUuid 调用 FileStorage#getObject"]
+      }
+    },
+    {
+      "interface_id": "384d8b80-f88b-439e-8a59-05c5e47f2ffa",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/taskcenter/import/sync"},
+      "semantic": {
+        "purpose": "供当前登录用户上传 Excel 并在当前 HTTP 请求内同步执行完整导入链路，仍写任务与源文件但不发布 MQ，返回含 taskId、成功状态、错误文件 UUID、错误信息和业务编号列表的结果。",
+        "audiences": ["业务系统前端", "任务中心接入端", "当前登录用户"],
+        "domains": ["任务中心", "数据导入", "文件存储"],
+        "scenarios": ["调用端需要等待导入校验和批处理结束并立即获得成功、失败及错误文件信息时使用同步导入。"],
+        "actions": ["import", "create", "upload", "update"],
+        "entities": ["导入任务", "导入结果", "导入源文件", "导入错误文件"],
+        "aliases": ["同步上传并执行导入", "立即返回导入结果", "TaskCenterController.createImportSync"],
+        "resource": "task_center_import_task",
+        "lookup_keys": ["systemCode", "processorSystemCode", "bizType", "taskId", "errorFileUuid", "bizNos"],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": ["与异步 /import 共用 TaskCenterImportExecutor，但直接 markRunning、execute、markFinished，不发送 taskcenter.execute MQ；cardinality 按实际导入的多行业务资源，不按单个 SyncImportTaskResult 包装判断。SyncImportTaskResult 声明 bizNos，但同步链路没有像 MQ 消费者那样从 paramJson 解析并设置 Task.bizNos，因此该字段实际保持 null。"],
+        "required_inputs": [
+          {"name": "systemCode", "zh_name": "任务所属系统编码", "location": "query", "required": true, "schema_type": "String"},
+          {"name": "bizType", "zh_name": "导入业务类型", "location": "query", "required": true, "schema_type": "String"},
+          {"name": "file", "zh_name": "导入文件", "location": "body", "required": true, "schema_type": "binary"}
+        ],
+        "business_identifiers": [
+          {"canonical": "task_center_task_id", "display_name": "任务ID", "technical_names": ["taskId"], "aliases": ["同步导入任务ID"], "resource": "task_center_import_task", "source": "response_contract", "confidence": 0.99},
+          {"canonical": "task_error_file_uuid", "display_name": "导入错误文件UUID", "technical_names": ["errorFileUuid"], "aliases": ["错误明细文件UUID"], "resource": "task_center_import_task", "source": "response_contract", "confidence": 0.99},
+          {"canonical": "import_business_number", "display_name": "导入生成的业务编号", "technical_names": ["bizNos"], "aliases": ["业务号列表", "序列号列表"], "resource": "task_center_import_task", "source": "response_contract", "confidence": 0.98},
+          {"canonical": "task_system_code", "display_name": "任务所属系统编码", "technical_names": ["systemCode"], "aliases": ["系统编码"], "resource": "task_center_import_task", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "task_processor_system_code", "display_name": "处理器系统编码", "technical_names": ["processorSystemCode"], "aliases": ["处理系统编码"], "resource": "task_center_import_task", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "task_business_type_code", "display_name": "导入业务类型", "technical_names": ["bizType"], "aliases": ["业务类型编码"], "resource": "task_center_import_task", "source": "request_contract", "confidence": 0.99}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.90,
+        "semantic_evidence": ["TaskCenterController#createImportSync(...) -> ResponseData<SyncImportTaskResult>", "CreateImportTaskItem；SyncImportTaskResult.taskId/success/status/errorFileUuid/errorMessage/bizNos", "TaskCenterRepository#createImportTaskSync -> CustomFile#upload -> TaskCenterService#saveOrUpdate/markFinished，最终 resp.setBizNos(task.getBizNos())", "DefaultTaskCenterEngine#execute 与 TaskCenterImportExecutor#execute；同步链路不经过 TaskCenterMqConsumer#parseBizNos，且未见其他代码设置 Task.bizNos"]
+      }
+    },
+    {
+      "interface_id": "9d991f74-e0de-4224-a92a-1092674c37b6",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/taskcenter/export"},
+      "semantic": {
+        "purpose": "供当前登录用户创建一条异步业务数据导出任务，写入 PENDING 任务并发布 MQ，由业务回调分页取数生成 Excel 或 ZIP 上传对象存储，立即返回原始 Long 任务 ID。",
+        "audiences": ["业务系统前端", "任务中心接入端", "当前登录用户"],
+        "domains": ["任务中心", "数据导出", "文件存储"],
+        "scenarios": ["业务端提交 systemCode、bizType 和可选导出参数，后台分页取数生成单 Sheet、多 Sheet 或拆分压缩文件，用户稍后下载。"],
+        "actions": ["export", "create", "publish", "generate"],
+        "entities": ["导出任务", "导出文件", "任务执行消息"],
+        "aliases": ["创建异步导出任务", "后台生成Excel文件", "TaskCenterController.createExport"],
+        "resource": "task_center_export_task",
+        "lookup_keys": ["systemCode", "processorSystemCode", "bizType"],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": ["只立即返回任务 ID；MQ 消费后通过 EXPORT_DESCRIBE/EXPORT_FETCH_PAGE 回调取得多条业务数据并上传结果文件。不同于 export/sendEmail 直接接收 dataList、同步生成附件并发邮件且不写任务表。"],
+        "required_inputs": [
+          {"name": "systemCode", "zh_name": "任务所属系统编码", "location": "body", "required": true, "schema_type": "String"},
+          {"name": "bizType", "zh_name": "导出业务类型", "location": "body", "required": true, "schema_type": "String"}
+        ],
+        "business_identifiers": [
+          {"canonical": "task_system_code", "display_name": "任务所属系统编码", "technical_names": ["systemCode"], "aliases": ["系统编码"], "resource": "task_center_export_task", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "task_processor_system_code", "display_name": "处理器系统编码", "technical_names": ["processorSystemCode"], "aliases": ["处理系统编码"], "resource": "task_center_export_task", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "task_business_type_code", "display_name": "导出业务类型", "technical_names": ["bizType"], "aliases": ["业务类型编码"], "resource": "task_center_export_task", "source": "request_contract", "confidence": 0.99}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["TaskCenterController#createExport(CreateExportTaskItem) -> ResponseData<Long>", "CreateExportTaskItem.systemCode/processorSystemCode/bizType/fileName/paramJson；sys_task_center system_code、biz_type NOT NULL", "TaskCenterRepository#createExportTask -> TaskCenterService#saveOrUpdate -> MqMessageSender#send(taskcenter.execute)", "TaskCenterMqConsumer#onMessage -> DefaultTaskCenterEngine#executeExport；TaskCenterCallbackClient#describeExport/fetchPage；FileStorage#putObject"]
+      }
+    },
+    {
+      "interface_id": "d7c79980-4f9f-4538-95fd-859ebc6928f1",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/taskcenter/export/sendEmail"},
+      "semantic": {
+        "purpose": "供业务接入端把请求中的多行 Map 数据同步生成一个 Excel 附件并向一个或多个接收用户邮箱发送，返回是否全部邮件提交成功；不创建任务中心任务。",
+        "audiences": ["业务接入端", "邮件发送调用端"],
+        "domains": ["任务中心", "数据导出", "邮件消息", "文件存储"],
+        "scenarios": ["业务端已有导出数据且希望立即生成 Excel 附件并按默认邮件或指定消息模板发给多个收件人。"],
+        "actions": ["export", "generate", "send_email", "upload"],
+        "entities": ["导出数据", "Excel 邮件附件", "邮件消息"],
+        "aliases": ["导出Excel并发邮件", "生成附件发送收件人", "TaskCenterController.exportAndSendEmail"],
+        "resource": "task_center_email_export",
+        "lookup_keys": ["userId", "emails", "templateCode"],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": ["dataList 必须非空，所有非空数据行都必须为 Map，且第一条规范化后的 Map 至少包含一个字段，Excel 表头取自第一行键集合；至少一个接收人同时具有 userId 和非空 emails。templateCode 为空走默认邮件并在 finally 删除临时文件，非空走消息模板且保留附件文件；不写 sys_task_center、不发布 MQ。"],
+        "required_inputs": [
+          {"name": "dataList", "zh_name": "导出数据列表", "location": "body", "required": true, "schema_type": "List<Map<String,Object>>"},
+          {"name": "receivers[].userId", "zh_name": "至少一个接收人用户ID", "location": "body", "required": true, "schema_type": "Long"},
+          {"name": "receivers[].emails", "zh_name": "至少一个接收人的非空邮箱列表", "location": "body", "required": true, "schema_type": "List<String>"}
+        ],
+        "business_identifiers": [
+          {"canonical": "email_receiver_user_id", "display_name": "邮件接收用户ID", "technical_names": ["receivers[].userId"], "aliases": ["收件人用户ID"], "resource": "task_center_email_export", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "email_template_code", "display_name": "邮件模板编码", "technical_names": ["templateCode"], "aliases": ["消息模板编码"], "resource": "task_center_email_export", "source": "request_contract", "confidence": 0.99}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["TaskCenterController#exportAndSendEmail(ExportEmailRequest) -> ResponseData<Boolean>", "ExportEmailRequest.dataList/receivers/templateCode/templateParams；ExportEmailReceiver.userId/emails", "TaskCenterRepository#exportAndSendEmail 主动校验 dataList 与 normalizeReceivers 结果；ExportExcelService#generate 要求 Map 行", "CustomFile#upload/delete；MessageChannelSendService#send 或 MessageRepository#sendByTemplate；无 TaskCenterService 写入"]
+      }
+    },
+    {
+      "interface_id": "acac0fa4-3fc6-4baa-b2f1-eb497f4426aa",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/taskcenter/template/page"},
+      "semantic": {
+        "purpose": "供后台模板管理端分页查询全局打印模板，可按编码、名称和打印类型筛选，返回模板主体、config、状态及基于超级管理员身份计算的操作按钮。",
+        "audiences": ["后台模板管理端", "超级管理员"],
+        "domains": ["任务中心", "打印模板"],
+        "scenarios": ["后台管理员分页检索打印模板并查看是否可编辑、启用、停用、删除或设计配置。"],
+        "actions": ["query", "page"],
+        "entities": ["打印模板"],
+        "aliases": ["分页查询打印模板", "后台管理打印模板", "TemplateController.page"],
+        "resource": "print_template",
+        "lookup_keys": ["code", "name", "printType", "id"],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": ["SQL 未按当前用户、租户、公司或系统过滤，属于全局模板分页；请求 DTO 暴露 remark，但 template_page.sql 实际忽略该字段。不同于 list 只返回启用模板且不分页。"],
+        "required_inputs": [],
+        "business_identifiers": [
+          {"canonical": "print_template_id", "display_name": "打印模板ID", "technical_names": ["id"], "aliases": ["模板主键"], "resource": "print_template", "source": "response_contract", "confidence": 0.99},
+          {"canonical": "print_template_code", "display_name": "打印模板编码", "technical_names": ["code"], "aliases": ["模板编码"], "resource": "print_template", "source": "request_response_contract", "confidence": 0.99}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.90,
+        "semantic_evidence": ["TemplateController#page(PrintTemplatePageCondition) -> ResponseData<PageResult<PrintTemplateQuery>>", "PrintTemplatePageCondition.code/name/remark/printType；PrintTemplateQuery", "TemplateRepository#page/fillOperatorButtons；SessionContext#isSuperAdmin 只影响按钮", "template_page.sql 查询 cs_print_template，仅使用 printType/name/code，未使用 DTO.remark 且无租户/系统过滤"]
+      }
+    },
+    {
+      "interface_id": "062306d7-d80c-43f6-9c3c-d082689d1bde",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/taskcenter/template/getById/{id}"},
+      "semantic": {
+        "purpose": "供后台模板管理端按 id 查询一条全局打印模板详情，返回模板主体、config、状态和创建信息。",
+        "audiences": ["后台模板管理端"],
+        "domains": ["任务中心", "打印模板"],
+        "scenarios": ["管理员从模板分页列表按 ID 打开一条打印模板的主体与配置详情。"],
+        "actions": ["query", "detail"],
+        "entities": ["打印模板"],
+        "aliases": ["查询打印模板详情", "按模板ID查看配置", "TemplateController.getById"],
+        "resource": "print_template",
+        "lookup_keys": ["id", "code"],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": ["按显式 id 读取 cs_print_template，执行链未增加当前用户、租户、公司或系统范围；不同于 getConfigByCode 仅返回 config 原始字符串。"],
+        "required_inputs": [{"name": "id", "zh_name": "打印模板ID", "location": "path", "required": true, "schema_type": "Long"}],
+        "business_identifiers": [
+          {"canonical": "print_template_id", "display_name": "打印模板ID", "technical_names": ["id"], "aliases": ["模板主键"], "resource": "print_template", "source": "path_and_response_contract", "confidence": 0.99},
+          {"canonical": "print_template_code", "display_name": "打印模板编码", "technical_names": ["code"], "aliases": ["模板编码"], "resource": "print_template", "source": "response_contract", "confidence": 0.99}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["TemplateController#getById(Long) -> ResponseData<PrintTemplateQuery>", "PrintTemplateQuery", "TemplateRepository#getById 主动校验 id 和查空；PrintTemplateService#findById -> PrintTemplateDao/cs_print_template"]
+      }
+    },
+    {
+      "interface_id": "8aaa3a25-b5b9-40fe-ba04-9e09fb6710c7",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/taskcenter/template/save"},
+      "semantic": {
+        "purpose": "供后台模板管理端新增或按 id 编辑一条全局打印模板主体及 config，校验编码和名称不重复并写 cs_print_template，返回原始 Long 模板 ID。",
+        "audiences": ["后台模板管理端", "超级管理员"],
+        "domains": ["任务中心", "打印模板"],
+        "scenarios": ["管理员新增打印模板，或携带 id 修改模板名称、编码、类型、配置、状态和备注。"],
+        "actions": ["save", "create", "update"],
+        "entities": ["打印模板"],
+        "aliases": ["保存打印模板主体", "新增或编辑打印模板", "TemplateController.save"],
+        "resource": "print_template",
+        "lookup_keys": ["id", "code", "name"],
+        "cardinality": "one",
+        "ownership": "all",
+        "discriminators": ["id 为空新增、非空编辑；code 由数据库 NOT NULL 且唯一约束保证，name/config/printType/status 由 Bean Validation 必填。与 saveConfig 只按 id 覆盖同一表的 config 字段不同。"],
+        "required_inputs": [
+          {"name": "code", "zh_name": "打印模板编码", "location": "body", "required": true, "schema_type": "String"},
+          {"name": "name", "zh_name": "打印模板名称", "location": "body", "required": true, "schema_type": "String"},
+          {"name": "config", "zh_name": "打印模板配置", "location": "body", "required": true, "schema_type": "String"},
+          {"name": "printType", "zh_name": "打印类型", "location": "body", "required": true, "schema_type": "String"},
+          {"name": "status", "zh_name": "模板状态", "location": "body", "required": true, "schema_type": "String"}
+        ],
+        "business_identifiers": [
+          {"canonical": "print_template_id", "display_name": "打印模板ID", "technical_names": ["id"], "aliases": ["模板主键"], "resource": "print_template", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "print_template_code", "display_name": "打印模板编码", "technical_names": ["code"], "aliases": ["模板编码"], "resource": "print_template", "source": "request_contract", "confidence": 0.99}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["TemplateController#save(@Valid PrintTemplateItem) -> ResponseData<Long>", "PrintTemplateItem.name/config/printType/status @NotBlank，code 无 Bean Validation；id 为新增/编辑判别项", "TemplateRepository#save 查重 code/name 并调用 PrintTemplateService#preSave/saveOrUpdate，写新增或修改日志", "cs_print_template DDL：code/name/print_type/status NOT NULL、code UNIQUE；config 列可空但 DTO 对本接口强制非空"]
+      }
+    },
+    {
+      "interface_id": "27e837a7-1bf0-401a-9227-c4257f24ae4c",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/taskcenter/template/deleteByIds"},
+      "semantic": {
+        "purpose": "供后台模板管理端按 ids 批量删除全局打印模板，只允许删除非启用模板；实际响应成功包装不携带 Boolean 数据。",
+        "audiences": ["后台模板管理端", "超级管理员"],
+        "domains": ["任务中心", "打印模板"],
+        "scenarios": ["管理员批量清理未启用的打印模板，并记录每条模板删除业务日志。"],
+        "actions": ["delete"],
+        "entities": ["打印模板"],
+        "aliases": ["批量删除打印模板", "删除停用模板", "TemplateController.deleteByIds"],
+        "resource": "print_template",
+        "lookup_keys": ["ids"],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": ["遇到已启用模板即拒绝；执行代码删除命中的模板并写日志，但 Controller 声明 ResponseData<Boolean> 却调用 ResponseData.success()，真实 data 为空。"],
+        "required_inputs": [{"name": "ids", "zh_name": "打印模板ID数组", "location": "body", "required": true, "schema_type": "Long[]"}],
+        "business_identifiers": [{"canonical": "print_template_id", "display_name": "打印模板ID", "technical_names": ["ids"], "aliases": ["模板主键数组"], "resource": "print_template", "source": "request_contract", "confidence": 0.99}],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.90,
+        "semantic_evidence": ["TemplateController#deleteByIds(Long[]) 声明 ResponseData<Boolean>，实际 return ResponseData.success()", "TemplateRepository#deleteByIds 主动校验 ids 非空、拒绝 StatusEnum.YES，调用 PrintTemplateService#delete 并写日志", "PrintTemplateService -> PrintTemplateDao/cs_print_template"]
+      }
+    },
+    {
+      "interface_id": "6195865b-c3d1-4831-a55f-b46a5decc3e8",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/taskcenter/template/enableByIds"},
+      "semantic": {
+        "purpose": "供后台模板管理端按 ids 批量把命中的全局打印模板状态更新为启用，返回是否至少更新一条模板。",
+        "audiences": ["后台模板管理端", "超级管理员"],
+        "domains": ["任务中心", "打印模板"],
+        "scenarios": ["管理员批量启用当前处于停用状态的打印模板，使其可被模板列表和打印任务使用。"],
+        "actions": ["enable", "update"],
+        "entities": ["打印模板", "模板状态"],
+        "aliases": ["批量启用打印模板", "开启模板使用状态", "TemplateController.enableByIds"],
+        "resource": "print_template",
+        "lookup_keys": ["ids"],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": ["拒绝已启用的命中模板；未命中任何模板返回 false，但未检查 ids 是否全部命中。不同于 disableByIds 写停用状态和 deleteByIds 删除记录。"],
+        "required_inputs": [{"name": "ids", "zh_name": "打印模板ID数组", "location": "body", "required": true, "schema_type": "Long[]"}],
+        "business_identifiers": [{"canonical": "print_template_id", "display_name": "打印模板ID", "technical_names": ["ids"], "aliases": ["模板主键数组"], "resource": "print_template", "source": "request_contract", "confidence": 0.99}],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["TemplateController#enableByIds(Long[]) -> ResponseData<Boolean>", "TemplateRepository#enableByIds 主动校验 ids 非空、validateTemplateStatus、setStatus(YES)、batchUpdate、logEnable", "PrintTemplateService -> PrintTemplateDao/cs_print_template"]
+      }
+    },
+    {
+      "interface_id": "c0c33724-8c38-48e5-94b6-41edff4780e6",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/taskcenter/template/disableByIds"},
+      "semantic": {
+        "purpose": "供后台模板管理端按 ids 批量把命中的全局打印模板状态更新为停用，返回是否至少更新一条模板。",
+        "audiences": ["后台模板管理端", "超级管理员"],
+        "domains": ["任务中心", "打印模板"],
+        "scenarios": ["管理员批量停用当前处于启用状态的打印模板，使其不再出现在启用模板列表或用于批量打印。"],
+        "actions": ["disable", "update"],
+        "entities": ["打印模板", "模板状态"],
+        "aliases": ["批量停用打印模板", "关闭模板使用状态", "TemplateController.disableByIds"],
+        "resource": "print_template",
+        "lookup_keys": ["ids"],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": ["拒绝已停用的命中模板；未命中任何模板返回 false，但未检查 ids 是否全部命中。不同于 enableByIds 写启用状态和 deleteByIds 删除记录。"],
+        "required_inputs": [{"name": "ids", "zh_name": "打印模板ID数组", "location": "body", "required": true, "schema_type": "Long[]"}],
+        "business_identifiers": [{"canonical": "print_template_id", "display_name": "打印模板ID", "technical_names": ["ids"], "aliases": ["模板主键数组"], "resource": "print_template", "source": "request_contract", "confidence": 0.99}],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["TemplateController#disableByIds(Long[]) -> ResponseData<Boolean>", "TemplateRepository#disableByIds 主动校验 ids 非空、validateTemplateStatus、setStatus(NO)、batchUpdate、logDisable", "PrintTemplateService -> PrintTemplateDao/cs_print_template"]
+      }
+    },
+    {
+      "interface_id": "692dd4d5-145f-4642-b3a7-b4f6e5712608",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/taskcenter/template/list"},
+      "semantic": {
+        "purpose": "供模板选择或打印配置端查询全部已启用的全局打印模板，可按 printType 精确过滤，返回多条 PrintTemplate 实体且不分页。",
+        "audiences": ["模板选择端", "打印配置端"],
+        "domains": ["任务中心", "打印模板"],
+        "scenarios": ["打印或模板设计页面加载可用模板下拉列表，并可限定打印类型。"],
+        "actions": ["query", "list"],
+        "entities": ["打印模板"],
+        "aliases": ["查询启用打印模板", "加载可用模板列表", "TemplateController.list"],
+        "resource": "print_template",
+        "lookup_keys": ["printType", "id", "code"],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": ["template_find.sql 固定 status=1、可选 printType 且无分页或用户/租户/系统范围；不同于 page 返回全部状态并计算管理按钮。"],
+        "required_inputs": [],
+        "business_identifiers": [
+          {"canonical": "print_template_id", "display_name": "打印模板ID", "technical_names": ["id"], "aliases": ["模板主键"], "resource": "print_template", "source": "response_contract", "confidence": 0.99},
+          {"canonical": "print_template_code", "display_name": "打印模板编码", "technical_names": ["code"], "aliases": ["模板编码"], "resource": "print_template", "source": "response_contract", "confidence": 0.99}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["TemplateController#list(TemplateCondition) -> ResponseData<List<PrintTemplate>>", "TemplateCondition.printType；PrintTemplate", "TemplateRepository#list -> SqlExecutor#find", "template_find.sql 查询 cs_print_template，固定 status=1，可选 print_type，无范围条件"]
+      }
+    },
+    {
+      "interface_id": "fd1097c4-8c8e-4963-8d67-f0a756200665",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/taskcenter/template/saveConfig"},
+      "semantic": {
+        "purpose": "供模板设计器按打印模板 id 覆盖同一条 cs_print_template 记录的 config 字段并返回无数据成功响应；不存在独立模板配置表。",
+        "audiences": ["打印模板设计器", "后台模板管理端"],
+        "domains": ["任务中心", "打印模板配置"],
+        "scenarios": ["模板设计器保存某个既有打印模板的设计配置，而不走模板主体的新增或完整编辑流程。"],
+        "actions": ["save", "update"],
+        "entities": ["打印模板配置", "打印模板"],
+        "aliases": ["保存打印模板配置", "按模板ID更新设计内容", "TemplateController.saveConfig"],
+        "resource": "print_template_config",
+        "lookup_keys": ["id"],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": ["只覆盖既有 cs_print_template.config，不创建独立配置记录；id 是运行时定位必需，config 在 DTO、Repository 和可空数据库列上均未强制非空。与 save 的模板主体新增/编辑及多字段校验不同。"],
+        "required_inputs": [{"name": "id", "zh_name": "打印模板ID", "location": "body", "required": true, "schema_type": "Long"}],
+        "business_identifiers": [{"canonical": "print_template_id", "display_name": "打印模板ID", "technical_names": ["id"], "aliases": ["模板主键"], "resource": "print_template_config", "source": "request_contract", "confidence": 0.99}],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["TemplateController#saveConfig(@Valid PrintTemplateConfigItem) -> ResponseData<Void>", "PrintTemplateConfigItem.id/config 均无 Bean Validation；@Valid 不产生字段约束", "TemplateRepository#saveConfig 以 id 调用 PrintTemplateService#findById，直接 setConfig/preSave/saveOrUpdate，未显式处理不存在模板", "PrintTemplate.config 映射 cs_print_template.config 可空列；无独立模板配置 DAO 或表"]
+      }
+    },
+    {
+      "interface_id": "d9b5765e-a371-4efc-acac-87dbe9b1e67f",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/taskcenter/template/getConfigByCode"},
+      "semantic": {
+        "purpose": "供打印或远程业务调用端按模板 code 查询一条全局打印模板的 config，返回原始 String 配置而不是模板实体。",
+        "audiences": ["打印调用端", "远程业务服务", "模板设计器"],
+        "domains": ["任务中心", "打印模板配置"],
+        "scenarios": ["打印执行前按模板编码加载存放在 cs_print_template.config 的设计配置字符串。"],
+        "actions": ["query", "detail"],
+        "entities": ["打印模板配置"],
+        "aliases": ["按编码查询模板配置", "读取打印设计配置", "TemplateController.getConfigByCode"],
+        "resource": "print_template_config",
+        "lookup_keys": ["code"],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": ["按 code 精确定位并仅返回 config 原始字符串，不检查模板启停状态；不同于 getById 返回完整模板，也不同于 saveConfig 按 id 写配置。"],
+        "required_inputs": [{"name": "code", "zh_name": "打印模板编码", "location": "body", "required": true, "schema_type": "String"}],
+        "business_identifiers": [{"canonical": "print_template_code", "display_name": "打印模板编码", "technical_names": ["code"], "aliases": ["模板编码"], "resource": "print_template_config", "source": "request_contract", "confidence": 0.99}],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["TemplateController#getConfigByCode(@Valid PrintTemplateCondition) -> ResponseData<String>", "PrintTemplateCondition.code @NotBlank；RemoteTaskCenterService#getConfigByCode 明确返回模板配置字符串", "TemplateRepository#getConfigByCode -> PrintTemplateService#getByCode -> PrintTemplateDao/cs_print_template.config"]
+      }
+    },
+    {
+      "interface_id": "c2696e03-1f39-4130-9634-43f9d4d68944",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/taskcenter/print/batch"},
+      "semantic": {
+        "purpose": "供当前登录用户按 systemCode、bizType、templateCode 和多个 bizNos 同步批量取数打印，写入并完成一条 PRINT 任务，返回业务 PrintProcessor.fetchBatch 定义的任意数据对象。",
+        "audiences": ["业务打印端", "当前登录用户"],
+        "domains": ["任务中心", "批量打印", "打印模板"],
+        "scenarios": ["业务端选择一个已启用且有配置的打印模板，对多个业务单据号同步取得批量打印数据。"],
+        "actions": ["print", "create", "update", "callback"],
+        "entities": ["打印任务", "业务单据打印数据", "打印模板"],
+        "aliases": ["批量打印业务单据", "按模板和单据号取打印数据", "PrintController.batch"],
+        "resource": "task_center_print_task",
+        "lookup_keys": ["systemCode", "processorSystemCode", "bizType", "templateCode", "bizNos"],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": ["要求模板存在、启用且 config 非空；写 sys_task_center 后立即标 RUNNING，同步回调业务侧 PRINT_FETCH_BATCH，最后标记成功或失败。返回任意回调 data，不生成文件流；不同于 fieldDefinitions 不写任务且只返回字段元数据。"],
+        "required_inputs": [
+          {"name": "systemCode", "zh_name": "任务所属系统编码", "location": "body", "required": true, "schema_type": "String"},
+          {"name": "bizType", "zh_name": "打印业务类型", "location": "body", "required": true, "schema_type": "String"},
+          {"name": "templateCode", "zh_name": "打印模板编码", "location": "body", "required": true, "schema_type": "String"},
+          {"name": "bizNos", "zh_name": "业务单据号列表", "location": "body", "required": true, "schema_type": "List<String>"}
+        ],
+        "business_identifiers": [
+          {"canonical": "task_system_code", "display_name": "任务所属系统编码", "technical_names": ["systemCode"], "aliases": ["系统编码"], "resource": "task_center_print_task", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "task_processor_system_code", "display_name": "处理器系统编码", "technical_names": ["processorSystemCode"], "aliases": ["处理系统编码"], "resource": "task_center_print_task", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "task_business_type_code", "display_name": "打印业务类型", "technical_names": ["bizType"], "aliases": ["业务类型编码"], "resource": "task_center_print_task", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "print_template_code", "display_name": "打印模板编码", "technical_names": ["templateCode"], "aliases": ["模板编码"], "resource": "task_center_print_task", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "print_business_document_number", "display_name": "打印业务单据号", "technical_names": ["bizNos"], "aliases": ["业务单号列表"], "resource": "task_center_print_task", "source": "request_contract", "confidence": 0.99}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["PrintController#batch(PrintBatchRequest) -> ResponseData<Object>", "PrintBatchRequest；Controller 主动校验 systemCode/bizType/templateCode/bizNos", "PrintTemplateService#getByCode；PrintTemplate/cs_print_template status/config 校验", "TaskCenterRepository#createTask/markRunning/markFinished 写 sys_task_center；TaskCenterCallbackClient#printFetchBatch", "TaskCenterCallbackController#callback PRINT_FETCH_BATCH -> ProcessorRegistry#getRequiredPrint -> PrintProcessor#fetchBatch"]
+      }
+    },
+    {
+      "interface_id": "032f3b36-ccee-42f8-bd1c-15e93558e186",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/taskcenter/print/fieldDefinitions"},
+      "semantic": {
+        "purpose": "供打印模板设计器按 systemCode、bizType 和 templateCode 查询业务 PrintProcessor 提供的一份字段定义元数据，直接返回任意回调 data，不创建打印任务。",
+        "audiences": ["打印模板设计器", "业务打印端"],
+        "domains": ["任务中心", "打印模板", "字段元数据"],
+        "scenarios": ["模板设计器为指定业务类型和模板编码加载可绑定的打印字段定义。"],
+        "actions": ["query", "callback"],
+        "entities": ["打印字段定义"],
+        "aliases": ["查询打印字段定义", "加载模板可用字段", "PrintController.fieldDefinitions"],
+        "resource": "print_field_definition",
+        "lookup_keys": ["systemCode", "processorSystemCode", "bizType", "templateCode"],
+        "cardinality": "many",
+        "ownership": "unknown",
+        "discriminators": ["按显式系统、业务类型、模板编码定位业务处理器，范围受处理系统注册能力约束而现有 ownership 枚举无法表达；只发 PRINT_FIELD_DEFINITIONS 回调，不查询 cs_print_template、不写 sys_task_center，也不需要 bizNos。"],
+        "required_inputs": [
+          {"name": "systemCode", "zh_name": "任务所属系统编码", "location": "body", "required": true, "schema_type": "String"},
+          {"name": "bizType", "zh_name": "打印业务类型", "location": "body", "required": true, "schema_type": "String"},
+          {"name": "templateCode", "zh_name": "打印模板编码", "location": "body", "required": true, "schema_type": "String"}
+        ],
+        "business_identifiers": [
+          {"canonical": "task_system_code", "display_name": "任务所属系统编码", "technical_names": ["systemCode"], "aliases": ["系统编码"], "resource": "print_field_definition", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "task_processor_system_code", "display_name": "处理器系统编码", "technical_names": ["processorSystemCode"], "aliases": ["处理系统编码"], "resource": "print_field_definition", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "task_business_type_code", "display_name": "打印业务类型", "technical_names": ["bizType"], "aliases": ["业务类型编码"], "resource": "print_field_definition", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "print_template_code", "display_name": "打印模板编码", "technical_names": ["templateCode"], "aliases": ["模板编码"], "resource": "print_field_definition", "source": "request_contract", "confidence": 0.99}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.97,
+        "semantic_evidence": ["PrintController#fieldDefinitions(PrintBatchRequest) -> ResponseData<Object>", "PrintBatchRequest；Controller 主动校验 systemCode/bizType/templateCode，未校验 bizNos", "TaskCenterCallbackClient#printFieldDefinitions", "TaskCenterCallbackController#callback PRINT_FIELD_DEFINITIONS -> ProcessorRegistry#getRequiredPrint -> PrintProcessor#fieldDefinitions；无 TaskCenterRepository 写入"]
+      }
+    },
+    {
+      "interface_id": "68a5f7f6-a9a9-43a6-89bb-6ecf01cbd8e5",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/taskcenter/document-generation/generate"},
+      "semantic": {
+        "purpose": "供当前登录用户同步生成一个 PDF 或 Word 文档：创建并完成 DOCUMENT_GENERATION 任务、回调业务处理器取得模板数据、渲染 Freemarker HTML、上传对象存储并返回原始文件 UUID 字符串。",
+        "audiences": ["业务文档生成端", "当前登录用户"],
+        "domains": ["任务中心", "文档生成", "文件存储"],
+        "scenarios": ["业务端按系统、业务类型和 documentType 获取业务数据并套用内置模板，同步生成 PDF 或 Word 文件。"],
+        "actions": ["generate", "create", "upload", "update", "callback"],
+        "entities": ["文档生成任务", "PDF 文档", "Word 文档"],
+        "aliases": ["同步生成PDF或Word", "按文档类型生成文件", "DocumentGenerationController.generate"],
+        "resource": "generated_document",
+        "lookup_keys": ["systemCode", "processorSystemCode", "bizType", "documentType", "outputType"],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": ["outputType 仅允许 PDF/WORD；paramJson 若提供必须可解析为 JSON 对象，documentType 会写入参数。同步写任务、回调 DOCUMENT_GENERATE、以 systemCode_documentType.ftl 渲染并上传一个文件；不同于普通 export 的 MQ 异步分页 Excel/ZIP。"],
+        "required_inputs": [
+          {"name": "systemCode", "zh_name": "任务所属系统编码", "location": "body", "required": true, "schema_type": "String"},
+          {"name": "bizType", "zh_name": "文档业务类型", "location": "body", "required": true, "schema_type": "String"},
+          {"name": "documentType", "zh_name": "文档类型", "location": "body", "required": true, "schema_type": "String"},
+          {"name": "outputType", "zh_name": "输出类型", "location": "body", "required": true, "schema_type": "String(PDF|WORD)"},
+          {"name": "fileName", "zh_name": "生成文件名称", "location": "body", "required": true, "schema_type": "String"}
+        ],
+        "business_identifiers": [
+          {"canonical": "task_system_code", "display_name": "任务所属系统编码", "technical_names": ["systemCode"], "aliases": ["系统编码"], "resource": "generated_document", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "task_processor_system_code", "display_name": "处理器系统编码", "technical_names": ["processorSystemCode"], "aliases": ["处理系统编码"], "resource": "generated_document", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "task_business_type_code", "display_name": "文档业务类型", "technical_names": ["bizType"], "aliases": ["业务类型编码"], "resource": "generated_document", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "document_type_code", "display_name": "文档类型", "technical_names": ["documentType"], "aliases": ["文件模板类型"], "resource": "generated_document", "source": "request_contract", "confidence": 0.99}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["DocumentGenerationController#generate(DocumentGenerationTaskRequest) -> ResponseData<Object>，实际 ResponseData.success(fileUuid String)", "DocumentGenerationTaskRequest；Controller 主动校验 systemCode/bizType/documentType/fileName 和 outputType=PDF|WORD，paramJson 可选但提供时需为 JSON 对象", "TaskCenterRepository#createTask/markRunning/markFinished 写 sys_task_center；TaskCenterCallbackClient#documentGenerate", "TaskCenterCallbackController#callback DOCUMENT_GENERATE -> DocumentGenerationProcessor#generate", "DocumentGenerationRepository#generate/renderHtml；DocumentGenerationService#generate -> DocumentGenerationUtil#htmlToPdf/htmlToWord -> FileStorage#putObject"]
+      }
+    },
+    {
+      "interface_id": "54d53e66-c595-4fba-823c-f1a6bc60ebce",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/internal/task-center/callback"},
+      "semantic": {
+        "purpose": "供 c12-sys 任务执行器按 action 回调处理系统中的共享任务处理器，完成导入表头/逐行校验/批量落库、导出描述/分页取数、打印取数/字段定义、文档数据生成、业务号解析或任务完成通知，返回 CallbackResponse。",
+        "audiences": ["c12-sys 任务执行器", "内部业务服务"],
+        "domains": ["任务中心", "任务回调"],
+        "scenarios": ["c12-sys 在导入、导出、打印或文档生成执行过程中，通过共享模块入口按 action 调用目标业务系统注册的 TaskProcessor。"],
+        "actions": ["callback", "import", "export", "print", "generate", "update"],
+        "entities": ["任务处理器", "导入批次", "导出分页数据", "打印数据", "文档数据", "任务完成状态"],
+        "aliases": ["处理任务中心业务回调", "接收导入导出打印回调", "TaskCenterCallbackController.callback"],
+        "resource": "task_center_callback",
+        "lookup_keys": ["action", "systemCode", "processorSystemCode", "bizType", "taskType", "taskId", "taskTraceId", "fileUuid", "errorFileUuid", "bizNos", "sheetCode"],
+        "cardinality": "unknown",
+        "ownership": "unknown",
+        "discriminators": ["所有成功分支共同要求 action、systemCode、bizType、taskType；processorSystemCode 为空回退 systemCode，ProcessorRegistry 按系统+业务类型+任务类型定位，打印和文档还分别加入 templateCode/documentType。处理范围随目标系统注册处理器而变，现有 ownership 枚举无法准确表达。", "条件必填：PRINT_FETCH_BATCH 需要 paramJson.templateCode 与非空 paramJson.bizNos；PRINT_FIELD_DEFINITIONS 需要 paramJson.templateCode；DOCUMENT_GENERATE 需要 paramJson.documentType；MULTI_SHEET 的 EXPORT_FETCH_PAGE 需要 sheetCode。TASK_FINISHED 的 status 可为空并传 null 状态，其他 action 的 row/rows/pageNumber/pageSize 均有错误返回、空操作或默认值路径，不能列为无条件必填。", "只有 IMPORT_HANDLE_BATCH 和业务 TaskProcessor#taskFinished 等分支可能持久化业务数据或状态；其他分支是查询、校验或生成返回，update 不能理解为每个 action 都更新。返回形态随 action 在 headers/errors/rows/data/bizNos/状态之间变化。"],
+        "required_inputs": [
+          {"name": "action", "zh_name": "回调动作", "location": "body", "required": true, "schema_type": "String(CallbackAction)"},
+          {"name": "systemCode", "zh_name": "任务所属系统编码", "location": "body", "required": true, "schema_type": "String"},
+          {"name": "bizType", "zh_name": "任务业务类型", "location": "body", "required": true, "schema_type": "String"},
+          {"name": "taskType", "zh_name": "任务类型", "location": "body", "required": true, "schema_type": "String(TaskType)"}
+        ],
+        "business_identifiers": [
+          {"canonical": "task_center_task_id", "display_name": "任务ID", "technical_names": ["taskId"], "aliases": ["回调任务ID"], "resource": "task_center_callback", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "task_center_trace_id", "display_name": "任务链路追踪ID", "technical_names": ["taskTraceId"], "aliases": ["回调追踪ID"], "resource": "task_center_callback", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "task_system_code", "display_name": "任务所属系统编码", "technical_names": ["systemCode"], "aliases": ["系统编码"], "resource": "task_center_callback", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "task_processor_system_code", "display_name": "处理器系统编码", "technical_names": ["processorSystemCode"], "aliases": ["处理系统编码"], "resource": "task_center_callback", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "task_business_type_code", "display_name": "任务业务类型", "technical_names": ["bizType"], "aliases": ["业务类型编码"], "resource": "task_center_callback", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "task_result_file_uuid", "display_name": "任务结果文件UUID", "technical_names": ["fileUuid"], "aliases": ["结果文件UUID"], "resource": "task_center_callback", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "task_error_file_uuid", "display_name": "任务错误文件UUID", "technical_names": ["errorFileUuid"], "aliases": ["错误文件UUID"], "resource": "task_center_callback", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "task_business_number", "display_name": "任务业务单据号", "technical_names": ["bizNos"], "aliases": ["业务号列表"], "resource": "task_center_callback", "source": "request_response_contract", "confidence": 0.99},
+          {"canonical": "export_sheet_code", "display_name": "导出逻辑Sheet编码", "technical_names": ["sheetCode"], "aliases": ["工作表编码"], "resource": "task_center_callback", "source": "request_contract", "confidence": 0.99}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.97,
+        "semantic_evidence": ["TaskCenterCallbackController#callback(CallbackRequest) -> CallbackResponse", "CallbackRequest；CallbackResponse；CallbackAction 的 10 个动作；TaskType/TaskStatus", "ProcessorRegistry#getRequired/getRequiredPrint/getRequiredDocumentGeneration 按 processorSystemCode|systemCode、bizType、taskType 及 templateCode/documentType 定位处理器", "TaskCenterImportCallbackSupport；TaskCenterExportCallbackSupport；TaskCenterPrintCallbackSupport；TaskCenterDocumentGenerationCallbackSupport", "ImportTaskProcessor#handleBatch；ExportTaskProcessor/MultiSheetExportTaskProcessor#fetchPage；PrintProcessor#fetchBatch/fieldDefinitions；DocumentGenerationProcessor#generate；TaskProcessor#resolveBizNos/taskFinished"]
+      }
+    }
+  ]
+}

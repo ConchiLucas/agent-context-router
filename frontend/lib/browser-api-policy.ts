@@ -7,6 +7,7 @@ const SAFE_BROWSER_POST_PATHS = [
   /^\/api\/workspaces\/reload-local-mapping$/,
   /^\/api\/workspaces\/[^/]+\/shared-files\/(restore|publish)$/,
   /^\/api\/workspaces\/[^/]+\/containers\/bulk-action$/,
+  /^\/api\/workspaces\/[^/]+\/host-runtime\/actions$/,
   /^\/api\/workspaces\/[^/]+\/relation-records\/search$/,
   /^\/api\/projects\/[^/]+\/runtime-config\/(fast|full)\/execute$/,
   /^\/api\/interface-forwarding\/(import|environments|identities)$/,

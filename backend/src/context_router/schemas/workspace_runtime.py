@@ -7,12 +7,30 @@ from typing import Literal, Self
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 HostRuntimeEnvironment = Literal["local", "test", "uat"]
-HostRuntimeAction = Literal["pzh.ensure-host-runtime", "pzh.status-host-runtime"]
+HostRuntimeAction = Literal[
+    "pzh.ensure-host-runtime",
+    "pzh.status-host-runtime",
+    "pzh.start-and-check",
+]
 
 RuntimeOperationStatus = Literal[
     "queued", "leased", "running", "succeeded", "failed", "cancelled", "interrupted"
 ]
 RuntimeStepStatus = Literal["queued", "running", "succeeded", "failed", "skipped", "cancelled"]
+ReadinessStatus = Literal["pending", "ready", "failed"]
+
+
+class RuntimeReadinessLevel(BaseModel):
+    status: ReadinessStatus
+    duration_ms: int | None = Field(default=None, ge=0, le=7_200_000)
+    error_message: str | None = Field(default=None, max_length=500)
+
+
+class RuntimeReadinessResult(BaseModel):
+    revision: int | None = Field(default=None, ge=1)
+    infrastructure: RuntimeReadinessLevel
+    services: RuntimeReadinessLevel
+    business: RuntimeReadinessLevel
 
 
 class WorkspaceRuntimeFileDraft(BaseModel):
@@ -88,6 +106,7 @@ class RuntimeOperationStepView(BaseModel):
     finished_at: datetime | None
     log: str = ""
     log_truncated: bool = False
+    readiness: RuntimeReadinessResult | None = None
 
 
 class RuntimeOperationView(BaseModel):
@@ -130,6 +149,7 @@ class RunnerStepResultRequest(RunnerOperationRequest):
     exit_code: int
     error_code: str | None = Field(default=None, max_length=64)
     error_message: str | None = Field(default=None, max_length=2000)
+    readiness: RuntimeReadinessResult | None = None
 
 
 class RunnerForwardingResultRequest(RunnerOperationRequest):

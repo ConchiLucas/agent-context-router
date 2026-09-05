@@ -1,0 +1,2870 @@
+{
+  "schema_version": "context-router-interface-semantic-batch-v1",
+  "batch_id": "panzhihua-c12-portal-government-report-017",
+  "workspace_id": "b9ce65eddc27437d9615177fbd07cb0a",
+  "family_groups": {
+    "门户填报任务查询与入口": 4,
+    "门户项目情况填报": 5,
+    "门户企业运行数据填报": 4,
+    "门户枢纽运行数据公示": 2,
+    "小程序填报任务查询与入口": 2,
+    "小程序项目情况填报": 5,
+    "小程序企业运行数据填报": 4
+  },
+  "generation_policy": "完整覆盖 c12-portal PortalGovernmentReportController 15 个与 MiniGovernmentReportController 11 个有效接口。二者为 BFF：项目情况/工作台/分页转发 RemotePortalProjectProgressReportService（小程序 page 经 RemoteMiniGovernmentReportService 再进同一 Service），企业运行数据转发 RemotePortalEnterpriseOperationReportService，公示转发 RemotePortalEnterpriseOperationPublicService，首页统计由 PortalGovernmentHomeStatisticsService 聚合 GICS+MTP。按门户查询入口、项目情况、企业运行、公示与小程序对应分组。源码追到 DAO/SQL/实体、会话企业、批次可填窗口和草稿/提交副作用。小程序无 noAuth 入口、首页统计和公示。page 查当前企业历史任务/项目行，currentFillableList 查工作台入口，currentPublicFillableList 查公开批次且不返回 ID。项目情况 taskId/batchId 二选一，企业运行 taskId 必填。未使用 copy_from_interface_id，未写入 c12-gics 同源 /gics/portal/report/remote。",
+  "items": [
+    {
+      "interface_id": "ab5a6de1-4f5f-4f32-835a-107a28bdbfb9",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/government/report/page"
+      },
+      "semantic": {
+        "purpose": "供政务门户分页查询当前登录企业联系人在 GICS 中的历史填报任务：SQL 把企业运行数据按任务一行、项目情况按已关联项目行一行 UNION；不是工作台当前可填入口，也不是小程序 /api/mini 分页。",
+        "audiences": [
+          "政务门户",
+          "入驻企业联系人"
+        ],
+        "domains": [
+          "政务填报",
+          "企业运行数据",
+          "项目情况"
+        ],
+        "scenarios": [
+          "企业联系人在门户任务中心翻页查看本企业已有企业运行数据任务和已落项目行的项目情况历史，而不是打开工作台当前填报入口。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "填报任务",
+          "企业运行数据",
+          "项目情况填报"
+        ],
+        "aliases": [
+          "门户政务填报任务分页",
+          "门户历史填报列表",
+          "PortalGovernmentReportController.page"
+        ],
+        "resource": "government_report",
+        "lookup_keys": [
+          "reportType",
+          "title",
+          "reportYear",
+          "status",
+          "projectName",
+          "reportCycleStartDate",
+          "reportCycleEndDate",
+          "pageNumber",
+          "pageSize",
+          "taskId",
+          "batchId",
+          "instanceId",
+          "rowId"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal BFF POST /api/government/report/page，无 @OptionalLogin，原样转发 RemotePortalProjectProgressReportService#page；不是 /api/mini/government/report/page，也不是 currentFillableList。",
+          "PortalProjectProgressReportRemoteService#page 用会话 GicsCompany.contactUserId 写入 companyId，查 portal_report_page_list.sql：enterprise_operation 按任务、project_progress 仅 pr.id 非空的项目行。projectName 只过滤项目支。",
+          "pageSize 空值会在 SqlExecutor.page 拆箱 NPE；pageNumber 可空则 start=0。返回 taskId/batchId/instanceId/rowId 供详情、草稿、提交继续调用。"
+        ],
+        "required_inputs": [
+          {
+            "name": "pageSize",
+            "zh_name": "每页条数",
+            "location": "body",
+            "required": true,
+            "schema_type": "Integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "report_task_id",
+            "display_name": "填报任务ID",
+            "technical_names": [
+              "taskId"
+            ],
+            "aliases": [
+              "任务ID",
+              "政务填报任务主键"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "report_batch_id",
+            "display_name": "发布批次ID",
+            "technical_names": [
+              "batchId"
+            ],
+            "aliases": [
+              "填报批次ID",
+              "公示批次ID"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "report_instance_id",
+            "display_name": "填报实例ID",
+            "technical_names": [
+              "instanceId"
+            ],
+            "aliases": [
+              "填报实例主键"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_report_row_id",
+            "display_name": "项目填报行ID",
+            "technical_names": [
+              "rowId"
+            ],
+            "aliases": [
+              "项目行ID"
+            ],
+            "resource": "project_progress_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalGovernmentReportController#page(PortalProjectProgressReportPageCondition) -> RemotePortalProjectProgressReportService#page",
+          "PortalProjectProgressReportRemoteService#page：ObjectUtil.defaultIfNull 空条件；sqlCondition.companyId=currentCompanyId()；PortalProjectProgressReportDao#page -> SqlExecutor.page(portal_report_page_list.sql)",
+          "GicsCompanyDao 按 contactUserId+status 解析当前企业；SQL t.target_company_id=:companyId 且 data_source='fill'；postHandlePageRows 补 reportTypeName/statusName/canEdit/canSubmit/canFill",
+          "Swagger 写“分页查询填报任务”，可执行链路是企业历史任务+已关联项目行，不包含工作台尚未建任务的项目批次入口"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "f7e684a5-6e7f-4dc2-9a54-0c06eb214415",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/government/report/currentFillableList"
+      },
+      "semantic": {
+        "purpose": "供政务门户工作台列出当前登录企业最多两条可展示填报入口：企业运行数据取本企业最新有效任务，项目情况取当前填报期批次（可无 taskId）；待审核/通过任务只读仍展示。不是历史分页，也不是首页公开入口。",
+        "audiences": [
+          "政务门户",
+          "入驻企业联系人"
+        ],
+        "domains": [
+          "政务填报",
+          "企业运行数据",
+          "项目情况"
+        ],
+        "scenarios": [
+          "企业联系人打开门户政务工作台，查看本企业当前填报期的企业运行数据入口和项目情况入口，而不是翻历史任务。"
+        ],
+        "actions": [
+          "query"
+        ],
+        "entities": [
+          "填报入口",
+          "企业运行数据",
+          "项目情况填报"
+        ],
+        "aliases": [
+          "门户当前可填报入口",
+          "门户工作台填报入口",
+          "PortalGovernmentReportController.currentFillableList"
+        ],
+        "resource": "government_report",
+        "lookup_keys": [
+          "taskId",
+          "batchId",
+          "instanceId",
+          "reportType"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal BFF POST /api/government/report/currentFillableList，无请求体，需登录；不是 /noAuth/currentFillableList，也不是 page。",
+          "企业运行数据按 targetCompanyId=当前企业任务倒序取首条填报期批次；项目情况跳过任务循环，fillCurrentProjectBatchEntry 只放当前填报期批次，可能仅有 batchId、无 taskId。",
+          "VIEWABLE 含 pending_audit/audit_pass，此时 readOnly=true 仍返回；ended/revoked 不展示。公开入口则不返回任何业务主键。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "report_task_id",
+            "display_name": "填报任务ID",
+            "technical_names": [
+              "taskId"
+            ],
+            "aliases": [
+              "任务ID",
+              "政务填报任务主键"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "report_batch_id",
+            "display_name": "发布批次ID",
+            "technical_names": [
+              "batchId"
+            ],
+            "aliases": [
+              "填报批次ID",
+              "公示批次ID"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "report_instance_id",
+            "display_name": "填报实例ID",
+            "technical_names": [
+              "instanceId"
+            ],
+            "aliases": [
+              "填报实例主键"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalGovernmentReportController#currentFillableList() -> RemotePortalProjectProgressReportService#currentFillableList",
+          "PortalProjectProgressReportRemoteService#currentFillableList：ReportTaskDao targetCompanyId=currentCompanyId()；企业运行数据 buildPageQuery 写 taskId/batchId/instanceId；项目情况 fillCurrentProjectBatchEntry -> buildProjectBatchEntry 只写 batchId",
+          "isCurrentFillableBatch -> PortalReportFillAvailabilityService#isFillAvailable：批次须 IN_PROGRESS 且在 startDate 当天零点至 endDate 当天结束",
+          "与 currentPublicFillableList 对比：后者不查企业/任务/实例，公开入口不返回任何 ID"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "b464dd87-6301-41f5-9002-5de4339d7627",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/government/report/noAuth/currentFillableList"
+      },
+      "semantic": {
+        "purpose": "供政务门户首页查询当前填报期的公开填报入口：只按企业运行数据、项目情况两类最新可用发布批次返回标题和周期，不查企业任务，也不返回任何业务主键。Portal BFF 未标 @OptionalLogin，实际仍要求登录。",
+        "audiences": [
+          "政务门户"
+        ],
+        "domains": [
+          "政务填报"
+        ],
+        "scenarios": [
+          "门户首页展示当前是否有企业运行数据或项目情况填报期，只看公开批次标题和日期，不能凭此列表直接进入企业填报页。"
+        ],
+        "actions": [
+          "query"
+        ],
+        "entities": [
+          "填报入口",
+          "发布批次"
+        ],
+        "aliases": [
+          "门户首页公开填报入口",
+          "门户首页填报批次入口",
+          "PortalGovernmentReportController.currentPublicFillableList"
+        ],
+        "resource": "government_report",
+        "lookup_keys": [
+          "reportType"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "路径 /api/government/report/noAuth/currentFillableList 且 GICS RemotePortalProjectProgressReportController#currentPublicFillableList 有 @OptionalLogin，数据不按企业过滤；但 Portal 方法无 @OptionalLogin，LoginPolicySaInterceptor 对非 trusted 请求 checkLogin。",
+          "buildPublicFillableEntry 只写 reportType/title/reportYear/周期/canFill=true；登录后的工作台入口才返回本企业任务或项目批次标识。",
+          "数据范围为全局发布批次，因此 ownership=all；Portal 层强制登录属于访问策略，不改变数据归属。小程序无此接口。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [],
+        "semantic_confidence": 0.88,
+        "semantic_evidence": [
+          "PortalGovernmentReportController#currentPublicFillableList() 无 @OptionalLogin -> RemotePortalProjectProgressReportService#currentPublicFillableList",
+          "RemotePortalProjectProgressReportController#currentPublicFillableList 有 @OptionalLogin；PortalProjectProgressReportRemoteService#currentPublicFillableList/#addCurrentPublicFillableEntry/#buildPublicFillableEntry 不查任务与实例、不 set 任何 ID",
+          "LoginPolicyResolver 无 OptionalLogin/IgnoreLogin 则为 REQUIRED；LoginPolicySaInterceptor 对 REQUIRED 且非 trusted 执行 StpUtil.checkLogin()",
+          "方法注释写“由未登录首页调用”，与 Portal BFF 登录策略冲突；GICS 执行链与注释一致但不返回 batchId"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "2153a969-cfaf-479c-bd7c-4b3bdf64088a",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/government/report/noAuth/homeStatistics"
+      },
+      "semantic": {
+        "purpose": "供政务门户首页聚合六项公开统计：GICS 按已结束企业运行数据批次回退五项年度指标，MTP 返回公路铁路已完成承运订单总数；无年份参数，下游失败字段留空。不是填报入口，也不是公示列表。",
+        "audiences": [
+          "政务门户"
+        ],
+        "domains": [
+          "政务填报",
+          "枢纽运行统计"
+        ],
+        "scenarios": [
+          "匿名或登录用户打开门户首页，查看枢纽面积、吞吐量、专用线、班列、入驻企业和承运订单等公开统计，而不是查看某年公示明细。"
+        ],
+        "actions": [
+          "query"
+        ],
+        "entities": [
+          "门户首页统计",
+          "企业运行数据",
+          "承运订单"
+        ],
+        "aliases": [
+          "门户首页公开统计",
+          "门户政务首页指标",
+          "PortalGovernmentReportController.homeStatistics"
+        ],
+        "resource": "government_home_statistics",
+        "lookup_keys": [
+          "reportYear"
+        ],
+        "cardinality": "one",
+        "ownership": "all",
+        "discriminators": [
+          "c12-portal BFF POST /api/government/report/noAuth/homeStatistics 有 @OptionalLogin，由 PortalGovernmentHomeStatisticsService 聚合，不是纯转发；小程序无此接口。",
+          "GICS GroupReportSummaryService#homeStatistics 只取 ENDED 的 enterprise_operation 批次并从新到旧补齐五项指标；MTP AccountOverviewController#publicCompletedCarrierOrderCount 全局统计已完成承运订单，不按登录用户过滤。",
+          "无请求体、无年份控制。失败降级为 null 而不是演示值。publicList/publicDetail 才是按 publicityFlag 公示的批次清单/明细。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalGovernmentReportController#homeStatistics() @OptionalLogin -> PortalGovernmentHomeStatisticsService#homeStatistics",
+          "RemotePortalHomeStatisticsService#statistics -> RemotePortalHomeStatisticsController -> GroupReportSummaryService#homeStatistics（ENDED 企业运行批次回退）",
+          "RemoteAccountOverviewService#publicCompletedCarrierOrderCount -> AccountOverviewController#publicCompletedCarrierOrderCount @OptionalLogin",
+          "PortalGovernmentHomeStatisticsQuery 含 reportYear 与六项指标；无 ID。注释写无年份控制参数，与执行链一致"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "3866e1c0-f764-421f-a9c6-c78a41009ddf",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/government/report/getByTaskId"
+      },
+      "semantic": {
+        "purpose": "供政务门户按 taskId、batchId 或 rowId 查看当前企业项目情况填报详情：返回动态字段和项目行；fillMode=true 时校验填报期和可进入状态。不是企业运行数据详情，也不是列表直接提交。",
+        "audiences": [
+          "政务门户",
+          "入驻企业联系人"
+        ],
+        "domains": [
+          "政务填报",
+          "项目情况"
+        ],
+        "scenarios": [
+          "企业联系人在门户打开一条项目情况填报，用任务ID看整单、用批次ID做首次填报、或用项目行ID只回显单个历史项目。"
+        ],
+        "actions": [
+          "detail",
+          "query"
+        ],
+        "entities": [
+          "项目情况填报",
+          "项目填报行",
+          "动态字段"
+        ],
+        "aliases": [
+          "门户项目情况填报详情",
+          "门户按任务查看项目填报",
+          "PortalGovernmentReportController.getByTaskId"
+        ],
+        "resource": "project_progress_report",
+        "lookup_keys": [
+          "taskId",
+          "batchId",
+          "rowId",
+          "fillMode",
+          "fieldId",
+          "fieldCode",
+          "projectId"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal BFF POST /api/government/report/getByTaskId 转发项目情况远程服务；不是 /enterprise/getByTaskId，也不是 MiniGovernmentReportController#getByTaskId。",
+          "PortalProjectProgressReportIdCondition 无 Bean Validation；resolveProjectRowContext 要求 taskId/batchId/rowId 至少一项。rowId 优先并校验与 task/batch 一致；仅 batchId 时 buildProjectProgressTaskFromBatch，taskId 为空。",
+          "详情构造把 instance 固定传 null，不返回 instanceId；templateId/templateName 被置空。fillMode=true 才校验批次可填和未开始/草稿/驳回可进入。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "report_task_id",
+            "display_name": "填报任务ID",
+            "technical_names": [
+              "taskId"
+            ],
+            "aliases": [
+              "任务ID",
+              "政务填报任务主键"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "report_batch_id",
+            "display_name": "发布批次ID",
+            "technical_names": [
+              "batchId"
+            ],
+            "aliases": [
+              "填报批次ID",
+              "公示批次ID"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_report_row_id",
+            "display_name": "项目填报行ID",
+            "technical_names": [
+              "rowId"
+            ],
+            "aliases": [
+              "项目行ID"
+            ],
+            "resource": "project_progress_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_template_field_id",
+            "display_name": "项目模板字段ID",
+            "technical_names": [
+              "fieldId"
+            ],
+            "aliases": [
+              "动态字段ID"
+            ],
+            "resource": "project_progress_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_template_field_code",
+            "display_name": "项目模板字段编码",
+            "technical_names": [
+              "fieldCode"
+            ],
+            "aliases": [
+              "动态字段编码"
+            ],
+            "resource": "project_progress_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_id",
+            "display_name": "项目ID",
+            "technical_names": [
+              "projectId"
+            ],
+            "aliases": [
+              "项目主键"
+            ],
+            "resource": "project_progress_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": [
+          "PortalGovernmentReportController#getByTaskId(@Valid PortalProjectProgressReportIdCondition) -> RemotePortalProjectProgressReportService#getByTaskId",
+          "PortalProjectProgressReportRemoteService#getByTaskId(taskId,batchId,rowId,fillMode) -> resolveProjectRowContext；REPORT_TASK_OR_ROW_ID_EMPTY；requireProjectProgressTask 过滤当前企业且 reportType=project_progress",
+          "buildDetailQuery 的 instance 恒为 null；detailQuery.setTemplateId(null)；toRowQuery 返回 rowId/projectId/fieldId/fieldCode",
+          "Swagger 标题“查询填报详情”未写明仅项目情况；可执行链路只走项目情况远程服务"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "40805ecb-6975-483c-988c-5391e13a81ce",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/government/report/saveDraft"
+      },
+      "semantic": {
+        "purpose": "供政务门户保存当前企业项目情况填报草稿：有 taskId 则覆盖该任务 draft 行，无 taskId 则按 batchId 工作台批次保存并可创建项目子任务；不进入待审核。成功返回 Long，任务路径为 taskId，批次路径为 batchId。",
+        "audiences": [
+          "政务门户",
+          "入驻企业联系人"
+        ],
+        "domains": [
+          "政务填报",
+          "项目情况"
+        ],
+        "scenarios": [
+          "企业联系人在门户项目情况填报页暂存动态字段，或从工作台按发布批次新增/改部分项目草稿，而不是提交审核。"
+        ],
+        "actions": [
+          "save",
+          "update"
+        ],
+        "entities": [
+          "项目情况填报",
+          "项目填报行",
+          "填报任务"
+        ],
+        "aliases": [
+          "门户保存项目情况草稿",
+          "门户暂存项目填报",
+          "PortalGovernmentReportController.saveDraft"
+        ],
+        "resource": "project_progress_report",
+        "lookup_keys": [
+          "taskId",
+          "batchId",
+          "rowId",
+          "fieldId"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal BFF POST /api/government/report/saveDraft @Idempotent @Valid（无 SubmitGroup），不是 submit/directSubmit，也不是 /enterprise/saveDraft。",
+          "taskId 非空走 requireProjectProgressTask；为空走 saveBatchDraft(requireProjectProgressBatch)。草稿不要求 projectList 非空；审核拒绝保存后仍保持 audit_reject。",
+          "GICS 另加 RedisLock(companyId)。批次保存只持久化本次 changedRowNoSet，不删未提交的历史项目。原始 Long 返回值在任务路径是 taskId、批次路径是 batchId。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "report_task_id",
+            "display_name": "填报任务ID",
+            "technical_names": [
+              "taskId"
+            ],
+            "aliases": [
+              "任务ID",
+              "政务填报任务主键"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "report_batch_id",
+            "display_name": "发布批次ID",
+            "technical_names": [
+              "batchId"
+            ],
+            "aliases": [
+              "填报批次ID",
+              "公示批次ID"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_report_row_id",
+            "display_name": "项目填报行ID",
+            "technical_names": [
+              "rowId"
+            ],
+            "aliases": [
+              "项目行ID"
+            ],
+            "resource": "project_progress_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_template_field_id",
+            "display_name": "项目模板字段ID",
+            "technical_names": [
+              "fieldId"
+            ],
+            "aliases": [
+              "动态字段ID"
+            ],
+            "resource": "project_progress_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalGovernmentReportController#saveDraft(@Valid PortalProjectProgressReportSaveItem) -> RemotePortalProjectProgressReportService#saveDraft",
+          "PortalProjectProgressReportRemoteService#saveDraft/#saveBatchDraft：写 cs_gics_project_report_row、cs_gics_project_report_value、cs_gics_report_task；Remote 方法 @Idempotent @RedisLock",
+          "PortalProjectProgressReportSaveItem.projectList 的 @NotEmpty 仅 SubmitGroup，草稿不强制；validateProjectRows(submitAction=false) 允许空列表",
+          "resolveProjectSaveContext 单行且带 rowId 时合并其他可见行，避免只提交一行覆盖整单"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "76cf69fb-d112-4e3a-bfe5-21d789bc32f5",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/government/report/deleteDraft"
+      },
+      "semantic": {
+        "purpose": "供政务门户删除当前企业一条草稿状态的项目情况填报任务：必填 taskId，rowId 可空则用任务关联行；物理删除动态字段、项目行和任务。不能删除非草稿，也不能删企业运行数据。",
+        "audiences": [
+          "政务门户",
+          "入驻企业联系人"
+        ],
+        "domains": [
+          "政务填报",
+          "项目情况"
+        ],
+        "scenarios": [
+          "企业联系人在门户工作台对项目情况草稿二次确认后删除该任务及其项目行，而不是保存或提交。"
+        ],
+        "actions": [
+          "delete"
+        ],
+        "entities": [
+          "项目情况填报",
+          "项目填报行",
+          "填报任务"
+        ],
+        "aliases": [
+          "门户删除项目情况草稿",
+          "门户去掉项目填报草稿",
+          "PortalGovernmentReportController.deleteDraft"
+        ],
+        "resource": "project_progress_report",
+        "lookup_keys": [
+          "taskId",
+          "rowId"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal BFF POST /api/government/report/deleteDraft，只删 project_progress 且 taskStatus=draft；企业运行数据没有 deleteDraft。",
+          "IdCondition 无 @NotNull，但 requireProjectProgressTask 对空 taskId 抛 REPORT_TASK_ID_EMPTY。rowId 可空：resolveDraftRow 回退 task.projectRowId 或按 taskId 查行。",
+          "行与任务 taskId 不一致视为不存在，防止用 rowId 越权。无关联行时仍删除孤立草稿任务。返回被删任务ID。"
+        ],
+        "required_inputs": [
+          {
+            "name": "taskId",
+            "zh_name": "填报任务ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "report_task_id",
+            "display_name": "填报任务ID",
+            "technical_names": [
+              "taskId"
+            ],
+            "aliases": [
+              "任务ID",
+              "政务填报任务主键"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_report_row_id",
+            "display_name": "项目填报行ID",
+            "technical_names": [
+              "rowId"
+            ],
+            "aliases": [
+              "项目行ID"
+            ],
+            "resource": "project_progress_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "PortalGovernmentReportController#deleteDraft(@Valid PortalProjectProgressReportIdCondition) -> RemotePortalProjectProgressReportService#deleteDraft",
+          "PortalProjectProgressReportRemoteService#deleteDraft(taskId,rowId)：requireProjectProgressTask；validateDraftTask 仅 draft；resolveDraftRow；ProjectReportValueDao.delete by taskId；ProjectReportRowDao.delete；ReportTaskDao.delete",
+          "RemotePortalProjectProgressReportController#deleteDraft @Idempotent @RedisLock(companyId)",
+          "企业运行数据家族无对应删除草稿接口"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "b8532977-50da-4c10-b9ad-b7f6ae31d9b8",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/government/report/submit"
+      },
+      "semantic": {
+        "purpose": "供政务门户提交当前企业项目情况填报进入待审核：先落最新草稿再写 submit 快照；有 taskId 提交该任务，无 taskId 按 batchId 批次提交。SubmitGroup 要求至少一条项目。成功 Long 在任务路径为 taskId、批次路径为 batchId。",
+        "audiences": [
+          "政务门户",
+          "入驻企业联系人"
+        ],
+        "domains": [
+          "政务填报",
+          "项目情况"
+        ],
+        "scenarios": [
+          "企业联系人在门户项目情况填报页点提交，把当前动态字段送审，而不是只存草稿或从列表直接提交已有草稿。"
+        ],
+        "actions": [
+          "submit",
+          "update"
+        ],
+        "entities": [
+          "项目情况填报",
+          "项目填报行",
+          "填报任务"
+        ],
+        "aliases": [
+          "门户提交项目情况填报",
+          "门户项目填报送审",
+          "PortalGovernmentReportController.submit"
+        ],
+        "resource": "project_progress_report",
+        "lookup_keys": [
+          "taskId",
+          "batchId",
+          "rowId",
+          "fieldId"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal BFF POST /api/government/report/submit @Validated(SubmitGroup.class)，不是 saveDraft，也不是只带 ID 的 directSubmit。",
+          "SubmitGroup 才 @NotEmpty projectList；提交时 validateProjectRows 校验模板必填/类型/同单项目名不重复。taskId 与 batchId 二选一，与 saveDraft 相同。",
+          "directSubmit 不收 projectList，后端按标识重读草稿再走 submit。企业运行数据 submit 走另一远程服务且 taskId 无条件必填。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "report_task_id",
+            "display_name": "填报任务ID",
+            "technical_names": [
+              "taskId"
+            ],
+            "aliases": [
+              "任务ID",
+              "政务填报任务主键"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "report_batch_id",
+            "display_name": "发布批次ID",
+            "technical_names": [
+              "batchId"
+            ],
+            "aliases": [
+              "填报批次ID",
+              "公示批次ID"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_report_row_id",
+            "display_name": "项目填报行ID",
+            "technical_names": [
+              "rowId"
+            ],
+            "aliases": [
+              "项目行ID"
+            ],
+            "resource": "project_progress_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_template_field_id",
+            "display_name": "项目模板字段ID",
+            "technical_names": [
+              "fieldId"
+            ],
+            "aliases": [
+              "动态字段ID"
+            ],
+            "resource": "project_progress_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalGovernmentReportController#submit(@Validated(SubmitGroup.class) PortalProjectProgressReportSaveItem) -> RemotePortalProjectProgressReportService#submit",
+          "PortalProjectProgressReportRemoteService#submit/#submitBatch：replaceDraftRows 后 replaceSubmitRows/saveBatchRows(stage=submit)，taskStatus=pending_audit",
+          "PortalProjectProgressReportSaveItem.projectList @NotEmpty(groups=SubmitGroup)；PortalProjectProgressFieldValueItem.fieldId @NotNull(groups=SubmitGroup)；validateProjectRows(submitAction=true)",
+          "返回 task.getId() 或 batch.getId()，无响应包装字段名"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "2750b39d-733c-4de1-9f09-ad08ac7c6982",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/government/report/directSubmit"
+      },
+      "semantic": {
+        "purpose": "供政务门户在项目情况列表上按标识直接提交已有草稿：taskId 优先读详情再 submit，否则按 batchId 收集批次草稿行提交；不接收 projectList。taskId 与 batchId 至少一项。",
+        "audiences": [
+          "政务门户",
+          "入驻企业联系人"
+        ],
+        "domains": [
+          "政务填报",
+          "项目情况"
+        ],
+        "scenarios": [
+          "企业联系人在门户填报任务列表对已有项目情况草稿直接送审，不再打开填报页编辑动态字段。"
+        ],
+        "actions": [
+          "submit",
+          "update"
+        ],
+        "entities": [
+          "项目情况填报",
+          "项目填报行",
+          "填报任务"
+        ],
+        "aliases": [
+          "门户项目情况列表直接提交",
+          "门户不打开填报页提交项目",
+          "PortalGovernmentReportController.directSubmit"
+        ],
+        "resource": "project_progress_report",
+        "lookup_keys": [
+          "taskId",
+          "batchId",
+          "rowId"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal BFF POST /api/government/report/directSubmit 只收 PortalProjectProgressReportIdCondition，不是带 projectList 的 submit。",
+          "directSubmit 显式校验 taskId、batchId 不能都空；有 taskId 时 getByTaskId(..., fillMode=false) 再 submit，空草稿会在 submit 的 SubmitGroup/校验上失败。",
+          "企业运行数据列表直提只接受填报任务ID，不接受发布批次或项目行标识。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "report_task_id",
+            "display_name": "填报任务ID",
+            "technical_names": [
+              "taskId"
+            ],
+            "aliases": [
+              "任务ID",
+              "政务填报任务主键"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "report_batch_id",
+            "display_name": "发布批次ID",
+            "technical_names": [
+              "batchId"
+            ],
+            "aliases": [
+              "填报批次ID",
+              "公示批次ID"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_report_row_id",
+            "display_name": "项目填报行ID",
+            "technical_names": [
+              "rowId"
+            ],
+            "aliases": [
+              "项目行ID"
+            ],
+            "resource": "project_progress_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalGovernmentReportController#directSubmit(@Valid PortalProjectProgressReportIdCondition) -> RemotePortalProjectProgressReportService#directSubmit",
+          "PortalProjectProgressReportRemoteService#directSubmit：taskId 与 batchId 都空则 REPORT_TASK_OR_ROW_ID_EMPTY；buildDirectSubmitItem/buildBatchDirectSubmitItem 后 submit()",
+          "列表直提 fillMode=false，不先校验进入填报页；真正提交仍走批次可填和可编辑状态校验",
+          "IdCondition 无无条件 Bean Validation 叶子；运行时二选一标识"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "9a409935-1473-4707-807f-484693b01b5e",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/government/report/enterprise/getByTaskId"
+      },
+      "semantic": {
+        "purpose": "供政务门户按填报任务ID查看当前企业企业运行数据详情：优先草稿值，否则最近提交快照，再否则模板空结构；fillMode=true 时限制填报期和可进入状态。详情组装不填充发布批次标识。不是项目情况详情，也不是公示明细。",
+        "audiences": [
+          "政务门户",
+          "入驻企业联系人"
+        ],
+        "domains": [
+          "政务填报",
+          "企业运行数据"
+        ],
+        "scenarios": [
+          "企业联系人在门户打开本企业一条企业运行数据任务，查看分组指标和已填值，而不是看枢纽公示或项目情况。"
+        ],
+        "actions": [
+          "detail",
+          "query"
+        ],
+        "entities": [
+          "企业运行数据填报",
+          "填报模板",
+          "填报分组"
+        ],
+        "aliases": [
+          "门户企业运行数据填报详情",
+          "门户按任务查看企业运行填报",
+          "PortalGovernmentReportController.getEnterpriseByTaskId"
+        ],
+        "resource": "enterprise_operation_report",
+        "lookup_keys": [
+          "taskId",
+          "fillMode",
+          "instanceId",
+          "templateId",
+          "sectionCode",
+          "itemId",
+          "itemCode",
+          "templateItemId"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal BFF POST /api/government/report/enterprise/getByTaskId 只把任务标识与填报页标志传给企业运行远程服务，不消费项目情况的批次入口或项目行入口。",
+          "requireEnterpriseTask 无条件要求 taskId，且 reportType 必须 enterprise_operation、targetCompanyId=当前企业。",
+          "PortalEnterpriseOperationReportRemoteService#buildPageQuery 不填充发布批次标识，与历史分页/工作台入口的返回矩阵不同；templateId 来自 task.templateSourceId。不是公示详情。"
+        ],
+        "required_inputs": [
+          {
+            "name": "taskId",
+            "zh_name": "填报任务ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "report_task_id",
+            "display_name": "填报任务ID",
+            "technical_names": [
+              "taskId"
+            ],
+            "aliases": [
+              "任务ID",
+              "政务填报任务主键"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "report_instance_id",
+            "display_name": "填报实例ID",
+            "technical_names": [
+              "instanceId"
+            ],
+            "aliases": [
+              "填报实例主键"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "enterprise_template_id",
+            "display_name": "企业运行数据模板ID",
+            "technical_names": [
+              "templateId"
+            ],
+            "aliases": [
+              "模板主键"
+            ],
+            "resource": "enterprise_operation_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "enterprise_template_item_id",
+            "display_name": "企业模板项ID",
+            "technical_names": [
+              "templateItemId"
+            ],
+            "aliases": [
+              "模板项主键"
+            ],
+            "resource": "enterprise_operation_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "enterprise_report_item_id",
+            "display_name": "企业填报项ID",
+            "technical_names": [
+              "itemId"
+            ],
+            "aliases": [
+              "填报项主键"
+            ],
+            "resource": "enterprise_operation_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "enterprise_report_item_code",
+            "display_name": "企业填报项编码",
+            "technical_names": [
+              "itemCode"
+            ],
+            "aliases": [
+              "指标项编码"
+            ],
+            "resource": "enterprise_operation_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "enterprise_section_code",
+            "display_name": "企业填报分组编码",
+            "technical_names": [
+              "sectionCode"
+            ],
+            "aliases": [
+              "分组编码"
+            ],
+            "resource": "enterprise_operation_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalGovernmentReportController#getEnterpriseByTaskId(@Valid PortalProjectProgressReportIdCondition) -> RemotePortalEnterpriseOperationReportService#getByTaskId",
+          "RemotePortalEnterpriseOperationReportController#getByTaskId 仅 remoteService.getByTaskId(condition.getTaskId(), condition.getFillMode())",
+          "PortalEnterpriseOperationReportRemoteService#requireEnterpriseTask 空 taskId 抛 REPORT_TASK_ID_EMPTY；buildTaskDetail 读 ReportInstance/EnterpriseReportValue；buildPageQuery 不写 batchId",
+          "fillMode=true 时 PortalReportFillAvailabilityService#validateFillAvailability 与 validateEnterFillPage"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "98010ba5-b1c8-4f83-9b79-128d7db2a0b2",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/government/report/enterprise/saveDraft"
+      },
+      "semantic": {
+        "purpose": "供政务门户按填报任务ID保存当前企业企业运行数据草稿：覆盖 draft 阶段 enterprise_report_value 和实例说明，不写提交快照、不改审核拒绝状态为待审核。taskId 无条件必填。返回任务ID。",
+        "audiences": [
+          "政务门户",
+          "入驻企业联系人"
+        ],
+        "domains": [
+          "政务填报",
+          "企业运行数据"
+        ],
+        "scenarios": [
+          "企业联系人在门户企业运行数据填报页暂存分组指标，稍后再提交审核。"
+        ],
+        "actions": [
+          "save",
+          "update"
+        ],
+        "entities": [
+          "企业运行数据填报",
+          "填报实例",
+          "填报任务"
+        ],
+        "aliases": [
+          "门户保存企业运行数据草稿",
+          "门户暂存企业运行填报",
+          "PortalGovernmentReportController.saveEnterpriseDraft"
+        ],
+        "resource": "enterprise_operation_report",
+        "lookup_keys": [
+          "taskId",
+          "sectionCode",
+          "itemId",
+          "templateItemId"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal BFF POST /api/government/report/enterprise/saveDraft @Valid，taskId @NotNull 无分组；sectionList @NotEmpty 仅 SubmitGroup，草稿不强制。",
+          "可执行 saveDraft 把 validateSectionItems 注释掉，不校验模板必填；Javadoc 仍写草稿也要满足必填。提交接口才会校验。",
+          "不是项目情况草稿（项目情况允许按发布批次首次保存）。只改 draft 值，不影响 submit 快照。"
+        ],
+        "required_inputs": [
+          {
+            "name": "taskId",
+            "zh_name": "填报任务ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "report_task_id",
+            "display_name": "填报任务ID",
+            "technical_names": [
+              "taskId"
+            ],
+            "aliases": [
+              "任务ID",
+              "政务填报任务主键"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "enterprise_template_item_id",
+            "display_name": "企业模板项ID",
+            "technical_names": [
+              "templateItemId"
+            ],
+            "aliases": [
+              "模板项主键"
+            ],
+            "resource": "enterprise_operation_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "enterprise_report_item_id",
+            "display_name": "企业填报项ID",
+            "technical_names": [
+              "itemId"
+            ],
+            "aliases": [
+              "填报项主键"
+            ],
+            "resource": "enterprise_operation_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "enterprise_section_code",
+            "display_name": "企业填报分组编码",
+            "technical_names": [
+              "sectionCode"
+            ],
+            "aliases": [
+              "分组编码"
+            ],
+            "resource": "enterprise_operation_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": [
+          "PortalGovernmentReportController#saveEnterpriseDraft(@Valid PortalEnterpriseOperationReportSaveItem) -> RemotePortalEnterpriseOperationReportService#saveDraft",
+          "PortalEnterpriseOperationReportSaveItem.taskId @NotNull；sectionList @NotEmpty(groups=SubmitGroup)",
+          "PortalEnterpriseOperationReportRemoteService#saveDraft：requireEnterpriseTask；validateFillAvailability；validateEditableTask(false)；validateSectionItems 被注释；saveDraftValues 写 ReportInstance 与 EnterpriseReportValue draft",
+          "Javadoc“草稿保存前必须满足当前模板的必填”与注释掉的校验冲突，以可执行链路为准"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "c9fa66a2-5f1a-4c0a-82e7-3f2a1004f6ab",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/government/report/enterprise/submit"
+      },
+      "semantic": {
+        "purpose": "供政务门户提交当前企业企业运行数据进入待审核：先落草稿再写 submit 明细、模板快照和实例版本。taskId 无条件必填；GICS 使用 SubmitGroup，成功路径至少一组且分组编码必填。返回任务ID。",
+        "audiences": [
+          "政务门户",
+          "入驻企业联系人"
+        ],
+        "domains": [
+          "政务填报",
+          "企业运行数据"
+        ],
+        "scenarios": [
+          "企业联系人在门户企业运行数据填报页提交分组指标送审，而不是只存草稿或从列表直接提交。"
+        ],
+        "actions": [
+          "submit",
+          "update"
+        ],
+        "entities": [
+          "企业运行数据填报",
+          "填报实例",
+          "填报任务"
+        ],
+        "aliases": [
+          "门户提交企业运行数据填报",
+          "门户企业运行填报送审",
+          "PortalGovernmentReportController.submitEnterprise"
+        ],
+        "resource": "enterprise_operation_report",
+        "lookup_keys": [
+          "taskId",
+          "sectionCode",
+          "itemId",
+          "templateItemId"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal BFF POST /api/government/report/enterprise/submit 本地仅 @Valid，但 GICS RemotePortalEnterpriseOperationReportController#submit 为 @Validated(SubmitGroup.class)，成功路径仍要非空 sectionList 和 sectionCode。",
+          "submit 会调用 validateSectionItems 与模板必填；saveDraft 已注释该校验。不是 directSubmit。",
+          "项目情况提交允许按发布批次整单提交；本接口填报任务ID无条件必填。"
+        ],
+        "required_inputs": [
+          {
+            "name": "taskId",
+            "zh_name": "填报任务ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          },
+          {
+            "name": "sectionCode",
+            "zh_name": "分组编码",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "report_task_id",
+            "display_name": "填报任务ID",
+            "technical_names": [
+              "taskId"
+            ],
+            "aliases": [
+              "任务ID",
+              "政务填报任务主键"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "enterprise_template_item_id",
+            "display_name": "企业模板项ID",
+            "technical_names": [
+              "templateItemId"
+            ],
+            "aliases": [
+              "模板项主键"
+            ],
+            "resource": "enterprise_operation_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "enterprise_report_item_id",
+            "display_name": "企业填报项ID",
+            "technical_names": [
+              "itemId"
+            ],
+            "aliases": [
+              "填报项主键"
+            ],
+            "resource": "enterprise_operation_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "enterprise_section_code",
+            "display_name": "企业填报分组编码",
+            "technical_names": [
+              "sectionCode"
+            ],
+            "aliases": [
+              "分组编码"
+            ],
+            "resource": "enterprise_operation_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.95,
+        "semantic_evidence": [
+          "PortalGovernmentReportController#submitEnterprise(@Valid PortalEnterpriseOperationReportSaveItem) -> RemotePortalEnterpriseOperationReportService#submit",
+          "RemotePortalEnterpriseOperationReportController#submit(@Validated(SubmitGroup.class))；PortalEnterpriseOperationSectionItem.sectionCode @NotBlank(SubmitGroup)；PortalEnterpriseOperationValueItem.itemId @NotNull(SubmitGroup)",
+          "PortalEnterpriseOperationReportRemoteService#submit：saveDraftValues(updateTaskDraftStatus=false) 后 replaceSubmitValues、ReportInstanceVersionDao.saveOrUpdate，任务/实例改为 pending_audit",
+          "Portal 层未使用 SubmitGroup，与 GICS 服务端分组校验不一致，以 GICS 执行链为成功前提"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "8c4846f8-0fe7-4952-bfff-eff30cb82d1a",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/government/report/enterprise/directSubmit"
+      },
+      "semantic": {
+        "purpose": "供政务门户在企业运行数据列表上按任务ID直接提交已有草稿：后端 getByTaskId(fillMode=false) 组装 sectionList 再走标准 submit。taskId 无条件必填，不接收分组明细。",
+        "audiences": [
+          "政务门户",
+          "入驻企业联系人"
+        ],
+        "domains": [
+          "政务填报",
+          "企业运行数据"
+        ],
+        "scenarios": [
+          "企业联系人在门户任务列表对企业运行数据草稿直接送审，不打开填报页改指标。"
+        ],
+        "actions": [
+          "submit",
+          "update"
+        ],
+        "entities": [
+          "企业运行数据填报",
+          "填报实例",
+          "填报任务"
+        ],
+        "aliases": [
+          "门户企业运行数据列表直接提交",
+          "门户不打开填报页提交企业运行数据",
+          "PortalGovernmentReportController.directSubmitEnterprise"
+        ],
+        "resource": "enterprise_operation_report",
+        "lookup_keys": [
+          "taskId"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal BFF POST /api/government/report/enterprise/directSubmit 只收填报任务ID；项目情况列表直提还接受发布批次或项目行标识。",
+          "PortalEnterpriseOperationReportRemoteService#directSubmit 空 taskId 抛 REPORT_TASK_ID_EMPTY，然后 submit 仍走模板必填。",
+          "不是 saveDraft，也不是带 sectionList 的 submit。"
+        ],
+        "required_inputs": [
+          {
+            "name": "taskId",
+            "zh_name": "填报任务ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "report_task_id",
+            "display_name": "填报任务ID",
+            "technical_names": [
+              "taskId"
+            ],
+            "aliases": [
+              "任务ID",
+              "政务填报任务主键"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "PortalGovernmentReportController#directSubmitEnterprise(@Valid PortalProjectProgressReportIdCondition) -> RemotePortalEnterpriseOperationReportService#directSubmit",
+          "PortalEnterpriseOperationReportRemoteService#directSubmit(taskId)：getByTaskId(taskId,false) -> toSectionItemList -> submit",
+          "IdCondition 无 @NotNull，运行时 require 空 taskId 失败",
+          "返回 task.getId()"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "42a03cb0-c3fc-4a9c-a572-a084d656a4b5",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/government/report/enterprise/publicList"
+      },
+      "semantic": {
+        "purpose": "供政务门户列出 publicityFlag=1 的企业运行数据公示批次：按年份和周期倒序返回 batchId 与标题，不按登录企业过滤。@OptionalLogin。不是企业填报任务列表，也不是公示详情。",
+        "audiences": [
+          "政务门户"
+        ],
+        "domains": [
+          "政务填报",
+          "枢纽运行统计"
+        ],
+        "scenarios": [
+          "匿名或登录用户在门户查看各年攀枝花物流枢纽运行总体数据公示目录，再拿批次ID打开详情。"
+        ],
+        "actions": [
+          "query"
+        ],
+        "entities": [
+          "枢纽运行数据公示",
+          "发布批次"
+        ],
+        "aliases": [
+          "门户枢纽运行数据公示列表",
+          "门户企业运行公示目录",
+          "PortalGovernmentReportController.publicEnterpriseList"
+        ],
+        "resource": "enterprise_operation_public",
+        "lookup_keys": [
+          "batchId"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "c12-portal BFF POST /api/government/report/enterprise/publicList @OptionalLogin，无请求体；小程序无公示接口。",
+          "GroupReportSummaryService#publicList 过滤 reportType=enterprise_operation 且 publicityFlag=1；标题格式为“{年}年攀枝花物流枢纽运行总体数据”。",
+          "返回的 batchId 供 publicDetail 查询。homeStatistics 用已结束批次回退指标，不看 publicityFlag。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "report_batch_id",
+            "display_name": "发布批次ID",
+            "technical_names": [
+              "batchId"
+            ],
+            "aliases": [
+              "填报批次ID",
+              "公示批次ID"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "PortalGovernmentReportController#publicEnterpriseList() @OptionalLogin -> RemotePortalEnterpriseOperationPublicService#publicList",
+          "PortalEnterpriseOperationPublicRemoteService#publicList -> GroupReportSummaryService#publicList",
+          "toPublicSummaryItem 写 batchId 与按 reportYear 生成的 title；PortalEnterpriseOperationPublicSummaryQuery.list",
+          "loadBatchList 状态限于 IN_PROGRESS/ENDED，再过滤 publicityFlag"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "42a254ed-5010-4c4e-80c1-27d07be5a5fe",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/government/report/enterprise/publicDetail"
+      },
+      "semantic": {
+        "purpose": "供政务门户按公示批次ID查看枢纽运行总体数据明细：只返回对门户可见的类别、指标项和数据字符串。batchId 无条件必填。不是企业填报详情，也不是首页六项统计。",
+        "audiences": [
+          "政务门户"
+        ],
+        "domains": [
+          "政务填报",
+          "枢纽运行统计"
+        ],
+        "scenarios": [
+          "用户在门户点开某年枢纽运行公示，查看该批次下对门户显示的指标值。"
+        ],
+        "actions": [
+          "detail",
+          "query"
+        ],
+        "entities": [
+          "枢纽运行数据公示",
+          "公示指标"
+        ],
+        "aliases": [
+          "门户枢纽运行数据公示详情",
+          "门户企业运行公示明细",
+          "PortalGovernmentReportController.publicEnterpriseDetail"
+        ],
+        "resource": "enterprise_operation_public",
+        "lookup_keys": [
+          "batchId"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "c12-portal BFF POST /api/government/report/enterprise/publicDetail @OptionalLogin @Valid，batchId @NotNull；不是 getEnterpriseByTaskId。",
+          "publicDetailSimple 要求 enterprise_operation 且 publicityFlag=1，否则“公示批次不存在”。Item.data 是指标展示值不是 ResponseData 包装。",
+          "小程序无此接口。homeStatistics 不按 batchId 查询。"
+        ],
+        "required_inputs": [
+          {
+            "name": "batchId",
+            "zh_name": "公示批次ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "report_batch_id",
+            "display_name": "发布批次ID",
+            "technical_names": [
+              "batchId"
+            ],
+            "aliases": [
+              "填报批次ID",
+              "公示批次ID"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "PortalGovernmentReportController#publicEnterpriseDetail(@Valid PortalEnterpriseOperationPublicDetailCondition) -> RemotePortalEnterpriseOperationPublicService#publicDetail",
+          "PortalEnterpriseOperationPublicDetailCondition.batchId @NotNull",
+          "GroupReportSummaryService#publicDetailSimple(batchId)：buildEnterpriseModulesMixed + loadPortalHiddenItemIds，Item.category/indicator/data",
+          "公示详情不返回 taskId/instanceId；batchId 仅出现在请求中"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "36563f7b-a67d-4224-8d30-9b55b760fe7f",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/government/report/currentFillableList"
+      },
+      "semantic": {
+        "purpose": "供门户小程序工作台列出当前登录企业最多两条可展示填报入口，下游与门户 currentFillableList 相同：企业运行数据取本企业任务，项目情况取当前填报期批次。不是小程序历史分页，小程序也没有公开入口。",
+        "audiences": [
+          "门户小程序",
+          "入驻企业联系人"
+        ],
+        "domains": [
+          "政务填报",
+          "企业运行数据",
+          "项目情况"
+        ],
+        "scenarios": [
+          "企业联系人打开门户小程序政务工作台，查看本企业当前填报期入口，而不是翻小程序历史填报。"
+        ],
+        "actions": [
+          "query"
+        ],
+        "entities": [
+          "填报入口",
+          "企业运行数据",
+          "项目情况填报"
+        ],
+        "aliases": [
+          "小程序当前可填报入口",
+          "小程序工作台填报入口",
+          "MiniGovernmentReportController.currentFillableList"
+        ],
+        "resource": "government_report",
+        "lookup_keys": [
+          "taskId",
+          "batchId",
+          "instanceId",
+          "reportType"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal BFF POST /api/mini/government/report/currentFillableList，无 @OptionalLogin；门户同名方法路径是 /api/government/report/currentFillableList。",
+          "同样转发 RemotePortalProjectProgressReportService#currentFillableList，无 BFF 改写。小程序没有 /noAuth/currentFillableList。",
+          "与 MiniGovernmentReportController#page 对比：page 走 RemoteMiniGovernmentReportService，查历史任务而非工作台入口。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "report_task_id",
+            "display_name": "填报任务ID",
+            "technical_names": [
+              "taskId"
+            ],
+            "aliases": [
+              "任务ID",
+              "政务填报任务主键"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "report_batch_id",
+            "display_name": "发布批次ID",
+            "technical_names": [
+              "batchId"
+            ],
+            "aliases": [
+              "填报批次ID",
+              "公示批次ID"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "report_instance_id",
+            "display_name": "填报实例ID",
+            "technical_names": [
+              "instanceId"
+            ],
+            "aliases": [
+              "填报实例主键"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "MiniGovernmentReportController#currentFillableList() -> RemotePortalProjectProgressReportService#currentFillableList",
+          "MemberApiSuffixConstants.PORTAL_MINI=/api/mini；与门户共享 PortalProjectProgressReportRemoteService#currentFillableList",
+          "企业运行数据入口含 taskId/batchId；项目情况批次入口可能仅 batchId",
+          "无小程序公开填报入口接口"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "6370c376-fc96-4ad7-a3e4-b60720f8fc41",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/government/report/page"
+      },
+      "semantic": {
+        "purpose": "供门户小程序分页查询当前登录企业历史填报任务，SQL 与门户 page 相同：企业运行数据按任务、项目情况按已关联项目行。请求体可省略，但空 pageSize 仍会拆箱失败。不是工作台当前入口。",
+        "audiences": [
+          "门户小程序",
+          "入驻企业联系人"
+        ],
+        "domains": [
+          "政务填报",
+          "企业运行数据",
+          "项目情况"
+        ],
+        "scenarios": [
+          "企业联系人在门户小程序历史填报页翻页筛选本企业任务和项目行，而不是看工作台当前可填入口。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "填报任务",
+          "企业运行数据",
+          "项目情况填报"
+        ],
+        "aliases": [
+          "小程序历史填报分页",
+          "小程序政务填报列表",
+          "MiniGovernmentReportController.page"
+        ],
+        "resource": "government_report",
+        "lookup_keys": [
+          "reportType",
+          "title",
+          "reportYear",
+          "status",
+          "projectName",
+          "reportCycleStartDate",
+          "reportCycleEndDate",
+          "pageNumber",
+          "pageSize",
+          "taskId",
+          "batchId",
+          "instanceId",
+          "rowId"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal BFF POST /api/mini/government/report/page，@RequestBody(required=false) 转发 RemoteMiniGovernmentReportService#page；门户 page 直连 RemotePortalProjectProgressReportService 且请求体默认必填。",
+          "MiniGovernmentReportRemoteService#page 只是调用 PortalProjectProgressReportRemoteService#page，无展示改写，同一 portal_report_page_list.sql。",
+          "condition 为空会 new 空条件，pageSize 仍在 SqlExecutor.page 拆箱。返回标识与门户 page 一致。"
+        ],
+        "required_inputs": [
+          {
+            "name": "pageSize",
+            "zh_name": "每页条数",
+            "location": "body",
+            "required": true,
+            "schema_type": "Integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "report_task_id",
+            "display_name": "填报任务ID",
+            "technical_names": [
+              "taskId"
+            ],
+            "aliases": [
+              "任务ID",
+              "政务填报任务主键"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "report_batch_id",
+            "display_name": "发布批次ID",
+            "technical_names": [
+              "batchId"
+            ],
+            "aliases": [
+              "填报批次ID",
+              "公示批次ID"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "report_instance_id",
+            "display_name": "填报实例ID",
+            "technical_names": [
+              "instanceId"
+            ],
+            "aliases": [
+              "填报实例主键"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_report_row_id",
+            "display_name": "项目填报行ID",
+            "technical_names": [
+              "rowId"
+            ],
+            "aliases": [
+              "项目行ID"
+            ],
+            "resource": "project_progress_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "MiniGovernmentReportController#page(@RequestBody(required=false) PortalProjectProgressReportPageCondition) -> RemoteMiniGovernmentReportService#page",
+          "RemoteMiniGovernmentReportController#page -> MiniGovernmentReportRemoteService#page -> PortalProjectProgressReportRemoteService#page",
+          "portal_report_page_list.sql 与门户分页共用；companyId 来自当前企业联系人",
+          "Swagger“小程序历史填报分页查询”与 SQL 历史任务/项目行口径一致"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "aa66213b-cd1d-4444-bf1a-2e9318e03d03",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/government/report/getByTaskId"
+      },
+      "semantic": {
+        "purpose": "供门户小程序按 taskId、batchId 或 rowId 查看当前企业项目情况填报详情，下游与门户 getByTaskId 相同：动态字段加项目行；fillMode=true 校验可填。不是企业运行数据详情。",
+        "audiences": [
+          "门户小程序",
+          "入驻企业联系人"
+        ],
+        "domains": [
+          "政务填报",
+          "项目情况"
+        ],
+        "scenarios": [
+          "企业联系人在门户小程序打开项目情况填报，用任务、批次或项目行ID查看动态字段，而不是看企业运行数据。"
+        ],
+        "actions": [
+          "detail",
+          "query"
+        ],
+        "entities": [
+          "项目情况填报",
+          "项目填报行",
+          "动态字段"
+        ],
+        "aliases": [
+          "小程序项目情况填报详情",
+          "小程序按任务查看项目填报",
+          "MiniGovernmentReportController.getByTaskId"
+        ],
+        "resource": "project_progress_report",
+        "lookup_keys": [
+          "taskId",
+          "batchId",
+          "rowId",
+          "fillMode",
+          "fieldId",
+          "fieldCode",
+          "projectId"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal BFF POST /api/mini/government/report/getByTaskId，无 BFF 改写；门户同方法在 /api/government/report/getByTaskId。",
+          "标识三选一与门户相同；企业运行数据走 /enterprise/getByTaskId 且只要 taskId。",
+          "详情不返回 instanceId，templateId 被置空。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "report_task_id",
+            "display_name": "填报任务ID",
+            "technical_names": [
+              "taskId"
+            ],
+            "aliases": [
+              "任务ID",
+              "政务填报任务主键"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "report_batch_id",
+            "display_name": "发布批次ID",
+            "technical_names": [
+              "batchId"
+            ],
+            "aliases": [
+              "填报批次ID",
+              "公示批次ID"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_report_row_id",
+            "display_name": "项目填报行ID",
+            "technical_names": [
+              "rowId"
+            ],
+            "aliases": [
+              "项目行ID"
+            ],
+            "resource": "project_progress_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_template_field_id",
+            "display_name": "项目模板字段ID",
+            "technical_names": [
+              "fieldId"
+            ],
+            "aliases": [
+              "动态字段ID"
+            ],
+            "resource": "project_progress_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_template_field_code",
+            "display_name": "项目模板字段编码",
+            "technical_names": [
+              "fieldCode"
+            ],
+            "aliases": [
+              "动态字段编码"
+            ],
+            "resource": "project_progress_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_id",
+            "display_name": "项目ID",
+            "technical_names": [
+              "projectId"
+            ],
+            "aliases": [
+              "项目主键"
+            ],
+            "resource": "project_progress_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "MiniGovernmentReportController#getByTaskId(@Valid PortalProjectProgressReportIdCondition) -> RemotePortalProjectProgressReportService#getByTaskId",
+          "与门户共享 PortalProjectProgressReportRemoteService#getByTaskId/resolveProjectRowContext",
+          "Swagger 写“查询项目填报详情”，比门户“查询填报详情”更贴近执行链",
+          "toRowQuery 公开 rowId/projectId/fieldId/fieldCode"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "b8f32890-650e-4f75-8385-d703ddbb2756",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/government/report/saveDraft"
+      },
+      "semantic": {
+        "purpose": "供门户小程序保存当前企业项目情况填报草稿，下游与门户 saveDraft 相同：有 taskId 覆盖任务草稿，无 taskId 按 batchId 批次保存。成功 Long 可能是 taskId 或 batchId。",
+        "audiences": [
+          "门户小程序",
+          "入驻企业联系人"
+        ],
+        "domains": [
+          "政务填报",
+          "项目情况"
+        ],
+        "scenarios": [
+          "企业联系人在门户小程序暂存项目情况动态字段或按批次增改项目草稿，而不提交审核。"
+        ],
+        "actions": [
+          "save",
+          "update"
+        ],
+        "entities": [
+          "项目情况填报",
+          "项目填报行",
+          "填报任务"
+        ],
+        "aliases": [
+          "小程序保存项目情况草稿",
+          "小程序暂存项目填报",
+          "MiniGovernmentReportController.saveDraft"
+        ],
+        "resource": "project_progress_report",
+        "lookup_keys": [
+          "taskId",
+          "batchId",
+          "rowId",
+          "fieldId"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal BFF POST /api/mini/government/report/saveDraft @Idempotent @Valid，无 SubmitGroup；门户同能力路径不同。",
+          "taskId/batchId 二选一；草稿不强制 projectList。不是 /enterprise/saveDraft。",
+          "GICS RedisLock 按 companyId，小程序与门户共用。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "report_task_id",
+            "display_name": "填报任务ID",
+            "technical_names": [
+              "taskId"
+            ],
+            "aliases": [
+              "任务ID",
+              "政务填报任务主键"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "report_batch_id",
+            "display_name": "发布批次ID",
+            "technical_names": [
+              "batchId"
+            ],
+            "aliases": [
+              "填报批次ID",
+              "公示批次ID"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_report_row_id",
+            "display_name": "项目填报行ID",
+            "technical_names": [
+              "rowId"
+            ],
+            "aliases": [
+              "项目行ID"
+            ],
+            "resource": "project_progress_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_template_field_id",
+            "display_name": "项目模板字段ID",
+            "technical_names": [
+              "fieldId"
+            ],
+            "aliases": [
+              "动态字段ID"
+            ],
+            "resource": "project_progress_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "MiniGovernmentReportController#saveDraft(@Valid PortalProjectProgressReportSaveItem) -> RemotePortalProjectProgressReportService#saveDraft",
+          "PortalProjectProgressReportRemoteService#saveDraft/#saveBatchDraft 写项目行、字段值和任务",
+          "projectList @NotEmpty 仅 SubmitGroup",
+          "返回 taskId 或 batchId 的原始 Long"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "304b0aa4-bba7-431a-bd1c-8abbcd655455",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/government/report/deleteDraft"
+      },
+      "semantic": {
+        "purpose": "供门户小程序删除当前企业草稿状态的项目情况填报任务，下游与门户 deleteDraft 相同：taskId 必填，rowId 可空。物理删除字段值、项目行和任务。",
+        "audiences": [
+          "门户小程序",
+          "入驻企业联系人"
+        ],
+        "domains": [
+          "政务填报",
+          "项目情况"
+        ],
+        "scenarios": [
+          "企业联系人在门户小程序对项目情况草稿确认后删除，而不是保存或提交。"
+        ],
+        "actions": [
+          "delete"
+        ],
+        "entities": [
+          "项目情况填报",
+          "项目填报行",
+          "填报任务"
+        ],
+        "aliases": [
+          "小程序删除项目情况草稿",
+          "小程序去掉项目填报草稿",
+          "MiniGovernmentReportController.deleteDraft"
+        ],
+        "resource": "project_progress_report",
+        "lookup_keys": [
+          "taskId",
+          "rowId"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal BFF POST /api/mini/government/report/deleteDraft；仅 draft 且 project_progress。小程序企业运行数据无删除草稿。",
+          "taskId 运行时必填；rowId 可空回退任务关联行。",
+          "与门户 deleteDraft 同一 GICS 实现，仅端别路径不同。"
+        ],
+        "required_inputs": [
+          {
+            "name": "taskId",
+            "zh_name": "填报任务ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "report_task_id",
+            "display_name": "填报任务ID",
+            "technical_names": [
+              "taskId"
+            ],
+            "aliases": [
+              "任务ID",
+              "政务填报任务主键"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_report_row_id",
+            "display_name": "项目填报行ID",
+            "technical_names": [
+              "rowId"
+            ],
+            "aliases": [
+              "项目行ID"
+            ],
+            "resource": "project_progress_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "MiniGovernmentReportController#deleteDraft(@Valid PortalProjectProgressReportIdCondition) -> RemotePortalProjectProgressReportService#deleteDraft",
+          "PortalProjectProgressReportRemoteService#deleteDraft/#requireProjectProgressTask/#validateDraftTask/#resolveDraftRow",
+          "删除 ProjectReportValue、ProjectReportRow、ReportTask",
+          "返回被删任务ID"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "c540c73f-956f-4c1a-8087-c4e027b1a4c2",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/government/report/submit"
+      },
+      "semantic": {
+        "purpose": "供门户小程序提交当前企业项目情况填报进入待审核，下游与门户 submit 相同：SubmitGroup 要求至少一条项目；taskId 或 batchId 二选一。成功 Long 可能是任务ID或批次ID。",
+        "audiences": [
+          "门户小程序",
+          "入驻企业联系人"
+        ],
+        "domains": [
+          "政务填报",
+          "项目情况"
+        ],
+        "scenarios": [
+          "企业联系人在门户小程序项目情况填报页提交动态字段送审，而不是只存草稿或列表直提。"
+        ],
+        "actions": [
+          "submit",
+          "update"
+        ],
+        "entities": [
+          "项目情况填报",
+          "项目填报行",
+          "填报任务"
+        ],
+        "aliases": [
+          "小程序提交项目情况填报",
+          "小程序项目填报送审",
+          "MiniGovernmentReportController.submit"
+        ],
+        "resource": "project_progress_report",
+        "lookup_keys": [
+          "taskId",
+          "batchId",
+          "rowId",
+          "fieldId"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal BFF POST /api/mini/government/report/submit @Validated(SubmitGroup.class)；不是 saveDraft 或 directSubmit。",
+          "与门户 submit 同一远程实现；企业运行数据 submit 的 taskId 无条件必填。",
+          "taskId/batchId 二选一。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "report_task_id",
+            "display_name": "填报任务ID",
+            "technical_names": [
+              "taskId"
+            ],
+            "aliases": [
+              "任务ID",
+              "政务填报任务主键"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "report_batch_id",
+            "display_name": "发布批次ID",
+            "technical_names": [
+              "batchId"
+            ],
+            "aliases": [
+              "填报批次ID",
+              "公示批次ID"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_report_row_id",
+            "display_name": "项目填报行ID",
+            "technical_names": [
+              "rowId"
+            ],
+            "aliases": [
+              "项目行ID"
+            ],
+            "resource": "project_progress_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_template_field_id",
+            "display_name": "项目模板字段ID",
+            "technical_names": [
+              "fieldId"
+            ],
+            "aliases": [
+              "动态字段ID"
+            ],
+            "resource": "project_progress_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "MiniGovernmentReportController#submit(@Validated(SubmitGroup.class) PortalProjectProgressReportSaveItem) -> RemotePortalProjectProgressReportService#submit",
+          "PortalProjectProgressReportRemoteService#submit/#submitBatch 写 draft 后再写 submit 快照，状态 pending_audit",
+          "projectList @NotEmpty(groups=SubmitGroup)",
+          "返回 taskId 或 batchId"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "77a5b13f-3a71-4c89-96b8-69ebc50f895d",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/government/report/directSubmit"
+      },
+      "semantic": {
+        "purpose": "供门户小程序在项目情况列表按标识直接提交已有草稿，下游与门户 directSubmit 相同：taskId 优先，否则 batchId；不接收 projectList。",
+        "audiences": [
+          "门户小程序",
+          "入驻企业联系人"
+        ],
+        "domains": [
+          "政务填报",
+          "项目情况"
+        ],
+        "scenarios": [
+          "企业联系人在门户小程序历史填报列表对项目情况草稿直接送审，不打开填报页。"
+        ],
+        "actions": [
+          "submit",
+          "update"
+        ],
+        "entities": [
+          "项目情况填报",
+          "项目填报行",
+          "填报任务"
+        ],
+        "aliases": [
+          "小程序项目情况列表直接提交",
+          "小程序不打开填报页提交项目",
+          "MiniGovernmentReportController.directSubmit"
+        ],
+        "resource": "project_progress_report",
+        "lookup_keys": [
+          "taskId",
+          "batchId",
+          "rowId"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal BFF POST /api/mini/government/report/directSubmit 只收 IdCondition；与门户 directSubmit 同实现。",
+          "taskId 与 batchId 不能都空。企业运行数据直提只要 taskId。",
+          "不是带 projectList 的 submit。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "report_task_id",
+            "display_name": "填报任务ID",
+            "technical_names": [
+              "taskId"
+            ],
+            "aliases": [
+              "任务ID",
+              "政务填报任务主键"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "report_batch_id",
+            "display_name": "发布批次ID",
+            "technical_names": [
+              "batchId"
+            ],
+            "aliases": [
+              "填报批次ID",
+              "公示批次ID"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_report_row_id",
+            "display_name": "项目填报行ID",
+            "technical_names": [
+              "rowId"
+            ],
+            "aliases": [
+              "项目行ID"
+            ],
+            "resource": "project_progress_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "MiniGovernmentReportController#directSubmit(@Valid PortalProjectProgressReportIdCondition) -> RemotePortalProjectProgressReportService#directSubmit",
+          "PortalProjectProgressReportRemoteService#directSubmit/#buildDirectSubmitItem/#buildBatchDirectSubmitItem",
+          "taskId、batchId 都空则 REPORT_TASK_OR_ROW_ID_EMPTY",
+          "fillMode=false 重读草稿后 submit"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "f79bd7f8-9d4e-4601-965e-200f721f8673",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/government/report/enterprise/getByTaskId"
+      },
+      "semantic": {
+        "purpose": "供门户小程序按填报任务ID查看当前企业企业运行数据详情，下游与门户 getEnterpriseByTaskId 相同：草稿优先，否则提交快照或模板空结构；详情组装不填充发布批次标识。",
+        "audiences": [
+          "门户小程序",
+          "入驻企业联系人"
+        ],
+        "domains": [
+          "政务填报",
+          "企业运行数据"
+        ],
+        "scenarios": [
+          "企业联系人在门户小程序打开本企业企业运行数据任务，查看分组指标，而不是看项目情况或门户公示。"
+        ],
+        "actions": [
+          "detail",
+          "query"
+        ],
+        "entities": [
+          "企业运行数据填报",
+          "填报模板",
+          "填报分组"
+        ],
+        "aliases": [
+          "小程序企业运行数据填报详情",
+          "小程序按任务查看企业运行填报",
+          "MiniGovernmentReportController.getEnterpriseByTaskId"
+        ],
+        "resource": "enterprise_operation_report",
+        "lookup_keys": [
+          "taskId",
+          "fillMode",
+          "instanceId",
+          "templateId",
+          "sectionCode",
+          "itemId",
+          "itemCode",
+          "templateItemId"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal BFF POST /api/mini/government/report/enterprise/getByTaskId，只传 taskId 与 fillMode；小程序无公示详情。",
+          "taskId 运行时必填。与项目情况 getByTaskId 的三选一标识不同。",
+          "企业详情构造不填充发布批次标识。"
+        ],
+        "required_inputs": [
+          {
+            "name": "taskId",
+            "zh_name": "填报任务ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "report_task_id",
+            "display_name": "填报任务ID",
+            "technical_names": [
+              "taskId"
+            ],
+            "aliases": [
+              "任务ID",
+              "政务填报任务主键"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "report_instance_id",
+            "display_name": "填报实例ID",
+            "technical_names": [
+              "instanceId"
+            ],
+            "aliases": [
+              "填报实例主键"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "enterprise_template_id",
+            "display_name": "企业运行数据模板ID",
+            "technical_names": [
+              "templateId"
+            ],
+            "aliases": [
+              "模板主键"
+            ],
+            "resource": "enterprise_operation_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "enterprise_template_item_id",
+            "display_name": "企业模板项ID",
+            "technical_names": [
+              "templateItemId"
+            ],
+            "aliases": [
+              "模板项主键"
+            ],
+            "resource": "enterprise_operation_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "enterprise_report_item_id",
+            "display_name": "企业填报项ID",
+            "technical_names": [
+              "itemId"
+            ],
+            "aliases": [
+              "填报项主键"
+            ],
+            "resource": "enterprise_operation_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "enterprise_report_item_code",
+            "display_name": "企业填报项编码",
+            "technical_names": [
+              "itemCode"
+            ],
+            "aliases": [
+              "指标项编码"
+            ],
+            "resource": "enterprise_operation_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "enterprise_section_code",
+            "display_name": "企业填报分组编码",
+            "technical_names": [
+              "sectionCode"
+            ],
+            "aliases": [
+              "分组编码"
+            ],
+            "resource": "enterprise_operation_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "MiniGovernmentReportController#getEnterpriseByTaskId(@Valid PortalProjectProgressReportIdCondition) -> RemotePortalEnterpriseOperationReportService#getByTaskId",
+          "PortalEnterpriseOperationReportRemoteService#getByTaskId/#requireEnterpriseTask/#buildTaskDetail",
+          "buildPageQuery 不写 batchId；templateId=task.templateSourceId",
+          "小程序无 publicList/publicDetail"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "65f4ee20-b1bb-4a9c-94b2-9a302acf6438",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/government/report/enterprise/saveDraft"
+      },
+      "semantic": {
+        "purpose": "供门户小程序按填报任务ID保存当前企业企业运行数据草稿，下游与门户 saveEnterpriseDraft 相同：只覆盖 draft 值；taskId 必填；模板必填校验在可执行链路中被注释。",
+        "audiences": [
+          "门户小程序",
+          "入驻企业联系人"
+        ],
+        "domains": [
+          "政务填报",
+          "企业运行数据"
+        ],
+        "scenarios": [
+          "企业联系人在门户小程序暂存企业运行数据分组指标，稍后再提交。"
+        ],
+        "actions": [
+          "save",
+          "update"
+        ],
+        "entities": [
+          "企业运行数据填报",
+          "填报实例",
+          "填报任务"
+        ],
+        "aliases": [
+          "小程序保存企业运行数据草稿",
+          "小程序暂存企业运行填报",
+          "MiniGovernmentReportController.saveEnterpriseDraft"
+        ],
+        "resource": "enterprise_operation_report",
+        "lookup_keys": [
+          "taskId",
+          "sectionCode",
+          "itemId",
+          "templateItemId"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal BFF POST /api/mini/government/report/enterprise/saveDraft @Valid，taskId @NotNull；sectionList 草稿不强制。",
+          "与门户一样，saveDraft 注释掉 validateSectionItems，Javadoc 仍写草稿要必填。",
+          "不是项目情况 saveDraft。"
+        ],
+        "required_inputs": [
+          {
+            "name": "taskId",
+            "zh_name": "填报任务ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "report_task_id",
+            "display_name": "填报任务ID",
+            "technical_names": [
+              "taskId"
+            ],
+            "aliases": [
+              "任务ID",
+              "政务填报任务主键"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "enterprise_template_item_id",
+            "display_name": "企业模板项ID",
+            "technical_names": [
+              "templateItemId"
+            ],
+            "aliases": [
+              "模板项主键"
+            ],
+            "resource": "enterprise_operation_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "enterprise_report_item_id",
+            "display_name": "企业填报项ID",
+            "technical_names": [
+              "itemId"
+            ],
+            "aliases": [
+              "填报项主键"
+            ],
+            "resource": "enterprise_operation_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "enterprise_section_code",
+            "display_name": "企业填报分组编码",
+            "technical_names": [
+              "sectionCode"
+            ],
+            "aliases": [
+              "分组编码"
+            ],
+            "resource": "enterprise_operation_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": [
+          "MiniGovernmentReportController#saveEnterpriseDraft(@Valid PortalEnterpriseOperationReportSaveItem) -> RemotePortalEnterpriseOperationReportService#saveDraft",
+          "PortalEnterpriseOperationReportRemoteService#saveDraft 注释掉 validateSectionItems",
+          "写 ReportInstance 与 EnterpriseReportValue draft；审核拒绝保存后仍 audit_reject",
+          "Javadoc 与可执行校验冲突，以代码为准"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "c924faa9-1e02-4869-b378-7acd1817f918",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/government/report/enterprise/submit"
+      },
+      "semantic": {
+        "purpose": "供门户小程序提交当前企业企业运行数据进入待审核，下游与门户 submitEnterprise 相同：taskId 必填；GICS SubmitGroup 要求至少一组且 sectionCode 必填。返回任务ID。",
+        "audiences": [
+          "门户小程序",
+          "入驻企业联系人"
+        ],
+        "domains": [
+          "政务填报",
+          "企业运行数据"
+        ],
+        "scenarios": [
+          "企业联系人在门户小程序提交企业运行数据分组指标送审，而不是只存草稿或列表直提。"
+        ],
+        "actions": [
+          "submit",
+          "update"
+        ],
+        "entities": [
+          "企业运行数据填报",
+          "填报实例",
+          "填报任务"
+        ],
+        "aliases": [
+          "小程序提交企业运行数据填报",
+          "小程序企业运行填报送审",
+          "MiniGovernmentReportController.submitEnterprise"
+        ],
+        "resource": "enterprise_operation_report",
+        "lookup_keys": [
+          "taskId",
+          "sectionCode",
+          "itemId",
+          "templateItemId"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal BFF POST /api/mini/government/report/enterprise/submit 本地 @Valid，GICS 为 SubmitGroup；成功路径仍要 sectionList/sectionCode。",
+          "会跑 validateSectionItems；saveDraft 不会。",
+          "项目情况提交允许按发布批次整单提交。"
+        ],
+        "required_inputs": [
+          {
+            "name": "taskId",
+            "zh_name": "填报任务ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          },
+          {
+            "name": "sectionCode",
+            "zh_name": "分组编码",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "report_task_id",
+            "display_name": "填报任务ID",
+            "technical_names": [
+              "taskId"
+            ],
+            "aliases": [
+              "任务ID",
+              "政务填报任务主键"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "enterprise_template_item_id",
+            "display_name": "企业模板项ID",
+            "technical_names": [
+              "templateItemId"
+            ],
+            "aliases": [
+              "模板项主键"
+            ],
+            "resource": "enterprise_operation_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "enterprise_report_item_id",
+            "display_name": "企业填报项ID",
+            "technical_names": [
+              "itemId"
+            ],
+            "aliases": [
+              "填报项主键"
+            ],
+            "resource": "enterprise_operation_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "enterprise_section_code",
+            "display_name": "企业填报分组编码",
+            "technical_names": [
+              "sectionCode"
+            ],
+            "aliases": [
+              "分组编码"
+            ],
+            "resource": "enterprise_operation_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.95,
+        "semantic_evidence": [
+          "MiniGovernmentReportController#submitEnterprise(@Valid PortalEnterpriseOperationReportSaveItem) -> RemotePortalEnterpriseOperationReportService#submit",
+          "RemotePortalEnterpriseOperationReportController#submit @Validated(SubmitGroup.class)",
+          "PortalEnterpriseOperationReportRemoteService#submit 写 submit 值、ReportInstanceVersion，状态 pending_audit",
+          "Mini 层未使用 SubmitGroup，以 GICS 为准"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "755af876-7342-47f2-9a95-97954d101a8c",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/government/report/enterprise/directSubmit"
+      },
+      "semantic": {
+        "purpose": "供门户小程序在企业运行数据列表按任务ID直接提交已有草稿，下游与门户 directSubmitEnterprise 相同：重读详情再 submit。taskId 无条件必填。",
+        "audiences": [
+          "门户小程序",
+          "入驻企业联系人"
+        ],
+        "domains": [
+          "政务填报",
+          "企业运行数据"
+        ],
+        "scenarios": [
+          "企业联系人在门户小程序历史填报列表对企业运行数据草稿直接送审，不打开填报页。"
+        ],
+        "actions": [
+          "submit",
+          "update"
+        ],
+        "entities": [
+          "企业运行数据填报",
+          "填报实例",
+          "填报任务"
+        ],
+        "aliases": [
+          "小程序企业运行数据列表直接提交",
+          "小程序不打开填报页提交企业运行数据",
+          "MiniGovernmentReportController.directSubmitEnterprise"
+        ],
+        "resource": "enterprise_operation_report",
+        "lookup_keys": [
+          "taskId"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal BFF POST /api/mini/government/report/enterprise/directSubmit 只收填报任务ID；项目情况列表直提还接受发布批次或项目行标识。",
+          "空 taskId 运行时失败。不是带 sectionList 的 submit。",
+          "与门户 enterprise/directSubmit 同 GICS 实现。"
+        ],
+        "required_inputs": [
+          {
+            "name": "taskId",
+            "zh_name": "填报任务ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "report_task_id",
+            "display_name": "填报任务ID",
+            "technical_names": [
+              "taskId"
+            ],
+            "aliases": [
+              "任务ID",
+              "政务填报任务主键"
+            ],
+            "resource": "government_report",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "MiniGovernmentReportController#directSubmitEnterprise(@Valid PortalProjectProgressReportIdCondition) -> RemotePortalEnterpriseOperationReportService#directSubmit",
+          "PortalEnterpriseOperationReportRemoteService#directSubmit(taskId) 组装详情后 submit",
+          "REPORT_TASK_ID_EMPTY",
+          "返回 task.getId()"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    }
+  ]
+}

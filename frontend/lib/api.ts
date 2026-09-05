@@ -53,7 +53,6 @@ import type {
   InterfaceForwardingLog,
   InterfaceForwardingExecuteResult,
   InterfaceForwardingInterface,
-  InterfaceSemanticsWrite,
   ValueMappingOverview,
   ValueMappingInterfaceSearchResult,
   ValueMappingPreviewResult,
@@ -758,16 +757,6 @@ export function getInterfaceForwardingOverview(workspaceId: string, keyword = ""
   const params = new URLSearchParams({ workspace_id: workspaceId });
   if (keyword.trim()) params.set("keyword", keyword.trim());
   return request<InterfaceForwardingOverview>(`/api/interface-forwarding/overview?${params.toString()}`, { cache: "no-store" });
-}
-
-export function updateInterfaceForwardingSemantics(
-  interfaceId: string,
-  input: InterfaceSemanticsWrite,
-): Promise<Partial<InterfaceForwardingInterface>> {
-  return request<Partial<InterfaceForwardingInterface>>(
-    `/api/interface-forwarding/interfaces/${encodeURIComponent(interfaceId)}/semantics`,
-    { method: "PUT", body: JSON.stringify(input) },
-  );
 }
 
 export function importInterfaceForwardingSpec(input: { workspace_id: string; service_name: string; spec: Record<string, unknown> }): Promise<{ imported_count: number; service_id: string }> {

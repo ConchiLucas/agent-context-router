@@ -1,0 +1,4713 @@
+{
+  "schema_version": "context-router-interface-semantic-batch-v1",
+  "batch_id": "panzhihua-c12-portal-userinfo-admin-portal-011",
+  "workspace_id": "b9ce65eddc27437d9615177fbd07cb0a",
+  "family_groups": {
+    "后台用户信息管理": 25,
+    "门户用户信息": 17
+  },
+  "generation_policy": "按数据库有效接口处理 c12-portal UserInfoAdminController 25 条与 UserInfoPortalController 17 条；源码多出的 loginRecords 未入库故不写入。比较管理端/门户端、当前登录与按 userId、货主/承运商/报关员/司机、分页列表导出详情、注册认证审核启用停用，以及 noAuth/mini/remote 兄弟但不写入这些 Controller。未使用 copy_from_interface_id。",
+  "items": [
+    {
+      "interface_id": "ea9ff393-1ea0-49d9-9703-0449506d3ed3",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/userInfo/shipper/page"
+      },
+      "semantic": {
+        "purpose": "供运营端按可选手机号、姓名、企业、证件和状态条件分页查询货主角色会员：Controller 写入 roleCode=SHIPPER 后走 UserInfoDao#page/userInfo_query_getPageList，不按已认证过滤；返回 PageResult<UserInfoAdminQuery> 并回填身份认证快照。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "门户会员",
+          "货主管理"
+        ],
+        "scenarios": [
+          "运营人员在后台按货主角色筛选会员分页列表，用于货主选择或台账。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "货主会员",
+          "会员资料"
+        ],
+        "aliases": [
+          "运营端货主分页",
+          "后台货主列表",
+          "UserInfoAdminController.shipperPage"
+        ],
+        "resource": "shipper_member",
+        "lookup_keys": [
+          "roleCode",
+          "mobile",
+          "userName",
+          "companyName",
+          "idCard",
+          "status",
+          "userId",
+          "id",
+          "companyUsci"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "运营端 /member-api/admin/userInfo/shipper/page，强制 roleCode=SHIPPER 后调用 page 而非 pageAuth/shipperMangerPage。Javadoc 写“查询已认证”，SQL userInfo_query_getPageList 不按 auth_status=1 过滤，与注释冲突。role_code LIKE %SHIPPER% 也会命中 MULTIMODAL_SHIPPER。",
+          "不同于门户 shipper/page（写 shipperRoleCode 且会按手机号映射 auth userIds 并清空请求 userIds）、货主管理分页（shipperPage SQL+评级字段）和 c12-data 多式联运货主分页。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "会员主键",
+              "资料ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "认证用户ID",
+              "auth用户ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "用户手机"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "id_card",
+            "display_name": "身份证号",
+            "technical_names": [
+              "idCard"
+            ],
+            "aliases": [
+              "证件号"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "role_code",
+            "display_name": "角色编码",
+            "technical_names": [
+              "roleCode"
+            ],
+            "aliases": [
+              "门户角色"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "user_name",
+            "display_name": "用户名称",
+            "technical_names": [
+              "userName"
+            ],
+            "aliases": [
+              "账号名称"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.88,
+        "semantic_evidence": [
+          "UserInfoAdminController#shipperPage(@RequestBody UserInfoAdminPageCondition) -> ResponseData<PageResult<UserInfoAdminQuery>>",
+          "Controller 设置 UserRoleCodeEnum.SHIPPER 后 UserInfoAdminService#page -> UserInfoDao#page -> userInfo_query_getPageList.sql",
+          "SQL 可选 t.role_code like :roleCode，无 auth_status=已认证条件；MemberUserIdentityAuthDetailService#fillQueriesFromDetail 回填快照",
+          "Javadoc“货主列表分页(查询已认证)”与可执行 SQL 冲突"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "14db3ab9-3b9c-4c3d-ab96-773e653d3796",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/userInfo/shipperManger/page"
+      },
+      "semantic": {
+        "purpose": "供运营端分页管理货主会员：强制 SHIPPER 角色，按手机号/姓名转 auth userId 后走 userInfo_query_getShipperPageList，回填认证状态、货代标记、评级结果和是否处于评级时间窗。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "门户会员",
+          "货主管理"
+        ],
+        "scenarios": [
+          "运营人员在货主管理页按企业、认证和等级条件查看货主台账。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "货主会员",
+          "货主等级",
+          "货代角色"
+        ],
+        "aliases": [
+          "运营货主管理分页",
+          "后台货主台账",
+          "UserInfoAdminController.shipperMangerPage"
+        ],
+        "resource": "shipper_member",
+        "lookup_keys": [
+          "mobile",
+          "realName",
+          "userName",
+          "companyName",
+          "idCard",
+          "authStatus",
+          "syncStatus",
+          "levelResult",
+          "levelStatus",
+          "userId",
+          "id",
+          "companyUsci",
+          "isAgent"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "走 shipperMangerPage/dao.shipperPage 而非普通 page；join 认证表和 cs_portal_member_shipper_level。手机号先查 c12-auth 再改写 userId。",
+          "不同于脱敏导出同 SQL、认证中分页 pageAuth，以及门户货主分页。返回 timeInRange 来自控制参数 rangeTime。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "会员主键",
+              "资料ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "认证用户ID",
+              "auth用户ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "用户手机"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "id_card",
+            "display_name": "身份证号",
+            "technical_names": [
+              "idCard"
+            ],
+            "aliases": [
+              "证件号"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "role_code",
+            "display_name": "角色编码",
+            "technical_names": [
+              "roleCode"
+            ],
+            "aliases": [
+              "门户角色"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "user_name",
+            "display_name": "用户名称",
+            "technical_names": [
+              "userName"
+            ],
+            "aliases": [
+              "账号名称"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "auth_status",
+            "display_name": "认证状态",
+            "technical_names": [
+              "authStatus"
+            ],
+            "aliases": [
+              "审核状态"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sync_status",
+            "display_name": "同步状态",
+            "technical_names": [
+              "syncStatus"
+            ],
+            "aliases": [
+              "同步标记"
+            ],
+            "resource": "shipper_member",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "UserInfoAdminController#shipperMangerPage -> UserInfoAdminService#shipperMangerPage",
+          "applyRealNameFilter + 手机号 RemoteUserService#getUser 转 userId；UserInfoDao#shipperPage -> userInfo_query_getShipperPageList.sql",
+          "按 SHIPPER_AGENT 已认证记录回填 isAgent；fillAuthUserInfo/fillAdminIdentityAuthDetail"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "de96742f-be73-4ab8-974f-75940d8cade9",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/userInfo/shipperManger/page/export"
+      },
+      "semantic": {
+        "purpose": "供运营端按货主管理相同条件取分页 JSON：字典转认证/等级/是否货代文案，并对身份证和手机号脱敏；仍返回 PageResult，不是文件流。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "门户会员",
+          "货主管理"
+        ],
+        "scenarios": [
+          "运营人员导出货主管理列表前先拉取脱敏后的分页数据。"
+        ],
+        "actions": [
+          "export",
+          "page"
+        ],
+        "entities": [
+          "货主会员"
+        ],
+        "aliases": [
+          "运营货主脱敏导出",
+          "货主管理导出分页",
+          "UserInfoAdminController.shipperMangerPageDesensitize"
+        ],
+        "resource": "shipper_member",
+        "lookup_keys": [
+          "mobile",
+          "realName",
+          "companyName",
+          "idCard",
+          "authStatus",
+          "levelStatus",
+          "levelResult",
+          "isAgent",
+          "userId",
+          "id"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "路径含 export 但 Controller 返回 ResponseData<PageResult>，用 Hutool DesensitizedUtil 和 RemoteDictDataService 转标签，不写文件、不改库。",
+          "查询链路与 shipperManger/page 相同，仅多脱敏和字典文案；不同于承运商导出还转公路/铁路/水路认证状态。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "会员主键",
+              "资料ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "认证用户ID",
+              "auth用户ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "用户手机"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "id_card",
+            "display_name": "身份证号",
+            "technical_names": [
+              "idCard"
+            ],
+            "aliases": [
+              "证件号"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "role_code",
+            "display_name": "角色编码",
+            "technical_names": [
+              "roleCode"
+            ],
+            "aliases": [
+              "门户角色"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "user_name",
+            "display_name": "用户名称",
+            "technical_names": [
+              "userName"
+            ],
+            "aliases": [
+              "账号名称"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "auth_status",
+            "display_name": "认证状态",
+            "technical_names": [
+              "authStatus"
+            ],
+            "aliases": [
+              "审核状态"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "UserInfoAdminController#shipperMangerPageDesensitize POST /shipperManger/page/export",
+          "复用 UserInfoAdminService#shipperMangerPage；DesensitizedUtil.idCardNum/mobilePhone；dictLabel(auth_status/level_status/level_result/yes_no)",
+          "导入标题“导出承运商/货主”对应 JSON 分页而非二进制"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "1abd222c-3425-416c-bb76-2909915199de",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/userInfo/carrierManger/page"
+      },
+      "semantic": {
+        "purpose": "供运营端分页管理已有公路/铁路/水路承运商角色的会员：可按姓名、手机号、企业及分运输方式认证状态筛选，回填分角色认证状态和企业统一社会信用代码。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "门户会员",
+          "承运商管理"
+        ],
+        "scenarios": [
+          "运营人员在承运商管理页查看公水铁角色会员及其认证进度。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "承运商会员"
+        ],
+        "aliases": [
+          "运营承运商管理分页",
+          "后台承运商台账",
+          "UserInfoAdminController.carrierPage"
+        ],
+        "resource": "carrier_member",
+        "lookup_keys": [
+          "mobile",
+          "userName",
+          "realName",
+          "companyName",
+          "idCard",
+          "highWayStatus",
+          "shippingStatus",
+          "railWayStatus",
+          "userId",
+          "id",
+          "companyUsci",
+          "highwayStatus",
+          "railwayStatus",
+          "shippingStatus"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "carrierMangerPage -> userInfo_query_getCarrierPageList，JOIN 公水铁角色认证，不强制已认证。请求 highWayStatus/railWayStatus/shippingStatus 与返回 highwayStatus 等字段名不完全相同。",
+          "不同于 carrierAll/page（已有承运商角色主体分页）、carrierAuth/page（认证中）和 carrier/all 全量已认证列表。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "会员主键",
+              "资料ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "认证用户ID",
+              "auth用户ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "用户手机"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "id_card",
+            "display_name": "身份证号",
+            "technical_names": [
+              "idCard"
+            ],
+            "aliases": [
+              "证件号"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "role_code",
+            "display_name": "角色编码",
+            "technical_names": [
+              "roleCode"
+            ],
+            "aliases": [
+              "门户角色"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "user_name",
+            "display_name": "用户名称",
+            "technical_names": [
+              "userName"
+            ],
+            "aliases": [
+              "账号名称"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "highway_auth_status",
+            "display_name": "公路认证状态",
+            "technical_names": [
+              "highwayStatus",
+              "highWayStatus"
+            ],
+            "aliases": [
+              "公路承运商认证"
+            ],
+            "resource": "carrier_member",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "railway_auth_status",
+            "display_name": "铁路认证状态",
+            "technical_names": [
+              "railwayStatus",
+              "railWayStatus"
+            ],
+            "aliases": [
+              "铁路承运商认证"
+            ],
+            "resource": "carrier_member",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "shipping_auth_status",
+            "display_name": "水路认证状态",
+            "technical_names": [
+              "shippingStatus"
+            ],
+            "aliases": [
+              "水路承运商认证"
+            ],
+            "resource": "carrier_member",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "UserInfoAdminController#carrierPage -> UserInfoAdminService#carrierMangerPage",
+          "applyCarrierNameFilter + 手机号转 userId；UserInfoDao#carrierMangerPage -> userInfo_query_getCarrierPageList.sql",
+          "enrichPageResultWithAuthInfo/fillCarrierCompanyUsci/fillAdminIdentityAuthDetail(CARRIER_DETAIL_ROLE_CODES)"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "24bb24ea-3bbd-4d99-b843-83962780b6c8",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/userInfo/carrier/all"
+      },
+      "semantic": {
+        "purpose": "供运营端或内部调用列出全部已认证公路/铁路/水路承运商会员，无请求体筛选，返回 List<UserInfoAdminQuery> 并回填承运商企业信用代码。",
+        "audiences": [
+          "运营端",
+          "内部服务"
+        ],
+        "domains": [
+          "门户会员",
+          "承运商管理"
+        ],
+        "scenarios": [
+          "下拉或选择器需要全部已认证承运商时一次拉取列表。"
+        ],
+        "actions": [
+          "list",
+          "query"
+        ],
+        "entities": [
+          "承运商会员"
+        ],
+        "aliases": [
+          "全部已认证承运商",
+          "运营承运商全量列表",
+          "UserInfoAdminController.allCarrierList"
+        ],
+        "resource": "carrier_member",
+        "lookup_keys": [
+          "id",
+          "userId",
+          "companyUsci",
+          "roleCode",
+          "mobile"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "无分页无筛选；UserAuthInfo 中公水铁角色且 auth_status=CERTIFIED 后再按会员 id 查询。不同于 carrierAll/page 分页和 carrierManger 未限已认证。",
+          "userAuthInfos 的 userInfoId 是会员资料ID，再 dao.find MemberUserInfo.id in 该集合。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "会员主键",
+              "资料ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "认证用户ID",
+              "auth用户ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "role_code",
+            "display_name": "角色编码",
+            "technical_names": [
+              "roleCode"
+            ],
+            "aliases": [
+              "门户角色"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "用户手机"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "UserInfoAdminController#allCarrierList -> UserInfoAdminService#allCarrierList",
+          "UserAuthInfoAdminService.find roleCode in CARRIER-HIGHWAY/SHIPPING/RAILWAY and authStatus=CERTIFIED",
+          "dao.find UserInfoAdminQuery by MemberUserInfo.id；fillCarrierCompanyUsci"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "2e9007a7-62e2-4212-88c3-c242d2791f60",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/userInfo/carrierManger/page/export"
+      },
+      "semantic": {
+        "purpose": "供运营端按承运商管理相同条件取分页 JSON，额外把认证/货代状态转字典文案并对证件和手机脱敏；返回 PageResult 而非文件。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "门户会员",
+          "承运商管理"
+        ],
+        "scenarios": [
+          "运营人员导出承运商管理列表时拉取脱敏分页数据。"
+        ],
+        "actions": [
+          "export",
+          "page"
+        ],
+        "entities": [
+          "承运商会员"
+        ],
+        "aliases": [
+          "运营承运商脱敏导出",
+          "承运商管理导出分页",
+          "UserInfoAdminController.carrierPageDesensitize"
+        ],
+        "resource": "carrier_member",
+        "lookup_keys": [
+          "mobile",
+          "userName",
+          "companyName",
+          "highWayStatus",
+          "shippingStatus",
+          "railWayStatus",
+          "userId",
+          "id"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "与 carrierManger/page 同查询，额外 dictLabel 公路/铁路/水路认证状态并脱敏。不是二进制导出，也不是货主导出。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "会员主键",
+              "资料ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "认证用户ID",
+              "auth用户ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "用户手机"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "id_card",
+            "display_name": "身份证号",
+            "technical_names": [
+              "idCard"
+            ],
+            "aliases": [
+              "证件号"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "role_code",
+            "display_name": "角色编码",
+            "technical_names": [
+              "roleCode"
+            ],
+            "aliases": [
+              "门户角色"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "user_name",
+            "display_name": "用户名称",
+            "technical_names": [
+              "userName"
+            ],
+            "aliases": [
+              "账号名称"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "UserInfoAdminController#carrierPageDesensitize POST /carrierManger/page/export",
+          "UserInfoAdminService#carrierMangerPage + DesensitizedUtil + dictLabel(auth_status/level_status/level_result/yes_no)"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "eda1080f-f542-47fa-a4ee-f59c6357ed86",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/userInfo/getShipperById/{id}"
+      },
+      "semantic": {
+        "purpose": "供运营端按路径会员资料ID查看货主详情：读取 MemberUserInfo，仅取 SHIPPER 认证记录的认证状态，并回填货主/货代快照。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "门户会员",
+          "货主管理"
+        ],
+        "scenarios": [
+          "运营人员打开某一货主的详情或编辑回显。"
+        ],
+        "actions": [
+          "detail"
+        ],
+        "entities": [
+          "货主会员"
+        ],
+        "aliases": [
+          "运营货主详情",
+          "按会员ID查看货主",
+          "UserInfoAdminController.getShipperById"
+        ],
+        "resource": "shipper_member",
+        "lookup_keys": [
+          "id",
+          "userId",
+          "companyUsci",
+          "mobile",
+          "authStatus"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "路径 id 是 cs_portal_member_user_info.id，不是 auth userId。认证只查 SHIPPER 角色。导入标题写“托运人”与货主实现不一致。",
+          "不同于 getCarrierById（排除货主认证）、getAuthById（强制回写认证中）、getUserInfoById（body userId）。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "会员资料ID",
+            "location": "path",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "会员主键",
+              "资料ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "认证用户ID",
+              "auth用户ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "用户手机"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "auth_status",
+            "display_name": "认证状态",
+            "technical_names": [
+              "authStatus"
+            ],
+            "aliases": [
+              "审核状态"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "id_card",
+            "display_name": "身份证号",
+            "technical_names": [
+              "idCard"
+            ],
+            "aliases": [
+              "证件号"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": [
+          "UserInfoAdminController#getShipperById(@PathVariable Long id)",
+          "UserInfoAdminService#getShipperById dao.findById；UserAuthInfo roleCode=SHIPPER findFirst",
+          "fillAuthUserInfo + fillAdminIdentityAuthDetail(SHIPPER_DETAIL_ROLE_CODES)",
+          "导入 title“查询托运人信息用户”与货主实现冲突"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "15a6f4c8-8b1a-4b1e-9c25-feb22d444dda",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/userInfo/getCarrierById/{id}"
+      },
+      "semantic": {
+        "purpose": "供运营端按路径会员资料ID查看承运商详情：加载非货主认证记录、许可证、危险品资质集合及承运商企业信用代码。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "门户会员",
+          "承运商管理"
+        ],
+        "scenarios": [
+          "运营人员查看某一承运商的资质和分运输方式认证状态。"
+        ],
+        "actions": [
+          "detail"
+        ],
+        "entities": [
+          "承运商会员",
+          "运输许可证"
+        ],
+        "aliases": [
+          "运营承运商详情",
+          "按会员ID查看承运商",
+          "UserInfoAdminController.getCarrierById"
+        ],
+        "resource": "carrier_member",
+        "lookup_keys": [
+          "id",
+          "userId",
+          "companyUsci",
+          "highwayStatus",
+          "railwayStatus",
+          "shippingStatus"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "路径 id 为会员资料ID；认证查询 andNotEqual SHIPPER。会汇总 CARRIER+危险品许可证列表。不同于货主详情和认证查看。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "会员资料ID",
+            "location": "path",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "会员主键",
+              "资料ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "认证用户ID",
+              "auth用户ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "用户手机"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "role_code",
+            "display_name": "角色编码",
+            "technical_names": [
+              "roleCode"
+            ],
+            "aliases": [
+              "门户角色"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "UserInfoAdminController#getCarrierById(@PathVariable Long id)",
+          "UserInfoAdminService#getCarrierById；UserAuthInfo userInfoId=id and roleCode!=SHIPPER",
+          "collectDangerousGoodsLicenses；fillCarrierCompanyUsci；CARRIER_DETAIL_ROLE_CODES"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "8b67dfd2-f546-4887-9f38-79dab5c30c98",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/userInfo/getAuthById/{id}"
+      },
+      "semantic": {
+        "purpose": "供运营端按路径会员资料ID打开认证审核详情：组装许可证与角色认证状态，但可执行代码把返回 authStatus 固定写成认证中(3)。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "门户会员",
+          "会员认证"
+        ],
+        "scenarios": [
+          "运营人员在货主或承运商认证审核页查看待审资料。"
+        ],
+        "actions": [
+          "detail"
+        ],
+        "entities": [
+          "会员认证资料"
+        ],
+        "aliases": [
+          "运营认证详情",
+          "按会员ID查看认证资料",
+          "UserInfoAdminController.getAuthById"
+        ],
+        "resource": "member_user",
+        "lookup_keys": [
+          "id",
+          "userId",
+          "authStatus",
+          "companyUsci",
+          "mobile"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "getByInfoId 只取认证中记录，随后又 setAuthStatus(CERTIFYING)，详情不是任意审核状态。注释称认证查看。",
+          "不同于 getShipperById/getCarrierById 按角色取真实 authStatus，也不同于门户 personalCenterInfo。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "会员资料ID",
+            "location": "path",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "会员主键",
+              "资料ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "认证用户ID",
+              "auth用户ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "auth_status",
+            "display_name": "认证状态",
+            "technical_names": [
+              "authStatus"
+            ],
+            "aliases": [
+              "审核状态"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "用户手机"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.86,
+        "semantic_evidence": [
+          "UserInfoAdminController#getAuthById(@PathVariable Long id)",
+          "UserInfoAdminService#getAuthById：UserAuthInfoAdminService#getByInfoId 仅 authStatus=CERTIFYING，再 setAuthStatus(CERTIFYING)",
+          "Javadoc/Swagger 认证查看与固定写认证中冲突"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "fe0306b3-857d-4d8d-b66e-0a61a23f9adc",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/userInfo/getUserInfoById"
+      },
+      "semantic": {
+        "purpose": "供运营端或 Feign 按请求体 userId（c12-auth 用户ID）查询一条会员资料并回填身份认证快照，不使用路径 id 或 body.id。",
+        "audiences": [
+          "运营端",
+          "内部服务"
+        ],
+        "domains": [
+          "门户会员"
+        ],
+        "scenarios": [
+          "下游按认证用户ID补全门户会员资料。"
+        ],
+        "actions": [
+          "detail"
+        ],
+        "entities": [
+          "会员资料"
+        ],
+        "aliases": [
+          "按用户ID查运营会员",
+          "后台Feign用户详情",
+          "UserInfoAdminController.getUserInfoById"
+        ],
+        "resource": "member_user",
+        "lookup_keys": [
+          "userId",
+          "id",
+          "mobile",
+          "companyUsci"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "定位键是 body.userId=MemberUserInfo.userId，忽略 UserInfoAdminCondition.id。不同于路径会员ID详情和 getUserInfoByList 批量。",
+          "门户同名接口返回 UserInfoPortalQuery 并 applyAuthMasterInfo；c12-data 同名接口还带企业身份码。无主动非空校验。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "认证用户ID",
+              "auth用户ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "会员主键",
+              "资料ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "用户手机"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "UserInfoAdminController#getUserInfoById(@RequestBody UserInfoAdminCondition)",
+          "UserInfoAdminService#getByUserId andEqual MemberUserInfo.userId；fillQueryFromDetail",
+          "导入 title“按 ID 查询”实际不是路径 id"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "be99d24e-5b35-4e03-a84d-40c92c68ea39",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/userInfo/getUserInfoByList"
+      },
+      "semantic": {
+        "purpose": "供运营端或 Feign 按请求体 Long 数组（auth 用户ID集合）批量查询会员资料列表并回填认证快照。",
+        "audiences": [
+          "运营端",
+          "内部服务"
+        ],
+        "domains": [
+          "门户会员"
+        ],
+        "scenarios": [
+          "按多个用户ID批量补全运营侧会员资料。"
+        ],
+        "actions": [
+          "list",
+          "query"
+        ],
+        "entities": [
+          "会员资料"
+        ],
+        "aliases": [
+          "按用户ID批量查运营会员",
+          "后台会员批量查询",
+          "UserInfoAdminController.getUserInfoByList"
+        ],
+        "resource": "member_user",
+        "lookup_keys": [
+          "userId",
+          "id",
+          "mobile",
+          "companyUsci"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "请求体是 List<Long> 用户ID，andIn MemberUserInfo.userId，不是会员资料ID。不同于 getUserInfoById 单条和门户同名接口。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "认证用户ID",
+              "auth用户ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "会员主键",
+              "资料ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "用户手机"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "UserInfoAdminController#getUserInfoByList(@RequestBody List<Long> ids)",
+          "UserInfoAdminService#getUserInfoByList dao.find andIn MemberUserInfo.userId；fillQueriesFromDetail"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "cdd7cce2-fd08-479f-be4e-20c170023c0e",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/userInfo/save"
+      },
+      "semantic": {
+        "purpose": "供运营端新增或按会员资料ID更新 MemberUserInfo：有会话时用当前登录 userId/userName/mobile 覆盖请求身份字段，再按许可证推导角色并写角色认证快照。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "门户会员"
+        ],
+        "scenarios": [
+          "运营人员保存会员主档或后台维护页提交资料。"
+        ],
+        "actions": [
+          "save"
+        ],
+        "entities": [
+          "会员资料",
+          "身份认证快照"
+        ],
+        "aliases": [
+          "保存运营会员资料",
+          "后台新增或更新会员",
+          "UserInfoAdminController.save"
+        ],
+        "resource": "member_user",
+        "lookup_keys": [
+          "id",
+          "userId",
+          "mobile",
+          "roleCode",
+          "shippingLicense",
+          "highwayLicense",
+          "railwayLicense"
+        ],
+        "cardinality": "one",
+        "ownership": "unknown",
+        "discriminators": [
+          "item.id 空则插入，非空则按会员资料ID更新。有 SessionContext 时覆盖 userId/userName/mobile 为当前登录人，范围既不是纯 by_id 也不是 self。",
+          "@Valid 的 UserInfoAdminItem 无字段校验。不同于 register 调 auth 注册、saveCustomsDeclarant 报关员链路。默认 status=启用。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "会员主键",
+              "资料ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "认证用户ID",
+              "auth用户ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "用户手机"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "role_code",
+            "display_name": "角色编码",
+            "technical_names": [
+              "roleCode"
+            ],
+            "aliases": [
+              "门户角色"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.88,
+        "semantic_evidence": [
+          "UserInfoAdminController#save(@RequestBody @Valid UserInfoAdminItem)",
+          "UserInfoAdminService#saveOrUpdate：SessionContext 覆盖身份；按许可证拼接 roleCode；dao.saveOrUpdate；saveOrUpdateByAdminItem",
+          "ownership 取决于会话是否存在，枚举无法准确表达"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "94ac9d39-a581-47a1-a8cc-c372c9b89551",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/userInfo/shipperAuth/page"
+      },
+      "semantic": {
+        "purpose": "供运营端分页查看认证中的货主：SQL 固定 auth_status=3，可按是否货代追加货代角色包含/排除条件，并回填风控状态。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "门户会员",
+          "会员认证"
+        ],
+        "scenarios": [
+          "运营人员审核货主认证申请列表。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "货主认证",
+          "货主会员"
+        ],
+        "aliases": [
+          "运营货主认证分页",
+          "货主待审列表",
+          "UserInfoAdminController.shipperAuthPage"
+        ],
+        "resource": "shipper_member",
+        "lookup_keys": [
+          "isAgent",
+          "mobile",
+          "companyName",
+          "idCard",
+          "riskStatus",
+          "userId",
+          "authRoleCode",
+          "authStatus"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "pageAuth/userInfo_query_getPageAuthList，硬编码认证中。isAgent=是则同时匹配货代角色，=否则排除货代角色。",
+          "不同于货主管理分页（含已认证和等级）和承运商认证分页（公水铁角色）。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "会员主键",
+              "资料ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "认证用户ID",
+              "auth用户ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "用户手机"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "id_card",
+            "display_name": "身份证号",
+            "technical_names": [
+              "idCard"
+            ],
+            "aliases": [
+              "证件号"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "role_code",
+            "display_name": "角色编码",
+            "technical_names": [
+              "roleCode"
+            ],
+            "aliases": [
+              "门户角色"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "user_name",
+            "display_name": "用户名称",
+            "technical_names": [
+              "userName"
+            ],
+            "aliases": [
+              "账号名称"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "auth_status",
+            "display_name": "认证状态",
+            "technical_names": [
+              "authStatus"
+            ],
+            "aliases": [
+              "审核状态"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "auth_role_code",
+            "display_name": "认证角色编码",
+            "technical_names": [
+              "authRoleCode"
+            ],
+            "aliases": [
+              "待审角色集合"
+            ],
+            "resource": "shipper_member",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "UserInfoAdminController#shipperAuthPage 设置 shipperRoleCode=SHIPPER，按 isAgent 写 shipperAgentRoleCode/shipperAgentNoRoleCode",
+          "UserInfoAdminService#pageAuth -> dao.pageAuth -> userInfo_query_getPageAuthList.sql auth_status='3'",
+          "手机号转 auth userId；fillCarrierCompanyUsci 对货主行也可能回填信用代码"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "1dabeadd-83e6-4c2a-b413-b93375596438",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/userInfo/register"
+      },
+      "semantic": {
+        "purpose": "供运营端后台注册门户会员：先按统一社会信用代码判重，再调 c12-auth adminRegister 建号，落本地会员、认证中记录和角色快照，投标人角色额外同步 EGPS；返回 Boolean。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "门户会员",
+          "会员注册"
+        ],
+        "scenarios": [
+          "运营人员在后台为货主、承运商或投标人等角色开户。"
+        ],
+        "actions": [
+          "register"
+        ],
+        "entities": [
+          "会员资料",
+          "门户账号"
+        ],
+        "aliases": [
+          "运营后台注册会员",
+          "后台开户",
+          "UserInfoAdminController.register"
+        ],
+        "resource": "member_user",
+        "lookup_keys": [
+          "mobile",
+          "portalRoleCode",
+          "companyUsci",
+          "companyName",
+          "password",
+          "userName",
+          "isAgent"
+        ],
+        "cardinality": "one",
+        "ownership": "all",
+        "discriminators": [
+          "运营端已登录后台开户，不是门户/小程序 noAuth /register，也不走短信校验。Javadoc 罗列手机号密码等必填，DTO 无 Bean Validation，Service 仅在信用代码非空时判重。",
+          "isAgent=是时额外插入 SHIPPER_AGENT 认证中记录。导入响应 data 为空对象，实际 Controller 返回 Boolean。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "用户手机"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "role_code",
+            "display_name": "角色编码",
+            "technical_names": [
+              "roleCode"
+            ],
+            "aliases": [
+              "门户角色"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "user_name",
+            "display_name": "用户名称",
+            "technical_names": [
+              "userName"
+            ],
+            "aliases": [
+              "账号名称"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "portal_role_code",
+            "display_name": "门户角色编码",
+            "technical_names": [
+              "portalRoleCode"
+            ],
+            "aliases": [
+              "注册角色"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.86,
+        "semantic_evidence": [
+          "UserInfoAdminController#register(@RequestBody UserInfoRegisterAdminItem) 无 @Valid",
+          "UserInfoAdminService#register：existsCompanyUsci；MemberRemoteAuthService#adminRegister；createAndSaveUserInfo；saveOrUpdateByRegisterItem；createAndSaveUserAuthInfo CERTIFYING",
+          "Javadoc 必填清单与可执行校验冲突；syncBidderSupplier 仅 BIDDER"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "9c858e94-ef8a-4cb3-b33f-00b72590197a",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/userInfo/carrierAuth/page"
+      },
+      "semantic": {
+        "purpose": "供运营端分页查看认证中的承运商：roleCode 为空时默认公路/铁路/水路三角色，走 pageAuth 且 SQL 固定认证中。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "门户会员",
+          "会员认证"
+        ],
+        "scenarios": [
+          "运营人员审核承运商认证申请。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "承运商认证",
+          "承运商会员"
+        ],
+        "aliases": [
+          "运营承运商认证分页",
+          "承运商待审列表",
+          "UserInfoAdminController.carrierAuthPage"
+        ],
+        "resource": "carrier_member",
+        "lookup_keys": [
+          "roleCode",
+          "highwayRoleCode",
+          "railwayRoleCode",
+          "shippingRoleCode",
+          "mobile",
+          "companyName",
+          "riskStatus",
+          "authRoleCode"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "与货主认证分页共用 pageAuth，roleCode 为空才写入公水铁角色码。请求自带 roleCode 时 SQL 无 :roleCode 绑定，承运商类型过滤会被跳过。不是承运商管理分页，也不是已认证全量列表。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "会员主键",
+              "资料ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "认证用户ID",
+              "auth用户ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "用户手机"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "id_card",
+            "display_name": "身份证号",
+            "technical_names": [
+              "idCard"
+            ],
+            "aliases": [
+              "证件号"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "role_code",
+            "display_name": "角色编码",
+            "technical_names": [
+              "roleCode"
+            ],
+            "aliases": [
+              "门户角色"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "user_name",
+            "display_name": "用户名称",
+            "technical_names": [
+              "userName"
+            ],
+            "aliases": [
+              "账号名称"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "auth_status",
+            "display_name": "认证状态",
+            "technical_names": [
+              "authStatus"
+            ],
+            "aliases": [
+              "审核状态"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "UserInfoAdminController#carrierAuthPage 空 roleCode 时 setHighway/Railway/ShippingRoleCode",
+          "UserInfoAdminService#pageAuth -> userInfo_query_getPageAuthList.sql"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "a0c84555-66ad-4178-b462-8515fbcf3a6c",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/userInfo/carrierAll/page"
+      },
+      "semantic": {
+        "purpose": "供运营端或 Feign 分页查询已具备承运商角色的会员主体：roleCode 为空则默认公水铁角色，走 authPage/user_info_query_getAuthPageList，不按已认证状态过滤。",
+        "audiences": [
+          "运营端",
+          "内部服务"
+        ],
+        "domains": [
+          "门户会员",
+          "承运商管理"
+        ],
+        "scenarios": [
+          "选择器或列表需要分页拉取承运商会员。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "承运商会员"
+        ],
+        "aliases": [
+          "运营承运商主体分页",
+          "已有承运商角色分页",
+          "UserInfoAdminController.carrierAllPage"
+        ],
+        "resource": "carrier_member",
+        "lookup_keys": [
+          "roleCode",
+          "highwayRoleCode",
+          "railwayRoleCode",
+          "shippingRoleCode",
+          "mobile",
+          "companyName",
+          "userId",
+          "id",
+          "companyUsci"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "Javadoc 写“查询已认证过的用户”，SQL 只要求会员 role_code 匹配承运商角色并关联认证快照，无 auth_status=1。请求自带 roleCode 时三个 *RoleCode 不写入且 SQL 无 :roleCode。不同于 allCarrierList 的已认证全量、carrierAuth 认证中、门户 carrierAll/page。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "会员主键",
+              "资料ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "认证用户ID",
+              "auth用户ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "用户手机"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "id_card",
+            "display_name": "身份证号",
+            "technical_names": [
+              "idCard"
+            ],
+            "aliases": [
+              "证件号"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "role_code",
+            "display_name": "角色编码",
+            "technical_names": [
+              "roleCode"
+            ],
+            "aliases": [
+              "门户角色"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "user_name",
+            "display_name": "用户名称",
+            "technical_names": [
+              "userName"
+            ],
+            "aliases": [
+              "账号名称"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.88,
+        "semantic_evidence": [
+          "UserInfoAdminController#carrierAllPage -> UserInfoAdminService#carrierPage -> UserInfoDao#authPage -> user_info_query_getAuthPageList.sql",
+          "注释已认证与 SQL 无 auth_status 条件冲突；fillCarrierCompanyUsci"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "b7d1b21f-c59c-487e-9c13-b47f16d70a7b",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/userInfo/userEnable"
+      },
+      "semantic": {
+        "purpose": "供运营端按请求体 ids 批量启用门户账号：把 MemberIdsObject.ids 当作 c12-auth 用户ID调用 batchChangeStatus(status=1)，不改本地会员 status。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "门户会员",
+          "账号状态"
+        ],
+        "scenarios": [
+          "运营人员在货主或承运商列表启用用户登录账号。"
+        ],
+        "actions": [
+          "enable"
+        ],
+        "entities": [
+          "门户账号"
+        ],
+        "aliases": [
+          "启用门户用户",
+          "批量启用会员账号",
+          "UserInfoAdminController.userEnable"
+        ],
+        "resource": "member_user",
+        "lookup_keys": [
+          "ids"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "ids 作为 UserCondition.userIds 发给 auth，不是会员资料ID，也不是报关员 enable/{ids}。无 Bean Validation，ids 为空会 NPE。",
+          "对应停用是 userDisable 同一批用户ID改 status=0。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "ids"
+            ],
+            "aliases": [
+              "认证用户ID集合"
+            ],
+            "resource": "member_user",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.95,
+        "semantic_evidence": [
+          "UserInfoAdminController#userEnable(@RequestBody MemberIdsObject ids)",
+          "UserInfoAdminService#changeUserStatus(ids, MemberYesNoConstant.YES) -> MemberRemoteAuthService#batchChangeStatus",
+          "MemberIdsObject 仅 ids 字段且无校验"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "f1b83563-dc3a-4a48-9ad2-e85d20de0c66",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/userInfo/userDisable"
+      },
+      "semantic": {
+        "purpose": "供运营端按请求体 ids 批量停用门户账号：将 ids 作为 c12-auth 用户ID调用 batchChangeStatus(status=0)。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "门户会员",
+          "账号状态"
+        ],
+        "scenarios": [
+          "运营人员停用货主或承运商登录账号。"
+        ],
+        "actions": [
+          "disable"
+        ],
+        "entities": [
+          "门户账号"
+        ],
+        "aliases": [
+          "停用门户用户",
+          "批量停用会员账号",
+          "UserInfoAdminController.disable"
+        ],
+        "resource": "member_user",
+        "lookup_keys": [
+          "ids"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "方法名 disable 与报关员路径 /disable/{ids} 不同；改的是 auth 用户状态。Java 方法与报关员 disable 同名重载靠路径区分。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "ids"
+            ],
+            "aliases": [
+              "认证用户ID集合"
+            ],
+            "resource": "member_user",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.95,
+        "semantic_evidence": [
+          "UserInfoAdminController#disable(@RequestBody MemberIdsObject ids) 映射 /userDisable",
+          "UserInfoAdminService#changeUserStatus(ids, MemberYesNoConstant.NO)"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "a7fff55a-b65b-4c61-81ca-b84324aea34a",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/userInfo/pageCustomsDeclarant"
+      },
+      "semantic": {
+        "purpose": "供运营端分页查询报关员会员：Service 把角色改写为 CUSTOMS_DECLARANT 后走通用 getPageList SQL，并把 status 转成字典标签后映射为 UserInfoCustomsDeclarantAdminQuery。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "门户会员",
+          "报关员管理"
+        ],
+        "scenarios": [
+          "运营人员维护报关行/报关员列表。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "报关员会员"
+        ],
+        "aliases": [
+          "运营报关员分页",
+          "报关人员列表",
+          "UserInfoAdminController.pageCustomsDeclarant"
+        ],
+        "resource": "customs_declarant",
+        "lookup_keys": [
+          "userName",
+          "mobile",
+          "status",
+          "companyName",
+          "roleCode",
+          "id"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "Controller 先写 SHIPPER_AGENT(AGENT)，Service 立即覆盖为 CUSTOMS_DECLARANT，可执行过滤是报关员不是货代。导入 title 报关员与 Controller 赋值冲突。",
+          "返回 DTO 无 userId。不同于货主/承运商分页。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "报关员资料ID"
+            ],
+            "resource": "customs_declarant",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "报关员手机"
+            ],
+            "resource": "customs_declarant",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "user_name",
+            "display_name": "用户名称",
+            "technical_names": [
+              "userName"
+            ],
+            "aliases": [
+              "报关员名称"
+            ],
+            "resource": "customs_declarant",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.86,
+        "semantic_evidence": [
+          "UserInfoAdminController#pageCustomsDeclarant 设置 SHIPPER_AGENT",
+          "UserInfoAdminService#pageCustomsDeclarant 再 setRoleCode(CUSTOMS_DECLARANT) 后 dao.page/userInfo_query_getPageList",
+          "status 用字典 type=status 换成 label；GenericBeanConverter 转 UserInfoCustomsDeclarantAdminQuery"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "73be18a8-9f22-4121-8519-c612539968d4",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/userInfo/getCustomsDeclarantById/{id}"
+      },
+      "semantic": {
+        "purpose": "供运营端按路径会员资料ID查询一条报关员展示对象，字段仅 id、名称、手机、状态、公司和创建时间。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "门户会员",
+          "报关员管理"
+        ],
+        "scenarios": [
+          "打开报关员编辑或详情。"
+        ],
+        "actions": [
+          "detail"
+        ],
+        "entities": [
+          "报关员会员"
+        ],
+        "aliases": [
+          "运营报关员详情",
+          "按ID查看报关员",
+          "UserInfoAdminController.getCustomsDeclarantById"
+        ],
+        "resource": "customs_declarant",
+        "lookup_keys": [
+          "id",
+          "mobile",
+          "userName",
+          "companyName"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "返回 UserInfoCustomsDeclarantAdminQuery，不含 userId。路径 id 是会员资料ID。实体 mobile/companyName 为 @Transient，详情投影常空，与分页 SQL 回填不同。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "会员资料ID",
+            "location": "path",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "报关员资料ID"
+            ],
+            "resource": "customs_declarant",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "报关员手机"
+            ],
+            "resource": "customs_declarant",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": [
+          "UserInfoAdminController#getCustomsDeclarantById(@PathVariable Long id)",
+          "UserInfoAdminService#getCustomsDeclarantById dao.findFirst by MemberUserInfo.id",
+          "MemberUserInfo.mobile/companyName @Transient，详情不走 userInfo_query_getPageList"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "c621f802-8d97-4979-87c3-5a0486e6e13f",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/userInfo/saveCustomsDeclarant"
+      },
+      "semantic": {
+        "purpose": "供运营端新增或按会员资料ID更新报关员：校验报关行公司名不重复，在 auth 以手机号为账号保存 CUSTOMS_DECLARANT 用户，本地默认停用并写已认证角色快照。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "门户会员",
+          "报关员管理"
+        ],
+        "scenarios": [
+          "运营人员录入或修改报关行人员。"
+        ],
+        "actions": [
+          "save"
+        ],
+        "entities": [
+          "报关员会员",
+          "门户账号"
+        ],
+        "aliases": [
+          "保存报关员",
+          "新增或更新报关人员",
+          "UserInfoAdminController.saveCustomsDeclarant"
+        ],
+        "resource": "customs_declarant",
+        "lookup_keys": [
+          "id",
+          "mobile",
+          "userName",
+          "companyName",
+          "userId"
+        ],
+        "cardinality": "one",
+        "ownership": "unknown",
+        "discriminators": [
+          "有 id 则更新对应会员并复用其 userId 调 auth.saveUserInfo；无 id 则新建。注释写默认启用，代码 status 空则 MemberYesNoDict.NO 停用。公司名重复才失败，手机号/公司名并非无条件必填。",
+          "不同于普通 save 覆盖当前登录人，也不同于门户 saveDriver。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "报关员资料ID"
+            ],
+            "resource": "customs_declarant",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "认证用户ID"
+            ],
+            "resource": "customs_declarant",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "登录手机"
+            ],
+            "resource": "customs_declarant",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.9,
+        "semantic_evidence": [
+          "UserInfoAdminController#saveCustomsDeclarant(@RequestBody @Valid UserInfoCustomsDeclarantAdminItem) 无字段校验",
+          "UserInfoAdminService#saveOrUpdateCustomsDeclarant：existsCompanyName；remoteAuthService.saveUserInfo；注释默认启用 vs item.status 空则 MemberYesNoDict.NO；saveOrUpdateByCustomsDeclarantItem；UserAuthInfo CERTIFIED"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "659a0f7d-1421-463e-9782-87eaa3c4edc2",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/userInfo/deleteByIds/{ids}"
+      },
+      "semantic": {
+        "purpose": "供运营端按路径会员资料ID批量删除报关员，仅允许当前本地 status 全部为停用的记录。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "门户会员",
+          "报关员管理"
+        ],
+        "scenarios": [
+          "停用后的报关员从会员表删除。"
+        ],
+        "actions": [
+          "delete"
+        ],
+        "entities": [
+          "报关员会员"
+        ],
+        "aliases": [
+          "删除报关员",
+          "批量删除报关人员",
+          "UserInfoAdminController.deleteById"
+        ],
+        "resource": "customs_declarant",
+        "lookup_keys": [
+          "ids"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "导入 title“批量删除用户”实际只删报关员会员行且启用中不可删。路径 ids 是会员资料ID，不是 userDisable 的 auth 用户ID。"
+        ],
+        "required_inputs": [
+          {
+            "name": "ids",
+            "zh_name": "会员资料ID集合",
+            "location": "path",
+            "required": true,
+            "schema_type": "Long[]"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "ids"
+            ],
+            "aliases": [
+              "报关员资料ID"
+            ],
+            "resource": "customs_declarant",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": [
+          "UserInfoAdminController#deleteById(@PathVariable Long... ids) /deleteByIds/{ids}",
+          "UserInfoAdminService#deleteCustomsDeclarant：findByIds 空则用户不存在；status 必须全为 NO 否则“启用状态不可删除”；dao.delete",
+          "Swagger 标题批量删除用户与报关员范围冲突"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "56a06939-e19b-453a-8cbf-42d04cc74ed9",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/userInfo/enable/{ids}"
+      },
+      "semantic": {
+        "purpose": "供运营端按路径会员资料ID批量启用报关员本地 status，仅当记录当前全部为停用。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "门户会员",
+          "报关员管理"
+        ],
+        "scenarios": [
+          "把停用中的报关员重新启用。"
+        ],
+        "actions": [
+          "enable"
+        ],
+        "entities": [
+          "报关员会员"
+        ],
+        "aliases": [
+          "启用报关员",
+          "批量启用报关人员",
+          "UserInfoAdminController.enable"
+        ],
+        "resource": "customs_declarant",
+        "lookup_keys": [
+          "ids"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "改 MemberUserInfo.status 为 ENABLE，不调 auth batchChangeStatus。导入 title“启用用户”范围过宽。空 ids 抛“请选择要启用的报关员”。",
+          "不同于 /userEnable。"
+        ],
+        "required_inputs": [
+          {
+            "name": "ids",
+            "zh_name": "会员资料ID集合",
+            "location": "path",
+            "required": true,
+            "schema_type": "Long[]"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "ids"
+            ],
+            "aliases": [
+              "报关员资料ID"
+            ],
+            "resource": "customs_declarant",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": [
+          "UserInfoAdminController#enable(@PathVariable Long... ids)",
+          "UserInfoAdminService#enable：ids 空抛错；须全为 NO；setStatus(ExternalInterfaceStatusEnum.ENABLE)；batchUpdate",
+          "Swagger 启用用户 vs 报关员"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "201e1fef-9665-4d6f-9987-614525f3d586",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/userInfo/disable/{ids}"
+      },
+      "semantic": {
+        "purpose": "供运营端按路径会员资料ID批量停用报关员本地 status，仅当记录当前全部为启用。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "门户会员",
+          "报关员管理"
+        ],
+        "scenarios": [
+          "停用仍在启用状态的报关员。"
+        ],
+        "actions": [
+          "disable"
+        ],
+        "entities": [
+          "报关员会员"
+        ],
+        "aliases": [
+          "停用报关员",
+          "批量停用报关人员",
+          "UserInfoAdminController.disable"
+        ],
+        "resource": "customs_declarant",
+        "lookup_keys": [
+          "ids"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "路径 disable/{ids} 与 body /userDisable 是不同接口。空 ids 异常文案误写“请选择要启用的报关员”。改本地 status=DISABLE。"
+        ],
+        "required_inputs": [
+          {
+            "name": "ids",
+            "zh_name": "会员资料ID集合",
+            "location": "path",
+            "required": true,
+            "schema_type": "Long[]"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "ids"
+            ],
+            "aliases": [
+              "报关员资料ID"
+            ],
+            "resource": "customs_declarant",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.9,
+        "semantic_evidence": [
+          "UserInfoAdminController#disable(@PathVariable Long... ids) /disable/{ids}",
+          "UserInfoAdminService#disable：须全为 YES；setStatus(DISABLE)；异常文案复制为启用",
+          "Swagger 停用用户 vs 报关员"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "533a4cff-de73-43d6-8dce-23a892ecd1e4",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/userInfo/updateAgentStatus"
+      },
+      "semantic": {
+        "purpose": "供运营端按会员资料ID开通或关闭货代角色：agent=1 时在已有货主认证上复制状态插入 SHIPPER_AGENT，agent=0 时删除货代认证记录。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "门户会员",
+          "货代角色"
+        ],
+        "scenarios": [
+          "运营人员把货主标记为货代或取消货代。"
+        ],
+        "actions": [
+          "grant_agent",
+          "revoke_agent"
+        ],
+        "entities": [
+          "货代角色",
+          "货主会员"
+        ],
+        "aliases": [
+          "更新货代状态",
+          "开通或关闭货代",
+          "UserInfoAdminController.updateAgentStatus"
+        ],
+        "resource": "shipper_member",
+        "lookup_keys": [
+          "id",
+          "agent"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "必填 id+agent。开启依赖已有 SHIPPER 认证；关闭按 roleCode=AGENT 删除 UserAuthInfo。不改 MemberUserInfo 主表。不同于门户 upgradeRole。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "会员资料ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          },
+          {
+            "name": "agent",
+            "zh_name": "是否货代",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "货主资料ID"
+            ],
+            "resource": "shipper_member",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "UserInfoAdminController#updateAgentStatus(@RequestBody @Valid UserInfoAgentAdminItem)",
+          "UserInfoAgentAdminItem @NotNull id/agent",
+          "UserInfoAdminService#updateAgentStatus：YES 插入 SHIPPER_AGENT，否则 delete 货代认证"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "10800bb5-a1ef-4a3b-8c90-39f3c6a2a953",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/userInfo/shipper/page"
+      },
+      "semantic": {
+        "purpose": "供门户或 Feign 分页查询货主会员：写入 shipperRoleCode=SHIPPER，忽略请求 userIds，可选手机号映射 auth 用户后再走同一 getPageList SQL，并回填承运商企业信用代码。",
+        "audiences": [
+          "门户端",
+          "内部服务"
+        ],
+        "domains": [
+          "门户会员",
+          "货主管理"
+        ],
+        "scenarios": [
+          "门户业务按货主角色选择或展示会员分页。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "货主会员"
+        ],
+        "aliases": [
+          "门户货主分页",
+          "门户货主列表",
+          "UserInfoPortalController.shipperPage"
+        ],
+        "resource": "shipper_member",
+        "lookup_keys": [
+          "mobile",
+          "userName",
+          "idCard",
+          "roleCode",
+          "shipperRoleCode",
+          "userId",
+          "id",
+          "companyUsci"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "门户前缀 /member-api/portal/userInfo/shipper/page，写 shipperRoleCode 不是 admin 的 roleCode。请求 userIds 被清空。Remote 同方法在 /userInfo/remote。不是 noAuth 注册登录。",
+          "SQL LIKE %SHIPPER% 也会命中 MULTIMODAL_SHIPPER。DTO 的 isAgent/authStatus 未进入本 SQL。导入 title“分页查询用户”过宽。fillCarrierCompanyUsci 对货主行也可能写 companyUsci。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "会员主键",
+              "资料ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "认证用户ID",
+              "auth用户ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "用户手机"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "role_code",
+            "display_name": "角色编码",
+            "technical_names": [
+              "roleCode"
+            ],
+            "aliases": [
+              "门户角色"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": [
+          "UserInfoPortalController#shipperPage 设置 UserRoleCodeEnum.SHIPPER 到 shipperRoleCode",
+          "UserInfoPortalService#page 清空 userIds；手机号 findAuthUsersByMobile 后再 dao.page/userInfo_query_getPageList",
+          "RemoteUserInfoPortalController 同实现不同路径"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "bd61c5a1-b2c7-43ff-b405-1fdbdd86ad7a",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/userInfo/getUserInfoById"
+      },
+      "semantic": {
+        "purpose": "供门户或 Feign 按请求体 userId 查一条会员：找不到仍返回带该 userId 的空对象，并用 auth 主档回填姓名手机企业和信用代码。",
+        "audiences": [
+          "门户端",
+          "内部服务"
+        ],
+        "domains": [
+          "门户会员"
+        ],
+        "scenarios": [
+          "按认证用户ID补全门户会员展示资料。"
+        ],
+        "actions": [
+          "detail"
+        ],
+        "entities": [
+          "会员资料"
+        ],
+        "aliases": [
+          "按用户ID查门户会员",
+          "门户Feign用户详情",
+          "UserInfoPortalController.getUserInfoById"
+        ],
+        "resource": "member_user",
+        "lookup_keys": [
+          "userId",
+          "id",
+          "mobile",
+          "companyUsci"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "body.userId 不是当前登录用户，也不是路径会员ID。空记录仍 success 返回 userId。applyAuthMasterInfo 会用主体关系信用代码覆盖 companyUsci。Remote 有同路径。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "认证用户ID",
+              "auth用户ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "会员主键",
+              "资料ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "用户手机"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "UserInfoPortalController#getUserInfoById(@RequestBody UserInfoPortalCondition)",
+          "UserInfoPortalService#getByUserId findFirst by userId；空则 new Query 仅 setUserId；applyAuthMasterInfo"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "6f9180e1-4871-4e3b-98e4-ca1d3fcda39a",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/userInfo/carrierAll/page"
+      },
+      "semantic": {
+        "purpose": "供门户或 Feign 分页查询承运商会员：roleCode 为空则默认公水铁角色码，同样忽略请求 userIds、可按手机号映射后走 getPageList。",
+        "audiences": [
+          "门户端",
+          "内部服务"
+        ],
+        "domains": [
+          "门户会员",
+          "承运商管理"
+        ],
+        "scenarios": [
+          "门户选择承运商时分页检索。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "承运商会员"
+        ],
+        "aliases": [
+          "门户承运商分页",
+          "门户全部承运商列表",
+          "UserInfoPortalController.carrierAllPage"
+        ],
+        "resource": "carrier_member",
+        "lookup_keys": [
+          "roleCode",
+          "highwayRoleCode",
+          "railwayRoleCode",
+          "shippingRoleCode",
+          "mobile",
+          "userId",
+          "id",
+          "companyUsci"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "与门户货主分页共用 Service#page，但写入承运商三角色。不同于运营 carrierAll/page 的 authPage SQL 和 allCarrierList 已认证全量。Remote 同方法。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "会员主键",
+              "资料ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "认证用户ID",
+              "auth用户ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "用户手机"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "role_code",
+            "display_name": "角色编码",
+            "technical_names": [
+              "roleCode"
+            ],
+            "aliases": [
+              "门户角色"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "UserInfoPortalController#carrierAllPage 空 roleCode 时 setHighway/Railway/ShippingRoleCode",
+          "UserInfoPortalService#page + fillCarrierCompanyUsci"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "14632f4b-f368-47d5-aa6c-b9d71e0d3175",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/userInfo/getMenuTreeByRoleCode"
+      },
+      "semantic": {
+        "purpose": "供当前门户登录用户按角色编码切换 PC 菜单，或只传 menuModule 查询 APP 权限树；roleCode 与 menuModule 至少填一个。认证中身份会清空按钮码。",
+        "audiences": [
+          "门户端",
+          "当前登录用户"
+        ],
+        "domains": [
+          "门户权限",
+          "角色切换"
+        ],
+        "scenarios": [
+          "登录后按货主/承运商等角色加载菜单，或小程序按模块取 APP 权限。"
+        ],
+        "actions": [
+          "switch_role",
+          "query"
+        ],
+        "entities": [
+          "门户菜单",
+          "角色权限"
+        ],
+        "aliases": [
+          "按角色取门户菜单",
+          "切换门户角色权限",
+          "UserInfoPortalController.getMenuTreeByRoleCode"
+        ],
+        "resource": "portal_permission",
+        "lookup_keys": [
+          "roleCode",
+          "menuModule"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "roleCode 与 menuModule 二选一，不能都空。有 roleCode 时按当前用户已有认证角色过滤；仅 menuModule 时 roleCodes=null 交给权限服务。不是 selectIdentity。",
+          "当前身份认证中则 portalRoleBtnCodes 置空列表。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "role_code",
+            "display_name": "角色编码",
+            "technical_names": [
+              "roleCode"
+            ],
+            "aliases": [
+              "门户角色"
+            ],
+            "resource": "portal_permission",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "UserInfoPortalController#getMenuTreeByRoleCode(@RequestBody UserInfoChangeRolePortalItem)",
+          "UserInfoPortalService#getMenuTreeByRoleCode：ROLE_CODE_AND_MENU_MODULE_EMPTY；RemotePortalRoleService#chooseRole；isCurrentIdentityCertifying 清按钮"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "feb997ad-657f-405a-b0cd-2873521073c2",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/userInfo/personalCenterInfo"
+      },
+      "semantic": {
+        "purpose": "供当前门户登录用户查看个人中心：按当前身份收敛认证快照、发票、认证状态，auth 主档回填联系信息；投标人再用 EGPS 供应商资料覆盖表单字段。",
+        "audiences": [
+          "门户端",
+          "当前登录用户"
+        ],
+        "domains": [
+          "门户会员",
+          "个人中心"
+        ],
+        "scenarios": [
+          "会员打开个人中心查看当前身份下的企业和认证资料。"
+        ],
+        "actions": [
+          "detail"
+        ],
+        "entities": [
+          "个人中心",
+          "会员认证资料"
+        ],
+        "aliases": [
+          "门户个人中心",
+          "当前用户认证资料",
+          "UserInfoPortalController.personalCenterInfo"
+        ],
+        "resource": "portal_user",
+        "lookup_keys": [
+          "userId",
+          "id",
+          "companyUsci",
+          "mobile",
+          "email",
+          "roleCode",
+          "authStatus"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "无请求体，userId 取 SessionContext。不同于 getLoginUserInfo 的登录展示/身份列表，也不同于按 userId 的 getUserInfoById。",
+          "投标人 EGPS 覆盖公司信用代码等，认证状态仍以 Portal 审核流为准。源码另有 loginRecords 未进入本批接口索引。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "会员主键",
+              "资料ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "认证用户ID",
+              "auth用户ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "用户手机"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "email",
+            "display_name": "邮箱",
+            "technical_names": [
+              "email"
+            ],
+            "aliases": [
+              "电子邮箱"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "role_code",
+            "display_name": "角色编码",
+            "technical_names": [
+              "roleCode"
+            ],
+            "aliases": [
+              "门户角色"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "auth_status",
+            "display_name": "认证状态",
+            "technical_names": [
+              "authStatus"
+            ],
+            "aliases": [
+              "审核状态"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "UserInfoPortalController#personalCenterInfo SessionContext.getUserId",
+          "UserInfoPortalService#personalCenterInfo：findUserInfoByUserId；fillQueryFromDetail；remoteAuthService.getPortalUserInfo；fillBidderSupplierProfile"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "8c2f1e44-f1e2-4ff4-8ce6-4a19b5ead646",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/userInfo/getCompanyUsciAuthPreset"
+      },
+      "semantic": {
+        "purpose": "供门户按统一社会信用代码回显已有企业认证预填：先查 portal 认证快照再补 auth 企业名称；代码为空或两边都没有则 exists=false，不视为参数错误。",
+        "audiences": [
+          "门户端"
+        ],
+        "domains": [
+          "门户会员",
+          "企业认证"
+        ],
+        "scenarios": [
+          "认证表单输入信用代码后自动带出企业资料。"
+        ],
+        "actions": [
+          "query"
+        ],
+        "entities": [
+          "企业认证预填"
+        ],
+        "aliases": [
+          "信用代码回显企业认证",
+          "企业认证预填",
+          "UserInfoPortalController.getCompanyUsciAuthPreset"
+        ],
+        "resource": "company_auth_preset",
+        "lookup_keys": [
+          "companyUsci",
+          "companyName",
+          "exists"
+        ],
+        "cardinality": "one",
+        "ownership": "unknown",
+        "discriminators": [
+          "按信用代码全局查找，不是当前用户范围。companyUsci 空白直接 exists=false，故非无条件必填。返回含证照字段。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_name",
+            "display_name": "企业名称",
+            "technical_names": [
+              "companyName"
+            ],
+            "aliases": [
+              "公司名称"
+            ],
+            "resource": "company_auth_preset",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "UserInfoPortalController#getCompanyUsciAuthPreset(@RequestBody CompanyUsciPortalItem)",
+          "UserInfoPortalService#getCompanyUsciAuthPreset：blank 则 exists=false；findFirstByCompanyUsci + findAuthSubjectRelation"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "bd26f124-d66e-41f7-a8bf-38cd2578f3c2",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/userInfo/updatePortalUserPassword"
+      },
+      "semantic": {
+        "purpose": "供当前门户用户修改登录密码：校验原密码、新密码和确认密码后转发 c12-auth，并刷新本地会话用户缓存。",
+        "audiences": [
+          "门户端",
+          "当前登录用户"
+        ],
+        "domains": [
+          "门户账号",
+          "密码"
+        ],
+        "scenarios": [
+          "已登录会员在个人中心修改密码。"
+        ],
+        "actions": [
+          "change_password"
+        ],
+        "entities": [
+          "门户账号"
+        ],
+        "aliases": [
+          "修改门户密码",
+          "门户改密",
+          "UserInfoPortalController.updatePortalUserPassword"
+        ],
+        "resource": "portal_user",
+        "lookup_keys": [
+          "oldPassword",
+          "newPassword",
+          "confirmPassword",
+          "mobile"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "已登录改密，不是 noAuth forgetUserPassword。请求可带 mobile/secretKey，auth 实际按当前会话 userId 改密，body.mobile 不作为定位键。@Idempotent。不是 updatePortalUserInfo。"
+        ],
+        "required_inputs": [
+          {
+            "name": "oldPassword",
+            "zh_name": "原密码",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          },
+          {
+            "name": "newPassword",
+            "zh_name": "新密码",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          },
+          {
+            "name": "confirmPassword",
+            "zh_name": "确认密码",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "用户手机"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "UserInfoPortalController#updatePortalUserPassword(@RequestBody @Valid ModifyPasswordPortalItem)",
+          "ModifyPasswordPortalItem @NotBlank oldPassword/newPassword/confirmPassword",
+          "UserInfoPortalService#updatePortalUserPassword -> remoteAuthService.updatePortalUserPassword；updateUserInfo"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "b5b0eabf-9676-40f5-aa93-a5af50fd87c5",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/userInfo/userAuth"
+      },
+      "semantic": {
+        "purpose": "供当前门户登录用户提交或重提认证：按 authInfoList 或顶层 CARRIER/BIDDER 角色校验企业或个人资料，写认证中状态、角色快照和企业主体，货主/承运商额外触发风控。",
+        "audiences": [
+          "门户端",
+          "当前登录用户"
+        ],
+        "domains": [
+          "门户会员",
+          "会员认证"
+        ],
+        "scenarios": [
+          "会员在认证页提交企业或个人资质等待审核。"
+        ],
+        "actions": [
+          "submit_auth"
+        ],
+        "entities": [
+          "会员认证资料",
+          "企业主体"
+        ],
+        "aliases": [
+          "提交门户认证",
+          "会员认证申报",
+          "UserInfoPortalController.userAuth"
+        ],
+        "resource": "member_user",
+        "lookup_keys": [
+          "roleCode",
+          "companyUsci",
+          "companyName",
+          "idCard",
+          "mobile",
+          "email"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "对象是当前会话用户，不是按 userId 替他人认证，也不是运营审核。角色必须从认证明细或 CARRIER/BIDDER 顶层角色得到。",
+          "企业角色才校验公司/信用代码等；个人角色（司机/报关员）校验身份证影像。首次企业认证校验信用代码唯一，已认证或不通过重提跳过。条件必填不可标 required。",
+          "小程序认证可能复用同一 Service，本条身份是门户 /userInfo/userAuth。消息发送代码已注释。Controller return ResponseData.success() 丢弃 Service Boolean。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "用户手机"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "email",
+            "display_name": "邮箱",
+            "technical_names": [
+              "email"
+            ],
+            "aliases": [
+              "电子邮箱"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "role_code",
+            "display_name": "角色编码",
+            "technical_names": [
+              "roleCode"
+            ],
+            "aliases": [
+              "门户角色"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "id_card",
+            "display_name": "身份证号",
+            "technical_names": [
+              "idCard"
+            ],
+            "aliases": [
+              "证件号"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "会员主键",
+              "资料ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "UserInfoPortalController#userAuth(@RequestBody UserInfoAuthPortalItem) @Idempotent",
+          "UserInfoPortalService#userAuth SessionContext；AUTH_ROLE_EMPTY；validateEnterpriseAuth/validatePersonalAuth；processShipper/Carrier/Personal/BidderAuth；syncOnAuthSubmit"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "444b03e3-3cbb-45a0-bcf3-143b530d3281",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/userInfo/updatePortalUserInfo"
+      },
+      "semantic": {
+        "purpose": "供当前门户用户修改昵称、性别和头像：门户只把 nickName/gender/headPic 转给 auth，定位用当前会话而不是 body.userId；请求中的手机号邮箱验证码不会走本接口生效。",
+        "audiences": [
+          "门户端",
+          "当前登录用户"
+        ],
+        "domains": [
+          "门户账号"
+        ],
+        "scenarios": [
+          "个人中心修改昵称头像等基本资料。"
+        ],
+        "actions": [
+          "update_profile"
+        ],
+        "entities": [
+          "门户账号"
+        ],
+        "aliases": [
+          "修改门户用户资料",
+          "更新昵称头像",
+          "UserInfoPortalController.updatePortalUserInfo"
+        ],
+        "resource": "portal_user",
+        "lookup_keys": [
+          "userId",
+          "nickName",
+          "gender",
+          "headPic"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "与 updateMobile/updateEmail 分离。DTO 含 mobile/email/smsCaptcha/userId，Service 丢弃手机邮箱验证码；auth 按当前会话用户更新，body.userId 不定位他人。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "认证用户ID",
+              "auth用户ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.88,
+        "semantic_evidence": [
+          "UserInfoPortalController#updatePortalUserInfo(@RequestBody UpdateUserInfoPortalItem)",
+          "UserInfoPortalService#updatePortalUserInfo 仅复制 userId/nickName/gender/headPic 后 remoteAuthService.updatePortalUserInfo",
+          "请求合同多余字段与执行行为冲突"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "e0e8607d-04a3-44dd-aeb3-c8e97b2662ce",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/userInfo/updateMobile"
+      },
+      "semantic": {
+        "purpose": "供当前门户用户更换手机号：校验明文/脱敏手机号格式和短信验证码后更新 auth，并回写本地会员 userName 兜底。",
+        "audiences": [
+          "门户端",
+          "当前登录用户"
+        ],
+        "domains": [
+          "门户账号"
+        ],
+        "scenarios": [
+          "已登录会员绑定新手机号。"
+        ],
+        "actions": [
+          "update_mobile"
+        ],
+        "entities": [
+          "门户账号"
+        ],
+        "aliases": [
+          "修改门户手机号",
+          "更换登录手机",
+          "UserInfoPortalController.updateMobile"
+        ],
+        "resource": "portal_user",
+        "lookup_keys": [
+          "mobile",
+          "smsCaptcha"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "mobile 与 smsCaptcha 无条件必填；图形验证码非本层必填。不是改邮箱或资料。PortalSensitiveFieldUtil 可解脱敏手机号。"
+        ],
+        "required_inputs": [
+          {
+            "name": "mobile",
+            "zh_name": "新手机号",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          },
+          {
+            "name": "smsCaptcha",
+            "zh_name": "短信验证码",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "用户手机"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "UserInfoPortalController#updateMobile(@RequestBody UpdateMobilePortalItem)",
+          "UserInfoPortalService#validateMobileItem MOBILE_EMPTY/SMS_CAPTCHA_EMPTY；remoteAuthService.updatePortalUserInfo；updateLocalMobile"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "cf594ee9-adbf-4aee-9b5f-b709fec57c35",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/userInfo/updateEmail"
+      },
+      "semantic": {
+        "purpose": "供当前门户用户修改邮箱：校验邮箱非空且格式后只把 email 转给 auth。",
+        "audiences": [
+          "门户端",
+          "当前登录用户"
+        ],
+        "domains": [
+          "门户账号"
+        ],
+        "scenarios": [
+          "个人中心绑定或更换邮箱。"
+        ],
+        "actions": [
+          "update_email"
+        ],
+        "entities": [
+          "门户账号"
+        ],
+        "aliases": [
+          "修改门户邮箱",
+          "更换邮箱",
+          "UserInfoPortalController.updateEmail"
+        ],
+        "resource": "portal_user",
+        "lookup_keys": [
+          "email"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "只改邮箱，不改手机。email 无条件必填。"
+        ],
+        "required_inputs": [
+          {
+            "name": "email",
+            "zh_name": "邮箱",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "email",
+            "display_name": "邮箱",
+            "technical_names": [
+              "email"
+            ],
+            "aliases": [
+              "电子邮箱"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "UserInfoPortalController#updateEmail(@RequestBody UpdateEmailPortalItem)",
+          "UserInfoPortalService#validateEmailItem EMAIL_EMPTY/EMAIL_FORMAT_INVALID；updatePortalUserInfo 仅 setEmail"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "eabee302-e3cc-4198-8cd2-fb23aa811668",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/userInfo/getLoginUserInfo"
+      },
+      "semantic": {
+        "purpose": "供当前门户登录用户获取登录展示信息：公司名按当前身份所属系统解析，返回角色集合、身份列表和是否需要选择身份。",
+        "audiences": [
+          "门户端",
+          "当前登录用户"
+        ],
+        "domains": [
+          "门户账号",
+          "登录身份"
+        ],
+        "scenarios": [
+          "登录后首页或布局加载当前用户身份和展示名。"
+        ],
+        "actions": [
+          "detail"
+        ],
+        "entities": [
+          "登录用户",
+          "门户身份"
+        ],
+        "aliases": [
+          "获取门户登录用户",
+          "当前登录会员信息",
+          "UserInfoPortalController.getLoginUserInfo"
+        ],
+        "resource": "portal_user",
+        "lookup_keys": [
+          "userId",
+          "identityCode",
+          "currentIdentityCode",
+          "systemCode",
+          "roleCodes",
+          "mobile"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "登录态展示，不是个人中心认证表单。多身份且未选中时 needSelectIdentity=true。导入 response data 为空对象，实际返回 AuthUserInfoPortalQuery。",
+          "角色集合会把公水铁折叠为 CARRIER。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "认证用户ID",
+              "auth用户ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "用户手机"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "identity_code",
+            "display_name": "身份编码",
+            "technical_names": [
+              "identityCode",
+              "currentIdentityCode"
+            ],
+            "aliases": [
+              "当前身份"
+            ],
+            "resource": "portal_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "system_code",
+            "display_name": "系统编码",
+            "technical_names": [
+              "systemCode"
+            ],
+            "aliases": [
+              "身份所属系统"
+            ],
+            "resource": "portal_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": [
+          "UserInfoPortalController#getLoginUserInfo -> UserInfoPortalService#getLoginUserInfo",
+          "remoteAuthService.getPortalUserInfo + findUserInfoByUserId + buildIdentityInfos",
+          "导入 response_schema.data 空对象与 AuthUserInfoPortalQuery 冲突"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "492d1b34-b159-40d9-bd86-00a64479093a",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/userInfo/selectIdentity"
+      },
+      "semantic": {
+        "purpose": "供当前门户用户选择登录身份：必须传 identityCode，可选 systemCode，转发 c12-auth 切换身份并返回 Map。",
+        "audiences": [
+          "门户端",
+          "当前登录用户"
+        ],
+        "domains": [
+          "门户账号",
+          "登录身份"
+        ],
+        "scenarios": [
+          "多身份用户登录后选择当前业务身份。"
+        ],
+        "actions": [
+          "select_identity"
+        ],
+        "entities": [
+          "门户身份"
+        ],
+        "aliases": [
+          "选择门户身份",
+          "切换登录身份",
+          "UserInfoPortalController.selectIdentity"
+        ],
+        "resource": "portal_user",
+        "lookup_keys": [
+          "identityCode",
+          "systemCode"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "identityCode 无条件必填，systemCode 可选。不是 getMenuTreeByRoleCode。返回 Map 而非用户 DTO。"
+        ],
+        "required_inputs": [
+          {
+            "name": "identityCode",
+            "zh_name": "身份编码",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "identity_code",
+            "display_name": "身份编码",
+            "technical_names": [
+              "identityCode"
+            ],
+            "aliases": [
+              "登录身份"
+            ],
+            "resource": "portal_user",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "system_code",
+            "display_name": "系统编码",
+            "technical_names": [
+              "systemCode"
+            ],
+            "aliases": [
+              "身份系统"
+            ],
+            "resource": "portal_user",
+            "source": "request_contract",
+            "confidence": 0.9
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "UserInfoPortalController#selectIdentity(@RequestBody PortalIdentitySelectPortalItem)",
+          "UserInfoPortalService#selectPortalIdentity 空 identityCode 抛请选择登录身份；remoteAuthService.selectPortalIdentity"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "f54dd56f-d310-4d81-b2f3-a270a61a338c",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/userInfo/getAuthStatusByUserId"
+      },
+      "semantic": {
+        "purpose": "供门户或 Feign 按请求体 userId 判断该会员是否已有认证通过角色，返回 Boolean；找不到会员则业务异常。",
+        "audiences": [
+          "门户端",
+          "内部服务"
+        ],
+        "domains": [
+          "门户会员",
+          "会员认证"
+        ],
+        "scenarios": [
+          "下游按用户ID判断是否已通过至少一种角色认证。"
+        ],
+        "actions": [
+          "query"
+        ],
+        "entities": [
+          "认证状态"
+        ],
+        "aliases": [
+          "按用户ID查是否已认证",
+          "门户认证状态",
+          "UserInfoPortalController.getAuthStatusByUserId"
+        ],
+        "resource": "member_user",
+        "lookup_keys": [
+          "userId"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "返回 Boolean 不是用户详情。任一 UserAuthInfo.authStatus=CERTIFIED 即为 true。注释写“是否存在认证”，实现是是否已认证通过。Remote 同方法。userId 无主动非空校验。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "认证用户ID",
+              "auth用户ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": [
+          "UserInfoPortalController#getAuthStatusByUserId -> ResponseData<Boolean>",
+          "UserInfoPortalService#getAuthStatusByUserId find MemberUserInfo by userId；anyMatch CERTIFIED",
+          "Javadoc“根据用户id获取是否存在认证”与 CERTIFIED 判断冲突"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "f474ab77-79b3-4a56-a1d0-b8cf33829e8c",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/userInfo/upgradeRole"
+      },
+      "semantic": {
+        "purpose": "供当前门户用户升级承运商相关角色：按认证明细许可证写入未认证/认证中，必要时补 CARRIER 角色并重建未通过的危险品资质。",
+        "audiences": [
+          "门户端",
+          "当前登录用户"
+        ],
+        "domains": [
+          "门户会员",
+          "承运商认证"
+        ],
+        "scenarios": [
+          "已有会员补充公路铁路水路或危险品承运资质。"
+        ],
+        "actions": [
+          "upgrade_role"
+        ],
+        "entities": [
+          "承运商角色",
+          "运输许可证"
+        ],
+        "aliases": [
+          "升级门户角色",
+          "补充承运商资质",
+          "UserInfoPortalController.upgradeRole"
+        ],
+        "resource": "carrier_member",
+        "lookup_keys": [
+          "roleCode",
+          "license",
+          "licenseType",
+          "id"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "当前用户升级角色，不是运营 updateAgentStatus。请求是 List<UserAuthInfoPortalItem>。license 空则未认证，有 license 且未认证则认证中。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "auth_info_id",
+            "display_name": "认证记录ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "资质记录ID"
+            ],
+            "resource": "carrier_member",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "role_code",
+            "display_name": "角色编码",
+            "technical_names": [
+              "roleCode"
+            ],
+            "aliases": [
+              "门户角色"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "UserInfoPortalController#upgradeRole(@RequestBody List<UserAuthInfoPortalItem>)",
+          "UserInfoPortalService#upgradeRole 当前会话会员；补 CARRIER；persistAuthInfoChanges batchInsert/Update"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "8aaed451-6c9a-4daa-b16d-b816b0082535",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/userInfo/getUserInfoByList"
+      },
+      "semantic": {
+        "purpose": "供门户或 Feign 按 auth 用户ID数组批量查询会员列表，并对每条回填 auth 主档姓名手机企业和信用代码。",
+        "audiences": [
+          "门户端",
+          "内部服务"
+        ],
+        "domains": [
+          "门户会员"
+        ],
+        "scenarios": [
+          "批量按用户ID补全门户会员展示。"
+        ],
+        "actions": [
+          "list",
+          "query"
+        ],
+        "entities": [
+          "会员资料"
+        ],
+        "aliases": [
+          "按用户ID批量查门户会员",
+          "门户会员批量查询",
+          "UserInfoPortalController.getUserInfoByList"
+        ],
+        "resource": "member_user",
+        "lookup_keys": [
+          "userId",
+          "id",
+          "mobile",
+          "companyUsci"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "List<Long> 是 userId 不是会员资料ID。门户返回会 applyAuthMasterInfo。Remote 同方法。不同于运营版 fillQueriesFromDetail。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "认证用户ID",
+              "auth用户ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "会员主键",
+              "资料ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "用户手机"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "UserInfoPortalController#getUserInfoByList(@RequestBody List<Long> ids)",
+          "UserInfoPortalService#getUserInfoByList andIn MemberUserInfo.userId；applyAuthMasterInfo"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "a316e84d-4261-4d6b-8410-3413ebc7fdfb",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/userInfo/saveDriver"
+      },
+      "semantic": {
+        "purpose": "供门户或 Feign 按手机号为已存在的 auth 司机账号补建本地司机会员和已认证 DRIVER 记录；本地已有该手机号对应用户则 Service 返回 false 且不覆盖。本 Controller 丢弃 Boolean，公开响应是空成功体。",
+        "audiences": [
+          "门户端",
+          "内部服务"
+        ],
+        "domains": [
+          "门户会员",
+          "司机"
+        ],
+        "scenarios": [
+          "外部已在认证中心建司机号后，在门户落会员档案。"
+        ],
+        "actions": [
+          "save_driver"
+        ],
+        "entities": [
+          "司机会员"
+        ],
+        "aliases": [
+          "保存司机会员",
+          "按手机号落司机档案",
+          "UserInfoPortalController.saveDriver"
+        ],
+        "resource": "driver_member",
+        "lookup_keys": [
+          "mobile",
+          "userName",
+          "userId"
+        ],
+        "cardinality": "one",
+        "ownership": "unknown",
+        "discriminators": [
+          "按 mobile 在 auth 查找，不是当前登录用户。auth 无该手机抛“auth中未找到对应司机用户”，故手机号实际必需。已存在则 Service 返回 false。不创建 auth 账号。",
+          "本 Controller 调用后 return ResponseData.success()，不把 Boolean 写入响应；Remote /userInfo/remote/saveDriver 才返回 Boolean。导入 data 空对象与 Service Boolean 都不是本接口公开合同。范围按手机号全局定位，ownership 用 unknown。"
+        ],
+        "required_inputs": [
+          {
+            "name": "mobile",
+            "zh_name": "手机号",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "用户手机"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "认证用户ID",
+              "auth用户ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.9,
+        "semantic_evidence": [
+          "UserInfoPortalController#saveDriver(@RequestBody UserInfoPortalItem) -> ResponseData.success() 丢弃 Boolean",
+          "UserInfoPortalService#saveDriver findUserInfoByMobileFromAuth；空则 findAuthUserByMobile，没有则异常；roleCode=DRIVER authStatus=CERTIFIED",
+          "空白手机号同样走“auth中未找到对应司机用户”；RemoteUserInfoPortalController#saveDriver 才返回 Boolean"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    }
+  ]
+}

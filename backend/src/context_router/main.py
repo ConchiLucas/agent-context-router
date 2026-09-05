@@ -44,6 +44,10 @@ from context_router.database.manager import ConnectorManager
 from context_router.database.policy import SqlSafetyPolicy
 from context_router.database.registry import ConnectorRegistry
 from context_router.database.result import DatabaseResultFormatter
+from context_router.interface_search.config import Settings as InterfaceSearchSettings
+from context_router.interface_search.embedding import create_embedding_provider
+from context_router.interface_search.repository import PostgresEndpointRepository
+from context_router.interface_search.search import SearchService
 from context_router.mcp_server import create_context_router_mcp
 from context_router.middleware.browser_read_only import BrowserReadOnlyMiddleware
 from context_router.repositories.ai_data_query_repository import (
@@ -366,7 +370,35 @@ def create_app(
         ),
         resolved_shared_ai_default_repository,
     )
-    interface_forwarding_service = InterfaceForwardingService(resolved_settings.database_url)
+    interface_search_service: SearchService | None = None
+    if resolved_settings.database_url:
+        interface_search_settings = InterfaceSearchSettings(
+            database_url=resolved_settings.database_url,
+            embedding_provider=resolved_settings.interface_search_embedding_provider,
+            embedding_dimensions=resolved_settings.interface_search_embedding_dimensions,
+            embedding_base_url=resolved_settings.interface_search_embedding_base_url,
+            embedding_model=resolved_settings.interface_search_embedding_model,
+            embedding_api_key=resolved_settings.interface_search_embedding_api_key,
+            seed_demo=False,
+            search_candidate_limit=resolved_settings.interface_search_candidate_limit,
+            search_session_ttl_days=resolved_settings.interface_search_session_ttl_days,
+            search_session_cache_size=resolved_settings.interface_search_session_cache_size,
+        )
+        interface_search_service = SearchService(
+            PostgresEndpointRepository(resolved_settings.database_url),
+            create_embedding_provider(
+                provider=interface_search_settings.embedding_provider,
+                dimensions=interface_search_settings.embedding_dimensions,
+                base_url=interface_search_settings.embedding_base_url,
+                model=interface_search_settings.embedding_model,
+                api_key=interface_search_settings.embedding_api_key,
+            ),
+            interface_search_settings,
+        )
+    interface_forwarding_service = InterfaceForwardingService(
+        resolved_settings.database_url,
+        interface_search_service=interface_search_service,
+    )
     resolved_workspace_runtime_repository = workspace_runtime_repository or (
         PostgresWorkspaceRuntimeRepository(resolved_settings.database_url)
         if resolved_settings.database_url
@@ -420,6 +452,7 @@ def create_app(
             resolved_settings.runtime_runner_heartbeat_ttl_seconds
         ),
         local_mapping=local_workspace_mapping,
+        shared_files_service=workspace_shared_files_service,
     )
     resolved_read_repository = document_read_repository or PostgresDocumentReadRepository(
         resolved_settings.database_url
@@ -526,6 +559,7 @@ def create_app(
         database_url=resolved_settings.database_url,
         task_repository=resolved_task_repository,
         database_environment_repository=resolved_database_environment_repository,
+        interface_search_service=interface_search_service,
         value_mapping_service=value_mapping_service,
         host_runner_available=lambda: resolved_runtime_runner_repository.is_available(
             resolved_settings.runtime_runner_heartbeat_ttl_seconds,
@@ -678,6 +712,7 @@ def create_app(
     app.state.local_workspace_mapping = local_workspace_mapping
     app.state.mcp_integration_service = mcp_integration_service
     app.state.mcp_server = mcp_server
+    app.state.interface_search_service = interface_search_service
     app.state.data_source_repository = resolved_data_source_repository
     app.state.database_environment_repository = resolved_database_environment_repository
     app.state.table_relation_repository = resolved_table_relation_repository

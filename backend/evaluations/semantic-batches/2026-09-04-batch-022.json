@@ -1,0 +1,254 @@
+{
+  "schema_version": "context-router-interface-semantic-batch-v1",
+  "batch_id": "panzhihua-c12-portal-customer-bill-022",
+  "workspace_id": "b9ce65eddc27437d9615177fbd07cb0a",
+  "family_groups": {
+    "客户门户应收账单查询": 2,
+    "客户门户应收账单问题反馈": 2
+  },
+  "generation_policy": "仅维护 c12-portal PortalCustomerBillController 的 4 个客户门户应收账单接口，不扩展到其他 Controller。沿 com.chinaservices.dsly.member.module.scts.receivablebill.controller.PortalCustomerBillController、RemotePortalCustomerBillService、com.chinaservices.scts.module.portal.controller.PortalCustomerBillController、ReceivableBillService、ReceivableBillDao、ReceivableBillFeedbackDao、SQL、DTO 与通用分页/JPA 实现生成；区分客户门户分页、按ID详情、账单反馈列表与反馈创建，并与小程序客户账单、通用门户问题反馈及供应商应付账单接口区分。",
+  "items": [
+    {
+      "interface_id": "28d44dec-1951-42e6-82d2-5b0ceb2d772f",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/scts/customer/bill/page"
+      },
+      "semantic": {
+        "purpose": "供 PC 客户门户当前登录客户分页查询自己的应收账单商品行，可按账单日期、账单号、销售方、商品、销售订单号、销售合同号、结算状态、开票状态或一组应收账单ID筛选。",
+        "audiences": ["PC 客户门户客户"],
+        "domains": ["供应链贸易", "应收账单", "财务结算"],
+        "scenarios": ["客户在 PC 门户按账单日期区间、账单号、销售方、商品、销售订单、销售合同、结算状态、开票状态或应收账单ID集合分页核对自己的应收账单商品行。"],
+        "actions": ["page", "query"],
+        "entities": ["应收账单", "账单商品行"],
+        "aliases": ["客户门户应收账单分页", "PC 门户客户账单商品行", "PortalCustomerBillController.page"],
+        "resource": "receivable_bill",
+        "lookup_keys": [
+          "billDateStart", "billDateEnd", "billNo", "sellerName", "skuName", "salesOrderNo",
+          "salesContractNo", "settlementStatus", "invoiceStatus", "businessIds", "id",
+          "receivablePaymentNo", "sellerId", "sellerCode", "skuId", "skuCode",
+          "salesOrderId", "salesContractId"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "这是 PC 客户门户的应收账单分页接口；不是 SctsBillController.customerPage 的小程序状态页签/关键词接口，也不是 PortalSupplierBillController 的供应商应付账单分页。",
+          "ReceivableBillService#portalPage 先从会话 userId 解析 Customer.portalUserId，再无条件以当前客户ID覆盖请求 DTO 的 customerId；客户端传入 customerId 不会改变数据范围，且响应 DTO 不公开客户ID，所以 customerId 不作为检索键或业务标识。",
+          "公开筛选字段为继承的 pageSize、pageNumber，以及 billDateStart、billDateEnd、billNo、sellerName、skuName、salesOrderNo、salesContractNo、settlementStatus、invoiceStatus、customerId、businessIds；其中 customerId 被会话值覆盖，businessIds 实际进入 SQL 的 t.id in 筛选。OpenAPI 中的 start 来自只读计算 getter，不是可设置筛选字段。",
+          "SQL 连接 cs_bill_detail 后分页，实际一行对应一个账单商品行；同一账单有多条商品时会重复账单级字段并占用多条分页记录，count 也是商品行粒度，不是去重账单数。",
+          "settlementStatus 由 billStatus 与关联收款单 receiptBillStatus 联合映射：待提交或收款单 draft/pending_confirm 为 pending_settle，pending_receipt/partial_receipt 为 settling，full_receipt 为 settled；invoiceStatus 仅把 invoiced 保留为 invoiced，其余统一为 un_invoiced。",
+          "billAmount 和 settledAmount 分别取整张应收账单的 receivableAmount、receivedAmount，并在每个商品行重复；Service 仅锁定 customerId 后原样返回 DAO 分页结果，没有金额汇总、去重或其他后处理。",
+          "门户与小程序分页共用 PortalCustomerBillPageQuery，且都按商品行分页；但门户使用日期、分字段文本、结算/开票状态和 businessIds，状态来自 billStatus+receiptBillStatus，小程序使用 status+keyword，状态来自 billConfirmTime+receivablePaymentStatus。门户 SQL 填充 billConfirmTime，小程序 SQL 未选择该公开字段。",
+          "portal_customer_bill_query_page.sql 还选择 customerId/customerCode/customerName，但 PortalCustomerBillPageQuery 不公开这些字段；公开 DTO 的其余字段均由该 SQL 选择并直接映射。"
+        ],
+        "required_inputs": [
+          {"name": "pageSize", "zh_name": "每页条数", "location": "body", "required": true, "schema_type": "Integer"}
+        ],
+        "business_identifiers": [
+          {"canonical": "receivable_bill_id", "display_name": "应收账单ID", "technical_names": ["businessIds", "id"], "aliases": ["客户账单主键"], "resource": "receivable_bill", "source": "request_response_contract", "confidence": 0.99},
+          {"canonical": "receivable_bill_no", "display_name": "应收账单号", "technical_names": ["billNo"], "aliases": ["客户账单编号"], "resource": "receivable_bill", "source": "request_response_contract", "confidence": 0.99},
+          {"canonical": "receipt_bill_no", "display_name": "收款单号", "technical_names": ["receivablePaymentNo"], "aliases": ["应收结算单号"], "resource": "receipt_bill", "source": "response_contract", "confidence": 0.98},
+          {"canonical": "seller_id", "display_name": "销售方ID", "technical_names": ["sellerId"], "aliases": ["本方销售组织ID"], "resource": "receivable_bill", "source": "response_contract", "confidence": 0.98},
+          {"canonical": "seller_code", "display_name": "销售方编码", "technical_names": ["sellerCode"], "aliases": ["本方销售组织编码"], "resource": "receivable_bill", "source": "response_contract", "confidence": 0.98},
+          {"canonical": "sku_id", "display_name": "商品ID", "technical_names": ["skuId"], "aliases": ["SKU主键"], "resource": "sku", "source": "response_contract", "confidence": 0.98},
+          {"canonical": "sku_code", "display_name": "商品编码", "technical_names": ["skuCode"], "aliases": ["SKU编码"], "resource": "sku", "source": "response_contract", "confidence": 0.98},
+          {"canonical": "sales_order_id", "display_name": "销售订单ID", "technical_names": ["salesOrderId"], "aliases": ["客户订单主键"], "resource": "sales_order", "source": "response_contract", "confidence": 0.99},
+          {"canonical": "sales_order_no", "display_name": "销售订单号", "technical_names": ["salesOrderNo"], "aliases": ["客户订单编号"], "resource": "sales_order", "source": "request_response_contract", "confidence": 0.99},
+          {"canonical": "sales_contract_id", "display_name": "销售合同ID", "technical_names": ["salesContractId"], "aliases": ["客户合同主键"], "resource": "sales_contract", "source": "response_contract", "confidence": 0.99},
+          {"canonical": "sales_contract_no", "display_name": "销售合同号", "technical_names": ["salesContractNo"], "aliases": ["客户合同编号"], "resource": "sales_contract", "source": "request_response_contract", "confidence": 0.99}
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "c12-portal BFF：com.chinaservices.dsly.member.module.scts.receivablebill.controller.PortalCustomerBillController#page(@RequestBody @Valid PortalCustomerBillPageCondition) -> RemotePortalCustomerBillService#page；外部路径为 POST /member-api/portal/scts/customer/bill/page。",
+          "c12-scts 下游：com.chinaservices.scts.module.portal.controller.PortalCustomerBillController#page(@RequestBody @Valid PortalCustomerBillPageCondition) -> ReceivableBillService#portalPage -> ReceivableBillDao#portalPage -> SqlExecutor#page。",
+          "PortalCustomerBillPageCondition 公开 billDateStart、billDateEnd、billNo、sellerName、skuName、salesOrderNo、salesContractNo、settlementStatus、invoiceStatus、customerId、businessIds，并继承 PageCondition.pageSize/pageNumber；PageCondition#getStart 仅计算 start。",
+          "ReceivableBillService#getPortalCustomer 使用 SessionContext.userId -> CustomerService#getByPortalUserId；portalPage 随后 condition.setCustomerId(currentCustomer.id)，无条件覆盖公开请求 customerId。",
+          "portal_customer_bill_query_page.sql 以 t.customer_id=:customerId 限制当前客户，并消费日期、账单号、销售方、商品、销售订单号、销售合同号、结算状态、开票状态和 businessIds；联表 cs_bill_detail 后按 d.id 排序，形成商品行分页。",
+          "portal_customer_bill_query_page.sql 的 settlementStatus、invoiceStatus、billAmount、settledAmount 映射与 PortalCustomerBillPageQuery 字段已逐项核对；SQL 额外 customer 字段在公开返回 DTO 中不存在。",
+          "SqlExecutor#page(Class,String,PageCondition) 把 pageCondition.getPageSize() 传入 pageForSqlStr 的 int pageSize，null 会自动拆箱失败；pageNumber 为 null 时 PageCondition#getStart 返回 0，因此只有 pageSize 是所有成功路径无条件必填。",
+          "数据库只读核验：interface_id=28d44dec-1951-42e6-82d2-5b0ceb2d772f、service=c12-portal、method=POST、path=/member-api/portal/scts/customer/bill/page、controller_name=PortalCustomerBillController。"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "5ad87f20-df47-4558-8500-d07b517a71d5",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/scts/customer/bill/getById"
+      },
+      "semantic": {
+        "purpose": "供 PC 客户门户按应收账单ID查询单条账单详情，返回客户与销售方、销售订单与合同、商品、销售发票、收款结算明细、金额和账单反馈；当前实现只按ID读取，未校验账单属于当前会话客户。",
+        "audiences": ["PC 客户门户用户"],
+        "domains": ["供应链贸易", "应收账单", "财务结算"],
+        "scenarios": ["PC 客户门户用户按应收账单ID打开账单详情，核对客户与销售方、销售订单、销售合同、商品、销售发票、收款分摊和问题反馈；运行时不执行当前客户归属校验。"],
+        "actions": ["detail", "query"],
+        "entities": ["应收账单", "账单商品明细", "销售发票", "收款结算明细", "应收账单问题反馈"],
+        "aliases": ["客户门户应收账单详情", "PC 门户账单完整明细", "PortalCustomerBillController.getById"],
+        "resource": "receivable_bill",
+        "lookup_keys": [
+          "id", "billNo", "receivablePaymentNo", "customerId", "customerCode", "sellerId",
+          "sellerCode", "salesOrderId", "salesOrderNo", "salesContractId", "salesContractNo",
+          "goodsList.id", "goodsList.skuId", "goodsList.skuCode", "goodsList.measurementUnitId",
+          "invoiceList.id", "invoiceList.invoiceNo", "settlementList.id", "settlementList.billNo",
+          "settlementList.voucherFileId", "feedbackList.id", "feedbackList.billId", "feedbackList.billNo"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "这是 PC 客户门户应收账单详情，不是 PortalSupplierBillController 的供应商应付账单详情，也不是通用门户 ProblemFeedback 详情。",
+          "IdCondition.id 由 @NotNull 无条件校验；但 ReceivableBillService#portalGetById 只先 dao.findById(id) 再以同一 id 执行 portalGetById SQL，既不调用 getPortalCustomer，也没有 id+customerId 联合条件，因此实际不是 self，而是 by_id。",
+          "门户 getById 与小程序 customerGetById 共用 PortalCustomerBillQuery 和四组 DAO 查询，但不完全共用 Service：门户走 portalGetById，小程序走 portalMiniGetById。只有小程序先做当前客户联合归属校验、按 receivablePaymentStatus 重映射 settlementStatus、汇总 totalQty 并尝试回填 settlementList.serialNo。",
+          "门户 settlementStatus 直接使用 portal_customer_bill_query_getById.sql 的 billStatus+receiptBillStatus 映射；小程序随后以 ReceivableBill.receivablePaymentStatus 覆盖为 pending_settle、settling 或 settled，两个端的状态来源和异常值行为不同。",
+          "详情实际返回 goodsList、invoiceList、settlementList 和 feedbackList：商品按 billNo 查询；仅在 receivablePaymentNo 非空时查询 sales 发票与收款分摊；反馈按应收账单ID返回多条。",
+          "PortalCustomerBillQuery.totalAmount 由 receivableAmount 填充；公开 totalQty 未被详情 SQL选择，门户 Service 也不汇总，运行时为空。详情 SQL 额外选择 receivedAmount/unreceivedAmount，但公开 DTO 无对应字段。",
+          "settlementList.id 是 cs_receipt_bill_allocation_record.id，billNo 是收款单号，voucherFileId 是收款凭证文件ID；SQL 将 serialNo 固定为 null，门户 Service 不调用回填，因此 serialNo 不可靠且实际为空。paymentStatus 也未被收款链 SQL选择，只有 receiptStatus 被填充。",
+          "feedbackList 公开反馈ID、应收账单ID和账单号，但不公开内部 processorId；只公开 processorName。",
+          "源码注释声称‘按当前门户客户可见范围返回详情’，但可执行实现没有会话客户或归属条件；公开 DTO 还声明 totalQty、settlementList.serialNo/paymentStatus 而门户链路不填充，属于文档/合同与运行时冲突。"
+        ],
+        "required_inputs": [
+          {"name": "id", "zh_name": "应收账单ID", "location": "body", "required": true, "schema_type": "Long"}
+        ],
+        "business_identifiers": [
+          {"canonical": "receivable_bill_id", "display_name": "应收账单ID", "technical_names": ["id", "feedbackList.billId"], "aliases": ["客户账单主键"], "resource": "receivable_bill", "source": "request_response_contract", "confidence": 0.99},
+          {"canonical": "receivable_bill_no", "display_name": "应收账单号", "technical_names": ["billNo", "feedbackList.billNo"], "aliases": ["客户账单编号"], "resource": "receivable_bill", "source": "response_contract", "confidence": 0.99},
+          {"canonical": "receipt_bill_no", "display_name": "收款单号", "technical_names": ["receivablePaymentNo", "settlementList.billNo"], "aliases": ["应收结算单号"], "resource": "receipt_bill", "source": "response_contract", "confidence": 0.98},
+          {"canonical": "customer_id", "display_name": "客户ID", "technical_names": ["customerId"], "aliases": ["采购方ID"], "resource": "customer", "source": "response_contract", "confidence": 0.99},
+          {"canonical": "customer_code", "display_name": "客户编码", "technical_names": ["customerCode"], "aliases": ["采购方编码"], "resource": "customer", "source": "response_contract", "confidence": 0.99},
+          {"canonical": "seller_id", "display_name": "销售方ID", "technical_names": ["sellerId"], "aliases": ["本方销售组织ID"], "resource": "receivable_bill", "source": "response_contract", "confidence": 0.98},
+          {"canonical": "seller_code", "display_name": "销售方编码", "technical_names": ["sellerCode"], "aliases": ["本方销售组织编码"], "resource": "receivable_bill", "source": "response_contract", "confidence": 0.98},
+          {"canonical": "sales_order_id", "display_name": "销售订单ID", "technical_names": ["salesOrderId"], "aliases": ["客户订单主键"], "resource": "sales_order", "source": "response_contract", "confidence": 0.99},
+          {"canonical": "sales_order_no", "display_name": "销售订单号", "technical_names": ["salesOrderNo"], "aliases": ["客户订单编号"], "resource": "sales_order", "source": "response_contract", "confidence": 0.99},
+          {"canonical": "sales_contract_id", "display_name": "销售合同ID", "technical_names": ["salesContractId"], "aliases": ["客户合同主键"], "resource": "sales_contract", "source": "response_contract", "confidence": 0.99},
+          {"canonical": "sales_contract_no", "display_name": "销售合同号", "technical_names": ["salesContractNo"], "aliases": ["客户合同编号"], "resource": "sales_contract", "source": "response_contract", "confidence": 0.99},
+          {"canonical": "bill_detail_id", "display_name": "账单商品明细ID", "technical_names": ["goodsList.id"], "aliases": ["商品明细主键"], "resource": "bill_goods", "source": "response_contract", "confidence": 0.98},
+          {"canonical": "sku_id", "display_name": "商品ID", "technical_names": ["goodsList.skuId"], "aliases": ["SKU主键"], "resource": "sku", "source": "response_contract", "confidence": 0.98},
+          {"canonical": "sku_code", "display_name": "商品编码", "technical_names": ["goodsList.skuCode"], "aliases": ["SKU编码"], "resource": "sku", "source": "response_contract", "confidence": 0.98},
+          {"canonical": "measurement_unit_id", "display_name": "计量单位ID", "technical_names": ["goodsList.measurementUnitId"], "aliases": ["单位主键"], "resource": "bill_goods", "source": "response_contract", "confidence": 0.97},
+          {"canonical": "sales_invoice_id", "display_name": "销售发票ID", "technical_names": ["invoiceList.id"], "aliases": ["发票主键"], "resource": "sales_invoice", "source": "response_contract", "confidence": 0.98},
+          {"canonical": "sales_invoice_no", "display_name": "销售发票号码", "technical_names": ["invoiceList.invoiceNo"], "aliases": ["发票号"], "resource": "sales_invoice", "source": "response_contract", "confidence": 0.99},
+          {"canonical": "receipt_allocation_id", "display_name": "收款分摊记录ID", "technical_names": ["settlementList.id"], "aliases": ["收款结算明细ID"], "resource": "receipt_settlement", "source": "response_contract", "confidence": 0.97},
+          {"canonical": "receipt_voucher_file_id", "display_name": "收款凭证文件ID", "technical_names": ["settlementList.voucherFileId"], "aliases": ["收款凭证ID"], "resource": "receipt_settlement", "source": "response_contract", "confidence": 0.97},
+          {"canonical": "receivable_bill_feedback_id", "display_name": "应收账单问题反馈ID", "technical_names": ["feedbackList.id"], "aliases": ["账单反馈主键"], "resource": "receivable_bill_feedback", "source": "response_contract", "confidence": 0.99}
+        ],
+        "semantic_confidence": 0.90,
+        "semantic_evidence": [
+          "c12-portal BFF：com.chinaservices.dsly.member.module.scts.receivablebill.controller.PortalCustomerBillController#getById(@RequestBody @Valid IdCondition) -> RemotePortalCustomerBillService#getById；外部路径为 POST /member-api/portal/scts/customer/bill/getById。",
+          "c12-scts 下游：com.chinaservices.scts.module.portal.controller.PortalCustomerBillController#getById(@RequestBody @Valid IdCondition) -> ReceivableBillService#portalGetById -> ReceivableBillDao 与 ReceivableBillFeedbackDao。",
+          "IdCondition.id 使用 @NotNull；两个同名 Controller 与 Feign 合同均启用 @Valid。ReceivableBillService#portalGetById 仅 dao.findById(id) 后调用 dao.portalGetById(id)，未调用 getPortalCustomer/getPortalCustomerBill。",
+          "portal_customer_bill_query_getById.sql 只以 t.id=:id 查询，返回客户、销售方、销售订单、销售合同、应收账单、金额及 billStatus+receiptBillStatus 结算状态；没有 customerId 会话范围条件。",
+          "ReceivableBillDao#portalGoodsList/#portalInvoiceList/#portalSettlementList 分别执行 portal_customer_bill_goods_query_list.sql、portal_customer_bill_invoice_query_list.sql、portal_customer_bill_settlement_query_list.sql；发票限定 invoice_business_type=sales 且 related_bill_no=receivablePaymentNo。",
+          "portal_customer_bill_settlement_query_list.sql 返回收款分摊记录ID、收款时间、收款单号、receiptStatus、allocationAmount、凭证文件ID/名称，并将 serialNo 固定为 null；门户 portalGetById 不调用 fillSettlementSerialNo。",
+          "ReceivableBillFeedbackDao#listByBillId -> receivable_bill_feedback_query_list.sql 返回多条 id、billId、billNo、反馈内容/时间、处理状态/时间/结果和 processorName，不选择内部 processorId。",
+          "小程序 customerGetById 走 ReceivableBillService#portalMiniGetById，会先 getPortalCustomerBill(id,currentCustomer.id)，覆盖 settlementStatus、汇总 totalQty 并调用 fillSettlementSerialNo；门户详情没有这些步骤。",
+          "数据库只读核验：interface_id=5ad87f20-df47-4558-8500-d07b517a71d5、service=c12-portal、method=POST、path=/member-api/portal/scts/customer/bill/getById、controller_name=PortalCustomerBillController；OpenAPI 公开 totalQty、settlementList.serialNo/paymentStatus，但门户执行链不填充。"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "b751b343-cdfd-4baf-8034-ff3bf27ca9e3",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/scts/customer/bill/feedback/list"
+      },
+      "semantic": {
+        "purpose": "供 PC 客户门户当前登录客户按应收账单ID查询自己账单的全部问题反馈列表，返回反馈ID、账单ID、账单号、反馈内容与处理信息。",
+        "audiences": ["PC 客户门户客户"],
+        "domains": ["供应链贸易", "应收账单", "财务结算"],
+        "scenarios": ["客户在 PC 门户按应收账单ID查看自己该笔账单历次提交的问题反馈及处理状态、处理结果和处理人名称。"],
+        "actions": ["list", "query"],
+        "entities": ["应收账单问题反馈", "应收账单"],
+        "aliases": ["客户门户账单反馈列表", "查询应收账单问题记录", "PortalCustomerBillController.feedbackList"],
+        "resource": "receivable_bill_feedback",
+        "lookup_keys": ["billId", "id", "billNo"],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "这是按一笔应收账单返回多条反馈的非分页列表接口；不是 feedback/submit 的单条反馈创建，也不是 getById 返回的整张账单聚合详情。",
+          "ReceivableBillService#portalListFeedback 先按会话 userId 解析当前客户，再以 billId+currentCustomer.id 联合查询应收账单；请求不能传入或覆盖 customerId。",
+          "billId 由 @NotNull 无条件校验；未登录、会话用户未映射客户或账单不存在/不属于当前客户时，在查询反馈前失败。",
+          "ReceivableBillFeedbackDao#listByBillId 查询该账单全部未删除反馈，按 feedbackTime、id 倒序返回，不只返回最新一条。",
+          "公开结果标识包括反馈ID id、应收账单ID billId 和应收账单号 billNo；处理人只公开 processorName，不公开实体中的 processorId，内部当前 customerId 也不公开。",
+          "小程序 PortalMiniBillController 没有直接的 customerFeedbackList 兄弟接口；小程序只能在 customerGetById 的 feedbackList 聚合字段读取反馈，不能把本接口假设为小程序直接列表接口。",
+          "通用 member-api /member-api/portal/feedback/page/getById/save/evaluate 处理不绑定账单的 ProblemFeedback；本接口只读 cs_receivable_bill_feedback，不按通用问题类型、编号、优先级或附件查询。"
+        ],
+        "required_inputs": [
+          {"name": "billId", "zh_name": "应收账单ID", "location": "body", "required": true, "schema_type": "Long"}
+        ],
+        "business_identifiers": [
+          {"canonical": "receivable_bill_feedback_id", "display_name": "应收账单问题反馈ID", "technical_names": ["id"], "aliases": ["账单反馈主键"], "resource": "receivable_bill_feedback", "source": "response_contract", "confidence": 0.99},
+          {"canonical": "receivable_bill_id", "display_name": "应收账单ID", "technical_names": ["billId"], "aliases": ["客户账单主键"], "resource": "receivable_bill", "source": "request_response_contract", "confidence": 0.99},
+          {"canonical": "receivable_bill_no", "display_name": "应收账单号", "technical_names": ["billNo"], "aliases": ["客户账单编号"], "resource": "receivable_bill", "source": "response_contract", "confidence": 0.99}
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "c12-portal BFF：com.chinaservices.dsly.member.module.scts.receivablebill.controller.PortalCustomerBillController#feedbackList(@RequestBody @Valid ReceivableBillFeedbackCondition) -> RemotePortalCustomerBillService#feedbackList；外部路径为 POST /member-api/portal/scts/customer/bill/feedback/list。",
+          "c12-scts 下游：com.chinaservices.scts.module.portal.controller.PortalCustomerBillController#feedbackList(@RequestBody @Valid ReceivableBillFeedbackCondition) -> ReceivableBillService#portalListFeedback -> ReceivableBillFeedbackDao#listByBillId。",
+          "ReceivableBillFeedbackCondition.billId 使用 @NotNull，两个同名 Controller 与 Feign 合同均启用 @Valid；返回合同为 ResponseData<List<ReceivableBillFeedbackQuery>>。",
+          "ReceivableBillService#getPortalCustomer 使用 SessionContext.userId -> CustomerService#getByPortalUserId；getPortalCustomerBill 使用 ReceivableBill.id=billId AND customerId=currentCustomer.id 联合查询，未命中抛 BILL_NOT_EXIST_OR_NO_PERMISSION。",
+          "receivable_bill_feedback_query_list.sql 以 receivable_bill_id=:billId 查询 cs_receivable_bill_feedback，按 feedback_time desc、id desc 返回所有未删除记录，并公开 id、billId、billNo 与处理信息，但不选择 processorId。",
+          "PortalMiniBillController 完整家族只有 customerPage、customerGetById、customerConfirm、customerFeedbackSubmit 等，没有 customerFeedbackList；小程序详情通过 ReceivableBillService#portalMiniGetById 聚合反馈。",
+          "git commit 505baa6 的 ProblemFeedbackPortalController 与 ProblemFeedbackService 证明通用门户反馈使用 FeedbackPortalItem(type/content/contact/priority/attachmentList)、ProblemFeedback 和 ResponseData<Long>，与账单反馈列表不同。",
+          "数据库只读核验：interface_id=b751b343-cdfd-4baf-8034-ff3bf27ca9e3、service=c12-portal、method=POST、path=/member-api/portal/scts/customer/bill/feedback/list、controller_name=PortalCustomerBillController。"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "f2e0a620-f359-4a56-8ec9-c856a91d628a",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/scts/customer/bill/feedback/submit"
+      },
+      "semantic": {
+        "purpose": "供 PC 客户门户当前登录客户按应收账单ID为自己的账单提交并创建一条待处理问题反馈，成功仅返回空业务数据，不修改原应收账单或发布账单确认日志。",
+        "audiences": ["PC 客户门户客户"],
+        "domains": ["供应链贸易", "应收账单", "财务结算"],
+        "scenarios": ["客户在 PC 门户查看自己的一笔应收账单后，按账单ID提交问题内容并创建一条待处理的应收账单反馈记录。"],
+        "actions": ["submit", "create"],
+        "entities": ["应收账单问题反馈", "应收账单"],
+        "aliases": ["客户门户提交账单反馈", "创建应收账单问题记录", "PortalCustomerBillController.submitFeedback"],
+        "resource": "receivable_bill_feedback",
+        "lookup_keys": ["billId"],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "这是 PC 客户门户创建一条应收账单问题反馈的写接口；不是 feedback/list 的多条只读列表，也不是账单确认或状态更新接口。",
+          "ReceivableBillService#portalSubmitFeedback 先按会话 userId 解析当前客户，再以 billId+currentCustomer.id 联合查询应收账单；请求不能传入或覆盖 customerId。",
+          "billId 由 @NotNull 无条件校验；feedbackContent 由 @NotBlank 与 @Size(max=500) 在进入 Service 前校验，所以 null、空串、纯空白和原始长度超过500均失败，成功路径再用 StrUtil.trim 去除首尾空白后持久化。",
+          "每次成功调用创建一条 cs_receivable_bill_feedback 记录，写 receivableBillId、账单号快照、内部当前客户ID、trim 后反馈内容、当前反馈时间和 pending 待处理状态；处理时间、处理结果、处理人ID/名称保持未设置，并由通用 JPA 层生成主键和填充审计字段。",
+          "该接口不更新 cs_receivable_bill，不改变 billConfirmTime、billStatus、receivablePaymentStatus、invoiceStatus 或 settlementStatus，也不发布 customerConfirm 的财务结算业务日志。",
+          "公开返回是 ResponseData<Void>，不得虚构反馈ID；内部新生成反馈ID、会话解析 customerId、审计 creator/modifier/companyId/tenancy 均不是该接口公开业务标识。",
+          "门户 submitFeedback 与小程序 SctsBillController.customerFeedbackSubmit 使用同一 ReceivableBillFeedbackItem，并最终完全共用 ReceivableBillService#portalSubmitFeedback 和 ReceivableBillFeedbackDao#saveOrUpdate 持久化实现；差异是端别和外部路径。",
+          "通用 /member-api/portal/feedback/save 创建不绑定账单的 ProblemFeedback，接收 type、content、可选 contact/priority/附件，生成反馈编号、附件和业务日志并返回反馈ID；本接口只接收 billId、feedbackContent，创建账单子资源且返回 Void。",
+          "OpenAPI 将 feedbackContent 标为 required、maxLength=500 但 minLength=0；可执行 DTO 的 @NotBlank 明确拒绝纯空白，这是生成文档与运行时校验表达冲突。"
+        ],
+        "required_inputs": [
+          {"name": "billId", "zh_name": "应收账单ID", "location": "body", "required": true, "schema_type": "Long"},
+          {"name": "feedbackContent", "zh_name": "问题反馈内容", "location": "body", "required": true, "schema_type": "String"}
+        ],
+        "business_identifiers": [
+          {"canonical": "receivable_bill_id", "display_name": "应收账单ID", "technical_names": ["billId"], "aliases": ["客户账单主键"], "resource": "receivable_bill", "source": "request_contract", "confidence": 0.99}
+        ],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": [
+          "c12-portal BFF：com.chinaservices.dsly.member.module.scts.receivablebill.controller.PortalCustomerBillController#submitFeedback(@RequestBody @Valid ReceivableBillFeedbackItem) -> RemotePortalCustomerBillService#submitFeedback；外部路径为 POST /member-api/portal/scts/customer/bill/feedback/submit。",
+          "c12-scts 下游：com.chinaservices.scts.module.portal.controller.PortalCustomerBillController#submitFeedback(@RequestBody @Valid ReceivableBillFeedbackItem) -> ReceivableBillService#portalSubmitFeedback -> ReceivableBillFeedbackDao#saveOrUpdate。",
+          "ReceivableBillFeedbackItem.billId 使用 @NotNull；feedbackContent 使用 @NotBlank 和 @Size(max=500)；两个同名 Controller 与 Feign 合同均启用 @Valid，公开返回为 ResponseData<Void>。",
+          "ReceivableBillService#getPortalCustomer 使用 SessionContext.userId -> CustomerService#getByPortalUserId；getPortalCustomerBill 使用 ReceivableBill.id=billId AND customerId=currentCustomer.id 联合查询。",
+          "ReceivableBillService#portalSubmitFeedback 新建 ReceivableBillFeedback，设置 receivableBillId、billNo、内部 customerId、StrUtil.trim(feedbackContent)、new Date feedbackTime 和 ReceivableBillFeedbackStatusEnum.PENDING(pending)，只调用 feedbackDao.saveOrUpdate。",
+          "ReceivableBillFeedback @Table(name=cs_receivable_bill_feedback)；ModuleBaseDaoSupport#saveOrUpdate 对无ID实体填充 creator/createTime/modifier/modifyTime/companyId/tenancy 后 insert；CommonJpaRepositoryImpl#insert 使用 EntityManager.persist 并 flush。",
+          "PortalMiniBillService#customerFeedbackSubmit 直接复用 ReceivableBillService#portalSubmitFeedback；batch-021 的小程序接口使用相同 DTO、归属校验、trim、pending 状态、表和 Void 返回。小程序 Controller 没有反馈列表直接兄弟接口。",
+          "git commit 505baa6 的 ProblemFeedbackPortalController#save 与 ProblemFeedbackService#submit 返回 Long，并生成通用 ProblemFeedback、反馈编号、可选附件及移动端提交日志；本接口没有这些副作用。",
+          "数据库只读核验：interface_id=f2e0a620-f359-4a56-8ec9-c856a91d628a、service=c12-portal、method=POST、path=/member-api/portal/scts/customer/bill/feedback/submit、controller_name=PortalCustomerBillController；OpenAPI feedbackContent.minLength=0 与 DTO @NotBlank 冲突。"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-04"
+      }
+    }
+  ]
+}

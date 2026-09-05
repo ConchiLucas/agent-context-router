@@ -1,0 +1,662 @@
+{
+  "schema_version": "context-router-interface-semantic-batch-v1",
+  "batch_id": "panzhihua-c12-portal-scts-bill-020",
+  "workspace_id": "b9ce65eddc27437d9615177fbd07cb0a",
+  "family_groups": {
+    "客户小程序应收账单": 3,
+    "供应商小程序应付账单": 3,
+    "运营人员小程序应收账单": 3,
+    "运营人员小程序应付账单": 3
+  },
+  "generation_policy": "仅维护 c12-portal SctsBillController 指定的 12 个小程序账单接口，不包含 customerFeedbackSubmit，也不扩展到其他 Controller。沿 c12-portal BFF、RemotePortalMiniBillService、c12-scts PortalMiniBillController/Service、应收应付 Service/DAO/SQL 和公开返回 DTO 生成；区分客户应收、供应商应付、运营应收与运营应付，以及分页、详情、确认和备注覆盖。",
+  "items": [
+    {
+      "interface_id": "65761dae-205b-4ece-b5cf-79ec72cf8ed4",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/bill/customerConfirmBill"
+      },
+      "semantic": {
+        "purpose": "供供应链小程序当前登录客户按应收账单ID确认自己的账单；首次确认写账单确认时间及通用修改人/修改时间，不改变账单、收款或结算状态，并在每次调用时发布小程序来源的财务结算业务日志。",
+        "audiences": ["供应链小程序客户"],
+        "domains": ["供应链贸易", "应收账单", "财务结算"],
+        "scenarios": ["客户在小程序核对应收账单后按账单ID确认，系统首次落确认时间且每次确认调用记录业务日志。"],
+        "actions": ["confirm", "update"],
+        "entities": ["应收账单", "财务结算业务日志"],
+        "aliases": ["客户确认应收账单", "小程序采购方确认账单", "SctsBillController.customerConfirmBill"],
+        "resource": "receivable_bill",
+        "lookup_keys": ["id"],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal 的 customerConfirmBill 实际转发下游 customerConfirm，并进入 ReceivableBillService#portalMiniConfirm；不是 supplierConfirmBill 的应付账单确认。",
+          "先按当前会话用户解析 customer，再以 id+customerId 校验账单归属；请求不能覆盖客户主体。",
+          "确认不修改 billStatus、receivablePaymentStatus、invoiceStatus 或 settlementStatus；billConfirmTime 仅为空时写入，但 MINI_CUSTOMER_RECEIVABLE_BILL_CONFIRM 业务日志每次调用都发布，日志携带当前用户名和 app 来源；没有独立确认人字段。"
+        ],
+        "required_inputs": [
+          {"name": "id", "zh_name": "应收账单ID", "location": "body", "required": true, "schema_type": "Long"}
+        ],
+        "business_identifiers": [
+          {"canonical": "receivable_bill_id", "display_name": "应收账单ID", "technical_names": ["id"], "aliases": ["客户账单主键"], "resource": "receivable_bill", "source": "request_contract", "confidence": 0.99}
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "SctsBillController#customerConfirmBill(@Valid IdCondition) -> RemotePortalMiniBillService#customerConfirm -> PortalMiniBillController#customerConfirm",
+          "PortalMiniBillService#customerConfirm -> ReceivableBillService#portalMiniConfirm；IdCondition.id 使用 @NotNull",
+          "ReceivableBillService#getPortalCustomer 读取 SessionContext.userId；getPortalCustomerBill 以 ReceivableBill.id 和 customerId 联合查询",
+          "ReceivableBillService#portalMiniConfirm：仅 billConfirmTime 为空时 set new Date 并 dao.saveOrUpdate，随后无条件调用 saveFinanceSettlementBusinessLog；ModuleBaseDaoSupport#saveOrUpdate 同步填 modifier/modifyTime",
+          "CustomBusinessLogService#buildBusinessLogDTO 写 userName；ReceivableBillService#saveFinanceSettlementBusinessLog 对 /api/portal/mini/ 请求使用 SourceEnum.APP"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "d09b4f44-9136-4009-9cc5-5c95a2076a7f",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/bill/supplierConfirmBill"
+      },
+      "semantic": {
+        "purpose": "供供应链小程序当前登录供应商按应付账单ID确认自己的账单；首次确认写账单确认时间及通用修改人/修改时间，不改变账单、付款或结算状态，并在每次调用时发布小程序来源的财务结算业务日志。",
+        "audiences": ["供应链小程序供应商"],
+        "domains": ["供应链贸易", "应付账单", "财务结算"],
+        "scenarios": ["供应商在小程序核对应付账单后按账单ID确认，系统首次落确认时间且每次确认调用记录业务日志。"],
+        "actions": ["confirm", "update"],
+        "entities": ["应付账单", "财务结算业务日志"],
+        "aliases": ["供应商确认应付账单", "小程序供货方确认账单", "SctsBillController.supplierConfirmBill"],
+        "resource": "payable_bill",
+        "lookup_keys": ["id"],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal 的 supplierConfirmBill 实际转发下游 supplierConfirm，并进入 PayableBillService#portalMiniConfirm；不是 customerConfirmBill 的应收账单确认。",
+          "先按当前会话用户解析 supplier，再以 id+supplierId 校验账单归属；请求不能覆盖供应商主体。",
+          "确认不修改 billStatus、payablePaymentStatus、invoiceStatus 或 settlementStatus；billConfirmTime 仅为空时写入，但 MINI_SUPPLIER_PAY_BILL_CONFIRM 业务日志每次调用都发布，日志携带当前用户名和 app 来源；没有独立确认人字段。"
+        ],
+        "required_inputs": [
+          {"name": "id", "zh_name": "应付账单ID", "location": "body", "required": true, "schema_type": "Long"}
+        ],
+        "business_identifiers": [
+          {"canonical": "payable_bill_id", "display_name": "应付账单ID", "technical_names": ["id"], "aliases": ["供应商账单主键"], "resource": "payable_bill", "source": "request_contract", "confidence": 0.99}
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "SctsBillController#supplierConfirmBill(@Valid IdCondition) -> RemotePortalMiniBillService#supplierConfirm -> PortalMiniBillController#supplierConfirm",
+          "PortalMiniBillService#supplierConfirm -> PayableBillService#portalMiniConfirm；IdCondition.id 使用 @NotNull",
+          "PayableBillService#getPortalSupplier 读取 SessionContext.userId；getPortalSupplierBill 以 PayableBill.id 和 supplierId 联合查询",
+          "PayableBillService#portalMiniConfirm：仅 billConfirmTime 为空时 set new Date 并 dao.saveOrUpdate，随后无条件调用 saveFinanceSettlementBusinessLog；ModuleBaseDaoSupport#saveOrUpdate 同步填 modifier/modifyTime",
+          "CustomBusinessLogService#buildBusinessLogDTO 写 userName；PayableBillService#saveFinanceSettlementBusinessLog 对 /api/portal/mini/ 请求使用 SourceEnum.APP"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "a5cf251e-13e7-4246-8997-dad0809022d4",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/bill/supplierGetById"
+      },
+      "semantic": {
+        "purpose": "供供应链小程序当前登录供应商按应付账单ID查看自己的供应商账单详情，返回采购订单与合同、供应商和采购方、商品、发票、付款结算明细及金额。",
+        "audiences": ["供应链小程序供应商"],
+        "domains": ["供应链贸易", "应付账单", "财务结算"],
+        "scenarios": ["供应商在小程序打开自己的一笔应付账单，核对采购订单、采购合同、商品、发票和付款流水。"],
+        "actions": ["detail", "query"],
+        "entities": ["应付账单", "账单商品明细", "采购发票", "付款结算明细"],
+        "aliases": ["供应商应付账单详情", "小程序供应商账单明细", "SctsBillController.supplierGetById"],
+        "resource": "payable_bill",
+        "lookup_keys": [
+          "id", "billNo", "payablePaymentNo", "supplierId", "supplierCode", "purchaserId", "purchaserCode",
+          "purchaseOrderId", "purchaseOrderNo", "purchaseContractId", "purchaseContractNo",
+          "goodsList.id", "goodsList.skuId", "goodsList.skuCode", "goodsList.measurementUnitId",
+          "invoiceList.id", "invoiceList.invoiceNo", "settlementList.id", "settlementList.billNo",
+          "settlementList.voucherFileId"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "请求 id 是应付账单ID；Service 先解析当前 supplierId，再以 id+supplierId 校验归属，所以不同于运营人员应付详情的全局按ID读取。",
+          "返回采购订单/采购合同和付款单语义；客户详情返回销售订单/销售合同和收款单语义。",
+          "settlementStatus 不采用 portal_supplier_bill_query_getById.sql 的旧 billStatus/paymentBill 联表结果，而由 PayableBill.payablePaymentStatus 在 Service 中重新映射为 pending_settle、settling 或 settled。",
+          "settlementList.serialNo 虽在公开 DTO 中声明，但 SQL 固定返回 null；回填代码用付款明细ID映射付款分摊记录ID，键来自不同表，除非ID偶然相同否则仍为空，因此不作为可靠 lookup_key/business_identifier。"
+        ],
+        "required_inputs": [
+          {"name": "id", "zh_name": "应付账单ID", "location": "body", "required": true, "schema_type": "Long"}
+        ],
+        "business_identifiers": [
+          {"canonical": "payable_bill_id", "display_name": "应付账单ID", "technical_names": ["id"], "aliases": ["供应商账单主键"], "resource": "payable_bill", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "payable_bill_no", "display_name": "应付账单号", "technical_names": ["billNo"], "aliases": ["供应商账单编号"], "resource": "payable_bill", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "payment_bill_no", "display_name": "付款单号", "technical_names": ["payablePaymentNo", "settlementList.billNo"], "aliases": ["应付结算单号"], "resource": "payment_bill", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "supplier_id", "display_name": "供应商ID", "technical_names": ["supplierId"], "aliases": ["供货方ID"], "resource": "supplier", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "supplier_code", "display_name": "供应商编码", "technical_names": ["supplierCode"], "aliases": ["供货方编码"], "resource": "supplier", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "purchaser_id", "display_name": "采购方ID", "technical_names": ["purchaserId"], "aliases": ["买方ID"], "resource": "payable_bill", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "purchaser_code", "display_name": "采购方编码", "technical_names": ["purchaserCode"], "aliases": ["买方编码"], "resource": "payable_bill", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "purchase_order_id", "display_name": "采购订单ID", "technical_names": ["purchaseOrderId"], "aliases": ["供应商订单主键"], "resource": "purchase_order", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "purchase_order_no", "display_name": "采购订单号", "technical_names": ["purchaseOrderNo"], "aliases": ["供应商订单编号"], "resource": "purchase_order", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "purchase_contract_id", "display_name": "采购合同ID", "technical_names": ["purchaseContractId"], "aliases": ["供应商合同主键"], "resource": "purchase_contract", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "purchase_contract_no", "display_name": "采购合同号", "technical_names": ["purchaseContractNo"], "aliases": ["供应商合同编号"], "resource": "purchase_contract", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "bill_detail_id", "display_name": "账单商品明细ID", "technical_names": ["goodsList.id"], "aliases": ["商品明细主键"], "resource": "bill_goods", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "sku_id", "display_name": "商品ID", "technical_names": ["goodsList.skuId"], "aliases": ["SKU主键"], "resource": "sku", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "sku_code", "display_name": "商品编码", "technical_names": ["goodsList.skuCode"], "aliases": ["SKU编码"], "resource": "sku", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "measurement_unit_id", "display_name": "计量单位ID", "technical_names": ["goodsList.measurementUnitId"], "aliases": ["单位主键"], "resource": "bill_goods", "source": "source_contract", "confidence": 0.97},
+          {"canonical": "purchase_invoice_id", "display_name": "采购发票ID", "technical_names": ["invoiceList.id"], "aliases": ["发票主键"], "resource": "purchase_invoice", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "purchase_invoice_no", "display_name": "采购发票号码", "technical_names": ["invoiceList.invoiceNo"], "aliases": ["发票号"], "resource": "purchase_invoice", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "payment_allocation_id", "display_name": "付款分摊记录ID", "technical_names": ["settlementList.id"], "aliases": ["付款结算明细ID"], "resource": "payment_settlement", "source": "source_contract", "confidence": 0.97},
+          {"canonical": "payment_voucher_file_id", "display_name": "付款凭证文件ID", "technical_names": ["settlementList.voucherFileId"], "aliases": ["付款凭证ID"], "resource": "payment_settlement", "source": "source_contract", "confidence": 0.97}
+        ],
+        "semantic_confidence": 0.9,
+        "semantic_evidence": [
+          "SctsBillController#supplierGetById(@Valid IdCondition) -> RemotePortalMiniBillService#supplierGetById -> PortalMiniBillController#supplierGetById",
+          "PayableBillService#portalMiniGetById：getPortalSupplier + getPortalSupplierBill(id, supplierId)，随后读取 portalGetById、portalGoodsList、portalInvoiceList 和 portalSettlementList",
+          "portal_supplier_bill_query_getById.sql 返回供应商/采购方、采购订单、采购合同、应付账单和付款单字段；PortalSupplierBillQuery 是公开返回合同",
+          "portal_supplier_bill_goods_query_list.sql、portal_supplier_bill_invoice_query_list.sql、portal_supplier_bill_settlement_query_list.sql 分别返回商品、purchase 发票和付款分摊记录",
+          "portal_supplier_bill_settlement_query_list.sql 选择 cs_payment_bill_allocation_record.id 且 serial_no=null；PayableBillService#fillSettlementSerialNo 却按 PaymentBillDetailQuery.id 建图并用 settlement.id 查找，存在跨表ID错配"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "7ba937d1-62e6-422d-9c61-602b886aac46",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/bill/supplierPage"
+      },
+      "semantic": {
+        "purpose": "供供应链小程序当前登录供应商分页查看自己的应付账单商品行，按小程序结算页签状态和关键词筛选，关键词匹配账单号、采购订单号、采购合同号、商品名或采购方，并返回是否可上传发票。",
+        "audiences": ["供应链小程序供应商"],
+        "domains": ["供应链贸易", "应付账单", "财务结算"],
+        "scenarios": ["供应商在小程序应付账单列表按待确认、待结算、结算中或已结算状态，以及账单、采购订单、采购合同、商品或采购方关键词检索自己的账单。"],
+        "actions": ["page", "query"],
+        "entities": ["应付账单", "账单商品行"],
+        "aliases": ["供应商应付账单分页", "小程序供应商账单列表", "SctsBillController.supplierPage"],
+        "resource": "payable_bill",
+        "lookup_keys": [
+          "status", "keyword", "id", "billNo", "payablePaymentNo", "purchaserId", "purchaserCode",
+          "skuId", "skuCode", "purchaseOrderId", "purchaseOrderNo", "purchaseContractId", "purchaseContractNo", "uploadInvoiceBtn"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "PayableBillService#portalMiniPage 无条件以当前会话用户绑定的 supplierId 覆盖请求 supplierId；该隐藏请求字段不会生效且 PortalSupplierBillPageQuery 也不返回它，因此不作为 lookup_key。",
+          "status 支持 all、pending_confirm、pending_settle/pending_settlement、settling、settled；SQL 结合 billConfirmTime 与 payablePaymentStatus 判断待确认和待结算。",
+          "分页按账单明细联表返回商品行；不同于 customerPage 的应收账单、销售订单/合同和销售方字段。uploadInvoiceBtn 仅确认过、待结算且未开票时为 true。",
+          "PortalSupplierBillPageQuery 声明 sellerName/sellerTaxNo/sellerBankName/sellerBankAccount/sellerPhone/sellerAddress，但 portal_mini_supplier_bill_query_page.sql 不选择这些列，运行时为空。"
+        ],
+        "required_inputs": [
+          {"name": "pageSize", "zh_name": "每页条数", "location": "body", "required": true, "schema_type": "Integer"}
+        ],
+        "business_identifiers": [
+          {"canonical": "payable_bill_id", "display_name": "应付账单ID", "technical_names": ["id"], "aliases": ["供应商账单主键"], "resource": "payable_bill", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "payable_bill_no", "display_name": "应付账单号", "technical_names": ["billNo"], "aliases": ["供应商账单编号"], "resource": "payable_bill", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "payment_bill_no", "display_name": "付款单号", "technical_names": ["payablePaymentNo"], "aliases": ["应付结算单号"], "resource": "payment_bill", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "purchaser_id", "display_name": "采购方ID", "technical_names": ["purchaserId"], "aliases": ["买方ID"], "resource": "payable_bill", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "purchaser_code", "display_name": "采购方编码", "technical_names": ["purchaserCode"], "aliases": ["买方编码"], "resource": "payable_bill", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "sku_id", "display_name": "商品ID", "technical_names": ["skuId"], "aliases": ["SKU主键"], "resource": "sku", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "sku_code", "display_name": "商品编码", "technical_names": ["skuCode"], "aliases": ["SKU编码"], "resource": "sku", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "purchase_order_id", "display_name": "采购订单ID", "technical_names": ["purchaseOrderId"], "aliases": ["供应商订单主键"], "resource": "purchase_order", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "purchase_order_no", "display_name": "采购订单号", "technical_names": ["purchaseOrderNo"], "aliases": ["供应商订单编号"], "resource": "purchase_order", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "purchase_contract_id", "display_name": "采购合同ID", "technical_names": ["purchaseContractId"], "aliases": ["供应商合同主键"], "resource": "purchase_contract", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "purchase_contract_no", "display_name": "采购合同号", "technical_names": ["purchaseContractNo"], "aliases": ["供应商合同编号"], "resource": "purchase_contract", "source": "source_contract", "confidence": 0.99}
+        ],
+        "semantic_confidence": 0.9,
+        "semantic_evidence": [
+          "SctsBillController#supplierPage(@Valid PortalMiniSupplierBillPageCondition) -> RemotePortalMiniBillService#supplierPage -> PortalMiniBillController#supplierPage",
+          "PayableBillService#portalMiniPage：getPortalSupplier 后 condition.setSupplierId(currentSupplier.id)，覆盖客户端 supplierId，再调用 PayableBillDao#portalMiniPage",
+          "portal_mini_supplier_bill_query_page.sql：supplierId 限定数据范围；status 与 keyword 条件分别消费公开筛选字段，keyword 匹配 billNo/purchaseOrderNo/purchaseContractNo/skuName/purchaserName",
+          "PayableBillService#portalMiniPage 按 billConfirmTime、pending_settle 和 un_invoiced 计算 uploadInvoiceBtn；SqlExecutor#page 对 pageSize 自动拆箱，pageNumber 为空安全回退",
+          "PortalSupplierBillPageQuery 的 seller 系列字段与 portal_mini_supplier_bill_query_page.sql 实际选择列存在公开合同差异"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "30311f79-676b-47bd-b721-e82eeb7926b3",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/bill/operationsStaffPayablePage"
+      },
+      "semantic": {
+        "purpose": "供运营人员小程序分页查询全局应付账单商品行，按付款结算状态和关键词筛选，关键词匹配应付账单号、采购订单号、采购合同号、供应商或商品。",
+        "audiences": ["供应链小程序运营人员"],
+        "domains": ["供应链贸易", "应付账单", "财务结算"],
+        "scenarios": ["运营人员在小程序应付账单列表按待付款、部分付款或已付款状态，以及账单、采购订单、采购合同、供应商或商品关键词检索全局账单。"],
+        "actions": ["page", "query"],
+        "entities": ["应付账单", "账单商品行"],
+        "aliases": ["运营应付账单分页", "小程序应付账单列表", "SctsBillController.operationsStaffPayablePage"],
+        "resource": "payable_bill",
+        "lookup_keys": [
+          "settlementStatus", "keyword", "id", "billNo", "billStatus", "invoiceStatus",
+          "orderId", "orderNo", "contractId", "contractNo", "oppositeCompanyId", "oppositeCompanyCode", "skuId", "skuCode"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "查询 cs_payable_bill 且没有当前人员、部门、公司、租户或供应商条件；oppositeCompany 是供应商，order/contract 是采购订单和采购合同。",
+          "公开页签值 pending_settle/settling/settled 在 Service 中分别转换为 pending_payment/partial_payment/full_payment；方向专用值也可直接进入 SQL。",
+          "SQL 返回 settlementStatus 为 pending_payment、partial_payment 或 full_payment；不同于应收分页返回 pending_receipt、partial_receipt 或 full_receipt。",
+          "请求 DTO 没有账单ID/编号、对方公司、订单、合同、时间范围或金额筛选字段；这些标识仅来自公开响应，keyword 才实际跨这些文本列筛选。"
+        ],
+        "required_inputs": [
+          {"name": "pageSize", "zh_name": "每页条数", "location": "body", "required": true, "schema_type": "Integer"}
+        ],
+        "business_identifiers": [
+          {"canonical": "payable_bill_id", "display_name": "应付账单ID", "technical_names": ["id"], "aliases": ["应付账单主键"], "resource": "payable_bill", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "payable_bill_no", "display_name": "应付账单号", "technical_names": ["billNo"], "aliases": ["应付账单编号"], "resource": "payable_bill", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "purchase_order_id", "display_name": "采购订单ID", "technical_names": ["orderId"], "aliases": ["应付关联订单ID"], "resource": "purchase_order", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "purchase_order_no", "display_name": "采购订单号", "technical_names": ["orderNo"], "aliases": ["应付关联订单号"], "resource": "purchase_order", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "purchase_contract_id", "display_name": "采购合同ID", "technical_names": ["contractId"], "aliases": ["应付关联合同ID"], "resource": "purchase_contract", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "purchase_contract_no", "display_name": "采购合同号", "technical_names": ["contractNo"], "aliases": ["应付关联合同号"], "resource": "purchase_contract", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "supplier_id", "display_name": "供应商ID", "technical_names": ["oppositeCompanyId"], "aliases": ["对方公司ID"], "resource": "supplier", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "supplier_code", "display_name": "供应商编码", "technical_names": ["oppositeCompanyCode"], "aliases": ["对方公司编码"], "resource": "supplier", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "sku_id", "display_name": "商品ID", "technical_names": ["skuId"], "aliases": ["SKU主键"], "resource": "sku", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "sku_code", "display_name": "商品编码", "technical_names": ["skuCode"], "aliases": ["SKU编码"], "resource": "sku", "source": "source_contract", "confidence": 0.98}
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "SctsBillController#operationsStaffPayablePage(@Valid PortalOperationsStaffBillPageCondition) -> RemotePortalMiniBillService -> PortalMiniBillController -> PortalMiniBillService",
+          "PortalOperationsStaffBillService#miniPayablePage -> PayableBillService#operationsStaffMiniPage；normalizeOperationsStaffSettlementStatus 将通用页签映射为付款状态",
+          "PayableBillDao#operationsStaffMiniPage -> portal_operations_staff_payable_bill_query_page.sql；where 仅 deleted=0 及可选 settlementStatus/keyword，无会话主体范围",
+          "SQL 把 purchase_order、purchase_contract、supplier 映射为共享 DTO 的 order、contract、oppositeCompany，并返回应付/已付/未付金额",
+          "SqlExecutor#page 的 pageSize 自动拆箱为 int；pageNumber 为空由 PageCondition#getStart 返回 0"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "c90311e3-50d6-466e-a0a9-3cbfda294f06",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/bill/operationsStaffReceivableGetById"
+      },
+      "semantic": {
+        "purpose": "供运营人员小程序按应收账单ID全局查看一笔应收账单详情，返回客户与销售方、销售订单和合同、收款单、商品、收款结算明细、金额、状态、账龄及备注。",
+        "audiences": ["供应链小程序运营人员"],
+        "domains": ["供应链贸易", "应收账单", "财务结算"],
+        "scenarios": ["运营人员从小程序应收账单列表打开详情，核对客户、销售订单、销售合同、收款单、商品、已收未收金额、账龄和备注。"],
+        "actions": ["detail", "query"],
+        "entities": ["应收账单", "账单商品明细", "收款结算明细"],
+        "aliases": ["运营应收账单详情", "小程序应收账单明细", "SctsBillController.operationsStaffReceivableGetById"],
+        "resource": "receivable_bill",
+        "lookup_keys": [
+          "id", "billNo", "paymentBillNo", "oppositeCompanyId", "oppositeCompanyCode", "ownCompanyId",
+          "orderId", "orderNo", "contractId", "contractNo", "deptId", "remark",
+          "goodsList.id", "goodsList.skuId", "goodsList.skuCode", "goodsList.measurementUnitId",
+          "settlementList.id", "settlementList.billNo", "settlementList.voucherFileId"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "id 是应收账单ID，直接进入 ReceivableBillService#getById；没有当前运营人员、部门、公司、租户或客户归属校验。",
+          "共享返回 DTO 中 oppositeCompany 表示客户，ownCompany 表示销售方，order/contract 表示销售订单和销售合同，paymentBillNo 表示收款单号；应付详情分别表示供应商、采购方、采购订单/合同和付款单。",
+          "settlementStatus 返回 pending_receipt、partial_receipt 或 full_receipt；结算明细 amount 被覆盖为整张应收账单金额，billCreateTime 被覆盖为关联收款单创建时间。",
+          "PortalOperationsStaffBillDetailQuery 声明 ownCompanyCode，但 ReceivableBillService#operationsStaffMiniGetById 未赋值；settlementList.serialNo 的 SQL 固定为 null 且本链路不回填，因此二者未列为 lookup_key。"
+        ],
+        "required_inputs": [
+          {"name": "id", "zh_name": "应收账单ID", "location": "body", "required": true, "schema_type": "Long"}
+        ],
+        "business_identifiers": [
+          {"canonical": "receivable_bill_id", "display_name": "应收账单ID", "technical_names": ["id"], "aliases": ["应收账单主键"], "resource": "receivable_bill", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "receivable_bill_no", "display_name": "应收账单号", "technical_names": ["billNo"], "aliases": ["应收账单编号"], "resource": "receivable_bill", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "receipt_bill_no", "display_name": "收款单号", "technical_names": ["paymentBillNo", "settlementList.billNo"], "aliases": ["应收结算单号"], "resource": "receipt_bill", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "customer_id", "display_name": "客户ID", "technical_names": ["oppositeCompanyId"], "aliases": ["对方公司ID"], "resource": "customer", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "customer_code", "display_name": "客户编码", "technical_names": ["oppositeCompanyCode"], "aliases": ["对方公司编码"], "resource": "customer", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "seller_id", "display_name": "销售方ID", "technical_names": ["ownCompanyId"], "aliases": ["本方公司ID"], "resource": "receivable_bill", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "sales_order_id", "display_name": "销售订单ID", "technical_names": ["orderId"], "aliases": ["应收关联订单ID"], "resource": "sales_order", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "sales_order_no", "display_name": "销售订单号", "technical_names": ["orderNo"], "aliases": ["应收关联订单号"], "resource": "sales_order", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "sales_contract_id", "display_name": "销售合同ID", "technical_names": ["contractId"], "aliases": ["应收关联合同ID"], "resource": "sales_contract", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "sales_contract_no", "display_name": "销售合同号", "technical_names": ["contractNo"], "aliases": ["应收关联合同号"], "resource": "sales_contract", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "department_id", "display_name": "所属部门ID", "technical_names": ["deptId"], "aliases": ["应收账单部门ID"], "resource": "receivable_bill", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "bill_detail_id", "display_name": "账单商品明细ID", "technical_names": ["goodsList.id"], "aliases": ["商品明细主键"], "resource": "bill_goods", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "sku_id", "display_name": "商品ID", "technical_names": ["goodsList.skuId"], "aliases": ["SKU主键"], "resource": "sku", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "sku_code", "display_name": "商品编码", "technical_names": ["goodsList.skuCode"], "aliases": ["SKU编码"], "resource": "sku", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "measurement_unit_id", "display_name": "计量单位ID", "technical_names": ["goodsList.measurementUnitId"], "aliases": ["单位主键"], "resource": "bill_goods", "source": "source_contract", "confidence": 0.97},
+          {"canonical": "receipt_allocation_id", "display_name": "收款分摊记录ID", "technical_names": ["settlementList.id"], "aliases": ["收款结算明细ID"], "resource": "receipt_settlement", "source": "source_contract", "confidence": 0.97},
+          {"canonical": "receipt_voucher_file_id", "display_name": "收款凭证文件ID", "technical_names": ["settlementList.voucherFileId"], "aliases": ["收款凭证ID"], "resource": "receipt_settlement", "source": "source_contract", "confidence": 0.97}
+        ],
+        "semantic_confidence": 0.9,
+        "semantic_evidence": [
+          "SctsBillController#operationsStaffReceivableGetById(@Valid PortalOperationsStaffBillDetailCondition) -> RemotePortalMiniBillService -> PortalMiniBillController -> PortalMiniBillService",
+          "PortalOperationsStaffBillDetailCondition.id @NotNull；PortalOperationsStaffBillService#miniReceivableGetById 仅复制为 IdCondition 并调用 ReceivableBillService#operationsStaffMiniGetById",
+          "ReceivableBillService#getById 使用 ReceivableBill.id 查询且不附加会话范围；operationsStaffMiniGetById 将 customer 映射 oppositeCompany、seller 映射 ownCompany、销售订单/合同映射共享字段",
+          "ReceivableBillDao#portalGoodsList 与 portalSettlementList；portal_customer_bill_goods_query_list.sql 和 portal_customer_bill_settlement_query_list.sql 返回商品及收款分摊标识",
+          "ReceivableBillService#operationsStaffMiniGetById 未设置 ownCompanyCode，也未调用 fillSettlementSerialNo，构成公开 DTO 字段与运行时填充差异"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "edade04d-378c-41f4-bc0f-f2ac15074217",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/bill/operationsStaffReceivablePage"
+      },
+      "semantic": {
+        "purpose": "供运营人员小程序分页查询全局应收账单商品行，按收款结算状态和关键词筛选，关键词匹配应收账单号、销售订单号、销售合同号、客户或商品。",
+        "audiences": ["供应链小程序运营人员"],
+        "domains": ["供应链贸易", "应收账单", "财务结算"],
+        "scenarios": ["运营人员在小程序应收账单列表按待收款、部分收款或已收款状态，以及账单、销售订单、销售合同、客户或商品关键词检索全局账单。"],
+        "actions": ["page", "query"],
+        "entities": ["应收账单", "账单商品行"],
+        "aliases": ["运营应收账单分页", "小程序应收账单列表", "SctsBillController.operationsStaffReceivablePage"],
+        "resource": "receivable_bill",
+        "lookup_keys": [
+          "settlementStatus", "keyword", "id", "billNo", "billStatus", "invoiceStatus",
+          "orderId", "orderNo", "contractId", "contractNo", "oppositeCompanyId", "oppositeCompanyCode", "skuId", "skuCode"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "查询 cs_receivable_bill 且没有当前人员、部门、公司、租户或客户条件；oppositeCompany 是客户，order/contract 是销售订单和销售合同。",
+          "公开页签值 pending_settle/settling/settled 在 Service 中分别转换为 pending_receipt/partial_receipt/full_receipt；方向专用值也可直接进入 SQL。",
+          "SQL 返回 settlementStatus 为 pending_receipt、partial_receipt 或 full_receipt；不同于应付分页返回 pending_payment、partial_payment 或 full_payment。",
+          "请求 DTO 没有账单ID/编号、对方公司、订单、合同、时间范围或金额筛选字段；这些标识仅来自公开响应，keyword 才实际跨这些文本列筛选。"
+        ],
+        "required_inputs": [
+          {"name": "pageSize", "zh_name": "每页条数", "location": "body", "required": true, "schema_type": "Integer"}
+        ],
+        "business_identifiers": [
+          {"canonical": "receivable_bill_id", "display_name": "应收账单ID", "technical_names": ["id"], "aliases": ["应收账单主键"], "resource": "receivable_bill", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "receivable_bill_no", "display_name": "应收账单号", "technical_names": ["billNo"], "aliases": ["应收账单编号"], "resource": "receivable_bill", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "sales_order_id", "display_name": "销售订单ID", "technical_names": ["orderId"], "aliases": ["应收关联订单ID"], "resource": "sales_order", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "sales_order_no", "display_name": "销售订单号", "technical_names": ["orderNo"], "aliases": ["应收关联订单号"], "resource": "sales_order", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "sales_contract_id", "display_name": "销售合同ID", "technical_names": ["contractId"], "aliases": ["应收关联合同ID"], "resource": "sales_contract", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "sales_contract_no", "display_name": "销售合同号", "technical_names": ["contractNo"], "aliases": ["应收关联合同号"], "resource": "sales_contract", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "customer_id", "display_name": "客户ID", "technical_names": ["oppositeCompanyId"], "aliases": ["对方公司ID"], "resource": "customer", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "customer_code", "display_name": "客户编码", "technical_names": ["oppositeCompanyCode"], "aliases": ["对方公司编码"], "resource": "customer", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "sku_id", "display_name": "商品ID", "technical_names": ["skuId"], "aliases": ["SKU主键"], "resource": "sku", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "sku_code", "display_name": "商品编码", "technical_names": ["skuCode"], "aliases": ["SKU编码"], "resource": "sku", "source": "source_contract", "confidence": 0.98}
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "SctsBillController#operationsStaffReceivablePage(@Valid PortalOperationsStaffBillPageCondition) -> RemotePortalMiniBillService -> PortalMiniBillController -> PortalMiniBillService",
+          "PortalOperationsStaffBillService#miniReceivablePage -> ReceivableBillService#operationsStaffMiniPage；normalizeOperationsStaffSettlementStatus 将通用页签映射为收款状态",
+          "ReceivableBillDao#operationsStaffMiniPage -> portal_operations_staff_receivable_bill_query_page.sql；where 仅 deleted=0 及可选 settlementStatus/keyword，无会话主体范围",
+          "SQL 把 sales_order、sales_contract、customer 映射为共享 DTO 的 order、contract、oppositeCompany，并返回应收/已收/未收金额",
+          "SqlExecutor#page 的 pageSize 自动拆箱为 int；pageNumber 为空由 PageCondition#getStart 返回 0"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "77e9d2a8-fdf9-4dd3-b73c-583b1e1fe229",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/bill/operationsStaffAddPayableRemark"
+      },
+      "semantic": {
+        "purpose": "供运营人员小程序按应付账单ID覆盖该应付账单的备注，并更新通用修改人和修改时间、发布应付账单备注业务日志；不校验当前人员或组织的数据范围。",
+        "audiences": ["供应链小程序运营人员"],
+        "domains": ["供应链贸易", "应付账单", "财务结算"],
+        "scenarios": ["运营人员在小程序按应付账单ID填写、替换或清空备注，并留下应付账单备注操作日志。"],
+        "actions": ["add_remark", "update"],
+        "entities": ["应付账单", "财务结算业务日志"],
+        "aliases": ["运营应付账单备注", "修改应付账单备注", "SctsBillController.operationsStaffAddPayableRemark"],
+        "resource": "payable_bill",
+        "lookup_keys": ["id", "remark", "companyId", "tenancy", "modifier", "modifyTime"],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "PortalMiniBillService#operationsStaffAddPayableRemark 调 PayableBillService#remark，修改 cs_payable_bill；不是应收备注接口修改的 cs_receivable_bill。",
+          "接口名称和 Swagger 写“添加备注”，真实实现是按 id 的局部更新：remark 可选且会覆盖现值，传空值可写空而不是追加历史文本。",
+          "仅以账单 id 更新，不校验当前运营人员、部门、公司或租户归属；继承的 companyId/tenancy 若显式提供也会进入通用局部更新。modifier/modifyTime 为空时才由当前用户和当前时间回填，客户端显式值会保留并写入。",
+          "更新后发布 PAY_BILL_ADD_REMARK 财务结算日志；空备注在日志内容中显示“-”，小程序请求使用 app 来源。"
+        ],
+        "required_inputs": [
+          {"name": "id", "zh_name": "应付账单ID", "location": "body", "required": true, "schema_type": "Long"}
+        ],
+        "business_identifiers": [
+          {"canonical": "payable_bill_id", "display_name": "应付账单ID", "technical_names": ["id"], "aliases": ["应付账单主键"], "resource": "payable_bill", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "company_id", "display_name": "公司ID", "technical_names": ["companyId"], "aliases": ["账单公司ID"], "resource": "payable_bill", "source": "request_contract", "confidence": 0.95},
+          {"canonical": "tenancy_id", "display_name": "租户ID", "technical_names": ["tenancy"], "aliases": ["账单租户ID"], "resource": "payable_bill", "source": "request_contract", "confidence": 0.95},
+          {"canonical": "modifier_user_id", "display_name": "修改人用户ID", "technical_names": ["modifier"], "aliases": ["账单修改人ID"], "resource": "payable_bill", "source": "request_contract", "confidence": 0.95}
+        ],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": [
+          "SctsBillController#operationsStaffAddPayableRemark(@Valid PayableBillRemarkItem) -> RemotePortalMiniBillService -> PortalMiniBillController -> PortalMiniBillService",
+          "PayableBillRemarkItem.id @NotNull、remark 仅 @Length(max=500)，并继承 ModuleBaseUpdateItem.companyId/tenancy 与 BaseUpdateItem.modifier/modifyTime",
+          "PayableBillService#remark：dao.findById(id) 后 dao.updateByCondition(item, id 条件)，随后发布 PAY_BILL_ADD_REMARK 日志",
+          "CommonJpaRepositoryImpl#update(Item, ConditionRule) 通过 BeanUtil.beanToMap 做局部更新；非空 companyId/tenancy 被保留，BaseFieldFillSupport#fillUpdate 只在 modifier/modifyTime 为空时回填默认值",
+          "PayableBillService#saveFinanceSettlementBusinessLog 与 CustomBusinessLogService#buildBusinessLogDTO：记录当前用户名、账单号、备注内容和 app 来源"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "6c91edd8-3130-4302-8114-a7dd0a620e17",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/bill/operationsStaffAddReceivableRemark"
+      },
+      "semantic": {
+        "purpose": "供运营人员小程序按应收账单ID覆盖该应收账单的备注，并更新通用修改人和修改时间、发布应收账单备注业务日志；不校验当前人员或组织的数据范围。",
+        "audiences": ["供应链小程序运营人员"],
+        "domains": ["供应链贸易", "应收账单", "财务结算"],
+        "scenarios": ["运营人员在小程序按应收账单ID填写、替换或清空备注，并留下应收账单备注操作日志。"],
+        "actions": ["add_remark", "update"],
+        "entities": ["应收账单", "财务结算业务日志"],
+        "aliases": ["运营应收账单备注", "修改应收账单备注", "SctsBillController.operationsStaffAddReceivableRemark"],
+        "resource": "receivable_bill",
+        "lookup_keys": ["id", "remark", "companyId", "tenancy", "modifier", "modifyTime"],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "PortalMiniBillService#operationsStaffAddReceivableRemark 调 ReceivableBillService#remark，修改 cs_receivable_bill；不是应付备注接口修改的 cs_payable_bill。",
+          "接口名称和 Swagger 写“添加备注”，真实实现是按 id 的局部更新：remark 可选且会覆盖现值，传空值可写空而不是追加历史文本。",
+          "仅以账单 id 更新，不校验当前运营人员、部门、公司或租户归属；继承的 companyId/tenancy 若显式提供也会进入通用局部更新。modifier/modifyTime 为空时才由当前用户和当前时间回填，客户端显式值会保留并写入。",
+          "更新后发布 RECEIVABLE_BILL_ADD_REMARK 财务结算日志；空备注在日志内容中显示“-”，小程序请求使用 app 来源。"
+        ],
+        "required_inputs": [
+          {"name": "id", "zh_name": "应收账单ID", "location": "body", "required": true, "schema_type": "Long"}
+        ],
+        "business_identifiers": [
+          {"canonical": "receivable_bill_id", "display_name": "应收账单ID", "technical_names": ["id"], "aliases": ["应收账单主键"], "resource": "receivable_bill", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "company_id", "display_name": "公司ID", "technical_names": ["companyId"], "aliases": ["账单公司ID"], "resource": "receivable_bill", "source": "request_contract", "confidence": 0.95},
+          {"canonical": "tenancy_id", "display_name": "租户ID", "technical_names": ["tenancy"], "aliases": ["账单租户ID"], "resource": "receivable_bill", "source": "request_contract", "confidence": 0.95},
+          {"canonical": "modifier_user_id", "display_name": "修改人用户ID", "technical_names": ["modifier"], "aliases": ["账单修改人ID"], "resource": "receivable_bill", "source": "request_contract", "confidence": 0.95}
+        ],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": [
+          "SctsBillController#operationsStaffAddReceivableRemark(@Valid ReceivableBillRemarkItem) -> RemotePortalMiniBillService -> PortalMiniBillController -> PortalMiniBillService",
+          "ReceivableBillRemarkItem.id @NotNull、remark 仅 @Length(max=500)，并继承 ModuleBaseUpdateItem.companyId/tenancy 与 BaseUpdateItem.modifier/modifyTime",
+          "ReceivableBillService#remark：dao.findById(id) 后 dao.updateByCondition(item, id 条件)，随后发布 RECEIVABLE_BILL_ADD_REMARK 日志；其 Javadoc 误写为“应付账单备注”",
+          "CommonJpaRepositoryImpl#update(Item, ConditionRule) 通过 BeanUtil.beanToMap 做局部更新；非空 companyId/tenancy 被保留，BaseFieldFillSupport#fillUpdate 只在 modifier/modifyTime 为空时回填默认值",
+          "ReceivableBillService#saveFinanceSettlementBusinessLog 与 CustomBusinessLogService#buildBusinessLogDTO：记录当前用户名、账单号、备注内容和 app 来源"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "8829447a-a3c4-4051-9502-d8f97f70d319",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/bill/operationsStaffPayableGetById"
+      },
+      "semantic": {
+        "purpose": "供运营人员小程序按应付账单ID全局查看一笔应付账单详情，返回供应商与采购方、采购订单和合同、付款单、商品、付款结算明细、金额、状态、账龄及备注。",
+        "audiences": ["供应链小程序运营人员"],
+        "domains": ["供应链贸易", "应付账单", "财务结算"],
+        "scenarios": ["运营人员从小程序应付账单列表打开详情，核对供应商、采购订单、采购合同、付款单、商品、已付未付金额、账龄和备注。"],
+        "actions": ["detail", "query"],
+        "entities": ["应付账单", "账单商品明细", "付款结算明细"],
+        "aliases": ["运营应付账单详情", "小程序应付账单明细", "SctsBillController.operationsStaffPayableGetById"],
+        "resource": "payable_bill",
+        "lookup_keys": [
+          "id", "billNo", "paymentBillNo", "oppositeCompanyId", "oppositeCompanyCode", "ownCompanyId",
+          "orderId", "orderNo", "contractId", "contractNo", "deptId", "remark",
+          "goodsList.id", "goodsList.skuId", "goodsList.skuCode", "goodsList.measurementUnitId",
+          "settlementList.id", "settlementList.billNo", "settlementList.voucherFileId"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "id 是应付账单ID，直接进入 PayableBillService#getById；没有当前运营人员、部门、公司、租户或供应商归属校验。",
+          "共享返回 DTO 中 oppositeCompany 表示供应商，ownCompany 表示采购方，order/contract 表示采购订单和采购合同，paymentBillNo 表示付款单号；应收详情分别表示客户、销售方、销售订单/合同和收款单。",
+          "settlementStatus 返回 pending_payment、partial_payment 或 full_payment；结算明细 amount 被覆盖为整张应付账单金额，billCreateTime 被覆盖为关联付款单创建时间。",
+          "PortalOperationsStaffBillDetailQuery 声明 ownCompanyCode，但 PayableBillService#operationsStaffMiniGetById 未赋值；settlementList.serialNo 的 SQL 固定为 null 且本链路不回填，因此二者未列为 lookup_key。"
+        ],
+        "required_inputs": [
+          {"name": "id", "zh_name": "应付账单ID", "location": "body", "required": true, "schema_type": "Long"}
+        ],
+        "business_identifiers": [
+          {"canonical": "payable_bill_id", "display_name": "应付账单ID", "technical_names": ["id"], "aliases": ["应付账单主键"], "resource": "payable_bill", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "payable_bill_no", "display_name": "应付账单号", "technical_names": ["billNo"], "aliases": ["应付账单编号"], "resource": "payable_bill", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "payment_bill_no", "display_name": "付款单号", "technical_names": ["paymentBillNo", "settlementList.billNo"], "aliases": ["应付结算单号"], "resource": "payment_bill", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "supplier_id", "display_name": "供应商ID", "technical_names": ["oppositeCompanyId"], "aliases": ["对方公司ID"], "resource": "supplier", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "supplier_code", "display_name": "供应商编码", "technical_names": ["oppositeCompanyCode"], "aliases": ["对方公司编码"], "resource": "supplier", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "purchaser_id", "display_name": "采购方ID", "technical_names": ["ownCompanyId"], "aliases": ["本方公司ID"], "resource": "payable_bill", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "purchase_order_id", "display_name": "采购订单ID", "technical_names": ["orderId"], "aliases": ["应付关联订单ID"], "resource": "purchase_order", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "purchase_order_no", "display_name": "采购订单号", "technical_names": ["orderNo"], "aliases": ["应付关联订单号"], "resource": "purchase_order", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "purchase_contract_id", "display_name": "采购合同ID", "technical_names": ["contractId"], "aliases": ["应付关联合同ID"], "resource": "purchase_contract", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "purchase_contract_no", "display_name": "采购合同号", "technical_names": ["contractNo"], "aliases": ["应付关联合同号"], "resource": "purchase_contract", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "department_id", "display_name": "所属部门ID", "technical_names": ["deptId"], "aliases": ["应付账单部门ID"], "resource": "payable_bill", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "bill_detail_id", "display_name": "账单商品明细ID", "technical_names": ["goodsList.id"], "aliases": ["商品明细主键"], "resource": "bill_goods", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "sku_id", "display_name": "商品ID", "technical_names": ["goodsList.skuId"], "aliases": ["SKU主键"], "resource": "sku", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "sku_code", "display_name": "商品编码", "technical_names": ["goodsList.skuCode"], "aliases": ["SKU编码"], "resource": "sku", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "measurement_unit_id", "display_name": "计量单位ID", "technical_names": ["goodsList.measurementUnitId"], "aliases": ["单位主键"], "resource": "bill_goods", "source": "source_contract", "confidence": 0.97},
+          {"canonical": "payment_allocation_id", "display_name": "付款分摊记录ID", "technical_names": ["settlementList.id"], "aliases": ["付款结算明细ID"], "resource": "payment_settlement", "source": "source_contract", "confidence": 0.97},
+          {"canonical": "payment_voucher_file_id", "display_name": "付款凭证文件ID", "technical_names": ["settlementList.voucherFileId"], "aliases": ["付款凭证ID"], "resource": "payment_settlement", "source": "source_contract", "confidence": 0.97}
+        ],
+        "semantic_confidence": 0.9,
+        "semantic_evidence": [
+          "SctsBillController#operationsStaffPayableGetById(@Valid PortalOperationsStaffBillDetailCondition) -> RemotePortalMiniBillService -> PortalMiniBillController -> PortalMiniBillService",
+          "PortalOperationsStaffBillDetailCondition.id @NotNull；PortalOperationsStaffBillService#miniPayableGetById 仅复制为 IdCondition 并调用 PayableBillService#operationsStaffMiniGetById",
+          "PayableBillService#getById 使用 PayableBill.id 查询且不附加会话范围；operationsStaffMiniGetById 将 supplier 映射 oppositeCompany、purchaser 映射 ownCompany、采购订单/合同映射共享字段",
+          "PayableBillDao#portalGoodsList 与 portalSettlementList；portal_supplier_bill_goods_query_list.sql 和 portal_supplier_bill_settlement_query_list.sql 返回商品及付款分摊标识",
+          "PayableBillService#operationsStaffMiniGetById 未设置 ownCompanyCode，也未调用 fillSettlementSerialNo，构成公开 DTO 字段与运行时填充差异"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "b679ac23-8428-4842-b05e-561571f74fec",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/bill/customerGetById"
+      },
+      "semantic": {
+        "purpose": "供供应链小程序当前登录客户按应收账单ID查看自己的客户账单详情，返回销售订单与合同、客户和销售方、商品、发票、收款结算明细、金额及问题反馈。",
+        "audiences": ["供应链小程序客户"],
+        "domains": ["供应链贸易", "应收账单", "财务结算"],
+        "scenarios": ["客户在小程序打开自己的一笔应收账单，核对销售订单、销售合同、商品、发票、收款流水和反馈明细。"],
+        "actions": ["detail", "query"],
+        "entities": ["应收账单", "账单商品明细", "销售发票", "收款结算明细", "账单问题反馈"],
+        "aliases": ["客户应收账单详情", "小程序客户账单明细", "SctsBillController.customerGetById"],
+        "resource": "receivable_bill",
+        "lookup_keys": [
+          "id", "billNo", "receivablePaymentNo", "customerId", "customerCode", "sellerId", "sellerCode",
+          "salesOrderId", "salesOrderNo", "salesContractId", "salesContractNo",
+          "goodsList.id", "goodsList.skuId", "goodsList.skuCode", "goodsList.measurementUnitId",
+          "invoiceList.id", "invoiceList.invoiceNo", "settlementList.id", "settlementList.billNo",
+          "settlementList.voucherFileId"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "请求 id 是应收账单ID；Service 先解析当前 customerId，再以 id+customerId 校验归属，所以不同于运营人员应收详情的全局按ID读取。",
+          "返回销售订单/销售合同和收款单语义；供应商详情返回采购订单/采购合同和付款单语义。",
+          "settlementStatus 不采用 portal_customer_bill_query_getById.sql 的旧 billStatus/receiptBill 联表结果，而由 ReceivableBill.receivablePaymentStatus 在 Service 中重新映射为 pending_settle、settling 或 settled。",
+          "settlementList.serialNo 虽在公开 DTO 中声明，但 SQL 固定返回 null；回填代码用收款明细ID映射收款分摊记录ID，键来自不同表，除非ID偶然相同否则仍为空，因此不作为可靠 lookup_key/business_identifier。"
+        ],
+        "required_inputs": [
+          {"name": "id", "zh_name": "应收账单ID", "location": "body", "required": true, "schema_type": "Long"}
+        ],
+        "business_identifiers": [
+          {"canonical": "receivable_bill_id", "display_name": "应收账单ID", "technical_names": ["id"], "aliases": ["客户账单主键"], "resource": "receivable_bill", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "receivable_bill_no", "display_name": "应收账单号", "technical_names": ["billNo"], "aliases": ["客户账单编号"], "resource": "receivable_bill", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "receipt_bill_no", "display_name": "收款单号", "technical_names": ["receivablePaymentNo", "settlementList.billNo"], "aliases": ["应收结算单号"], "resource": "receipt_bill", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "customer_id", "display_name": "客户ID", "technical_names": ["customerId"], "aliases": ["采购方ID"], "resource": "customer", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "customer_code", "display_name": "客户编码", "technical_names": ["customerCode"], "aliases": ["采购方编码"], "resource": "customer", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "seller_id", "display_name": "销售方ID", "technical_names": ["sellerId"], "aliases": ["本方销售组织ID"], "resource": "receivable_bill", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "seller_code", "display_name": "销售方编码", "technical_names": ["sellerCode"], "aliases": ["本方销售组织编码"], "resource": "receivable_bill", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "sales_order_id", "display_name": "销售订单ID", "technical_names": ["salesOrderId"], "aliases": ["客户订单主键"], "resource": "sales_order", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "sales_order_no", "display_name": "销售订单号", "technical_names": ["salesOrderNo"], "aliases": ["客户订单编号"], "resource": "sales_order", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "sales_contract_id", "display_name": "销售合同ID", "technical_names": ["salesContractId"], "aliases": ["客户合同主键"], "resource": "sales_contract", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "sales_contract_no", "display_name": "销售合同号", "technical_names": ["salesContractNo"], "aliases": ["客户合同编号"], "resource": "sales_contract", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "bill_detail_id", "display_name": "账单商品明细ID", "technical_names": ["goodsList.id"], "aliases": ["商品明细主键"], "resource": "bill_goods", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "sku_id", "display_name": "商品ID", "technical_names": ["goodsList.skuId"], "aliases": ["SKU主键"], "resource": "sku", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "sku_code", "display_name": "商品编码", "technical_names": ["goodsList.skuCode"], "aliases": ["SKU编码"], "resource": "sku", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "measurement_unit_id", "display_name": "计量单位ID", "technical_names": ["goodsList.measurementUnitId"], "aliases": ["单位主键"], "resource": "bill_goods", "source": "source_contract", "confidence": 0.97},
+          {"canonical": "sales_invoice_id", "display_name": "销售发票ID", "technical_names": ["invoiceList.id"], "aliases": ["发票主键"], "resource": "sales_invoice", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "sales_invoice_no", "display_name": "销售发票号码", "technical_names": ["invoiceList.invoiceNo"], "aliases": ["发票号"], "resource": "sales_invoice", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "receipt_allocation_id", "display_name": "收款分摊记录ID", "technical_names": ["settlementList.id"], "aliases": ["收款结算明细ID"], "resource": "receipt_settlement", "source": "source_contract", "confidence": 0.97},
+          {"canonical": "receipt_voucher_file_id", "display_name": "收款凭证文件ID", "technical_names": ["settlementList.voucherFileId"], "aliases": ["收款凭证ID"], "resource": "receipt_settlement", "source": "source_contract", "confidence": 0.97}
+        ],
+        "semantic_confidence": 0.9,
+        "semantic_evidence": [
+          "SctsBillController#customerGetById(@Valid IdCondition) -> RemotePortalMiniBillService#customerGetById -> PortalMiniBillController#customerGetById",
+          "ReceivableBillService#portalMiniGetById：getPortalCustomer + getPortalCustomerBill(id, customerId)，随后读取 portalGetById、portalGoodsList、portalInvoiceList、portalSettlementList 和 feedbackDao.listByBillId",
+          "portal_customer_bill_query_getById.sql 返回客户/销售方、销售订单、销售合同、应收账单和收款单字段；PortalCustomerBillQuery 是公开返回合同",
+          "portal_customer_bill_goods_query_list.sql、portal_customer_bill_invoice_query_list.sql、portal_customer_bill_settlement_query_list.sql 分别返回商品、sales 发票和收款分摊记录",
+          "portal_customer_bill_settlement_query_list.sql 选择 cs_receipt_bill_allocation_record.id 且 serial_no=null；ReceivableBillService#fillSettlementSerialNo 却按 ReceiptBillDetailQuery.id 建图并用 settlement.id 查找，存在跨表ID错配"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "47d80ec0-6cf6-49ff-b850-2c209ad3843f",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/bill/customerPage"
+      },
+      "semantic": {
+        "purpose": "供供应链小程序当前登录客户分页查看自己的应收账单商品行，按小程序结算页签状态和关键词筛选，关键词匹配账单号、销售订单号、销售合同号、商品名或销售方。",
+        "audiences": ["供应链小程序客户"],
+        "domains": ["供应链贸易", "应收账单", "财务结算"],
+        "scenarios": ["客户在小程序应收账单列表按待确认、待结算、结算中或已结算状态，以及账单、销售订单、销售合同、商品或销售方关键词检索自己的账单。"],
+        "actions": ["page", "query"],
+        "entities": ["应收账单", "账单商品行"],
+        "aliases": ["客户应收账单分页", "小程序客户账单列表", "SctsBillController.customerPage"],
+        "resource": "receivable_bill",
+        "lookup_keys": [
+          "status", "keyword", "id", "billNo", "receivablePaymentNo", "sellerId", "sellerCode",
+          "skuId", "skuCode", "salesOrderId", "salesOrderNo", "salesContractId", "salesContractNo"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "ReceivableBillService#portalMiniPage 无条件以当前会话用户绑定的 customerId 覆盖请求 customerId；该隐藏请求字段不会生效且 PortalCustomerBillPageQuery 也不返回它，因此不作为 lookup_key。",
+          "status 支持 all、pending_confirm、pending_settle/pending_settlement、settling、settled；SQL 结合 billConfirmTime 与 receivablePaymentStatus 判断待确认和待结算。",
+          "分页按账单明细联表返回商品行；不同于 supplierPage 的应付账单、采购订单/合同和采购方字段。",
+          "PortalCustomerBillPageQuery 声明 billConfirmTime，但 portal_mini_customer_bill_query_page.sql 未选择该列，运行时该字段为空；SQL 额外选择 customerId/customerCode/customerName，但返回 DTO 无对应字段。"
+        ],
+        "required_inputs": [
+          {"name": "pageSize", "zh_name": "每页条数", "location": "body", "required": true, "schema_type": "Integer"}
+        ],
+        "business_identifiers": [
+          {"canonical": "receivable_bill_id", "display_name": "应收账单ID", "technical_names": ["id"], "aliases": ["客户账单主键"], "resource": "receivable_bill", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "receivable_bill_no", "display_name": "应收账单号", "technical_names": ["billNo"], "aliases": ["客户账单编号"], "resource": "receivable_bill", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "receipt_bill_no", "display_name": "收款单号", "technical_names": ["receivablePaymentNo"], "aliases": ["应收结算单号"], "resource": "receipt_bill", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "seller_id", "display_name": "销售方ID", "technical_names": ["sellerId"], "aliases": ["本方销售组织ID"], "resource": "receivable_bill", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "seller_code", "display_name": "销售方编码", "technical_names": ["sellerCode"], "aliases": ["本方销售组织编码"], "resource": "receivable_bill", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "sku_id", "display_name": "商品ID", "technical_names": ["skuId"], "aliases": ["SKU主键"], "resource": "sku", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "sku_code", "display_name": "商品编码", "technical_names": ["skuCode"], "aliases": ["SKU编码"], "resource": "sku", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "sales_order_id", "display_name": "销售订单ID", "technical_names": ["salesOrderId"], "aliases": ["客户订单主键"], "resource": "sales_order", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "sales_order_no", "display_name": "销售订单号", "technical_names": ["salesOrderNo"], "aliases": ["客户订单编号"], "resource": "sales_order", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "sales_contract_id", "display_name": "销售合同ID", "technical_names": ["salesContractId"], "aliases": ["客户合同主键"], "resource": "sales_contract", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "sales_contract_no", "display_name": "销售合同号", "technical_names": ["salesContractNo"], "aliases": ["客户合同编号"], "resource": "sales_contract", "source": "source_contract", "confidence": 0.99}
+        ],
+        "semantic_confidence": 0.9,
+        "semantic_evidence": [
+          "SctsBillController#customerPage(@Valid PortalMiniCustomerBillPageCondition) -> RemotePortalMiniBillService#customerPage -> PortalMiniBillController#customerPage",
+          "ReceivableBillService#portalMiniPage：getPortalCustomer 后 condition.setCustomerId(currentCustomer.id)，覆盖客户端 customerId，再调用 ReceivableBillDao#portalMiniPage",
+          "portal_mini_customer_bill_query_page.sql：customerId 限定数据范围；status 与 keyword 条件分别消费公开筛选字段，keyword 匹配 billNo/salesOrderNo/salesContractNo/skuName/sellerName",
+          "SqlExecutor#page(..., PageCondition) 将 pageCondition.getPageSize() 传给 int pageSize 参数并发生自动拆箱；pageSize 为空时失败，pageNumber 为空由 PageCondition#getStart 安全回退为 0",
+          "PortalCustomerBillPageQuery 与 portal_mini_customer_bill_query_page.sql 存在 billConfirmTime 未选出及 customer 字段只在 SQL 出现的可执行合同差异"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-04"
+      }
+    }
+  ]
+}

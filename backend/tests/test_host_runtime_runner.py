@@ -20,6 +20,7 @@ class FakeApi:
     def __init__(self) -> None:
         self.started: list[tuple[str, str]] = []
         self.completed: list[tuple[str, str, int]] = []
+        self.completed_readiness: list[dict[str, object] | None] = []
         self.completed_forwarding: list[tuple[str, str, str, dict[str, object]]] = []
 
     def started_operation(self, operation_id: str, lease_token: str) -> None:
@@ -36,8 +37,10 @@ class FakeApi:
         exit_code: int,
         error_code: str | None = None,
         error_message: str | None = None,
+        readiness: dict[str, object] | None = None,
     ) -> None:
         self.completed.append((operation_id, step_id, exit_code))
+        self.completed_readiness.append(readiness)
 
     def complete_forwarding_job(
         self,
@@ -306,6 +309,18 @@ def test_runner_builds_json_requests_for_standard_write_methods(method: str) -> 
     assert max_response_bytes == 1_048_576
 
 
+def test_runner_default_host_actions_use_workspace_owned_script() -> None:
+    module = load_runner_module()
+
+    expected_root = Path(
+        "/Users/conchi/workforce/company_workforce/panzhihua_dev_workforce/deploy/host-runtime"
+    )
+    assert module.HOST_SCRIPT_ROOT == expected_root
+    assert module.HOST_ACTIONS["pzh.start-and-check"][0] == (expected_root / "start-and-check.sh")
+    assert module.HOST_ACTIONS["pzh.ensure-host-runtime"][0] == expected_root / "ensure.sh"
+    assert module.HOST_ACTIONS["pzh.status-host-runtime"][0] == expected_root / "ensure.sh"
+
+
 def test_runner_executes_allowlisted_host_action_with_default_local(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -313,14 +328,32 @@ def test_runner_executes_allowlisted_host_action_with_default_local(
     runtime_root = tmp_path / "runtime"
     workspace_root = tmp_path / "workspaces" / "workspace1"
     workspace_root.mkdir(parents=True)
-    script_root = tmp_path / "script"
+    script_root = tmp_path / "host-runtime"
     script_root.mkdir()
-    host_script = script_root / "ensure-panzhihua-host-runtime.sh"
+    host_script = script_root / "ensure.sh"
     host_script.write_text(
         "#!/bin/sh\n"
         'printf \'command:%s environment:%s variable:%s\\n\' "$1" "$3" "$C12_ENVIRONMENT"\n'
+        "printf '[READINESS] infrastructure=ready services=ready business=ready "
+        "infrastructure_ms=1200 services_ms=2300 business_ms=400 revision=12\\n'\n"
     )
     host_script.chmod(0o750)
+    state_root = script_root.parent / "runtime"
+    state_root.mkdir()
+    state_root.joinpath("context-router-shared-files.json").write_text(
+        json.dumps(
+            {
+                "revision": 2,
+                "digest": "d" * 64,
+                "files": {
+                    "deploy/host-runtime/ensure.sh": hashlib.sha256(
+                        host_script.read_bytes()
+                    ).hexdigest()
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     monkeypatch.setattr(module, "HOST_SCRIPT_ROOT", script_root)
     monkeypatch.setattr(
         module,
@@ -364,5 +397,25 @@ def test_runner_executes_allowlisted_host_action_with_default_local(
 
     assert api.started == [("operation-host", "h" * 48)]
     assert api.completed == [("operation-host", "step-host", 0)]
+    assert api.completed_readiness == [
+        {
+            "revision": 12,
+            "infrastructure": {
+                "status": "ready",
+                "duration_ms": 1200,
+                "error_message": None,
+            },
+            "services": {
+                "status": "ready",
+                "duration_ms": 2300,
+                "error_message": None,
+            },
+            "business": {
+                "status": "ready",
+                "duration_ms": 400,
+                "error_message": None,
+            },
+        }
+    ]
     log = (runtime_root / "runs/host-snapshot/execution.log").read_text()
     assert "command:ensure environment:local variable:local" in log

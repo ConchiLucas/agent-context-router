@@ -1,0 +1,2072 @@
+{
+  "schema_version": "context-router-interface-semantic-batch-v1",
+  "batch_id": "panzhihua-c12-portal-bidnotice-015",
+  "workspace_id": "b9ce65eddc27437d9615177fbd07cb0a",
+  "family_groups": {
+    "门户招标公告": 4,
+    "门户公告订阅规则": 4,
+    "小程序招标公告": 6,
+    "小程序公告订阅规则": 4
+  },
+  "generation_policy": "完整覆盖 c12-portal PortalBidNoticeController 8 个与 MiniPortalBidNoticeController 10 个有效接口。二者均为 BFF 转发 RemotePortalBidNoticeService 至 c12-egps PortalBidNoticeService。按门户招标公告、门户公告订阅规则、小程序招标公告、小程序公告订阅规则分组。源码追踪到 DAO/SQL/实体与会话解析。门户与小程序用路径、登录注解、请求模型和 SQL 范围区分，未虚构业务差异。homePage 不把已注释的 pageSize=3 当作当前逻辑。未使用 copy_from_interface_id，未写入 c12-egps 同源 /egps/api/portal/bidNotice。",
+  "items": [
+    {
+      "interface_id": "870608de-1602-498f-b2de-20a9c9da4ab7",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/bidNotice/page"
+      },
+      "semantic": {
+        "purpose": "供电子招投标门户分页查询已发布招标公告：@OptionalLogin，会话解析出的 supplierId 覆盖请求值；匿名或非投标人为 -1 可见全部已发布公告，已配置订阅的投标人只看命中启用规则的公告。可按标题、地区、项目类型和报名中/已截止筛选，返回不含正文和附件的分页摘要，并带已读、报名和命中订阅信息。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人",
+          "访客"
+        ],
+        "domains": [
+          "电子招投标",
+          "招标公告"
+        ],
+        "scenarios": [
+          "投标人或访客在门户招标公告列表按标题、地区和报名状态翻页查看已发布公告，不返回正文和附件。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "招标公告"
+        ],
+        "aliases": [
+          "门户招标公告分页",
+          "门户招标公告列表",
+          "PortalBidNoticeController.page"
+        ],
+        "resource": "bid_notice",
+        "lookup_keys": [
+          "noticeTitle",
+          "regionCode",
+          "regionName",
+          "projectType",
+          "noticeStatus",
+          "pageNumber",
+          "pageSize",
+          "id",
+          "applicationId",
+          "bidPackageId",
+          "subscriptionId",
+          "registrationId",
+          "docCode",
+          "applicationCode",
+          "bidCode"
+        ],
+        "cardinality": "many",
+        "ownership": "unknown",
+        "discriminators": [
+          "c12-portal BFF POST /member-api/portal/egps/bidNotice/page，@OptionalLogin，转发 RemotePortalBidNoticeService#page；不是小程序 /api/mini 的 pageForMobile 或 homePage。",
+          "SQL tender_doc_portal_bid_notice_query_page 固定 current_status=published，并以 :supplierId=-1 短路全部可见；登录投标人若已有订阅则只返回命中启用规则的公告。无 listScope/readStatus 入参。",
+          "请求 supplierId 为 hidden，Service 用会话覆盖。pageSize 空值会在 SqlExecutor.page 拆箱 NPE。返回 id 供详情、浏览量和澄清补遗继续调用。"
+        ],
+        "required_inputs": [
+          {
+            "name": "pageSize",
+            "zh_name": "每页条数",
+            "location": "body",
+            "required": true,
+            "schema_type": "Integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "bid_notice_id",
+            "display_name": "招标公告ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "招标文件ID",
+              "公告ID"
+            ],
+            "resource": "bid_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "application_id",
+            "display_name": "立项申请ID",
+            "technical_names": [
+              "applicationId"
+            ],
+            "aliases": [
+              "项目ID",
+              "采购项目ID"
+            ],
+            "resource": "bid_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "bid_package_id",
+            "display_name": "标包ID",
+            "technical_names": [
+              "bidPackageId"
+            ],
+            "aliases": [
+              "标主表ID",
+              "标ID"
+            ],
+            "resource": "bid_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "bid_code",
+            "display_name": "标编号",
+            "technical_names": [
+              "bidCode"
+            ],
+            "aliases": [
+              "标包编号"
+            ],
+            "resource": "bid_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "doc_code",
+            "display_name": "招标文件编号",
+            "technical_names": [
+              "docCode"
+            ],
+            "aliases": [
+              "文件编号"
+            ],
+            "resource": "bid_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "application_code",
+            "display_name": "项目编号",
+            "technical_names": [
+              "applicationCode"
+            ],
+            "aliases": [
+              "立项编号"
+            ],
+            "resource": "bid_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "subscription_id",
+            "display_name": "订阅规则ID",
+            "technical_names": [
+              "subscriptionId"
+            ],
+            "aliases": [
+              "规则ID"
+            ],
+            "resource": "bid_notice_subscription",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "registration_id",
+            "display_name": "报名ID",
+            "technical_names": [
+              "registrationId"
+            ],
+            "aliases": [
+              "项目报名ID"
+            ],
+            "resource": "project_registration",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalBidNoticeController#page(@RequestBody @Valid PortalBidNoticePageCondition) @OptionalLogin -> RemotePortalBidNoticeService#page",
+          "c12-egps PortalBidNoticeService#page：condition.setSupplierId(resolveSupplierId())；PortalSupplierContextSupport 未登录/非投标人/无供应商返回 -1，SUPPLIER_ID_EMPTY 实际不可达",
+          "TenderDocDao#pagePortalBidNotice -> tender_doc_portal_bid_notice_query_page.sql：td.deleted=0 and td.current_status='published'；:supplierId=-1 或无订阅或命中启用订阅；动态条件 noticeTitle/regionCode/regionName/projectType/noticeStatus",
+          "PageCondition 无 Bean Validation；SqlExecutor.page 拆箱 pageSize。PortalBidNoticeService#fillBaseQuery 公开返回 docCode、applicationCode、bidPackageId、bidCode；enrichRows 按供应商填 readStatus/registered/registrationId；matchedSubscriptionList.subscriptionId 供订阅家族继续使用"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "1fe2c42f-5c6f-4633-85d4-ace96b02ce19",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/bidNotice/getById"
+      },
+      "semantic": {
+        "purpose": "供电子招投标门户按招标公告ID查看一条已发布公告详情：可见范围与门户分页相同（匿名看全部已发布，有订阅的投标人须命中规则）；返回正文、截止时间和招标文件附件，不增加浏览量、不写已读记录。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人",
+          "访客"
+        ],
+        "domains": [
+          "电子招投标",
+          "招标公告"
+        ],
+        "scenarios": [
+          "投标人或访客在门户打开一条招标公告，阅读公告内容和招标文件附件，不自动记已读或加浏览量。"
+        ],
+        "actions": [
+          "detail"
+        ],
+        "entities": [
+          "招标公告",
+          "招标文件附件"
+        ],
+        "aliases": [
+          "门户招标公告详情",
+          "门户查看招标公告",
+          "PortalBidNoticeController.getById"
+        ],
+        "resource": "bid_notice",
+        "lookup_keys": [
+          "id",
+          "applicationId",
+          "bidPackageId",
+          "docCode",
+          "applicationCode",
+          "bidCode",
+          "subscriptionId",
+          "registrationId"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "门户 POST /member-api/portal/egps/bidNotice/getById，返回单条详情和 attachments；不是分页，也不是 increaseViewCount 或小程序同名路径。",
+          "请求 id 是 egps_tender_doc.id（招标公告/招标文件主表），不是立项申请ID、标包ID或订阅规则ID。getById 不 UPDATE notice_view_count，也不 insert 已读记录。",
+          "详情 SQL 可见性与门户分页相同，含 :supplierId=-1 短路；未命中订阅抛 NOTICE_NOT_EXIST。attachments[].id 是文件服务ID。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "招标公告ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "bid_notice_id",
+            "display_name": "招标公告ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "招标文件ID",
+              "公告ID"
+            ],
+            "resource": "bid_notice",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "application_id",
+            "display_name": "立项申请ID",
+            "technical_names": [
+              "applicationId"
+            ],
+            "aliases": [
+              "项目ID",
+              "采购项目ID"
+            ],
+            "resource": "bid_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "bid_package_id",
+            "display_name": "标包ID",
+            "technical_names": [
+              "bidPackageId"
+            ],
+            "aliases": [
+              "标主表ID",
+              "标ID"
+            ],
+            "resource": "bid_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "bid_code",
+            "display_name": "标编号",
+            "technical_names": [
+              "bidCode"
+            ],
+            "aliases": [
+              "标包编号"
+            ],
+            "resource": "bid_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "doc_code",
+            "display_name": "招标文件编号",
+            "technical_names": [
+              "docCode"
+            ],
+            "aliases": [
+              "文件编号"
+            ],
+            "resource": "bid_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "application_code",
+            "display_name": "项目编号",
+            "technical_names": [
+              "applicationCode"
+            ],
+            "aliases": [
+              "立项编号"
+            ],
+            "resource": "bid_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "file_id",
+            "display_name": "文件服务ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "附件ID",
+              "招标文件附件ID"
+            ],
+            "resource": "bid_notice_attachment",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "subscription_id",
+            "display_name": "订阅规则ID",
+            "technical_names": [
+              "subscriptionId"
+            ],
+            "aliases": [
+              "规则ID"
+            ],
+            "resource": "bid_notice_subscription",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "registration_id",
+            "display_name": "报名ID",
+            "technical_names": [
+              "registrationId"
+            ],
+            "aliases": [
+              "项目报名ID"
+            ],
+            "resource": "project_registration",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalBidNoticeController#getById(@Valid PortalBidNoticeIdCondition.id @NotNull) @OptionalLogin -> RemotePortalBidNoticeService#getById",
+          "PortalBidNoticeService#getById：setSupplierId 后 TenderDocPortalBidNoticeService#listDetail；空结果抛 NOTICE_NOT_EXIST；rows.get(0) 组装 PortalBidNoticeDetailQuery",
+          "tender_doc_portal_bid_notice_query_getDetail.sql：td.id=:id 且 published，可见性与 page SQL 相同；PortalBidNoticeService#fillBaseQuery 公开返回 docCode、applicationCode、bidPackageId、bidCode，附件来自 current_version file_json",
+          "不调用 increasePortalBidNoticeViewCount，也不调用 markRead；enrichRows 仍填已读和报名状态"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "4259dcf1-7bf7-4916-ad8f-704b7e6235e3",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/bidNotice/increaseViewCount"
+      },
+      "semantic": {
+        "purpose": "供电子招投标门户按招标公告ID把一条可见已发布公告的浏览量加一并写入 egps_tender_doc.notice_view_count；先按与详情相同的可见性校验，成功返回 Boolean，不返回公告正文，也不记已读。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人",
+          "访客"
+        ],
+        "domains": [
+          "电子招投标",
+          "招标公告"
+        ],
+        "scenarios": [
+          "投标人或访客在门户打开招标公告时，系统按该公告ID把浏览次数写入招标文件主表。"
+        ],
+        "actions": [
+          "increment",
+          "update"
+        ],
+        "entities": [
+          "招标公告"
+        ],
+        "aliases": [
+          "门户招标公告增加浏览量",
+          "门户公告浏览次数加一",
+          "PortalBidNoticeController.increaseViewCount"
+        ],
+        "resource": "bid_notice",
+        "lookup_keys": [
+          "id"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "写 notice_view_count+1，返回 ResponseData<Boolean>，不是查详情也不是 markNoticeRead。UPDATE 只按公告ID，但之前必须通过 listDetail 可见性校验。",
+          "与小程序 increaseViewCount 下游相同，仅门户路径 /member-api/portal。匿名可对任意已发布且对其可见的公告加浏览量。",
+          "定位键 id 是招标公告ID，不是澄清补遗或订阅规则ID。getById 不会隐式加浏览量。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "招标公告ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "bid_notice_id",
+            "display_name": "招标公告ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "招标文件ID",
+              "公告ID"
+            ],
+            "resource": "bid_notice",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "PortalBidNoticeController#increaseViewCount(@Valid PortalBidNoticeIdCondition) @OptionalLogin -> RemotePortalBidNoticeService#increaseViewCount",
+          "PortalBidNoticeService#increaseViewCount @Transactional：先 listDetail 校验可见，再 TenderDocPortalBidNoticeService#increaseViewCount(id)",
+          "tender_doc_portal_bid_notice_update_viewCount.sql：update egps_tender_doc set notice_view_count=ifnull(notice_view_count,0)+1 where deleted=0 and current_status='published' and id=:id",
+          "成功返回 Boolean true；无公告正文、附件或浏览量字段；不写 egps_portal_bid_notice_read_record"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "a63e0118-bd5e-487c-a24e-f3ec7ed0ed97",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/bidNotice/listClarificationAddendums"
+      },
+      "semantic": {
+        "purpose": "供电子招投标门户按招标公告ID列出该公告所属立项下已发布的澄清补遗：先确认公告已发布并取出 applicationId，再按澄清表 project_id=立项申请ID 查询；不校验订阅可见性，不增加浏览量。请求 id 指向招标公告，返回 id 才是澄清补遗主键。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人",
+          "访客"
+        ],
+        "domains": [
+          "电子招投标",
+          "澄清补遗"
+        ],
+        "scenarios": [
+          "投标人或访客在门户招标公告上查看该项目已发布的澄清和补遗列表及附件。"
+        ],
+        "actions": [
+          "list",
+          "query"
+        ],
+        "entities": [
+          "澄清补遗"
+        ],
+        "aliases": [
+          "门户招标公告澄清补遗",
+          "门户查看澄清补遗",
+          "PortalBidNoticeController.listClarificationAddendums"
+        ],
+        "resource": "clarification_addendum",
+        "lookup_keys": [
+          "id",
+          "clarificationCode",
+          "fileId"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "门户 POST .../listClarificationAddendums，返回澄清补遗列表，不是公告详情、分页或增加浏览量。",
+          "请求 id 是 egps_tender_doc.id；Service 用 getPublishedNoticeApplicationId 转立项申请ID，SQL 条件是 egps_tender_clarification_addendum.project_id。返回对象的 id 是澄清补遗ID。",
+          "resolveSupplierId() 返回值未用于过滤；公告未发布抛 NOTICE_NOT_EXIST。小程序同名接口路径为 /api/mini。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "招标公告ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "bid_notice_id",
+            "display_name": "招标公告ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "招标文件ID",
+              "公告ID"
+            ],
+            "resource": "bid_notice",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "clarification_id",
+            "display_name": "澄清补遗ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "澄清ID",
+              "补遗ID"
+            ],
+            "resource": "clarification_addendum",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "clarification_code",
+            "display_name": "澄清补遗编号",
+            "technical_names": [
+              "clarificationCode"
+            ],
+            "aliases": [
+              "澄清编号"
+            ],
+            "resource": "clarification_addendum",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "file_id",
+            "display_name": "澄清补遗附件ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "附件文件ID"
+            ],
+            "resource": "clarification_addendum_attachment",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalBidNoticeController#listClarificationAddendums(@Valid PortalBidNoticeIdCondition) @OptionalLogin -> RemotePortalBidNoticeService#listClarificationAddendums",
+          "PortalBidNoticeService#listClarificationAddendums：resolveSupplierId() 结果丢弃；getPublishedNoticeApplicationId(noticeId) 空则 NOTICE_NOT_EXIST；listPublishedByProjectId(applicationId)",
+          "tender_clarification_addendum_query_listPortalPublishedByProjectId.sql：project_id=:projectId and publish_status=published；PortalBidNoticeClarificationAddendumQuery 映射 id/clarificationCode/attachments",
+          "TenderDoc.applicationId 作为澄清表 project_id；不调用 increaseViewCount/markRead"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "7e493ea7-74b7-4f85-b252-06252660f967",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/bidNotice/listSubscriptions"
+      },
+      "semantic": {
+        "purpose": "供已登录门户投标人查询本供应商的招标公告订阅规则列表：无 @OptionalLogin，会话 supplierId 覆盖请求值，可按启停状态 0/1 筛选；返回规则名称、项目类型、地区和预算区间，不含公告本身。门户与小程序读写同一张订阅表。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "公告订阅"
+        ],
+        "scenarios": [
+          "投标人在门户订阅管理中查看自己已保存的招标公告订阅规则及启停状态。"
+        ],
+        "actions": [
+          "list",
+          "query"
+        ],
+        "entities": [
+          "公告订阅规则"
+        ],
+        "aliases": [
+          "门户公告订阅规则列表",
+          "门户招标订阅查询",
+          "PortalBidNoticeController.listSubscriptions"
+        ],
+        "resource": "bid_notice_subscription",
+        "lookup_keys": [
+          "enableStatus",
+          "id"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "门户 POST /member-api/portal/egps/bidNotice/listSubscriptions，需登录；不是公告分页，也不是小程序 /api/mini 同名接口。",
+          "SQL 按 supplier_id 隔离，enableStatus 空则不过滤启停。返回 id 供保存更新、启停和删除继续调用。",
+          "请求 supplierId hidden 且被会话覆盖；非投标人解析为 -1，会查 supplier_id=-1 的规则。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "subscription_id",
+            "display_name": "订阅规则ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "规则ID"
+            ],
+            "resource": "bid_notice_subscription",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalBidNoticeController#listSubscriptions(@Valid PortalBidNoticeSubscriptionListCondition) 无 @OptionalLogin -> RemotePortalBidNoticeService#listSubscriptions",
+          "PortalBidNoticeService#listSubscriptions：condition.setSupplierId(resolveSupplierId())；PortalBidNoticeSubscriptionService#list 空 supplierId 才抛 SUPPLIER_ID_EMPTY",
+          "portal_bidnotice_subscription_query_list.sql：deleted=0 and supplier_id=:supplierId，<<enable_status=:enableStatusValue>>；再装配 category/region",
+          "enableStatus 仅允许 0/1；空值查询全部。门户与小程序共用 egps_portal_bid_notice_subscription"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "3543f661-e2d2-4404-add8-7c548b194f2a",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/bidNotice/saveSubscription"
+      },
+      "semantic": {
+        "purpose": "供已登录门户投标人保存一条招标公告订阅规则：无 id 则新增，有 id 则更新本供应商已有规则；会话 supplierId 覆盖请求归属。规则可含项目类型、地区和预算万元区间，空类型/地区表示全部；新增或更新时 enableStatus 为空都会写成启用。返回规则主键。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "公告订阅"
+        ],
+        "scenarios": [
+          "投标人在门户新建或修改一条按类型、地区和预算匹配招标公告的订阅规则。"
+        ],
+        "actions": [
+          "create",
+          "update"
+        ],
+        "entities": [
+          "公告订阅规则"
+        ],
+        "aliases": [
+          "门户保存公告订阅规则",
+          "门户编辑招标订阅",
+          "PortalBidNoticeController.saveSubscription"
+        ],
+        "resource": "bid_notice_subscription",
+        "lookup_keys": [
+          "id",
+          "ruleName",
+          "projectTypeCodes",
+          "regionCodes",
+          "regionNames",
+          "minBudgetAmount",
+          "maxBudgetAmount",
+          "enableStatus"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "保存/覆盖更新订阅规则并返回 Long id，不是 listSubscriptions，也不是只改启停的 changeSubscriptionEnableStatus。",
+          "id 空 insert，id 非空 loadOwned 后 update；两条路径都调用 normalizeEnableStatus(enableStatus, true)，因此不传启停状态也会写成启用。类别和地区 replace 为空表示匹配全部，预算入参万元、落库乘 10000 存元。",
+          "门户路径 /member-api/portal，与小程序操作同一批供应商订阅数据。"
+        ],
+        "required_inputs": [
+          {
+            "name": "ruleName",
+            "zh_name": "规则名称",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "subscription_id",
+            "display_name": "订阅规则ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "规则ID"
+            ],
+            "resource": "bid_notice_subscription",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "PortalBidNoticeController#saveSubscription(@Valid PortalBidNoticeSubscriptionItem.ruleName @NotBlank) -> RemotePortalBidNoticeService#saveSubscription",
+          "PortalBidNoticeSubscriptionService#save：id==null 新增否则 loadOwned(id,supplierId)；insert 或 update；categoryService.replace / regionService.replace",
+          "min>max 抛 BUDGET_RANGE_INVALID；新增和更新都调用 normalizeEnableStatus(item.getEnableStatus(), true)，enableStatus 为空均写为 1；越权或不存在抛 SUBSCRIPTION_NOT_EXIST",
+          "表 egps_portal_bid_notice_subscription，明细表 category/region；返回 subscription.getId()"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "72b2ac6f-f91a-4894-a09f-02642f46e043",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/bidNotice/changeSubscriptionEnableStatus"
+      },
+      "semantic": {
+        "purpose": "供已登录门户投标人启用或停用本供应商的一条订阅规则：必填规则ID和 enableStatus（1启用/0停用），先发数据操作校验事件再按归属更新 enable_status，不改规则名称和匹配条件。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "公告订阅"
+        ],
+        "scenarios": [
+          "投标人在门户订阅管理中打开或关闭某条招标公告订阅规则，而不重新编辑匹配条件。"
+        ],
+        "actions": [
+          "enable",
+          "disable",
+          "update"
+        ],
+        "entities": [
+          "公告订阅规则"
+        ],
+        "aliases": [
+          "门户启用停用公告订阅",
+          "门户开关招标订阅",
+          "PortalBidNoticeController.changeSubscriptionEnableStatus"
+        ],
+        "resource": "bid_notice_subscription",
+        "lookup_keys": [
+          "id",
+          "enableStatus"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "只改 enable_status，不是 saveSubscription 全量覆盖，也不是 deleteSubscriptionById。",
+          "enableStatus 仅 0/1；启用/停用会发布 BIDNOTICE_RULE 校验事件。必须 loadOwned 校验供应商归属。",
+          "门户路径，小程序同名接口走 /api/mini，下游同一 Service。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "订阅规则ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          },
+          {
+            "name": "enableStatus",
+            "zh_name": "启停状态",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "subscription_id",
+            "display_name": "订阅规则ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "规则ID"
+            ],
+            "resource": "bid_notice_subscription",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "PortalBidNoticeController#changeSubscriptionEnableStatus(@Valid PortalBidNoticeSubscriptionEnableItem id @NotNull enableStatus @NotBlank @Pattern ^[01]$)",
+          "PortalBidNoticeSubscriptionService#changeEnableStatus @Transactional：ENABLE/DISABLE DataOperationValidationEvent 后 loadOwned 再 dao.update",
+          "portal_bidnotice_subscription_query_getById.sql：id 且 supplier_id 匹配且 deleted=0，否则 SUBSCRIPTION_NOT_EXIST",
+          "不修改 rule_name/预算/地区/类型明细"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "9a336770-e1ec-4202-aa45-07d310d46ec8",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/bidNotice/deleteSubscriptionById"
+      },
+      "semantic": {
+        "purpose": "供已登录门户投标人按规则ID逻辑删除本供应商的订阅规则：校验归属后把规则及类别、地区明细 deleted 置 1，不是物理删行，也不是停用。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "公告订阅"
+        ],
+        "scenarios": [
+          "投标人在门户订阅管理中删除一条不再使用的招标公告订阅规则。"
+        ],
+        "actions": [
+          "delete"
+        ],
+        "entities": [
+          "公告订阅规则"
+        ],
+        "aliases": [
+          "门户删除公告订阅规则",
+          "门户去掉招标订阅",
+          "PortalBidNoticeController.deleteSubscriptionById"
+        ],
+        "resource": "bid_notice_subscription",
+        "lookup_keys": [
+          "id"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "逻辑删除 deleted=1，不是 changeSubscriptionEnableStatus 停用，也不是 saveSubscription。",
+          "必须本供应商拥有该 id，否则 SUBSCRIPTION_NOT_EXIST。类别和地区同步软删。",
+          "门户路径；小程序删除同一张表中的同一批规则。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "订阅规则ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "subscription_id",
+            "display_name": "订阅规则ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "规则ID"
+            ],
+            "resource": "bid_notice_subscription",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "PortalBidNoticeController#deleteSubscriptionById(@Valid PortalBidNoticeSubscriptionIdCondition.id @NotNull) -> RemotePortalBidNoticeService#deleteSubscriptionById",
+          "PortalBidNoticeSubscriptionService#deleteById：loadOwned 后 subscription.setDeleted(1)；dao.update；category/region deleteBySubscriptionId",
+          "portal_bidnotice_subscription_category_delete_bySubscriptionId.sql：set deleted=1 where subscription_id=:subscriptionId，地区表同样软删",
+          "非物理 DELETE FROM；停用应走 changeSubscriptionEnableStatus"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "85b41bc5-93f1-4776-990f-c422cc2d9571",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/egps/bidNotice/homePage"
+      },
+      "semantic": {
+        "purpose": "供电子招投标小程序首页查询已发布招标公告：@OptionalLogin，请求体可空，代码强制 pageNumber=1 后转发 pageForMobile。HOME_PAGE_SIZE=3 设置 pageSize 的代码已注释，当前不会固定查 3 条；pageSize 为空时下游 SqlExecutor 拆箱 NPE，因此运行时仍必填。listScope 默认 matched。",
+        "audiences": [
+          "电子招投标小程序",
+          "投标人",
+          "访客"
+        ],
+        "domains": [
+          "电子招投标",
+          "招标公告"
+        ],
+        "scenarios": [
+          "用户打开小程序首页查看第一页招标公告摘要，条数由请求 pageSize 决定，而不是写死 3 条。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "招标公告"
+        ],
+        "aliases": [
+          "小程序招标公告首页",
+          "小程序首页招标公告",
+          "MiniPortalBidNoticeController.homePage"
+        ],
+        "resource": "bid_notice",
+        "lookup_keys": [
+          "pageSize",
+          "noticeTitle",
+          "regionCode",
+          "regionName",
+          "projectType",
+          "noticeStatus",
+          "listScope",
+          "readStatus",
+          "id",
+          "applicationId",
+          "bidPackageId",
+          "docCode",
+          "applicationCode",
+          "bidCode",
+          "subscriptionId",
+          "registrationId"
+        ],
+        "cardinality": "many",
+        "ownership": "unknown",
+        "discriminators": [
+          "小程序 POST /api/mini/egps/bidNotice/homePage，@OptionalLogin，强制第一页后走 pageForMobile；不是门户 /page，也不是可翻页的 pageForMobile。",
+          "不得把已注释的 setPageSize(HOME_PAGE_SIZE) 当成当前行为。下游没有默认 pageSize，空值拆箱 NPE。",
+          "normalizeMobilePageCondition 默认 listScope=matched；匿名 supplierId=-1 且无 -1 订阅时因 not exists 订阅而可见全部已发布公告。"
+        ],
+        "required_inputs": [
+          {
+            "name": "pageSize",
+            "zh_name": "每页条数",
+            "location": "body",
+            "required": true,
+            "schema_type": "Integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "bid_notice_id",
+            "display_name": "招标公告ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "招标文件ID",
+              "公告ID"
+            ],
+            "resource": "bid_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "application_id",
+            "display_name": "立项申请ID",
+            "technical_names": [
+              "applicationId"
+            ],
+            "aliases": [
+              "项目ID",
+              "采购项目ID"
+            ],
+            "resource": "bid_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "bid_package_id",
+            "display_name": "标包ID",
+            "technical_names": [
+              "bidPackageId"
+            ],
+            "aliases": [
+              "标主表ID",
+              "标ID"
+            ],
+            "resource": "bid_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "bid_code",
+            "display_name": "标编号",
+            "technical_names": [
+              "bidCode"
+            ],
+            "aliases": [
+              "标包编号"
+            ],
+            "resource": "bid_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "doc_code",
+            "display_name": "招标文件编号",
+            "technical_names": [
+              "docCode"
+            ],
+            "aliases": [
+              "文件编号"
+            ],
+            "resource": "bid_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "application_code",
+            "display_name": "项目编号",
+            "technical_names": [
+              "applicationCode"
+            ],
+            "aliases": [
+              "立项编号"
+            ],
+            "resource": "bid_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "subscription_id",
+            "display_name": "订阅规则ID",
+            "technical_names": [
+              "subscriptionId"
+            ],
+            "aliases": [
+              "规则ID"
+            ],
+            "resource": "bid_notice_subscription",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "registration_id",
+            "display_name": "报名ID",
+            "technical_names": [
+              "registrationId"
+            ],
+            "aliases": [
+              "项目报名ID"
+            ],
+            "resource": "project_registration",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "MiniPortalBidNoticeController#homePage(@RequestBody(required=false) PortalBidNoticeMobilePageCondition) @OptionalLogin：null 则 new；setPageNumber(1)；setPageSize(HOME_PAGE_SIZE) 整段注释",
+          "随后 RemotePortalBidNoticeService#pageForMobile -> PortalBidNoticeService#pageForMobile，无再设 pageSize 的代码",
+          "SqlExecutor.page(..., pageCondition.getPageSize()) 形参为 int，pageSize 空值 NPE；PageCondition.getStart 在 pageSize 空时返回 0 但到不了分页 SQL",
+          "normalizeMobilePageCondition：listScope 空则 matched；readStatus 空/all 置 null 以跳过 sql-ext 已读动态条件",
+          "PortalBidNoticeService#buildMobilePageQuery -> buildPageQuery -> fillBaseQuery，公开返回 docCode、applicationCode、bidPackageId、bidCode"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "279cf5d0-5ee8-4f54-8c6f-2ce1ef04489a",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/egps/bidNotice/pageForMobile"
+      },
+      "semantic": {
+        "purpose": "供已登录电子招投标小程序分页查询已发布招标公告：BFF 无 @OptionalLogin 必须登录，请求模型含 listScope（默认 matched）和 readStatus。核心查询与 homePage 共用 pageForMobile，但本接口可翻页且要求登录。登录投标人可筛已读/未读和全部/命中订阅。",
+        "audiences": [
+          "电子招投标小程序",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "招标公告"
+        ],
+        "scenarios": [
+          "已登录投标人在小程序招标公告列表按订阅范围、已读状态和标题地区翻页查看公告。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "招标公告"
+        ],
+        "aliases": [
+          "小程序招标公告分页",
+          "小程序移动端公告列表",
+          "MiniPortalBidNoticeController.pageForMobile"
+        ],
+        "resource": "bid_notice",
+        "lookup_keys": [
+          "noticeTitle",
+          "regionCode",
+          "regionName",
+          "projectType",
+          "noticeStatus",
+          "listScope",
+          "readStatus",
+          "pageNumber",
+          "pageSize",
+          "id",
+          "applicationId",
+          "bidPackageId",
+          "docCode",
+          "applicationCode",
+          "bidCode",
+          "subscriptionId",
+          "registrationId"
+        ],
+        "cardinality": "many",
+        "ownership": "unknown",
+        "discriminators": [
+          "小程序 POST /api/mini/egps/bidNotice/pageForMobile，无 @OptionalLogin；不是 homePage（强制第一页且可匿名），也不是门户 /page。",
+          "Feign 注释写“免登录，供首页使用”，但本 BFF 方法未标 @OptionalLogin，以 BFF 源码为准：调用本接口必须登录。",
+          "SQL pageForMobile 用 listScope=all 看全部已发布，matched 按订阅过滤且无门户 SQL 的 supplierId=-1 短路；readStatus 可筛已读记录。"
+        ],
+        "required_inputs": [
+          {
+            "name": "pageSize",
+            "zh_name": "每页条数",
+            "location": "body",
+            "required": true,
+            "schema_type": "Integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "bid_notice_id",
+            "display_name": "招标公告ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "招标文件ID",
+              "公告ID"
+            ],
+            "resource": "bid_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "application_id",
+            "display_name": "立项申请ID",
+            "technical_names": [
+              "applicationId"
+            ],
+            "aliases": [
+              "项目ID",
+              "采购项目ID"
+            ],
+            "resource": "bid_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "bid_package_id",
+            "display_name": "标包ID",
+            "technical_names": [
+              "bidPackageId"
+            ],
+            "aliases": [
+              "标主表ID",
+              "标ID"
+            ],
+            "resource": "bid_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "bid_code",
+            "display_name": "标编号",
+            "technical_names": [
+              "bidCode"
+            ],
+            "aliases": [
+              "标包编号"
+            ],
+            "resource": "bid_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "doc_code",
+            "display_name": "招标文件编号",
+            "technical_names": [
+              "docCode"
+            ],
+            "aliases": [
+              "文件编号"
+            ],
+            "resource": "bid_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "application_code",
+            "display_name": "项目编号",
+            "technical_names": [
+              "applicationCode"
+            ],
+            "aliases": [
+              "立项编号"
+            ],
+            "resource": "bid_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "subscription_id",
+            "display_name": "订阅规则ID",
+            "technical_names": [
+              "subscriptionId"
+            ],
+            "aliases": [
+              "规则ID"
+            ],
+            "resource": "bid_notice_subscription",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "registration_id",
+            "display_name": "报名ID",
+            "technical_names": [
+              "registrationId"
+            ],
+            "aliases": [
+              "项目报名ID"
+            ],
+            "resource": "project_registration",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": [
+          "MiniPortalBidNoticeController#pageForMobile(@RequestBody @Valid PortalBidNoticeMobilePageCondition) 无 @OptionalLogin -> RemotePortalBidNoticeService#pageForMobile",
+          "Feign RemotePortalBidNoticeService#pageForMobile Javadoc 为“移动端分页查询招标公告（免登录，供首页使用）”，与 BFF 登录要求冲突，以 Controller 注解为准",
+          "PortalBidNoticeService#pageForMobile：normalizeMobilePageCondition 后 TenderDocDao#pagePortalBidNoticeForMobile",
+          "tender_doc_portal_bid_notice_query_pageForMobile.sql：published；<<listScope=all 或无订阅或命中订阅>>；<<readStatus unread/read 关联 egps_portal_bid_notice_read_record>>；pageSize 拆箱必填",
+          "PortalBidNoticeService#buildMobilePageQuery -> buildPageQuery -> fillBaseQuery，公开返回 docCode、applicationCode、bidPackageId、bidCode"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "dd09cb03-93a1-4a3e-a763-3f60603eb435",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/egps/bidNotice/markNoticeRead"
+      },
+      "semantic": {
+        "purpose": "供电子招投标小程序按招标公告ID标记当前解析供应商已读：@OptionalLogin，先确认公告已发布，再按 supplierId+noticeId 幂等写入 egps_portal_bid_notice_read_record。匿名或非投标人记到 supplier_id=-1。不增加浏览量，不返回公告详情。门户无此接口。",
+        "audiences": [
+          "电子招投标小程序",
+          "投标人",
+          "访客"
+        ],
+        "domains": [
+          "电子招投标",
+          "招标公告"
+        ],
+        "scenarios": [
+          "用户在小程序打开或划过一条招标公告后，系统把该供应商对该公告记为已读，列表可按已读筛选。"
+        ],
+        "actions": [
+          "mark_read"
+        ],
+        "entities": [
+          "招标公告已读记录"
+        ],
+        "aliases": [
+          "小程序标记招标公告已读",
+          "小程序公告设为已读",
+          "MiniPortalBidNoticeController.markNoticeRead"
+        ],
+        "resource": "bid_notice_read_record",
+        "lookup_keys": [
+          "id"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "只写已读记录，不是 increaseViewCount（改 notice_view_count），也不是 getById。门户 Controller 无 markNoticeRead。",
+          "已存在相同 supplierId+noticeId 且 deleted=0 的记录直接返回 true，幂等。assertPublishedNoticeExists 不校验订阅可见性。",
+          "请求 id 是招标公告ID；归属用会话供应商，请求 supplierId 被覆盖。无会话时写入 -1。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "招标公告ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "bid_notice_id",
+            "display_name": "招标公告ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "招标文件ID",
+              "公告ID"
+            ],
+            "resource": "bid_notice",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "MiniPortalBidNoticeController#markNoticeRead(@Valid PortalBidNoticeIdCondition) @OptionalLogin -> RemotePortalBidNoticeService#markNoticeRead",
+          "PortalBidNoticeService#markNoticeRead：assertPublishedNoticeExists(id) 后 PortalBidNoticeReadRecordService#markRead(supplierId, noticeId)",
+          "markRead：getBySupplierAndNotice 已有则 true；否则 insert supplier_id/notice_id/read_time/deleted=0。表注释 notice_id=egps_tender_doc.id",
+          "existsPublishedNotice 只查 TenderDoc 已发布，不用 listDetail 订阅条件；不 UPDATE notice_view_count"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "178351d0-b8c5-4f77-ba47-8aa305d003a1",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/egps/bidNotice/getById"
+      },
+      "semantic": {
+        "purpose": "供电子招投标小程序按招标公告ID查看一条已发布公告详情：@OptionalLogin，下游与门户 getById 完全相同（含订阅可见性和 -1 短路），返回正文和附件；不增加浏览量、不自动 markNoticeRead。",
+        "audiences": [
+          "电子招投标小程序",
+          "投标人",
+          "访客"
+        ],
+        "domains": [
+          "电子招投标",
+          "招标公告"
+        ],
+        "scenarios": [
+          "用户在小程序打开一条招标公告阅读正文和招标文件附件，需另调接口才会加浏览量或记已读。"
+        ],
+        "actions": [
+          "detail"
+        ],
+        "entities": [
+          "招标公告",
+          "招标文件附件"
+        ],
+        "aliases": [
+          "小程序招标公告详情",
+          "小程序查看招标公告",
+          "MiniPortalBidNoticeController.getById"
+        ],
+        "resource": "bid_notice",
+        "lookup_keys": [
+          "id",
+          "applicationId",
+          "bidPackageId",
+          "docCode",
+          "applicationCode",
+          "bidCode",
+          "subscriptionId",
+          "registrationId"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "小程序 POST /api/mini/egps/bidNotice/getById，不是门户同名路径，也不是 markNoticeRead 或 increaseViewCount。",
+          "详情 SQL 与门户共用 getDetail，可见性含 supplierId=-1 短路，不受 listScope 影响。",
+          "请求 id 是招标公告ID；attachments[].id 是文件服务ID。getById 无写副作用。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "招标公告ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "bid_notice_id",
+            "display_name": "招标公告ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "招标文件ID",
+              "公告ID"
+            ],
+            "resource": "bid_notice",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "application_id",
+            "display_name": "立项申请ID",
+            "technical_names": [
+              "applicationId"
+            ],
+            "aliases": [
+              "项目ID",
+              "采购项目ID"
+            ],
+            "resource": "bid_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "bid_package_id",
+            "display_name": "标包ID",
+            "technical_names": [
+              "bidPackageId"
+            ],
+            "aliases": [
+              "标主表ID",
+              "标ID"
+            ],
+            "resource": "bid_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "bid_code",
+            "display_name": "标编号",
+            "technical_names": [
+              "bidCode"
+            ],
+            "aliases": [
+              "标包编号"
+            ],
+            "resource": "bid_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "doc_code",
+            "display_name": "招标文件编号",
+            "technical_names": [
+              "docCode"
+            ],
+            "aliases": [
+              "文件编号"
+            ],
+            "resource": "bid_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "application_code",
+            "display_name": "项目编号",
+            "technical_names": [
+              "applicationCode"
+            ],
+            "aliases": [
+              "立项编号"
+            ],
+            "resource": "bid_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "file_id",
+            "display_name": "文件服务ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "附件ID",
+              "招标文件附件ID"
+            ],
+            "resource": "bid_notice_attachment",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "subscription_id",
+            "display_name": "订阅规则ID",
+            "technical_names": [
+              "subscriptionId"
+            ],
+            "aliases": [
+              "规则ID"
+            ],
+            "resource": "bid_notice_subscription",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "registration_id",
+            "display_name": "报名ID",
+            "technical_names": [
+              "registrationId"
+            ],
+            "aliases": [
+              "项目报名ID"
+            ],
+            "resource": "project_registration",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "MiniPortalBidNoticeController#getById(@Valid PortalBidNoticeIdCondition) @OptionalLogin -> RemotePortalBidNoticeService#getById，与门户共用下游",
+          "PortalBidNoticeService#getById + tender_doc_portal_bid_notice_query_getDetail.sql，可见性与门户分页相同；fillBaseQuery 公开返回 docCode、applicationCode、bidPackageId、bidCode",
+          "不调用 markRead/increaseViewCount；enrichRows 仍返回 readStatus 供界面展示",
+          "未命中订阅或未发布抛 NOTICE_NOT_EXIST"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "8f368153-09e2-4e4d-928a-3c8488d2908e",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/egps/bidNotice/increaseViewCount"
+      },
+      "semantic": {
+        "purpose": "供电子招投标小程序按招标公告ID把一条可见已发布公告的浏览量加一并写入 egps_tender_doc.notice_view_count；可见性校验与详情相同，成功返回 Boolean。不写已读记录，与 markNoticeRead 分工不同。",
+        "audiences": [
+          "电子招投标小程序",
+          "投标人",
+          "访客"
+        ],
+        "domains": [
+          "电子招投标",
+          "招标公告"
+        ],
+        "scenarios": [
+          "用户在小程序打开招标公告时，系统把该公告浏览次数加一，已读状态仍需另调 markNoticeRead。"
+        ],
+        "actions": [
+          "increment",
+          "update"
+        ],
+        "entities": [
+          "招标公告"
+        ],
+        "aliases": [
+          "小程序招标公告增加浏览量",
+          "小程序公告浏览次数加一",
+          "MiniPortalBidNoticeController.increaseViewCount"
+        ],
+        "resource": "bid_notice",
+        "lookup_keys": [
+          "id"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "小程序路径 /api/mini/.../increaseViewCount，下游与门户相同，只改 notice_view_count，不是 markNoticeRead。",
+          "先 listDetail 可见性校验再 UPDATE。getById 不会隐式加浏览量。",
+          "定位键是招标公告ID，不是澄清补遗ID。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "招标公告ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "bid_notice_id",
+            "display_name": "招标公告ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "招标文件ID",
+              "公告ID"
+            ],
+            "resource": "bid_notice",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "MiniPortalBidNoticeController#increaseViewCount(@Valid PortalBidNoticeIdCondition) @OptionalLogin -> RemotePortalBidNoticeService#increaseViewCount",
+          "PortalBidNoticeService#increaseViewCount：listDetail 空则 NOTICE_NOT_EXIST，再 increasePortalBidNoticeViewCount",
+          "tender_doc_portal_bid_notice_update_viewCount.sql 更新 egps_tender_doc.notice_view_count",
+          "不 insert 阅读记录；与 markNoticeRead 表和字段均不同"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "d58db754-d884-45ca-ac3a-b298d1f1655b",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/egps/bidNotice/listClarificationAddendums"
+      },
+      "semantic": {
+        "purpose": "供电子招投标小程序按招标公告ID列出该公告所属立项下已发布澄清补遗：下游与门户相同，请求 id 为招标公告ID，内部转为立项申请ID去查澄清表 project_id；不校验订阅、不加浏览量。返回 id 是澄清补遗主键。",
+        "audiences": [
+          "电子招投标小程序",
+          "投标人",
+          "访客"
+        ],
+        "domains": [
+          "电子招投标",
+          "澄清补遗"
+        ],
+        "scenarios": [
+          "用户在小程序招标公告详情中查看该项目已发布的澄清和补遗。"
+        ],
+        "actions": [
+          "list",
+          "query"
+        ],
+        "entities": [
+          "澄清补遗"
+        ],
+        "aliases": [
+          "小程序招标公告澄清补遗",
+          "小程序查看澄清补遗",
+          "MiniPortalBidNoticeController.listClarificationAddendums"
+        ],
+        "resource": "clarification_addendum",
+        "lookup_keys": [
+          "id",
+          "clarificationCode",
+          "fileId"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "小程序 POST /api/mini/.../listClarificationAddendums，不是门户路径，也不是公告详情。",
+          "请求 id 指向招标公告/招标文件主表；SQL 使用澄清补遗.project_id=TenderDoc.applicationId。返回 id 是澄清补遗ID。",
+          "resolveSupplierId 未用于过滤。未发布公告抛 NOTICE_NOT_EXIST。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "招标公告ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "bid_notice_id",
+            "display_name": "招标公告ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "招标文件ID",
+              "公告ID"
+            ],
+            "resource": "bid_notice",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "clarification_id",
+            "display_name": "澄清补遗ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "澄清ID",
+              "补遗ID"
+            ],
+            "resource": "clarification_addendum",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "clarification_code",
+            "display_name": "澄清补遗编号",
+            "technical_names": [
+              "clarificationCode"
+            ],
+            "aliases": [
+              "澄清编号"
+            ],
+            "resource": "clarification_addendum",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "file_id",
+            "display_name": "澄清补遗附件ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "附件文件ID"
+            ],
+            "resource": "clarification_addendum_attachment",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "MiniPortalBidNoticeController#listClarificationAddendums(@Valid PortalBidNoticeIdCondition) @OptionalLogin，转发同一 Feign",
+          "PortalBidNoticeService#listClarificationAddendums：getPublishedNoticeApplicationId -> listPublishedByProjectId",
+          "tender_clarification_addendum_query_listPortalPublishedByProjectId.sql：project_id=:projectId and publish_status=published",
+          "PortalBidNoticeClarificationAddendumQuery.attachments 使用 TenderClarificationAddendumFileItem.fileId"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "abd5ffa0-b927-4843-9a0c-d033bc1cfe7e",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/egps/bidNotice/listSubscriptions"
+      },
+      "semantic": {
+        "purpose": "供已登录电子招投标小程序查询本供应商招标公告订阅规则列表：需登录，会话 supplierId 覆盖请求值，可按启停筛选；与门户 listSubscriptions 共用同一张表和同一 Service，仅入口为 /api/mini。",
+        "audiences": [
+          "电子招投标小程序",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "公告订阅"
+        ],
+        "scenarios": [
+          "投标人在小程序订阅管理中查看自己的招标公告订阅规则。"
+        ],
+        "actions": [
+          "list",
+          "query"
+        ],
+        "entities": [
+          "公告订阅规则"
+        ],
+        "aliases": [
+          "小程序公告订阅规则列表",
+          "小程序招标订阅查询",
+          "MiniPortalBidNoticeController.listSubscriptions"
+        ],
+        "resource": "bid_notice_subscription",
+        "lookup_keys": [
+          "enableStatus",
+          "id"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "小程序 POST /api/mini/egps/bidNotice/listSubscriptions，需登录；不是公告 pageForMobile，也不是门户 /member-api 同名接口。",
+          "下游 PortalBidNoticeSubscriptionService#list 与门户完全相同，按 supplier_id 隔离。",
+          "返回 id 供小程序保存、启停、删除继续调用。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "subscription_id",
+            "display_name": "订阅规则ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "规则ID"
+            ],
+            "resource": "bid_notice_subscription",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "MiniPortalBidNoticeController#listSubscriptions(@Valid PortalBidNoticeSubscriptionListCondition) 无 @OptionalLogin",
+          "PortalBidNoticeService#listSubscriptions setSupplierId(resolveSupplierId()) -> SubscriptionService#list",
+          "portal_bidnotice_subscription_query_list.sql 按 supplier_id 过滤，enableStatus 可选 0/1",
+          "与门户读写 egps_portal_bid_notice_subscription 同一批数据"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "aa10d6e6-93c6-4658-9da5-ea328e9a4a1b",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/egps/bidNotice/saveSubscription"
+      },
+      "semantic": {
+        "purpose": "供已登录电子招投标小程序保存一条招标公告订阅规则：无 id 新增、有 id 按归属更新，会话覆盖 supplierId；匹配维度与门户相同（类型、地区、预算万元），新增或更新时 enableStatus 为空都会写成启用。返回规则主键，写入与门户同一张表。",
+        "audiences": [
+          "电子招投标小程序",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "公告订阅"
+        ],
+        "scenarios": [
+          "投标人在小程序新建或修改按类型、地区和预算匹配的招标公告订阅规则。"
+        ],
+        "actions": [
+          "create",
+          "update"
+        ],
+        "entities": [
+          "公告订阅规则"
+        ],
+        "aliases": [
+          "小程序保存公告订阅规则",
+          "小程序编辑招标订阅",
+          "MiniPortalBidNoticeController.saveSubscription"
+        ],
+        "resource": "bid_notice_subscription",
+        "lookup_keys": [
+          "id",
+          "ruleName",
+          "projectTypeCodes",
+          "regionCodes",
+          "regionNames",
+          "minBudgetAmount",
+          "maxBudgetAmount",
+          "enableStatus"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "小程序保存/覆盖更新订阅并返回 Long，不是仅启停或删除，也不是门户 /member-api 路径。",
+          "空 id insert，非空 id 必须本供应商拥有；两条路径都调用 normalizeEnableStatus(enableStatus, true)，不传启停状态也会写成启用。空类型/地区表示全部。",
+          "与门户 saveSubscription 共用 PortalBidNoticeSubscriptionService#save。"
+        ],
+        "required_inputs": [
+          {
+            "name": "ruleName",
+            "zh_name": "规则名称",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "subscription_id",
+            "display_name": "订阅规则ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "规则ID"
+            ],
+            "resource": "bid_notice_subscription",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "MiniPortalBidNoticeController#saveSubscription(@Valid PortalBidNoticeSubscriptionItem.ruleName @NotBlank)",
+          "PortalBidNoticeSubscriptionService#save 新增或 loadOwned 更新，replace 类别和地区",
+          "预算万元转元；新增和更新时 enableStatus 为空都默认写成启用；越权 SUBSCRIPTION_NOT_EXIST",
+          "返回 subscription.id，表 egps_portal_bid_notice_subscription"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "a1a4a089-0581-48c0-9b86-243cca18ce7c",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/egps/bidNotice/changeSubscriptionEnableStatus"
+      },
+      "semantic": {
+        "purpose": "供已登录电子招投标小程序启用或停用本供应商一条订阅规则：必填规则ID和 enableStatus 0/1，校验归属后只改启停字段；与门户开关同一批规则。",
+        "audiences": [
+          "电子招投标小程序",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "公告订阅"
+        ],
+        "scenarios": [
+          "投标人在小程序订阅管理中打开或关闭某条招标公告订阅规则。"
+        ],
+        "actions": [
+          "enable",
+          "disable",
+          "update"
+        ],
+        "entities": [
+          "公告订阅规则"
+        ],
+        "aliases": [
+          "小程序启用停用公告订阅",
+          "小程序开关招标订阅",
+          "MiniPortalBidNoticeController.changeSubscriptionEnableStatus"
+        ],
+        "resource": "bid_notice_subscription",
+        "lookup_keys": [
+          "id",
+          "enableStatus"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "小程序路径只改 enable_status，不是 saveSubscription，也不是门户同名路径。",
+          "enableStatus 仅 0/1，启用/停用发 BIDNOTICE_RULE 校验事件。",
+          "必须本供应商拥有该订阅规则。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "订阅规则ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          },
+          {
+            "name": "enableStatus",
+            "zh_name": "启停状态",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "subscription_id",
+            "display_name": "订阅规则ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "规则ID"
+            ],
+            "resource": "bid_notice_subscription",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "MiniPortalBidNoticeController#changeSubscriptionEnableStatus(@Valid id @NotNull enableStatus @NotBlank @Pattern ^[01]$)",
+          "PortalBidNoticeSubscriptionService#changeEnableStatus：校验事件 + loadOwned + update enable_status",
+          "getById SQL 带 supplier_id，防止改他人规则",
+          "与门户共用同一 Service 和表"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "63b41c1f-30d5-47e1-aaa1-f0657bf4f170",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/egps/bidNotice/deleteSubscriptionById"
+      },
+      "semantic": {
+        "purpose": "供已登录电子招投标小程序按规则ID逻辑删除本供应商订阅规则：校验归属后软删除规则及类别、地区明细；与门户删除同一张表中的同一批数据。",
+        "audiences": [
+          "电子招投标小程序",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "公告订阅"
+        ],
+        "scenarios": [
+          "投标人在小程序订阅管理中删除一条招标公告订阅规则。"
+        ],
+        "actions": [
+          "delete"
+        ],
+        "entities": [
+          "公告订阅规则"
+        ],
+        "aliases": [
+          "小程序删除公告订阅规则",
+          "小程序去掉招标订阅",
+          "MiniPortalBidNoticeController.deleteSubscriptionById"
+        ],
+        "resource": "bid_notice_subscription",
+        "lookup_keys": [
+          "id"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "小程序逻辑删除订阅，不是停用，也不是门户 /member-api 删除路径。",
+          "deleted=1，类别和地区同步软删，不是物理删行。",
+          "id 必须属于当前会话供应商。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "订阅规则ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "subscription_id",
+            "display_name": "订阅规则ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "规则ID"
+            ],
+            "resource": "bid_notice_subscription",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "MiniPortalBidNoticeController#deleteSubscriptionById(@Valid PortalBidNoticeSubscriptionIdCondition.id @NotNull)",
+          "PortalBidNoticeSubscriptionService#deleteById：loadOwned 后 setDeleted(1) 并软删明细",
+          "category/region delete SQL 为 update deleted=1",
+          "与门户删除同一供应商规则数据"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    }
+  ]
+}

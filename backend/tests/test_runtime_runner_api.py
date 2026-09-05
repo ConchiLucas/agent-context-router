@@ -156,11 +156,38 @@ def test_runner_can_register_lease_and_complete_operation(tmp_path: Path) -> Non
         step_id = body["steps"][0]["id"]
         completed = client.post(
             f"/api/runtime-runner/operations/{operation.id}/steps/{step_id}/complete",
-            json={"lease_token": lease_token, "exit_code": 0},
+            json={
+                "lease_token": lease_token,
+                "exit_code": 0,
+                "readiness": {
+                    "revision": 9,
+                    "infrastructure": {"status": "ready", "duration_ms": 1000},
+                    "services": {"status": "ready", "duration_ms": 2000},
+                    "business": {"status": "ready", "duration_ms": 300},
+                },
+            },
             headers=headers,
         )
         assert completed.status_code == 200
         assert completed.json()["status"] == "succeeded"
+        assert operations.list_steps(operation.id)[0].readiness == {
+            "revision": 9,
+            "infrastructure": {
+                "status": "ready",
+                "duration_ms": 1000,
+                "error_message": None,
+            },
+            "services": {
+                "status": "ready",
+                "duration_ms": 2000,
+                "error_message": None,
+            },
+            "business": {
+                "status": "ready",
+                "duration_ms": 300,
+                "error_message": None,
+            },
+        }
 
 
 def test_runner_can_lease_and_complete_forwarding_job(tmp_path: Path) -> None:

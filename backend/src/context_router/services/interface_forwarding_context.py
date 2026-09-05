@@ -17,6 +17,9 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from context_router.interface_search.comparison import compare_interfaces
+from context_router.interface_search.domain import SearchFilters, SearchRequest
+from context_router.interface_search.search import SearchService
 from context_router.repositories.database_environment_repository import (
     DatabaseEnvironmentRepositoryError,
     DatabaseEnvironmentStore,
@@ -82,6 +85,7 @@ class InterfaceForwardingContextService:
         database_url: str | None,
         task_repository: TaskReader,
         database_environment_repository: DatabaseEnvironmentStore,
+        interface_search_service: SearchService | None = None,
         value_mapping_service: ValueMappingService | None = None,
         host_runner_available: Callable[[], bool] | None = None,
         host_execution_timeout_seconds: float = 40,
@@ -90,6 +94,7 @@ class InterfaceForwardingContextService:
         self._database_url = database_url
         self._tasks = task_repository
         self._environments = database_environment_repository
+        self._interface_search = interface_search_service
         self._value_mappings = value_mapping_service
         self._host_runner_available = host_runner_available
         self._host_execution_timeout_seconds = max(5.0, host_execution_timeout_seconds)
@@ -104,64 +109,166 @@ class InterfaceForwardingContextService:
         role: str | None = None,
         limit: int = 10,
     ) -> dict[str, object]:
+        if self._interface_search is None:
+            raise InterfaceForwardingContextError(
+                "接口语义检索尚未启用",
+                code="interface_semantic_search_unavailable",
+            )
+        return self._semantic_search(
+            task_id=task_id,
+            query=query,
+            service=service,
+            role=role,
+            limit=limit,
+        )
+
+    def compare(
+        self,
+        *,
+        task_id: int,
+        interface_ids: list[str],
+    ) -> dict[str, object]:
+        if self._interface_search is None:
+            raise InterfaceForwardingContextError(
+                "接口语义检索尚未启用", code="interface_semantic_search_unavailable"
+            )
+        if len(interface_ids) < 2 or len(interface_ids) > 5:
+            raise InterfaceForwardingContextError(
+                "interface_ids 必须包含 2 到 5 个接口", code="invalid_interface_ids"
+            )
+        if len(set(interface_ids)) != len(interface_ids):
+            raise InterfaceForwardingContextError(
+                "interface_ids 不能重复", code="duplicate_interface_ids"
+            )
+        workspace_id, _environment = self._task_scope(task_id, None)
+        endpoints = [self._interface_search.repository.get(item) for item in interface_ids]
+        if any(
+            endpoint is None or not endpoint.active or endpoint.workspace_id != workspace_id
+            for endpoint in endpoints
+        ):
+            raise InterfaceForwardingContextError("接口不存在", code="interface_not_found")
+        result = compare_interfaces([item for item in endpoints if item is not None])
+        return result.model_dump(mode="json")
+
+    def detail(self, *, task_id: int, interface_id: str) -> dict[str, object]:
+        if self._interface_search is None:
+            raise InterfaceForwardingContextError(
+                "接口语义检索尚未启用", code="interface_semantic_search_unavailable"
+            )
+        workspace_id, _environment = self._task_scope(task_id, None)
+        endpoint = self._interface_search.repository.get(interface_id)
+        if endpoint is None or not endpoint.active or endpoint.workspace_id != workspace_id:
+            raise InterfaceForwardingContextError("接口不存在", code="interface_not_found")
+        return endpoint.model_dump(mode="json")
+
+    def _semantic_search(
+        self,
+        *,
+        task_id: int,
+        query: str,
+        service: str | None,
+        role: str | None,
+        limit: int,
+    ) -> dict[str, object]:
         workspace_id, environment = self._task_scope(task_id, None)
         normalized = query.strip()
         if not normalized:
             raise InterfaceForwardingContextError("query 不能为空", code="invalid_query")
-        like = f"%{normalized}%"
+        bounded_limit = max(1, min(limit, 20))
+        response = self._interface_search.search(
+            SearchRequest(
+                workspace_id=workspace_id,
+                query=normalized,
+                filters=SearchFilters(services=[service] if service else []),
+                top_k=bounded_limit,
+            )
+        )
+        operational = self._search_operational_metadata(
+            workspace_id=workspace_id,
+            environment=environment,
+            interface_ids=[hit.interface_id for hit in response.hits],
+            role=role,
+        )
+        results: list[dict[str, object]] = []
+        for hit in response.hits:
+            metadata = operational.get(hit.interface_id, {})
+            callable_now = bool(
+                metadata
+                and metadata.get("operation_kind") in _EXECUTABLE_OPERATION_KINDS
+                and metadata.get("invocation_mode") != "disabled"
+                and int(metadata.get("address_count") or 0) > 0
+            )
+            results.append(
+                {
+                    "interface_id": hit.interface_id,
+                    "name": hit.title,
+                    "controller_name": hit.controller_name,
+                    "operation_id": hit.operation_id,
+                    "method": hit.method,
+                    "path": hit.path,
+                    "service": hit.service,
+                    "route_service": metadata.get("route_service_name"),
+                    "operation_kind": metadata.get("operation_kind", "unknown"),
+                    "purpose": hit.purpose,
+                    "audiences": hit.audiences,
+                    "domains": hit.domains,
+                    "scenarios": hit.scenarios,
+                    "resource": hit.resource,
+                    "actions": hit.actions,
+                    "lookup_keys": hit.lookup_keys,
+                    "cardinality": hit.cardinality,
+                    "discriminators": hit.discriminators,
+                    "interface_family": hit.interface_family,
+                    "family_size": hit.family_size,
+                    "matched_slots": hit.matched_slots,
+                    "conflicting_slots": hit.conflicting_slots,
+                    "semantic_stale": hit.semantic_stale,
+                    "confidence": hit.confidence,
+                    "reasons": hit.reasons[:3],
+                    "callable": callable_now,
+                    "address_count": int(metadata.get("address_count") or 0),
+                    "identity_count": int(metadata.get("identity_count") or 0),
+                    "request_count": int(metadata.get("request_count") or 0),
+                    "last_requested_at": self._iso(metadata.get("last_requested_at")),
+                }
+            )
+        return {
+            "status": "ok",
+            "mode": "ai_candidates",
+            "environment": environment,
+            "search_id": response.search_id,
+            "query": normalized,
+            "candidate_count": response.candidate_count,
+            "returned_count": len(results),
+            "intent": {
+                "positive_slots": response.intent.positive_slots,
+                "negative_slots": response.intent.negative_slots,
+                "uncertain_slots": response.intent.uncertain_slots,
+            },
+            "results": results,
+        }
+
+    def _search_operational_metadata(
+        self,
+        *,
+        workspace_id: str,
+        environment: str,
+        interface_ids: list[str],
+        role: str | None,
+    ) -> dict[str, dict[str, object]]:
+        if not interface_ids:
+            return {}
         with self._connect() as connection, connection.cursor() as cursor:
             cursor.execute(
                 """
-                SELECT interface.id, interface.name, interface.controller_name,
-                       interface.controller_description, interface.path, interface.method,
-                       interface.description, interface.operation_id,
-                       interface.operation_kind, interface.crud_type,
-                       profile.business_entity, profile.business_action,
-                       profile.business_scenario, profile.aliases,
-                       profile.positive_examples, profile.negative_examples,
-                       COALESCE(effects.items, '[]'::jsonb) AS table_effects,
-                       source.name AS service_name,
+                SELECT interface.id, interface.operation_kind,
                        source.invocation_mode, route.name AS route_service_name,
                        count(DISTINCT address.id)::int AS address_count,
                        count(DISTINCT identity.id)::int AS identity_count,
-                       max(log.created_at) AS last_requested_at,
-                       count(DISTINCT log.id)::int AS request_count
+                       count(DISTINCT log.id)::int AS request_count,
+                       max(log.created_at) AS last_requested_at
                 FROM interface_forwarding_interfaces AS interface
                 JOIN interface_forwarding_services AS source ON source.id=interface.service_id
-                LEFT JOIN interface_forwarding_intent_profiles AS profile
-                  ON profile.interface_id=interface.id
-                LEFT JOIN LATERAL (
-                    SELECT jsonb_agg(
-                        jsonb_build_object(
-                            'database_key', effect.database_key,
-                            'schema_name', effect.schema_name,
-                            'table_name', effect.table_name,
-                            'effect_type', effect.effect_type,
-                            'response_contribution', effect.response_contribution,
-                            'source_file', effect.source_file,
-                            'source_class', effect.source_class,
-                            'source_method', effect.source_method,
-                            'call_path', effect.call_path,
-                            'evidence_type', effect.evidence_type,
-                            'confidence', effect.confidence
-                        ) ORDER BY effect.table_name, effect.effect_type
-                    ) AS items
-                    FROM interface_forwarding_table_effects AS effect
-                    WHERE effect.interface_id=interface.id
-                      AND effect.effect_type=ANY(
-                        CASE interface.crud_type
-                          WHEN 'read' THEN ARRAY['select']::text[]
-                          WHEN 'create' THEN ARRAY['insert', 'upsert']::text[]
-                          WHEN 'update' THEN ARRAY[
-                            'insert', 'update', 'delete', 'soft_delete', 'upsert'
-                          ]::text[]
-                          WHEN 'delete' THEN ARRAY['delete', 'soft_delete']::text[]
-                          ELSE ARRAY[]::text[]
-                        END
-                      )
-                      AND (interface.crud_type <> 'read'
-                           OR effect.response_contribution='returned')
-                ) AS effects ON TRUE
                 LEFT JOIN interface_forwarding_services AS route
                   ON route.id=CASE WHEN source.invocation_mode='gateway'
                                    THEN source.gateway_service_id ELSE source.id END
@@ -173,94 +280,18 @@ class InterfaceForwardingContextService:
                   ON identity.environment_id=address.id
                  AND (%s::text IS NULL OR identity.role_name ILIKE %s)
                 LEFT JOIN interface_forwarding_logs AS log ON log.interface_id=interface.id
-                WHERE interface.workspace_id=%s
-                  AND (%s::text IS NULL OR source.name ILIKE %s)
-                  AND (interface.name ILIKE %s OR interface.path ILIKE %s
-                       OR interface.description ILIKE %s
-                       OR interface.controller_name ILIKE %s
-                       OR interface.controller_description ILIKE %s
-                       OR profile.business_entity ILIKE %s
-                       OR profile.business_action ILIKE %s
-                       OR profile.business_scenario ILIKE %s
-                       OR profile.aliases::text ILIKE %s
-                       OR profile.positive_examples::text ILIKE %s
-                       OR effects.items::text ILIKE %s)
-                GROUP BY interface.id, source.id, route.id, profile.interface_id, effects.items
-                ORDER BY
-                  CASE WHEN lower(interface.name)=lower(%s) THEN 0
-                       WHEN lower(interface.path)=lower(%s) THEN 1
-                       WHEN interface.name ILIKE %s THEN 2 ELSE 3 END,
-                  max(log.created_at) DESC NULLS LAST, lower(interface.path), interface.method
-                LIMIT %s
+                WHERE interface.workspace_id=%s AND interface.id=ANY(%s::text[])
+                GROUP BY interface.id, source.id, route.id
                 """,
                 (
                     environment,
                     role,
                     f"%{role}%" if role else None,
                     workspace_id,
-                    service,
-                    f"%{service}%" if service else None,
-                    like,
-                    like,
-                    like,
-                    like,
-                    like,
-                    like,
-                    like,
-                    like,
-                    like,
-                    like,
-                    like,
-                    normalized,
-                    normalized,
-                    f"{normalized}%",
-                    max(1, min(limit, 50)),
+                    interface_ids,
                 ),
             )
-            rows = list(cursor.fetchall())
-        results: list[dict[str, object]] = []
-        for row in rows:
-            callable_now = (
-                row["operation_kind"] in _EXECUTABLE_OPERATION_KINDS
-                and row["invocation_mode"] != "disabled"
-                and row["address_count"] > 0
-            )
-            results.append(
-                {
-                    "interface_id": row["id"],
-                    "name": row["name"],
-                    "controller": row["controller_name"],
-                    "controller_name": row["controller_name"],
-                    "controller_description": row["controller_description"],
-                    "description": row["description"],
-                    "operation_id": row["operation_id"],
-                    "method": row["method"],
-                    "path": row["path"],
-                    "service": row["service_name"],
-                    "route_service": row["route_service_name"],
-                    "operation_kind": row["operation_kind"],
-                    "crud_type": row["crud_type"],
-                    "business_entity": row["business_entity"] or "",
-                    "business_action": row["business_action"] or "",
-                    "business_scenario": row["business_scenario"] or "",
-                    "aliases": row["aliases"] or [],
-                    "positive_examples": row["positive_examples"] or [],
-                    "negative_examples": row["negative_examples"] or [],
-                    "table_effects": row["table_effects"] or [],
-                    "callable": callable_now,
-                    "address_count": row["address_count"],
-                    "identity_count": row["identity_count"],
-                    "request_count": row["request_count"],
-                    "last_requested_at": self._iso(row["last_requested_at"]),
-                }
-            )
-        return {
-            "status": "ok",
-            "environment": environment,
-            "query": normalized,
-            "returned_count": len(results),
-            "results": results,
-        }
+            return {str(row["id"]): dict(row) for row in cursor.fetchall()}
 
     def history(
         self,

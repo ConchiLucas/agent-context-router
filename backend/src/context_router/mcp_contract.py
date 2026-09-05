@@ -22,6 +22,8 @@ CONTEXT_ROUTER_TABLE_RELATION_TOOL_NAMES = (
 )
 CONTEXT_ROUTER_INTERFACE_FORWARDING_TOOL_NAMES = (
     "search_forwarding_interfaces",
+    "compare_forwarding_interfaces",
+    "read_forwarding_interface_detail",
     "read_forwarding_request_history",
     "prepare_forwarding_request",
     "execute_forwarding_request",

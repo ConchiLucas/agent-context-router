@@ -516,6 +516,7 @@ class PostgresTaskRepository:
         intent_source: str,
     ) -> None:
         if intent_type not in {
+            "interface_search",
             "interface_execute",
             "data_query",
             "task_execute",

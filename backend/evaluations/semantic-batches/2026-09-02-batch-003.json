@@ -1,0 +1,3845 @@
+{
+  "schema_version": "context-router-interface-semantic-batch-v1",
+  "batch_id": "panzhihua-c12-data-unscanned-003",
+  "workspace_id": "b9ce65eddc27437d9615177fbd07cb0a",
+  "generation_policy": "完整源码合同家族复核；业务语义仅进入批次JSON；未使用 copy_from_interface_id。",
+  "family_groups": {
+    "合同查询": 18,
+    "会员用户查询": 11,
+    "库存汇总": 4,
+    "仓库查询": 4,
+    "出库箱查询": 3,
+    "公路订单": 2,
+    "MTP可选商品": 2,
+    "SSE实时连接": 4,
+    "发票信息": 1,
+    "园区下拉": 1
+  },
+  "items": [
+    {
+      "interface_id": "9e921203-ecbb-4930-8817-7b0da27d43ed",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/admin/invoice/getByUserId"
+      },
+      "semantic": {
+        "purpose": "供运营相关内部服务按用户ID读取一条门户发票抬头、税号、开户地址和银行账户信息。",
+        "audiences": [
+          "内部服务",
+          "运营端"
+        ],
+        "domains": [
+          "门户会员",
+          "发票信息"
+        ],
+        "scenarios": [
+          "按用户定位其开票资料"
+        ],
+        "actions": [
+          "detail"
+        ],
+        "entities": [
+          "用户发票信息"
+        ],
+        "aliases": [
+          "按用户查发票资料",
+          "发票抬头信息",
+          "DataPortalInvoiceAdminController.getByUserId"
+        ],
+        "resource": "member_invoice",
+        "lookup_keys": [
+          "id",
+          "userId"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "按用户ID返回单条开票资料；不是合同发票、发票列表或当前登录用户自动取值。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "id",
+              "userId"
+            ],
+            "aliases": [
+              "会员用户ID"
+            ],
+            "resource": "member_invoice",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "DataPortalInvoiceAdminController#getByUserId 与 RemoteDataInvoiceAdminService#getByUserId",
+          "IdObject 请求体及 InvoiceInfoAdminQuery 返回DTO",
+          "DataPortalInvoiceAdminService 按 Invoice.userId findFirst"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "c78eec88-ca98-4874-bd7c-ce65bc578296",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/admin/park/list"
+      },
+      "semantic": {
+        "purpose": "供运营相关内部服务按园区名称模糊筛选园区ID和园区名称下拉列表。",
+        "audiences": [
+          "内部服务",
+          "运营端"
+        ],
+        "domains": [
+          "园区管理",
+          "基础数据"
+        ],
+        "scenarios": [
+          "加载园区选择项"
+        ],
+        "actions": [
+          "list"
+        ],
+        "entities": [
+          "园区"
+        ],
+        "aliases": [
+          "园区下拉列表",
+          "按名称查园区",
+          "DataPortalParkAdminController.list"
+        ],
+        "resource": "park_option",
+        "lookup_keys": [
+          "parkName"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "返回园区ID与名称的多条下拉项；不是园区详情、分页或园区预约数据。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "park_id",
+            "display_name": "园区ID",
+            "technical_names": [
+              "parkId"
+            ],
+            "aliases": [
+              "园区主键"
+            ],
+            "resource": "park_option",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "DataPortalParkAdminController#list 与 RemoteDataParkAdminService#list",
+          "ParkAdminCondition/ParkAdminQuery DTO",
+          "park_query_getList.sql 仅查未删除园区并按名称筛选"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "002ce03f-33b0-4116-9c14-4b846ef23f1f",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/admin/warehouse/page"
+      },
+      "semantic": {
+        "purpose": "供运营相关内部服务分页查询WMS仓储仓库主档，可按编码、名称、类型、来源、状态和电话筛选。",
+        "audiences": [
+          "内部服务",
+          "运营端"
+        ],
+        "domains": [
+          "仓储管理",
+          "仓库主档"
+        ],
+        "scenarios": [
+          "分页维护或选择仓储仓库"
+        ],
+        "actions": [
+          "page"
+        ],
+        "entities": [
+          "仓储仓库"
+        ],
+        "aliases": [
+          "仓库分页",
+          "WMS仓库分页",
+          "DataPortalWarehouseAdminController.page"
+        ],
+        "resource": "warehouse",
+        "lookup_keys": [
+          "warehouseCode",
+          "warehouseName",
+          "warehouseType",
+          "source",
+          "status",
+          "tel"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "返回完整仓库主档分页；不同于 /warehouse/list 的不分页集合，也不同于 /warehouse/inventory/page 的货主库存仓库分页。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "warehouse_code",
+            "display_name": "仓库编码",
+            "technical_names": [
+              "warehouseCode"
+            ],
+            "aliases": [
+              "仓库代码"
+            ],
+            "resource": "warehouse",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "DataPortalWarehouseAdminController#page 与 Feign PostMapping /page",
+          "WarehouseAdminPageCondition/WarehouseAdminQuery",
+          "warehouse_query_getPageList.sql"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "c80320f9-77fa-4f2d-9d22-a0e7cce17012",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/admin/warehouse/list"
+      },
+      "semantic": {
+        "purpose": "供运营相关内部服务按编码、名称、来源、状态和电话查询WMS仓储仓库集合。",
+        "audiences": [
+          "内部服务",
+          "运营端"
+        ],
+        "domains": [
+          "仓储管理",
+          "仓库主档"
+        ],
+        "scenarios": [
+          "不分页加载仓库集合"
+        ],
+        "actions": [
+          "list"
+        ],
+        "entities": [
+          "仓储仓库"
+        ],
+        "aliases": [
+          "仓库集合",
+          "仓储仓库列表",
+          "DataPortalWarehouseAdminController.list"
+        ],
+        "resource": "warehouse",
+        "lookup_keys": [
+          "warehouseCode",
+          "warehouseName",
+          "source",
+          "status",
+          "tel"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "返回不分页仓库集合且无 warehouseType 条件；不同于 /warehouse/page 分页，也不是按货主库存量列仓库。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "warehouse_code",
+            "display_name": "仓库编码",
+            "technical_names": [
+              "warehouseCode"
+            ],
+            "aliases": [
+              "仓库代码"
+            ],
+            "resource": "warehouse",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "DataPortalWarehouseAdminController#list 与 RemoteDataWarehouseAdminService#list",
+          "WarehouseAdminCondition/List<WarehouseAdminQuery>",
+          "warehouse_query_getList.sql"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "7dd8cadd-03f1-4e57-8a0f-c93b1b60573c",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/admin/warehouse/getByWarehouseCode"
+      },
+      "semantic": {
+        "purpose": "供运营相关内部服务按必填仓库编码读取一条WMS仓库及所属公司、地区、容量和联系方式详情。",
+        "audiences": [
+          "内部服务",
+          "运营端"
+        ],
+        "domains": [
+          "仓储管理",
+          "仓库主档"
+        ],
+        "scenarios": [
+          "按仓库编码核对仓库详情"
+        ],
+        "actions": [
+          "detail"
+        ],
+        "entities": [
+          "仓储仓库",
+          "所属公司"
+        ],
+        "aliases": [
+          "按仓库编码查详情",
+          "仓库信息",
+          "DataPortalWarehouseInfoAdminController.getByWarehouseCode"
+        ],
+        "resource": "warehouse",
+        "lookup_keys": [
+          "warehouseCode"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "以必填 warehouseCode 返回单条仓库详情并补充所属公司；不是条件列表或货主库存仓库分页。"
+        ],
+        "required_inputs": [
+          {
+            "name": "warehouseCode",
+            "zh_name": "仓库编码",
+            "location": "body",
+            "required": true,
+            "schema_type": "string"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "warehouse_code",
+            "display_name": "仓库编码",
+            "technical_names": [
+              "warehouseCode"
+            ],
+            "aliases": [
+              "仓库代码"
+            ],
+            "resource": "warehouse",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.99,
+        "semantic_evidence": [
+          "DataPortalWarehouseInfoAdminController#getByWarehouseCode 与 Feign 注解",
+          "WarehouseInfoCondition @NotBlank；WarehouseInfoQuery",
+          "warehouseInfo_query_getByCode.sql limit 1 并关联组织"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "b24b82d1-7702-44d1-8f56-8b7408d45ed1",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/admin/warehouse/inventory/page"
+      },
+      "semantic": {
+        "purpose": "供小程序相关内部服务按必填货主组织ID分页查询该货主有库存的仓库及各仓库存量。",
+        "audiences": [
+          "内部服务",
+          "小程序"
+        ],
+        "domains": [
+          "库存管理",
+          "仓库库存"
+        ],
+        "scenarios": [
+          "货主切换库存仓库选择项"
+        ],
+        "actions": [
+          "page"
+        ],
+        "entities": [
+          "库存仓库",
+          "货主组织"
+        ],
+        "aliases": [
+          "货主库存仓库分页",
+          "小程序仓库库存选择",
+          "DataPortalWarehouseInfoAdminController.inventoryPage"
+        ],
+        "resource": "owner_inventory_warehouse",
+        "lookup_keys": [
+          "ownerId"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "按 ownerId 限定并返回仓库及库存总量分页；不是全局仓库主档 page/list，也不是商品库存分页。"
+        ],
+        "required_inputs": [
+          {
+            "name": "ownerId",
+            "zh_name": "货主组织ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "owner_id",
+            "display_name": "货主组织ID",
+            "technical_names": [
+              "ownerId"
+            ],
+            "aliases": [
+              "货主ID"
+            ],
+            "resource": "owner_inventory_warehouse",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_code",
+            "display_name": "仓库编码",
+            "technical_names": [
+              "warehouseCode"
+            ],
+            "aliases": [
+              "仓库代码"
+            ],
+            "resource": "owner_inventory_warehouse",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.99,
+        "semantic_evidence": [
+          "DataPortalWarehouseInfoAdminController#inventoryPage",
+          "WarehouseInventoryPageCondition @NotNull 与 WarehouseInventoryQuery",
+          "warehouseInventory_query_getPageList.sql 按 ownerId 社会信用代码关联并汇总库存"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "7389ce43-7a65-40ff-b307-3a3a011f9966",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/admin/inventorySummary/listByWarehouseOwnerSku"
+      },
+      "semantic": {
+        "purpose": "供运营相关内部服务按仓库ID、货主组织ID和商品ID集合查询库存数量与可用数量汇总。",
+        "audiences": [
+          "内部服务",
+          "运营端"
+        ],
+        "domains": [
+          "库存管理",
+          "库存汇总"
+        ],
+        "scenarios": [
+          "按资源ID批量核对库存"
+        ],
+        "actions": [
+          "list"
+        ],
+        "entities": [
+          "库存汇总",
+          "仓库",
+          "货主",
+          "商品"
+        ],
+        "aliases": [
+          "按ID查库存汇总",
+          "仓库货主商品库存",
+          "DataPortalInventorySummaryAdminController.listByWarehouseOwnerSku"
+        ],
+        "resource": "inventory_summary",
+        "lookup_keys": [
+          "warehouseIds",
+          "ownerIds",
+          "skuIds"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "使用 warehouseIds/skuIds 数字ID筛选；不同于 listByWarehouseOwnerSkuAll 使用仓库编码和商品编码，且本接口不返回安全库存和入库时间。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "warehouse_id",
+            "display_name": "仓库ID",
+            "technical_names": [
+              "warehouseIds"
+            ],
+            "aliases": [
+              "仓库主键"
+            ],
+            "resource": "inventory_summary",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sku_id",
+            "display_name": "商品ID",
+            "technical_names": [
+              "skuIds"
+            ],
+            "aliases": [
+              "SKU ID"
+            ],
+            "resource": "inventory_summary",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "owner_id",
+            "display_name": "货主组织ID",
+            "technical_names": [
+              "ownerIds"
+            ],
+            "aliases": [
+              "货主ID"
+            ],
+            "resource": "inventory_summary",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.99,
+        "semantic_evidence": [
+          "DataPortalInventorySummaryAdminController#listByWarehouseOwnerSku",
+          "InventorySummaryAdminCondition/List<InventorySummaryAdminQuery>",
+          "inventory_summary_query_getList.sql 使用 warehouseIds、ownerIds、skuIds"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "04e7a5af-290c-4e06-b1ab-97ffbabfad51",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/admin/inventorySummary/listByWarehouseOwnerSkuAll"
+      },
+      "semantic": {
+        "purpose": "供运营相关内部服务按仓库编码、货主组织ID和商品编码集合查询全部匹配库存，并返回安全库存和入库时间等扩展字段。",
+        "audiences": [
+          "内部服务",
+          "运营端"
+        ],
+        "domains": [
+          "库存管理",
+          "库存汇总"
+        ],
+        "scenarios": [
+          "按业务编码批量核对全部库存"
+        ],
+        "actions": [
+          "list"
+        ],
+        "entities": [
+          "库存汇总",
+          "仓库",
+          "货主",
+          "商品"
+        ],
+        "aliases": [
+          "按编码查全部库存",
+          "库存汇总All",
+          "DataPortalInventorySummaryAdminController.listByWarehouseOwnerSkuAll"
+        ],
+        "resource": "inventory_summary",
+        "lookup_keys": [
+          "warehouseCodes",
+          "ownerIds",
+          "skuCodes"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "使用 warehouseCodes/skuCodes 业务编码并返回 safetyStock、inboundTime；不同于 ID 条件版 listByWarehouseOwnerSku。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "warehouse_code",
+            "display_name": "仓库编码",
+            "technical_names": [
+              "warehouseCodes"
+            ],
+            "aliases": [
+              "仓库代码"
+            ],
+            "resource": "inventory_summary",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sku_code",
+            "display_name": "商品编码",
+            "technical_names": [
+              "skuCodes"
+            ],
+            "aliases": [
+              "SKU编码"
+            ],
+            "resource": "inventory_summary",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "owner_id",
+            "display_name": "货主组织ID",
+            "technical_names": [
+              "ownerIds"
+            ],
+            "aliases": [
+              "货主ID"
+            ],
+            "resource": "inventory_summary",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.99,
+        "semantic_evidence": [
+          "DataPortalInventorySummaryAdminController#listByWarehouseOwnerSkuAll",
+          "InventorySummaryAllCondition/InventorySummaryAdminQuery",
+          "inventory_summary_query_getListAll.sql 的编码条件及扩展字段"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "868387a0-9a48-4ddf-adab-4dc981a0811d",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/admin/inventorySummary/page"
+      },
+      "semantic": {
+        "purpose": "供小程序相关内部服务按必填货主组织ID分页汇总商品库存，可按仓库、分类或商品关键字筛选并计算库存状态。",
+        "audiences": [
+          "内部服务",
+          "小程序"
+        ],
+        "domains": [
+          "库存管理",
+          "商品库存"
+        ],
+        "scenarios": [
+          "按商品或仓库视角浏览货主库存"
+        ],
+        "actions": [
+          "page"
+        ],
+        "entities": [
+          "商品库存",
+          "货主组织"
+        ],
+        "aliases": [
+          "小程序库存分页",
+          "货主商品库存",
+          "DataPortalInventorySummaryAdminController.page"
+        ],
+        "resource": "owner_product_inventory",
+        "lookup_keys": [
+          "ownerId",
+          "warehouseIds",
+          "categoryId",
+          "categoryName",
+          "keyword",
+          "queryMode"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "返回按商品和单位聚合的分页及 stockStatus；不同于 detail 的单个商品详情，也不同于不分页通用库存汇总。"
+        ],
+        "required_inputs": [
+          {
+            "name": "ownerId",
+            "zh_name": "货主组织ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "owner_id",
+            "display_name": "货主组织ID",
+            "technical_names": [
+              "ownerId"
+            ],
+            "aliases": [
+              "货主ID"
+            ],
+            "resource": "owner_product_inventory",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sku_id",
+            "display_name": "商品ID",
+            "technical_names": [
+              "skuId"
+            ],
+            "aliases": [
+              "SKU ID"
+            ],
+            "resource": "owner_product_inventory",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.99,
+        "semantic_evidence": [
+          "DataPortalInventorySummaryAdminController#page @Valid",
+          "InventorySummaryAdminPageCondition ownerId @NotNull 与 PageResult DTO",
+          "inventory_summary_query_getPageList.sql；Service 填充 stockStatus"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "1416ff85-4a54-440f-afb2-274e6f09246b",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/admin/inventorySummary/detail"
+      },
+      "semantic": {
+        "purpose": "供小程序相关内部服务按商品ID、单位ID和货主组织ID读取一条商品库存详情，汇总各仓库存量、价格与商品图片。",
+        "audiences": [
+          "内部服务",
+          "小程序"
+        ],
+        "domains": [
+          "库存管理",
+          "商品库存"
+        ],
+        "scenarios": [
+          "查看货主某商品库存详情"
+        ],
+        "actions": [
+          "detail"
+        ],
+        "entities": [
+          "商品库存详情",
+          "仓库库存",
+          "商品图片"
+        ],
+        "aliases": [
+          "小程序库存详情",
+          "商品各仓库存",
+          "DataPortalInventorySummaryAdminController.detail"
+        ],
+        "resource": "owner_product_inventory",
+        "lookup_keys": [
+          "skuId",
+          "unitId",
+          "ownerId",
+          "warehouseIds"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "返回一个商品维度详情并内嵌多仓库存和图片；不同于 page 的多商品分页，三个标识字段均必填。"
+        ],
+        "required_inputs": [
+          {
+            "name": "skuId",
+            "zh_name": "商品ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "integer"
+          },
+          {
+            "name": "unitId",
+            "zh_name": "单位ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "integer"
+          },
+          {
+            "name": "ownerId",
+            "zh_name": "货主组织ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "sku_id",
+            "display_name": "商品ID",
+            "technical_names": [
+              "skuId"
+            ],
+            "aliases": [
+              "SKU ID"
+            ],
+            "resource": "owner_product_inventory",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "unit_id",
+            "display_name": "单位ID",
+            "technical_names": [
+              "unitId"
+            ],
+            "aliases": [
+              "计量单位ID"
+            ],
+            "resource": "owner_product_inventory",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "owner_id",
+            "display_name": "货主组织ID",
+            "technical_names": [
+              "ownerId"
+            ],
+            "aliases": [
+              "货主ID"
+            ],
+            "resource": "owner_product_inventory",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.99,
+        "semantic_evidence": [
+          "DataPortalInventorySummaryAdminController#detail @Valid",
+          "InventorySummaryAdminDetailCondition 三个 @NotNull；InventorySummaryAdminDetailQuery",
+          "Service 聚合仓库行、商品图片、价格与库存总量；详情 SQL"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "c2c194c8-64f4-4da3-b7b7-6c487ef4556c",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/mtp/admin/goods/selectable/page"
+      },
+      "semantic": {
+        "purpose": "供MTP后台内部服务分页查询已审核通过且尚未加入MTP货物主数据的商品，可按商品名称或编码模糊筛选。",
+        "audiences": [
+          "内部服务",
+          "MTP后台"
+        ],
+        "domains": [
+          "主数据",
+          "商品货物"
+        ],
+        "scenarios": [
+          "选择可新增为MTP货物的商品"
+        ],
+        "actions": [
+          "page"
+        ],
+        "entities": [
+          "商品主数据",
+          "MTP货物"
+        ],
+        "aliases": [
+          "可选商品分页",
+          "未加入MTP的审核商品",
+          "DataGoodsController.selectablePage"
+        ],
+        "resource": "selectable_goods",
+        "lookup_keys": [
+          "goodsName",
+          "goodsCode"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "仅返回 approved 且未被MTP货物按 goodsId/编码/名称占用的商品分页；不是全量商品分页或单条复核。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "goods_code",
+            "display_name": "商品编码",
+            "technical_names": [
+              "goodsCode"
+            ],
+            "aliases": [
+              "货品编码"
+            ],
+            "resource": "selectable_goods",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "goods_id",
+            "display_name": "商品ID",
+            "technical_names": [
+              "goodsId"
+            ],
+            "aliases": [
+              "货品ID"
+            ],
+            "resource": "selectable_goods",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.99,
+        "semantic_evidence": [
+          "DataGoodsController#selectablePage 与 RemoteDataGoodsService",
+          "DataGoodsPageCondition/PageResult<DataGoodsQuery>",
+          "dataGoods_query_selectablePage.sql 的 approved 与 not exists 规则"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "4444c4e9-29ec-43c4-a308-afc5c9165d87",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/mtp/admin/goods/selectable/getById"
+      },
+      "semantic": {
+        "purpose": "供MTP后台内部服务按商品ID读取一条可加入MTP货物的商品，并再次校验其已审核且尚未加入。",
+        "audiences": [
+          "内部服务",
+          "MTP后台"
+        ],
+        "domains": [
+          "主数据",
+          "商品货物"
+        ],
+        "scenarios": [
+          "选中商品后复核是否仍可新增为MTP货物"
+        ],
+        "actions": [
+          "detail"
+        ],
+        "entities": [
+          "商品主数据",
+          "MTP货物"
+        ],
+        "aliases": [
+          "按ID查可选商品",
+          "复核未加入MTP商品",
+          "DataGoodsController.getSelectableById"
+        ],
+        "resource": "selectable_goods",
+        "lookup_keys": [
+          "goodsId"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "按 goodsId 返回单条并重复执行 approved/not exists 校验；不同于 selectable/page 的候选分页。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "goods_id",
+            "display_name": "商品ID",
+            "technical_names": [
+              "goodsId"
+            ],
+            "aliases": [
+              "货品ID"
+            ],
+            "resource": "selectable_goods",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "goods_code",
+            "display_name": "商品编码",
+            "technical_names": [
+              "goodsCode"
+            ],
+            "aliases": [
+              "货品编码"
+            ],
+            "resource": "selectable_goods",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "DataGoodsController#getSelectableById 与 RemoteDataGoodsService",
+          "DataGoodsCondition/DataGoodsQuery",
+          "DataGoodsService 缺ID返回null；selectableGetById.sql 复核可选规则"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "29557031-a58a-4a86-bb49-916bfd28b264",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/order/page"
+      },
+      "semantic": {
+        "purpose": "供内部服务分页查询公路派车运输单及货物信息，可按运单、承运单、车辆、司机、时间、承运商和装卸地址筛选。",
+        "audiences": [
+          "内部服务"
+        ],
+        "domains": [
+          "公路运输",
+          "派车订单"
+        ],
+        "scenarios": [
+          "分页查看公路派车单履约情况"
+        ],
+        "actions": [
+          "page"
+        ],
+        "entities": [
+          "公路派车单",
+          "运输货物"
+        ],
+        "aliases": [
+          "公路派车单分页",
+          "运输订单分页",
+          "DataPortalOrderController.page"
+        ],
+        "resource": "highway_dispatch_order",
+        "lookup_keys": [
+          "dispatchOrderNo",
+          "carrierOrderNo",
+          "status",
+          "vehicleNo",
+          "driverName",
+          "carrierId",
+          "planLoadTimeStart",
+          "planLoadTimeEnd",
+          "planUnloadTimeStart",
+          "planUnloadTimeEnd"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "返回派车单与货物明细分页；不同于 orderStatusStatistics 在相同条件下返回状态计数聚合。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "dispatch_order_no",
+            "display_name": "运输订单号",
+            "technical_names": [
+              "dispatchOrderNo"
+            ],
+            "aliases": [
+              "派车单号",
+              "运单号"
+            ],
+            "resource": "highway_dispatch_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "carrier_order_no",
+            "display_name": "承运订单号",
+            "technical_names": [
+              "carrierOrderNo"
+            ],
+            "aliases": [
+              "承运单号"
+            ],
+            "resource": "highway_dispatch_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "vehicle_no",
+            "display_name": "车牌号",
+            "technical_names": [
+              "vehicleNo"
+            ],
+            "aliases": [
+              "车辆号"
+            ],
+            "resource": "highway_dispatch_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "DataPortalOrderController#page 与 RemoteDataOrderService#page",
+          "HighwayDispatchOrderPageCondition/PageResult<HighwayDispatchOrder>",
+          "order_query_getPageList.sql"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "fa491d0b-a8f3-4984-9fc3-5a58fdeec6bb",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/order/orderStatusStatistics"
+      },
+      "semantic": {
+        "purpose": "供内部服务按公路派车单查询条件统计订单总数、待执行数、运输中数和完成数。",
+        "audiences": [
+          "内部服务"
+        ],
+        "domains": [
+          "公路运输",
+          "订单统计"
+        ],
+        "scenarios": [
+          "统计筛选范围内公路派车单状态分布"
+        ],
+        "actions": [
+          "query",
+          "aggregate"
+        ],
+        "entities": [
+          "公路派车单状态统计"
+        ],
+        "aliases": [
+          "公路订单状态统计",
+          "派车单执行完成数量",
+          "DataPortalOrderController.orderStatusStatistics"
+        ],
+        "resource": "highway_dispatch_order_statistics",
+        "lookup_keys": [
+          "dispatchOrderNo",
+          "carrierOrderNo",
+          "status",
+          "vehicleNo",
+          "driverName",
+          "carrierId",
+          "planLoadTimeStart",
+          "planLoadTimeEnd",
+          "planUnloadTimeStart",
+          "planUnloadTimeEnd"
+        ],
+        "cardinality": "one",
+        "ownership": "all",
+        "discriminators": [
+          "复用派车单筛选条件但返回 orderCount/runCount/executeCount/finishCount 聚合；不是返回订单分页明细。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "dispatch_order_no",
+            "display_name": "运输订单号",
+            "technical_names": [
+              "dispatchOrderNo"
+            ],
+            "aliases": [
+              "派车单号",
+              "运单号"
+            ],
+            "resource": "highway_dispatch_order_statistics",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "carrier_order_no",
+            "display_name": "承运订单号",
+            "technical_names": [
+              "carrierOrderNo"
+            ],
+            "aliases": [
+              "承运单号"
+            ],
+            "resource": "highway_dispatch_order_statistics",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.88,
+        "semantic_evidence": [
+          "DataPortalOrderController#orderStatusStatistics",
+          "HighwayDispatchOrderPageCondition/OrderStatusStatistics",
+          "order_query_orderStatusStatistics.sql 按 vehicle_no 分组，但 HighwayDispatchOrderDao#orderStatusStatistics 通过 findFirst 返回单对象，当前实现与整体聚合口径存在冲突"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "c64ff307-8d69-42f2-868c-effe84148e7a",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/admin/outboundBox/page"
+      },
+      "semantic": {
+        "purpose": "供运营相关内部服务分页查询多式联运出库装箱明细，可按出库单号、箱码、发运单号、生成状态、推送状态和箱状态筛选。",
+        "audiences": [
+          "内部服务",
+          "运营端"
+        ],
+        "domains": [
+          "仓储出库",
+          "多式联运装箱"
+        ],
+        "scenarios": [
+          "分页查看待发运或已绑定的出库箱"
+        ],
+        "actions": [
+          "page"
+        ],
+        "entities": [
+          "出库箱",
+          "装箱商品"
+        ],
+        "aliases": [
+          "多式联运装箱分页",
+          "出库箱分页",
+          "DataPortalOutboundBoxController.page"
+        ],
+        "resource": "multimodal_outbound_box",
+        "lookup_keys": [
+          "soNo",
+          "boxNo",
+          "shippingOrderNo",
+          "shippingGenerated",
+          "pushStatus",
+          "boxStatus"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "返回 shipment_type=multimodal 的箱及商品分页；不同于 queryByBoxNos 的批量箱明细和 queryMtpShippingBindings 的MTP绑定关系。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "box_no",
+            "display_name": "箱码",
+            "technical_names": [
+              "boxNo"
+            ],
+            "aliases": [
+              "箱号"
+            ],
+            "resource": "multimodal_outbound_box",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "outbound_order_no",
+            "display_name": "出库单号",
+            "technical_names": [
+              "soNo"
+            ],
+            "aliases": [
+              "SO单号"
+            ],
+            "resource": "multimodal_outbound_box",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "shipping_order_no",
+            "display_name": "发运单号",
+            "technical_names": [
+              "shippingOrderNo"
+            ],
+            "aliases": [
+              "运输单号"
+            ],
+            "resource": "multimodal_outbound_box",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.99,
+        "semantic_evidence": [
+          "DataPortalOutboundBoxController#page 与 Feign /page",
+          "OutboundBoxDataPageCondition/PageResult<OutboundBoxDataPageQuery>",
+          "outbound_box_data_query_getPageList.sql 限定 multimodal"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "666da6b9-9845-44c4-bb0e-94eae05299f0",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/admin/outboundBox/queryByBoxNos"
+      },
+      "semantic": {
+        "purpose": "供运营相关内部服务按必填箱码集合批量查询多式联运出库箱及其装箱商品明细。",
+        "audiences": [
+          "内部服务",
+          "运营端"
+        ],
+        "domains": [
+          "仓储出库",
+          "多式联运装箱"
+        ],
+        "scenarios": [
+          "按箱码核对装箱商品"
+        ],
+        "actions": [
+          "list"
+        ],
+        "entities": [
+          "出库箱",
+          "装箱商品"
+        ],
+        "aliases": [
+          "按箱码查装箱明细",
+          "批量箱码查询",
+          "DataPortalOutboundBoxController.queryByBoxNos"
+        ],
+        "resource": "multimodal_outbound_box",
+        "lookup_keys": [
+          "boxNos"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "按箱码返回出库箱头与商品行；不同于 queryMtpShippingBindings 只返回上游出库单、箱码和MTP发运单绑定。"
+        ],
+        "required_inputs": [
+          {
+            "name": "boxNos",
+            "zh_name": "箱码集合",
+            "location": "body",
+            "required": true,
+            "schema_type": "array"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "box_no",
+            "display_name": "箱码",
+            "technical_names": [
+              "boxNos",
+              "boxNo"
+            ],
+            "aliases": [
+              "箱号"
+            ],
+            "resource": "multimodal_outbound_box",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.99,
+        "semantic_evidence": [
+          "DataPortalOutboundBoxController#queryByBoxNos @Valid",
+          "OutboundBoxDataCondition boxNos @NotEmpty；OutboundBoxDataQuery",
+          "outbound_box_data_query_byBoxNos.sql 关联箱头与明细"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "59989d6d-53be-44d0-880f-995b359faeec",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/admin/outboundBox/queryMtpShippingBindings"
+      },
+      "semantic": {
+        "purpose": "供运营相关内部服务按必填箱码集合查询MTP公路派车箱关系，返回上游出库单号、箱码和发运单号绑定。",
+        "audiences": [
+          "内部服务",
+          "运营端"
+        ],
+        "domains": [
+          "仓储出库",
+          "多式联运发运"
+        ],
+        "scenarios": [
+          "检查出库箱是否已绑定MTP发运单"
+        ],
+        "actions": [
+          "list"
+        ],
+        "entities": [
+          "出库箱",
+          "MTP发运绑定"
+        ],
+        "aliases": [
+          "查询MTP发运箱绑定",
+          "箱码绑定发运单",
+          "DataPortalOutboundBoxController.queryMtpShippingBindings"
+        ],
+        "resource": "mtp_outbound_box_binding",
+        "lookup_keys": [
+          "boxNos"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "返回MTP派车箱关系三元组，不返回装箱商品；不同于 queryByBoxNos 的WMS箱头和商品明细。"
+        ],
+        "required_inputs": [
+          {
+            "name": "boxNos",
+            "zh_name": "箱码集合",
+            "location": "body",
+            "required": true,
+            "schema_type": "array"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "box_no",
+            "display_name": "箱码",
+            "technical_names": [
+              "boxNos",
+              "boxNo"
+            ],
+            "aliases": [
+              "箱号"
+            ],
+            "resource": "mtp_outbound_box_binding",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "shipping_order_no",
+            "display_name": "发运单号",
+            "technical_names": [
+              "shippingOrderNo",
+              "dispatchOrderNo"
+            ],
+            "aliases": [
+              "运输单号"
+            ],
+            "resource": "mtp_outbound_box_binding",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "outbound_order_no",
+            "display_name": "上游出库单号",
+            "technical_names": [
+              "soNo",
+              "upstreamOrderNo"
+            ],
+            "aliases": [
+              "SO单号"
+            ],
+            "resource": "mtp_outbound_box_binding",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.99,
+        "semantic_evidence": [
+          "DataPortalOutboundBoxController#queryMtpShippingBindings @Valid",
+          "OutboundBoxDataCondition/MtpOutboundBoxShippingBindingQuery",
+          "outbound_box_data_query_mtpShippingBindings.sql 查询公路派车箱关系"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "b97af3de-d5fb-420e-89f5-d50d1ec5deff",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/admin/userInfo/shipper/page"
+      },
+      "semantic": {
+        "purpose": "供运营相关内部服务分页查询多式联运货主会员及其 mtp_owner 认证资料，可按用户、企业和认证条件筛选。",
+        "audiences": [
+          "内部服务",
+          "运营端"
+        ],
+        "domains": [
+          "门户会员",
+          "货主认证"
+        ],
+        "scenarios": [
+          "运营端筛选多式联运货主用户"
+        ],
+        "actions": [
+          "page"
+        ],
+        "entities": [
+          "货主会员",
+          "企业认证"
+        ],
+        "aliases": [
+          "运营端货主分页",
+          "多式联运货主用户",
+          "DataPortalUserInfoAdminController.shipperPage"
+        ],
+        "resource": "multimodal_shipper_user",
+        "lookup_keys": [
+          "mobile",
+          "userName",
+          "companyName",
+          "idCard",
+          "authStatus",
+          "roleCode"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "强制货主角色并按 mtp_owner 身份预处理；不同于 carrierAll/page 的公路铁路水路承运商，也不同于 portal 返回模型。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "会员用户ID"
+            ],
+            "resource": "multimodal_shipper_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "multimodal_shipper_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.99,
+        "semantic_evidence": [
+          "DataPortalUserInfoAdminController#shipperPage",
+          "UserInfoAdminPageCondition/PageResult<UserInfoAdminQuery>",
+          "DataPortalUserInfoAdminService 强制 SHIPPER 与 MTP_OWNER；用户分页SQL"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "ba16ca4d-154a-47b3-bcfe-38ec8e175c04",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/admin/userInfo/carrierAll/page"
+      },
+      "semantic": {
+        "purpose": "供运营相关内部服务分页查询公路、铁路和水路承运商会员及承运商认证资料。",
+        "audiences": [
+          "内部服务",
+          "运营端"
+        ],
+        "domains": [
+          "门户会员",
+          "承运商认证"
+        ],
+        "scenarios": [
+          "运营端筛选全部运输方式承运商"
+        ],
+        "actions": [
+          "page"
+        ],
+        "entities": [
+          "承运商会员",
+          "企业认证"
+        ],
+        "aliases": [
+          "运营端全部承运商分页",
+          "公铁水承运商用户",
+          "DataPortalUserInfoAdminController.carrierAllPage"
+        ],
+        "resource": "carrier_user",
+        "lookup_keys": [
+          "mobile",
+          "userName",
+          "companyName",
+          "idCard",
+          "authStatus",
+          "roleCode",
+          "highWayStatus",
+          "railWayStatus",
+          "shippingStatus"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "默认限定公路/铁路/水路承运角色并按 CARRIER 身份填充；不同于 shipper/page 的货主和 carrier/all 的仅已认证不分页集合。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "会员用户ID"
+            ],
+            "resource": "carrier_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "carrier_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.99,
+        "semantic_evidence": [
+          "DataPortalUserInfoAdminController#carrierAllPage",
+          "UserInfoAdminPageCondition/PageResult<UserInfoAdminQuery>",
+          "AdminService 设置三类承运角色并按 CARRIER 预处理"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "3551b2f2-ff89-4106-b456-66faab6fe507",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/admin/userInfo/carrier/all"
+      },
+      "semantic": {
+        "purpose": "供运营相关内部服务查询全部已认证的公路、铁路或水路承运商会员集合。",
+        "audiences": [
+          "内部服务",
+          "运营端"
+        ],
+        "domains": [
+          "门户会员",
+          "承运商认证"
+        ],
+        "scenarios": [
+          "加载已认证承运商选择项或资料"
+        ],
+        "actions": [
+          "list"
+        ],
+        "entities": [
+          "已认证承运商会员"
+        ],
+        "aliases": [
+          "全部已认证承运商",
+          "承运商集合",
+          "DataPortalUserInfoAdminController.allCarrierList"
+        ],
+        "resource": "certified_carrier_user",
+        "lookup_keys": [],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "仅返回三类运输承运角色且 authStatus=已认证的不分页集合；不同于 carrierAll/page 的可筛选分页及未限定已认证数据。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "会员用户ID"
+            ],
+            "resource": "certified_carrier_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "certified_carrier_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.99,
+        "semantic_evidence": [
+          "DataPortalUserInfoAdminController#allCarrierList",
+          "List<UserInfoAdminQuery> 返回合同",
+          "AdminService 查询三类承运角色且认证状态 CERTIFIED"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "8b2783ff-8ef5-4544-b7cb-5b5fa1fc14e3",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/admin/userInfo/getUserInfoById"
+      },
+      "semantic": {
+        "purpose": "供运营相关内部服务按用户ID读取一条会员资料，并可用企业身份编码选择 wms_owner、mtp_owner 或 carrier 认证信息。",
+        "audiences": [
+          "内部服务",
+          "运营端"
+        ],
+        "domains": [
+          "门户会员",
+          "企业认证"
+        ],
+        "scenarios": [
+          "按用户查看指定企业身份资料"
+        ],
+        "actions": [
+          "detail"
+        ],
+        "entities": [
+          "会员用户",
+          "企业身份认证"
+        ],
+        "aliases": [
+          "运营端按用户ID查资料",
+          "指定身份用户详情",
+          "DataPortalUserInfoAdminController.getUserInfoById"
+        ],
+        "resource": "member_user",
+        "lookup_keys": [
+          "userId",
+          "enterpriseIdentityCode"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "以 userId 定位单条并按 enterpriseIdentityCode 填充身份；不同于 getUserInfoByList 的批量列表和门户版返回DTO。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "会员用户ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "enterprise_identity_code",
+            "display_name": "企业身份编码",
+            "technical_names": [
+              "enterpriseIdentityCode"
+            ],
+            "aliases": [
+              "wms_owner",
+              "mtp_owner",
+              "carrier"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "DataPortalUserInfoAdminController#getUserInfoById",
+          "UserInfoAdminCondition/UserInfoAdminQuery",
+          "AdminService 按 MemberUserInfo.userId findFirst 并调用身份填充服务"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "46acf32b-0139-4eee-a8fd-23e8e5a4ce31",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/admin/userInfo/getUserInfoByList"
+      },
+      "semantic": {
+        "purpose": "供运营相关内部服务按用户ID数组批量查询会员及认证资料列表。",
+        "audiences": [
+          "内部服务",
+          "运营端"
+        ],
+        "domains": [
+          "门户会员",
+          "企业认证"
+        ],
+        "scenarios": [
+          "批量补全多个用户资料"
+        ],
+        "actions": [
+          "list"
+        ],
+        "entities": [
+          "会员用户",
+          "企业身份认证"
+        ],
+        "aliases": [
+          "运营端批量查用户资料",
+          "用户ID列表查询",
+          "DataPortalUserInfoAdminController.getUserInfoByList"
+        ],
+        "resource": "member_user",
+        "lookup_keys": [
+          "ids"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "请求体本身是用户ID数组并返回多条；不同于 getUserInfoById 的单用户和分页接口。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "ids",
+              "userId"
+            ],
+            "aliases": [
+              "会员用户ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "DataPortalUserInfoAdminController#getUserInfoByList 与 Feign List<Long> 请求",
+          "List<UserInfoAdminQuery> 返回DTO",
+          "AdminService andIn MemberUserInfo.userId 后批量填充"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "a0fe001f-3ac6-49db-b1ae-978d265942c8",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/admin/userInfo/existsMultimodalShipper"
+      },
+      "semantic": {
+        "purpose": "供运营相关内部服务按企业统一社会信用代码判断是否存在多式联运货主身份资料。",
+        "audiences": [
+          "内部服务",
+          "运营端"
+        ],
+        "domains": [
+          "门户会员",
+          "货主认证"
+        ],
+        "scenarios": [
+          "校验企业是否已登记为多式联运货主"
+        ],
+        "actions": [
+          "query",
+          "validate"
+        ],
+        "entities": [
+          "多式联运货主身份"
+        ],
+        "aliases": [
+          "校验多式联运货主存在",
+          "信用代码查货主",
+          "DataPortalUserInfoAdminController.existsMultimodalShipper"
+        ],
+        "resource": "multimodal_shipper_identity",
+        "lookup_keys": [
+          "companyUsci"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "返回布尔值并同时限定 SHIPPER 角色和未删除身份记录；不是返回用户详情，也不检查仓储货主或承运商身份。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "multimodal_shipper_identity",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.99,
+        "semantic_evidence": [
+          "RemoteDataUserInfoAdminService#existsMultimodalShipper",
+          "UserInfoCompanyUsciCondition/Boolean",
+          "AdminService 按 companyUsci、SHIPPER、deleted=0 判断存在"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "d8a2a29a-77b9-4996-bd9d-320dcafaa3de",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/portal/userInfo/shipper/page"
+      },
+      "semantic": {
+        "purpose": "供门户相关内部服务分页查询多式联运货主会员及其 mtp_owner 认证资料。",
+        "audiences": [
+          "内部服务",
+          "门户端"
+        ],
+        "domains": [
+          "门户会员",
+          "货主认证"
+        ],
+        "scenarios": [
+          "门户业务选择多式联运货主"
+        ],
+        "actions": [
+          "page"
+        ],
+        "entities": [
+          "货主会员",
+          "企业认证"
+        ],
+        "aliases": [
+          "门户货主分页",
+          "门户多式联运货主用户",
+          "DataPortalUserInfoPortalController.shipperPage"
+        ],
+        "resource": "multimodal_shipper_user",
+        "lookup_keys": [
+          "mobile",
+          "userName",
+          "idCard",
+          "authStatus",
+          "roleCode"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "门户返回模型且强制 mtp_owner 货主身份；不同于 admin 货主分页的运营字段，也不同于门户 carrierAll/page。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "会员用户ID"
+            ],
+            "resource": "multimodal_shipper_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "multimodal_shipper_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.99,
+        "semantic_evidence": [
+          "DataPortalUserInfoPortalController#shipperPage",
+          "UserInfoPortalPageCondition/PageResult<UserInfoPortalQuery>",
+          "PortalService 强制 SHIPPER 与 MTP_OWNER；门户填充模型"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "7978a1e4-410a-4dcd-94eb-60f49db9709c",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/portal/userInfo/carrierAll/page"
+      },
+      "semantic": {
+        "purpose": "供门户相关内部服务分页查询公路、铁路和水路承运商会员及承运商认证资料。",
+        "audiences": [
+          "内部服务",
+          "门户端"
+        ],
+        "domains": [
+          "门户会员",
+          "承运商认证"
+        ],
+        "scenarios": [
+          "门户业务选择运输承运商"
+        ],
+        "actions": [
+          "page"
+        ],
+        "entities": [
+          "承运商会员",
+          "企业认证"
+        ],
+        "aliases": [
+          "门户全部承运商分页",
+          "门户公铁水承运商",
+          "DataPortalUserInfoPortalController.carrierAllPage"
+        ],
+        "resource": "carrier_user",
+        "lookup_keys": [
+          "mobile",
+          "userName",
+          "idCard",
+          "authStatus",
+          "roleCode"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "门户返回模型并默认限定三类运输承运角色；不同于门户 shipper/page 和运营端 carrierAll/page。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "会员用户ID"
+            ],
+            "resource": "carrier_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "carrier_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.99,
+        "semantic_evidence": [
+          "DataPortalUserInfoPortalController#carrierAllPage",
+          "UserInfoPortalPageCondition/PageResult<UserInfoPortalQuery>",
+          "PortalService 设置三类承运角色并按 CARRIER 填充"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "9765d897-77a5-414c-88c6-ddf84ba534d2",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/portal/userInfo/getUserInfoById"
+      },
+      "semantic": {
+        "purpose": "供门户相关内部服务按用户ID读取一条会员资料，并可按企业身份编码选择对应认证信息。",
+        "audiences": [
+          "内部服务",
+          "门户端"
+        ],
+        "domains": [
+          "门户会员",
+          "企业认证"
+        ],
+        "scenarios": [
+          "门户业务按用户查看企业身份资料"
+        ],
+        "actions": [
+          "detail"
+        ],
+        "entities": [
+          "会员用户",
+          "企业身份认证"
+        ],
+        "aliases": [
+          "门户按用户ID查资料",
+          "门户用户详情",
+          "DataPortalUserInfoPortalController.getUserInfoById"
+        ],
+        "resource": "member_user",
+        "lookup_keys": [
+          "userId",
+          "enterpriseIdentityCode"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "门户版单条 UserInfoPortalQuery；不同于 admin 版更丰富运营字段，也不同于批量用户列表。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "会员用户ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "enterprise_identity_code",
+            "display_name": "企业身份编码",
+            "technical_names": [
+              "enterpriseIdentityCode"
+            ],
+            "aliases": [
+              "wms_owner",
+              "mtp_owner",
+              "carrier"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "DataPortalUserInfoPortalController#getUserInfoById",
+          "UserInfoPortalCondition/UserInfoPortalQuery",
+          "PortalService 按 userId findFirst 并按企业身份填充"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "a8bd3540-78cd-4e3a-a86c-4f74ef72fc97",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/portal/userInfo/getUserInfoByList"
+      },
+      "semantic": {
+        "purpose": "供门户相关内部服务按用户ID数组批量查询会员及认证资料列表。",
+        "audiences": [
+          "内部服务",
+          "门户端"
+        ],
+        "domains": [
+          "门户会员",
+          "企业认证"
+        ],
+        "scenarios": [
+          "门户业务批量补全多个用户资料"
+        ],
+        "actions": [
+          "list"
+        ],
+        "entities": [
+          "会员用户",
+          "企业身份认证"
+        ],
+        "aliases": [
+          "门户批量查用户资料",
+          "门户用户ID列表查询",
+          "DataPortalUserInfoPortalController.getUserInfoByList"
+        ],
+        "resource": "member_user",
+        "lookup_keys": [
+          "ids"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "请求体为用户ID数组并返回门户用户DTO列表；不同于单用户详情和 admin 批量返回模型。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "ids",
+              "userId"
+            ],
+            "aliases": [
+              "会员用户ID"
+            ],
+            "resource": "member_user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "DataPortalUserInfoPortalController#getUserInfoByList 与 Feign List<Long> 请求",
+          "List<UserInfoPortalQuery> 返回合同",
+          "PortalService andIn userId 并批量填充"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "2014a44a-d358-4e5e-9541-b707bb47a8e8",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/portal/userInfo/getAuthStatusByUserId"
+      },
+      "semantic": {
+        "purpose": "供门户相关内部服务按用户ID判断该会员是否至少存在一条已认证身份记录。",
+        "audiences": [
+          "内部服务",
+          "门户端"
+        ],
+        "domains": [
+          "门户会员",
+          "企业认证"
+        ],
+        "scenarios": [
+          "检查用户是否已通过任一身份认证"
+        ],
+        "actions": [
+          "query",
+          "validate"
+        ],
+        "entities": [
+          "用户认证状态"
+        ],
+        "aliases": [
+          "查询用户是否已认证",
+          "用户认证布尔状态",
+          "DataPortalUserInfoPortalController.getAuthStatusByUserId"
+        ],
+        "resource": "member_user_auth_status",
+        "lookup_keys": [
+          "userId"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "返回是否存在任一 CERTIFIED 身份的布尔值；不是返回具体认证资料或按统一社会信用代码检查货主。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "会员用户ID"
+            ],
+            "resource": "member_user_auth_status",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.99,
+        "semantic_evidence": [
+          "DataPortalUserInfoPortalController#getAuthStatusByUserId",
+          "UserInfoPortalCondition/Boolean",
+          "PortalService 先按 userId 定位会员，再检查任一 UserAuthInfo 为 CERTIFIED"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "08b1aff5-3d76-4b6d-9630-c74d040530f9",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/admin/contract/page"
+      },
+      "semantic": {
+        "purpose": "运营端分页查询合同主档及作业合同字段，可按合同编号、内部合同号、名称、类型、客户、状态、来源、创建人和有效期筛选。",
+        "audiences": [
+          "内部服务",
+          "运营端"
+        ],
+        "domains": [
+          "门户合同",
+          "合同查询"
+        ],
+        "scenarios": [
+          "运营端按合同编号、客户、状态或有效期分页筛选合同"
+        ],
+        "actions": [
+          "page"
+        ],
+        "entities": [
+          "合同",
+          "承运商"
+        ],
+        "aliases": [
+          "运营端合同分页",
+          "按内部合同号筛选合同",
+          "DataPortalContractAdminController.page"
+        ],
+        "resource": "contract",
+        "lookup_keys": [
+          "contractNo",
+          "internalContractNo",
+          "contractName",
+          "contractType",
+          "clientId",
+          "clientName",
+          "status",
+          "source",
+          "creator",
+          "effectiveStartDate",
+          "effectiveEndDate"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "返回运营端合同分页并含内部合同号、创建人名称和附件标识；不同于 portal/page 的门户返回模型及 contractTypeList 条件。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "client_id",
+            "display_name": "合同客户ID",
+            "technical_names": [
+              "clientId"
+            ],
+            "aliases": [
+              "委托方ID",
+              "承运方ID"
+            ],
+            "resource": "contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "DataPortalContractAdminController#page；ContractAdminPageCondition/PageResult<ContractAdminQuery>；contract_query_getPageList.sql"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "6d450a08-3903-4036-a6a1-df96b589b03c",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/portal/contract/page"
+      },
+      "semantic": {
+        "purpose": "门户端分页查询合同主档及作业合同字段，可按合同编号、名称、类型或类型集合、客户、状态、来源和有效期筛选。",
+        "audiences": [
+          "内部服务",
+          "门户端"
+        ],
+        "domains": [
+          "门户合同",
+          "合同查询"
+        ],
+        "scenarios": [
+          "门户业务按合同类型、客户或有效期分页筛选合同"
+        ],
+        "actions": [
+          "page"
+        ],
+        "entities": [
+          "合同",
+          "承运商"
+        ],
+        "aliases": [
+          "门户合同分页",
+          "按合同类型集合筛选合同",
+          "DataPortalContractPortalController.page"
+        ],
+        "resource": "contract",
+        "lookup_keys": [
+          "contractNo",
+          "contractName",
+          "contractType",
+          "contractTypeList",
+          "clientId",
+          "clientName",
+          "status",
+          "source",
+          "effectiveStartDate",
+          "effectiveEndDate"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "返回门户合同分页且支持 contractTypeList；不同于 admin/page 的内部合同号、创建人筛选和运营返回字段。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "client_id",
+            "display_name": "合同客户ID",
+            "technical_names": [
+              "clientId"
+            ],
+            "aliases": [
+              "委托方ID",
+              "承运方ID"
+            ],
+            "resource": "contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "DataPortalContractPortalController#page；ContractPortalPageCondition/PageResult<ContractPortalQuery>；portalPage 有效期文本填充"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "411116cc-27d4-427a-b1a4-8b91b83a5cc5",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/admin/contract/getByContractNo"
+      },
+      "semantic": {
+        "purpose": "运营端按合同编号读取一条合同概要及首个合同附件文件标识。",
+        "audiences": [
+          "内部服务",
+          "运营端"
+        ],
+        "domains": [
+          "门户合同",
+          "合同查询"
+        ],
+        "scenarios": [
+          "运营端按合同编号查看合同概要和附件标识"
+        ],
+        "actions": [
+          "detail"
+        ],
+        "entities": [
+          "合同",
+          "承运商"
+        ],
+        "aliases": [
+          "按合同编号查合同概要",
+          "运营端合同附件概要",
+          "DataPortalContractAdminController.getByContractNo"
+        ],
+        "resource": "contract",
+        "lookup_keys": [
+          "contractNo"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "按 contractNo 返回概要和合同附件 fileId/fileName；不同于 getByIdItem 的主键完整详情及 getByIds 批量基础数据。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "DataPortalContractAdminController#getByContractNo；MemberContractNoAdminCondition/ContractInfoAdminQuery；DataPortalContractQueryService 查询合同并查首个合同附件"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "b3a5454c-9a9f-445b-8437-bacfd471381c",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/portal/contract/getByContractNo"
+      },
+      "semantic": {
+        "purpose": "门户端按合同编号读取一条合同概要及首个合同附件文件标识。",
+        "audiences": [
+          "内部服务",
+          "门户端"
+        ],
+        "domains": [
+          "门户合同",
+          "合同查询"
+        ],
+        "scenarios": [
+          "门户业务按合同编号查看合同概要和附件标识"
+        ],
+        "actions": [
+          "detail"
+        ],
+        "entities": [
+          "合同",
+          "承运商"
+        ],
+        "aliases": [
+          "门户按合同编号查概要",
+          "门户合同附件概要",
+          "DataPortalContractPortalController.getByContractNo"
+        ],
+        "resource": "contract",
+        "lookup_keys": [
+          "contractNo"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "门户返回模型的合同编号单条概要；不同于 admin 路径及按主键返回含作业报价的完整详情。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "DataPortalContractPortalController#getByContractNo；ContractNoPortalCondition/ContractInfoPortalQuery；DataPortalContractQueryService#getByContractNo 共享查询链路"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "ad533cde-a4a7-49f5-8c7e-136416434d1d",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/admin/contract/getByIdItem"
+      },
+      "semantic": {
+        "purpose": "运营端按合同主键读取一条合同详情；港口作业合同时附带作业信息和报价明细。",
+        "audiences": [
+          "内部服务",
+          "运营端"
+        ],
+        "domains": [
+          "门户合同",
+          "合同查询"
+        ],
+        "scenarios": [
+          "运营端按合同ID查看完整合同及港口作业报价"
+        ],
+        "actions": [
+          "detail"
+        ],
+        "entities": [
+          "合同",
+          "承运商"
+        ],
+        "aliases": [
+          "按合同ID查完整详情",
+          "运营端港口作业合同报价",
+          "DataPortalContractAdminController.getByIdItem"
+        ],
+        "resource": "contract",
+        "lookup_keys": [
+          "id"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "按主键返回完整合同数据，港口作业合同内嵌 operation 与 quote 列表；不同于按合同编号的概要附件返回。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "DataPortalContractAdminController#getByIdItem；IdObject/ContractDataAdminQuery；DataPortalContractQueryService#getByIdQuery 按合同类型补作业与报价"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "c279a92b-8d62-4137-a262-00834a59e7ec",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/portal/contract/getByIdItem"
+      },
+      "semantic": {
+        "purpose": "门户端按合同主键读取一条合同详情；港口作业合同时附带作业信息和报价明细。",
+        "audiences": [
+          "内部服务",
+          "门户端"
+        ],
+        "domains": [
+          "门户合同",
+          "合同查询"
+        ],
+        "scenarios": [
+          "门户业务按合同ID查看完整合同及港口作业报价"
+        ],
+        "actions": [
+          "detail"
+        ],
+        "entities": [
+          "合同",
+          "承运商"
+        ],
+        "aliases": [
+          "门户按合同ID查完整详情",
+          "门户港口作业合同报价",
+          "DataPortalContractPortalController.getByIdItem"
+        ],
+        "resource": "contract",
+        "lookup_keys": [
+          "id"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "门户合同详情模型且可内嵌作业与报价；不同于 admin 详情路径以及按编号概要。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "DataPortalContractPortalController#getByIdItem；IdObject/ContractDataPortalQuery；DataPortalContractQueryService#getByIdQuery 共享查询链路"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "06e19d2c-56af-4753-8345-69735de4a35a",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/admin/contract/getByIds"
+      },
+      "semantic": {
+        "purpose": "运营端按合同主键数组批量查询合同基础数据列表。",
+        "audiences": [
+          "内部服务",
+          "运营端"
+        ],
+        "domains": [
+          "门户合同",
+          "合同查询"
+        ],
+        "scenarios": [
+          "运营端按合同ID数组批量补全合同基础资料"
+        ],
+        "actions": [
+          "list"
+        ],
+        "entities": [
+          "合同",
+          "承运商"
+        ],
+        "aliases": [
+          "按合同ID批量查询",
+          "运营端合同基础数据列表",
+          "DataPortalContractAdminController.getByIds"
+        ],
+        "resource": "contract",
+        "lookup_keys": [
+          "ids"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "请求体是合同ID数组并返回多条基础数据；不会像 getByIdItem 为港口作业合同补作业和报价嵌套详情。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "ids"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "DataPortalContractAdminController#getByIds；List<Long>/List<ContractDataAdminQuery>；DataPortalContractQueryService#getByIds 批量转换"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "93bb67c0-c252-41c3-b6a4-34ce32012a68",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/portal/contract/getByIds"
+      },
+      "semantic": {
+        "purpose": "门户端按合同主键数组批量查询合同基础数据列表。",
+        "audiences": [
+          "内部服务",
+          "门户端"
+        ],
+        "domains": [
+          "门户合同",
+          "合同查询"
+        ],
+        "scenarios": [
+          "门户业务按合同ID数组批量补全合同基础资料"
+        ],
+        "actions": [
+          "list"
+        ],
+        "entities": [
+          "合同",
+          "承运商"
+        ],
+        "aliases": [
+          "门户按合同ID批量查询",
+          "门户合同基础数据列表",
+          "DataPortalContractPortalController.getByIds"
+        ],
+        "resource": "contract",
+        "lookup_keys": [
+          "ids"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "门户合同DTO批量列表；不同于单条完整详情，也不同于 admin 批量返回模型。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "ids"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "DataPortalContractPortalController#getByIds；List<Long>/List<ContractDataPortalQuery>；DataPortalContractQueryService#getByIds 批量转换"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "e156794b-3cbe-4c29-9e33-db64f165a0b4",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/admin/contract/validCarrierPage"
+      },
+      "semantic": {
+        "purpose": "运营端分页查询当前有效、已启用且已认证的运力采购承运商合同，可按运输方式、承运商、合同名称并排除客户筛选。",
+        "audiences": [
+          "内部服务",
+          "运营端"
+        ],
+        "domains": [
+          "门户合同",
+          "合同查询"
+        ],
+        "scenarios": [
+          "运营端按运输方式分页选择当前有效且已认证的承运商合同"
+        ],
+        "actions": [
+          "page"
+        ],
+        "entities": [
+          "合同",
+          "承运商"
+        ],
+        "aliases": [
+          "运营端有效承运商合同分页",
+          "按运输方式选择承运合同",
+          "DataPortalContractAdminController.validCarrierPage"
+        ],
+        "resource": "valid_carrier_contract",
+        "lookup_keys": [
+          "carrierName",
+          "contractName",
+          "clientName",
+          "routeType",
+          "roleCode",
+          "excludeClientIds"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "返回承运商有效合同分页并按 routeType 映射公路/水路/铁路角色；不同于 validCarrierList 按名称/信用代码的不分页集合。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "DataPortalContractAdminController#validCarrierPage；ContractValidAdminPageCondition；DataPortalContractQueryService 固定 CAPACITY_PURCHASE/ENABLED/CERTIFIED 并映射角色"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "5acc683e-12d2-4d93-8ba2-eebea104963c",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/portal/contract/validCarrierPage"
+      },
+      "semantic": {
+        "purpose": "门户端分页查询当前有效、已启用且已认证的运力采购承运商合同，可按运输方式和承运商名称筛选。",
+        "audiences": [
+          "内部服务",
+          "门户端"
+        ],
+        "domains": [
+          "门户合同",
+          "合同查询"
+        ],
+        "scenarios": [
+          "门户业务按运输方式分页选择当前有效且已认证的承运商合同"
+        ],
+        "actions": [
+          "page"
+        ],
+        "entities": [
+          "合同",
+          "承运商"
+        ],
+        "aliases": [
+          "门户有效承运商合同分页",
+          "门户按运输方式选择承运合同",
+          "DataPortalContractPortalController.validCarrierPage"
+        ],
+        "resource": "valid_carrier_contract",
+        "lookup_keys": [
+          "carrierName",
+          "routeType",
+          "roleCode"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "门户有效承运合同分页；不同于 admin 版额外支持合同/客户名称和排除客户，也不同于门户不分页 validCarrierList。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "DataPortalContractPortalController#validCarrierPage；ContractValidPortalPageCondition；DataPortalContractQueryService 共享 validCarrierPage 规则与门户DTO填充"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "9ed7f5fb-2aab-4596-afe3-ee97a6149685",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/admin/contract/getValidContractByClientId"
+      },
+      "semantic": {
+        "purpose": "运营端按客户ID或客户ID集合查询当前有效、已启用的运力采购承运合同列表，并按承运角色过滤。",
+        "audiences": [
+          "内部服务",
+          "运营端"
+        ],
+        "domains": [
+          "门户合同",
+          "合同查询"
+        ],
+        "scenarios": [
+          "运营端为指定客户选择当前有效的运力采购承运合同"
+        ],
+        "actions": [
+          "list"
+        ],
+        "entities": [
+          "合同",
+          "承运商"
+        ],
+        "aliases": [
+          "按客户ID查有效承运合同",
+          "运营端客户可用运力采购合同",
+          "DataPortalContractAdminController.getValidContractByClientId"
+        ],
+        "resource": "valid_carrier_contract",
+        "lookup_keys": [
+          "clientId",
+          "clientIds",
+          "roleCode",
+          "routeType"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "强制 CAPACITY_PURCHASE 和 ENABLED，以客户标识交集查询；不同于货主合同接口强制 COMMISSION/SHIPPER。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "client_id",
+            "display_name": "合同客户ID",
+            "technical_names": [
+              "clientId",
+              "clientIds"
+            ],
+            "aliases": [
+              "委托方ID",
+              "承运方ID"
+            ],
+            "resource": "valid_carrier_contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "DataPortalContractAdminController#getValidContractByClientId；CarrierValidAdminCondition；DataPortalContractQueryService#getValidAdminContractByClientId"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "ef482389-46e5-45f9-a199-9135b8902573",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/portal/contract/getValidContractByClientId"
+      },
+      "semantic": {
+        "purpose": "门户端按客户ID或客户ID集合查询当前有效、已启用的运力采购承运合同列表，并按承运角色过滤。",
+        "audiences": [
+          "内部服务",
+          "门户端"
+        ],
+        "domains": [
+          "门户合同",
+          "合同查询"
+        ],
+        "scenarios": [
+          "门户业务为指定客户选择当前有效的运力采购承运合同"
+        ],
+        "actions": [
+          "list"
+        ],
+        "entities": [
+          "合同",
+          "承运商"
+        ],
+        "aliases": [
+          "门户按客户ID查有效承运合同",
+          "门户客户可用运力采购合同",
+          "DataPortalContractPortalController.getValidContractByClientId"
+        ],
+        "resource": "valid_carrier_contract",
+        "lookup_keys": [
+          "clientId",
+          "clientIds",
+          "roleCode"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "门户DTO的运力采购有效合同列表；不同于 admin 返回模型及门户货主委托合同接口。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "client_id",
+            "display_name": "合同客户ID",
+            "technical_names": [
+              "clientId",
+              "clientIds"
+            ],
+            "aliases": [
+              "委托方ID",
+              "承运方ID"
+            ],
+            "resource": "valid_carrier_contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "DataPortalContractPortalController#getValidContractByClientId；CarrierValidPortalCondition；DataPortalContractQueryService#getValidPortalContractByClientId"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "444d4770-1b0b-412a-ac7f-a149c7701de8",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/admin/contract/getValidShipperContractByClientId"
+      },
+      "semantic": {
+        "purpose": "运营端按客户ID或客户ID集合查询当前有效、已启用的委托类货主合同列表。",
+        "audiences": [
+          "内部服务",
+          "运营端"
+        ],
+        "domains": [
+          "门户合同",
+          "合同查询"
+        ],
+        "scenarios": [
+          "运营端为指定客户选择当前有效的货主委托合同"
+        ],
+        "actions": [
+          "list"
+        ],
+        "entities": [
+          "合同",
+          "货主"
+        ],
+        "aliases": [
+          "按客户ID查有效货主合同",
+          "运营端客户可用委托合同",
+          "DataPortalContractAdminController.getValidShipperContractByClientId"
+        ],
+        "resource": "valid_shipper_contract",
+        "lookup_keys": [
+          "clientId",
+          "clientIds"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "强制 COMMISSION 合同类型和 SHIPPER 角色；不同于同路径家族 getValidContractByClientId 的运力采购承运合同。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "client_id",
+            "display_name": "合同客户ID",
+            "technical_names": [
+              "clientId",
+              "clientIds"
+            ],
+            "aliases": [
+              "委托方ID",
+              "承运方ID"
+            ],
+            "resource": "valid_shipper_contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "DataPortalContractAdminController#getValidShipperContractByClientId；CarrierValidAdminCondition；DataPortalContractQueryService 固定 COMMISSION/ENABLED/SHIPPER"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "a97e5d9c-4395-4ccc-8ed4-40f4395194cd",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/portal/contract/getValidShipperContractByClientId"
+      },
+      "semantic": {
+        "purpose": "门户端按客户ID或客户ID集合查询当前有效、已启用的委托类货主合同列表。",
+        "audiences": [
+          "内部服务",
+          "门户端"
+        ],
+        "domains": [
+          "门户合同",
+          "合同查询"
+        ],
+        "scenarios": [
+          "门户业务为指定客户选择当前有效的货主委托合同"
+        ],
+        "actions": [
+          "list"
+        ],
+        "entities": [
+          "合同",
+          "货主"
+        ],
+        "aliases": [
+          "门户按客户ID查有效货主合同",
+          "门户客户可用委托合同",
+          "DataPortalContractPortalController.getValidShipperContractByClientId"
+        ],
+        "resource": "valid_shipper_contract",
+        "lookup_keys": [
+          "clientId",
+          "clientIds"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "门户DTO且强制 COMMISSION/SHIPPER；不同于门户运力采购承运合同列表和 admin 返回模型。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "client_id",
+            "display_name": "合同客户ID",
+            "technical_names": [
+              "clientId",
+              "clientIds"
+            ],
+            "aliases": [
+              "委托方ID",
+              "承运方ID"
+            ],
+            "resource": "valid_shipper_contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "DataPortalContractPortalController#getValidShipperContractByClientId；CarrierValidPortalCondition；DataPortalContractQueryService 固定 COMMISSION/ENABLED/SHIPPER"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "c624e0b8-7551-4245-b5e6-bd91ef87ae73",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/admin/contract/validCarrierList"
+      },
+      "semantic": {
+        "purpose": "运营端按承运商名称集合或统一社会信用代码集合查询运力采购承运合同列表。",
+        "audiences": [
+          "内部服务",
+          "运营端"
+        ],
+        "domains": [
+          "门户合同",
+          "合同查询"
+        ],
+        "scenarios": [
+          "运营端按承运商名称或统一社会信用代码批量匹配运力采购合同"
+        ],
+        "actions": [
+          "list"
+        ],
+        "entities": [
+          "合同",
+          "承运商"
+        ],
+        "aliases": [
+          "按承运商名称查运力采购合同",
+          "按统一社会信用代码查承运合同",
+          "DataPortalContractAdminController.validCarrierList"
+        ],
+        "resource": "valid_carrier_contract",
+        "lookup_keys": [
+          "carrierNames",
+          "companyUscis"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "先以名称/信用代码解析 CARRIER 客户ID再查不分页合同；不同于 validCarrierPage 的运输细分角色分页。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUscis"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "valid_carrier_contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "DataPortalContractAdminController#validCarrierList；ContractValidAdminCondition；DataPortalMemberInfoFillService#resolveContractClientIds(CARRIER) 后调用 DataPortalContractDao#validCarrierList"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "61429bdf-b854-41bb-8ede-2f9bb9272593",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/portal/contract/validCarrierList"
+      },
+      "semantic": {
+        "purpose": "门户端按承运商名称集合或统一社会信用代码集合查询运力采购承运合同列表。",
+        "audiences": [
+          "内部服务",
+          "门户端"
+        ],
+        "domains": [
+          "门户合同",
+          "合同查询"
+        ],
+        "scenarios": [
+          "门户业务按承运商名称或统一社会信用代码批量匹配运力采购合同"
+        ],
+        "actions": [
+          "list"
+        ],
+        "entities": [
+          "合同",
+          "承运商"
+        ],
+        "aliases": [
+          "门户按承运商名称查合同",
+          "门户按企业信用代码查承运合同",
+          "DataPortalContractPortalController.validCarrierList"
+        ],
+        "resource": "valid_carrier_contract",
+        "lookup_keys": [
+          "carrierNames",
+          "companyUscis"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "门户DTO的不分页 CARRIER 合同集合；不同于 portal validCarrierPage 的分页和运输方式筛选。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUscis"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "valid_carrier_contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "DataPortalContractPortalController#validCarrierList；ContractValidPortalCondition；DataPortalMemberInfoFillService#resolveContractClientIds 与 DataPortalContractDao#validCarrierList"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "8ad7daab-2859-4ed9-a06e-6953127ea77e",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/admin/contract/getRailwayValidCarrierList"
+      },
+      "semantic": {
+        "purpose": "运营端分页查询当前有效、已启用且已认证的铁路承运商运力采购合同。",
+        "audiences": [
+          "内部服务",
+          "运营端"
+        ],
+        "domains": [
+          "门户合同",
+          "合同查询"
+        ],
+        "scenarios": [
+          "运营端分页选择当前有效且已认证的铁路承运商合同"
+        ],
+        "actions": [
+          "page"
+        ],
+        "entities": [
+          "合同",
+          "承运商"
+        ],
+        "aliases": [
+          "铁路有效承运商合同分页",
+          "选择已认证铁路承运合同",
+          "DataPortalContractAdminController.getRailwayValidCarrierList"
+        ],
+        "resource": "valid_railway_carrier_contract",
+        "lookup_keys": [
+          "carrierName",
+          "contractName",
+          "clientName",
+          "excludeClientIds"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "固定 CARRIER_RAILWAY 且 CERTIFIED；不同于 validCarrierPage 可按 routeType 选择公路、水路或铁路。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "DataPortalContractAdminController#getRailwayValidCarrierList；ContractValidAdminPageCondition；DataPortalContractQueryService 固定铁路角色、CAPACITY_PURCHASE、ENABLED、CERTIFIED"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "b5345f0b-32e8-435e-92c3-1c66d7c408db",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "POST",
+        "path": "/data-api/portal/admin/contract/getValidContractByContractNos"
+      },
+      "semantic": {
+        "purpose": "运营端按合同编号集合及可选客户/角色条件查询已启用且客户符合承运角色的合同列表。",
+        "audiences": [
+          "内部服务",
+          "运营端"
+        ],
+        "domains": [
+          "门户合同",
+          "合同查询"
+        ],
+        "scenarios": [
+          "运营端按合同编号集合批量核验已启用的承运合同"
+        ],
+        "actions": [
+          "list"
+        ],
+        "entities": [
+          "合同",
+          "承运商"
+        ],
+        "aliases": [
+          "按合同编号批量查已启用合同",
+          "批量匹配承运合同",
+          "DataPortalContractAdminController.getValidContractByContractNos"
+        ],
+        "resource": "valid_carrier_contract",
+        "lookup_keys": [
+          "contractNos",
+          "clientId",
+          "clientIds",
+          "roleCode"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "核心查询键是 contractNos 且不分页；不同于按 clientId 查询会固定 today 与 CAPACITY_PURCHASE，本接口仅强制 ENABLED 后使用 validFindList。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNos"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "valid_carrier_contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "client_id",
+            "display_name": "合同客户ID",
+            "technical_names": [
+              "clientId",
+              "clientIds"
+            ],
+            "aliases": [
+              "委托方ID",
+              "承运方ID"
+            ],
+            "resource": "valid_carrier_contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "DataPortalContractAdminController#getValidContractByContractNos；CarrierValidAdminCondition；DataPortalContractQueryService#getValidContractByContractNos 与 DataPortalContractDao#validFindList"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "2661bf93-04c8-45a9-aaa5-88a76d9c5829",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "GET",
+        "path": "/api/sse/connect"
+      },
+      "semantic": {
+        "purpose": "为当前已登录用户建立一条SSE长连接，可指定来源系统、客户端标识和业务类型，并返回事件流。",
+        "audiences": [
+          "登录用户",
+          "前端客户端"
+        ],
+        "domains": [
+          "实时消息",
+          "SSE连接"
+        ],
+        "scenarios": [
+          "建立实时事件推送通道"
+        ],
+        "actions": [
+          "connect"
+        ],
+        "entities": [
+          "SSE连接"
+        ],
+        "aliases": [
+          "建立SSE连接",
+          "实时推送连接",
+          "CustomSseEmitterController.connect"
+        ],
+        "resource": "sse_connection",
+        "lookup_keys": [
+          "type",
+          "X-Client-ID",
+          "clientId",
+          "businessType",
+          "_sid"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "创建并返回持续事件流；不同于 subscribe 只在已有 connectionId 上增加业务订阅，也不同于 disconnect 关闭当前用户连接。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "client_id",
+            "display_name": "客户端标识",
+            "technical_names": [
+              "X-Client-ID",
+              "clientId"
+            ],
+            "aliases": [
+              "客户端ID"
+            ],
+            "resource": "sse_connection",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "business_type",
+            "display_name": "业务类型",
+            "technical_names": [
+              "businessType"
+            ],
+            "aliases": [
+              "业务代码"
+            ],
+            "resource": "sse_connection",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "CustomSseEmitterController#connect @GetMapping",
+          "从 header/query 读取 type/clientId/businessType/_sid 并校验 SessionUserInfo",
+          "SseConnectionManager#createConnection 返回 SseEmitter"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "35ce8ff5-01c2-4894-9934-aeabc4661343",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "GET",
+        "path": "/api/sse/subscribe"
+      },
+      "semantic": {
+        "purpose": "为已有SSE连接订阅指定业务类型，使该连接接收对应业务事件。",
+        "audiences": [
+          "登录用户",
+          "前端客户端"
+        ],
+        "domains": [
+          "实时消息",
+          "SSE订阅"
+        ],
+        "scenarios": [
+          "连接建立后订阅业务事件"
+        ],
+        "actions": [
+          "subscribe"
+        ],
+        "entities": [
+          "SSE业务订阅"
+        ],
+        "aliases": [
+          "订阅SSE业务",
+          "连接订阅业务代码",
+          "CustomSseEmitterController.subscribe"
+        ],
+        "resource": "sse_subscription",
+        "lookup_keys": [
+          "connectionId",
+          "businessType"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "要求已有 connectionId 与 businessType 并新增订阅；不同于 connect 建立事件流、unsubscribe 取消订阅。"
+        ],
+        "required_inputs": [
+          {
+            "name": "connectionId",
+            "zh_name": "SSE连接ID",
+            "location": "query",
+            "required": true,
+            "schema_type": "string"
+          },
+          {
+            "name": "businessType",
+            "zh_name": "业务类型",
+            "location": "query",
+            "required": true,
+            "schema_type": "string"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "connection_id",
+            "display_name": "SSE连接ID",
+            "technical_names": [
+              "connectionId"
+            ],
+            "aliases": [
+              "连接标识"
+            ],
+            "resource": "sse_subscription",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "business_type",
+            "display_name": "业务类型",
+            "technical_names": [
+              "businessType"
+            ],
+            "aliases": [
+              "业务代码"
+            ],
+            "resource": "sse_subscription",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.99,
+        "semantic_evidence": [
+          "CustomSseEmitterController#subscribe @GetMapping",
+          "运行时代码显式校验 connectionId/businessType 非空",
+          "SseSubscriptionService#subscribe"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "a3e8d1e2-4c2d-47ed-9d5e-618ae86a4ee2",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "GET",
+        "path": "/api/sse/unsubscribe"
+      },
+      "semantic": {
+        "purpose": "从已有SSE连接取消指定业务类型订阅，使该连接不再接收对应业务事件。",
+        "audiences": [
+          "登录用户",
+          "前端客户端"
+        ],
+        "domains": [
+          "实时消息",
+          "SSE订阅"
+        ],
+        "scenarios": [
+          "取消某连接的业务事件订阅"
+        ],
+        "actions": [
+          "unsubscribe"
+        ],
+        "entities": [
+          "SSE业务订阅"
+        ],
+        "aliases": [
+          "取消SSE订阅",
+          "连接退订业务代码",
+          "CustomSseEmitterController.unsubscribe"
+        ],
+        "resource": "sse_subscription",
+        "lookup_keys": [
+          "connectionId",
+          "businessType"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "要求 connectionId 与 businessType 并删除订阅；不同于 subscribe 新增订阅和 disconnect 关闭整条用户连接。"
+        ],
+        "required_inputs": [
+          {
+            "name": "connectionId",
+            "zh_name": "SSE连接ID",
+            "location": "query",
+            "required": true,
+            "schema_type": "string"
+          },
+          {
+            "name": "businessType",
+            "zh_name": "业务类型",
+            "location": "query",
+            "required": true,
+            "schema_type": "string"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "connection_id",
+            "display_name": "SSE连接ID",
+            "technical_names": [
+              "connectionId"
+            ],
+            "aliases": [
+              "连接标识"
+            ],
+            "resource": "sse_subscription",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "business_type",
+            "display_name": "业务类型",
+            "technical_names": [
+              "businessType"
+            ],
+            "aliases": [
+              "业务代码"
+            ],
+            "resource": "sse_subscription",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.99,
+        "semantic_evidence": [
+          "CustomSseEmitterController#unsubscribe @GetMapping",
+          "运行时代码显式校验 connectionId/businessType 非空",
+          "SseSubscriptionService#unsubscribe"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "bab5909b-6d3f-4da8-a22c-76fb4c6fdd2f",
+      "expected_identity": {
+        "service": "c12-data",
+        "method": "GET",
+        "path": "/api/sse/disconnect"
+      },
+      "semantic": {
+        "purpose": "关闭当前已登录用户在指定来源系统下的SSE连接；未传类型时使用默认来源系统。",
+        "audiences": [
+          "登录用户",
+          "前端客户端"
+        ],
+        "domains": [
+          "实时消息",
+          "SSE连接"
+        ],
+        "scenarios": [
+          "主动断开实时事件通道"
+        ],
+        "actions": [
+          "disconnect",
+          "delete"
+        ],
+        "entities": [
+          "SSE连接"
+        ],
+        "aliases": [
+          "断开SSE连接",
+          "关闭实时推送",
+          "CustomSseEmitterController.disconnect"
+        ],
+        "resource": "sse_connection",
+        "lookup_keys": [
+          "type"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "按当前会话用户和可选 source type 关闭整条连接；不同于 unsubscribe 只移除某个 connectionId 的业务订阅。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "CustomSseEmitterController#disconnect @GetMapping",
+          "@RequestParam type required=false；SessionContext 用户必需",
+          "SseConnectionManager#closeUserConnection(userId, sourceSystem)"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    }
+  ]
+}

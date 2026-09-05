@@ -8,6 +8,7 @@ import http.client
 import json
 import os
 import platform
+import re
 import signal
 import socket
 import stat
@@ -21,20 +22,27 @@ import urllib.request
 from pathlib import Path, PurePosixPath
 from typing import Protocol
 
-RUNNER_VERSION = "2"
+RUNNER_VERSION = "3"
 MANIFEST_FILE = ".runtime-manifest.json"
 ENTRY_FILE = "deploy.sh"
 EXIT_VALIDATION_FAILED = 126
 EXIT_TIMEOUT = 124
-HOST_SCRIPT_ROOT = Path("/Users/conchi/script")
+HOST_SCRIPT_ROOT = Path(
+    "/Users/conchi/workforce/company_workforce/panzhihua_dev_workforce/deploy/host-runtime"
+)
 HOST_ACTIONS: dict[str, tuple[Path, str, int]] = {
+    "pzh.start-and-check": (
+        HOST_SCRIPT_ROOT / "start-and-check.sh",
+        "start-and-check",
+        3600,
+    ),
     "pzh.ensure-host-runtime": (
-        HOST_SCRIPT_ROOT / "ensure-panzhihua-host-runtime.sh",
+        HOST_SCRIPT_ROOT / "ensure.sh",
         "ensure",
         600,
     ),
     "pzh.status-host-runtime": (
-        HOST_SCRIPT_ROOT / "ensure-panzhihua-host-runtime.sh",
+        HOST_SCRIPT_ROOT / "ensure.sh",
         "status",
         120,
     ),
@@ -54,6 +62,12 @@ FORBIDDEN_REQUEST_HEADERS = {
     "x-forwarded-host",
     "x-forwarded-proto",
 }
+READINESS_PATTERN = re.compile(
+    r"\[READINESS\]\s+"
+    r"infrastructure=(pending|ready|failed)\s+"
+    r"services=(pending|ready|failed)\s+"
+    r"business=(pending|ready|failed)(?P<details>[^\r\n]*)"
+)
 
 
 class RunnerError(RuntimeError):
@@ -80,6 +94,7 @@ class RunnerApi(Protocol):
         exit_code: int,
         error_code: str | None = None,
         error_message: str | None = None,
+        readiness: dict[str, object] | None = None,
     ) -> None: ...
 
     def submit_host_action(
@@ -169,6 +184,7 @@ class RunnerApiClient:
         exit_code: int,
         error_code: str | None = None,
         error_message: str | None = None,
+        readiness: dict[str, object] | None = None,
     ) -> None:
         self._post(
             f"/api/runtime-runner/operations/{operation_id}/steps/{step_id}/complete",
@@ -177,6 +193,7 @@ class RunnerApiClient:
                 "exit_code": exit_code,
                 "error_code": error_code,
                 "error_message": error_message,
+                "readiness": readiness,
             },
         )
 
@@ -267,6 +284,7 @@ class HostRuntimeRunner:
                     step=raw_step,
                     **execution,
                 )
+                readiness = _read_readiness_result(execution["log_path"])
             else:
                 exit_code, error_code, error_message = self._execute_step(
                     operation_id=operation_id,
@@ -277,6 +295,7 @@ class HostRuntimeRunner:
                     environment_name=environment_name,
                     **execution,
                 )
+                readiness = None
             self._api.complete_step(
                 operation_id,
                 step_id,
@@ -284,6 +303,7 @@ class HostRuntimeRunner:
                 exit_code,
                 error_code,
                 error_message,
+                readiness,
             )
             if exit_code != 0:
                 return
@@ -537,6 +557,19 @@ class HostRuntimeRunner:
             raise RunnerSecurityError("白名单宿主机脚本不能允许组或其他用户写入")
         if not os.access(script, os.X_OK):
             raise RunnerSecurityError("白名单宿主机脚本不可执行")
+        state_path = root.parent / "runtime/context-router-shared-files.json"
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            revision = int(state["revision"])
+            digest = str(state["digest"])
+            expected_sha256 = str(state["files"][f"deploy/host-runtime/{script.name}"])
+        except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise RunnerSecurityError("宿主机脚本缺少有效的数据库同步状态") from exc
+        if revision < 1 or len(digest) != 64 or len(expected_sha256) != 64:
+            raise RunnerSecurityError("宿主机脚本数据库同步状态无效")
+        actual_sha256 = hashlib.sha256(script.read_bytes()).hexdigest()
+        if not hmac.compare_digest(actual_sha256, expected_sha256):
+            raise RunnerSecurityError("宿主机脚本与数据库同步摘要不一致")
 
     def _verify_manifest(self, snapshot: Path, step: dict[str, object]) -> None:
         manifest_path = snapshot / MANIFEST_FILE
@@ -913,6 +946,43 @@ def _controlled_environment() -> dict[str, str]:
             path_entries.append(entry)
     environment["PATH"] = os.pathsep.join(path_entries)
     return environment
+
+
+def _read_readiness_result(log_path: object) -> dict[str, object] | None:
+    if not isinstance(log_path, Path):
+        return None
+    try:
+        content = log_path.read_text(encoding="utf-8", errors="replace")[-131_072:]
+    except OSError:
+        return None
+    matches = list(READINESS_PATTERN.finditer(content))
+    if not matches:
+        return None
+    latest = matches[-1]
+    details = latest.group("details")
+
+    def detail_number(key: str) -> int | None:
+        match = re.search(rf"(?:^|\s){re.escape(key)}=(\d+)(?:\s|$)", details)
+        return int(match.group(1)) if match else None
+
+    labels = {
+        "infrastructure": "基础设施",
+        "services": "项目服务",
+        "business": "业务入口",
+    }
+    result: dict[str, object] = {}
+    for index, key in enumerate(labels, start=1):
+        status = latest.group(index)
+        result[key] = {
+            "status": status,
+            "duration_ms": detail_number(f"{key}_ms"),
+            "error_message": (
+                f"{labels[key]}阶段失败，详见运行日志" if status == "failed" else None
+            ),
+        }
+    revision = detail_number("revision")
+    result["revision"] = revision if revision and revision >= 1 else None
+    return result
 
 
 def _safe_relative(value: str, label: str) -> PurePosixPath:

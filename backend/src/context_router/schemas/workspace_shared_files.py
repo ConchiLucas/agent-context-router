@@ -6,4 +6,8 @@ class WorkspaceSharedFilesResult(BaseModel):
     source_root: str
     document_count: int
     deploy_count: int
+    script_count: int
+    host_runtime_count: int
+    revision: int
+    digest: str
     action: str

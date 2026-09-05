@@ -1,0 +1,63 @@
+{
+  "schema_version": "context-router-interface-semantic-batch-v1",
+  "batch_id": "panzhihua-c12-portal-scts-bill-021",
+  "workspace_id": "b9ce65eddc27437d9615177fbd07cb0a",
+  "family_groups": {
+    "客户小程序应收账单问题反馈": 1
+  },
+  "generation_policy": "这是 batch-020 遗漏接口的补齐批次，只维护 c12-portal SctsBillController.customerFeedbackSubmit 这 1 个接口；不重复生成或修改 batch-020 已审核入库的 12 个接口。沿 c12-portal 小程序 BFF、RemotePortalMiniBillService、c12-scts PortalMiniBillController/PortalMiniBillService、ReceivableBillService、ReceivableBillFeedbackItem、ReceivableBillFeedbackDao 与 JPA 实际持久化实现生成，并与 customerGetById、customerConfirmBill、PortalCustomerBillController 的应收账单反馈接口及通用 member-api 门户问题反馈接口区分。",
+  "items": [
+    {
+      "interface_id": "e86c5622-d0c3-4ca5-9f3e-6eb4e5ed7e55",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/bill/customerFeedbackSubmit"
+      },
+      "semantic": {
+        "purpose": "供供应链小程序当前登录客户按应收账单ID为自己的账单提交并创建一条应收账单问题反馈，成功仅返回空业务数据，不修改原应收账单及其确认、收款或结算状态。",
+        "audiences": ["供应链小程序客户"],
+        "domains": ["供应链贸易", "应收账单", "财务结算"],
+        "scenarios": ["客户在供应链小程序查看自己的一笔应收账单后，按账单ID提交问题内容并创建一条待处理的应收账单反馈记录。"],
+        "actions": ["submit", "create"],
+        "entities": ["应收账单问题反馈", "应收账单"],
+        "aliases": ["客户提交应收账单问题反馈", "小程序创建账单反馈", "SctsBillController.customerFeedbackSubmit"],
+        "resource": "receivable_bill_feedback",
+        "lookup_keys": ["billId"],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "这是供应链小程序客户对应收账单提交/创建问题反馈的写接口；不是 customerGetById 的账单详情查询，也不是 customerConfirmBill 写入账单确认时间和业务日志的确认动作。",
+          "ReceivableBillService#getPortalCustomer 从 SessionContext 的 userId 查询 Customer.portalUserId；请求不能传入或覆盖 customerId。随后 getPortalCustomerBill 以 billId+当前 customerId 联合查询，只允许反馈当前客户自己的应收账单。",
+          "billId 由 @NotNull 无条件校验；feedbackContent 由 @NotBlank 和 @Size(max=500) 在进入 Service 前校验，所以 null、空串、纯空白及原始长度超过500均失败，成功路径再以 StrUtil.trim 去除首尾空白后持久化。",
+          "每次成功调用新建一条 cs_receivable_bill_feedback 记录，写入应收账单ID、内部账单号快照、内部当前客户ID、trim 后反馈内容、当前反馈时间和 pending 待处理状态；处理时间、处理结果和处理人保持未设置，同时由通用 JPA 持久化层填充内部生成主键及审计字段。",
+          "该接口不更新 cs_receivable_bill，不改变 billConfirmTime、billStatus、receivablePaymentStatus、invoiceStatus 或 settlementStatus，也不发布 customerConfirmBill 的财务结算确认日志。",
+          "未登录或会话缺少 userId 时抛出 UNLOGIN；登录用户未映射客户时抛出 CUSTOMER_PORTAL_PHONE_NOT_MATCH；账单不存在与账单不属于当前客户都由 billId+customerId 联合查询返回同一 BILL_NOT_EXIST_OR_NO_PERMISSION。",
+          "PortalCustomerBillController#submitFeedback 是 PC/门户端同一 ReceivableBillFeedbackItem 与同一 portalSubmitFeedback 持久化行为；PortalCustomerBillController#feedbackList 则按 billId 返回当前客户该账单的多条反馈记录，本接口仅创建一条且不返回反馈列表或反馈ID。",
+          "通用 member-api /member-api/portal/feedback/save 创建的是不绑定账单的门户 ProblemFeedback，使用 type、content 及可选 contact、priority、附件并返回反馈ID；本接口必须提供 billId 和 feedbackContent，只创建应收账单问题反馈且 ResponseData<Void> 无业务返回值。",
+          "数据库 OpenAPI 的 feedbackContent schema 显示 minLength=0，且 Swagger 摘要只写“小程序客户提交问题反馈”；可执行 DTO 的 @NotBlank 与下游账单归属链证明运行时实际拒绝空白内容，业务对象是当前客户自己的应收账单问题反馈。"
+        ],
+        "required_inputs": [
+          {"name": "billId", "zh_name": "应收账单ID", "location": "body", "required": true, "schema_type": "Long"},
+          {"name": "feedbackContent", "zh_name": "问题反馈内容", "location": "body", "required": true, "schema_type": "String"}
+        ],
+        "business_identifiers": [
+          {"canonical": "receivable_bill_id", "display_name": "应收账单ID", "technical_names": ["billId"], "aliases": ["客户账单主键"], "resource": "receivable_bill", "source": "request_contract", "confidence": 0.99}
+        ],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": [
+          "SctsBillController#customerFeedbackSubmit(@RequestBody @Valid ReceivableBillFeedbackItem) -> RemotePortalMiniBillService#customerFeedbackSubmit -> PortalMiniBillController#customerFeedbackSubmit -> PortalMiniBillService#customerFeedbackSubmit",
+          "ReceivableBillFeedbackItem.billId 使用 @NotNull；feedbackContent 使用 @NotBlank 与 @Size(max=500)；两个 Controller 和 Feign 合同均声明 @Valid，公开返回为 ResponseData<Void>",
+          "ReceivableBillService#portalSubmitFeedback -> getPortalCustomer：SessionContext.getSessionUserInfo().userId -> CustomerService#getByPortalUserId，未登录抛 ServiceExceptionEnum.UNLOGIN，未映射客户抛 PortalBillExceptionEnum.CUSTOMER_PORTAL_PHONE_NOT_MATCH",
+          "ReceivableBillService#getPortalCustomerBill 使用 ReceivableBill.id=billId AND ReceivableBill.customerId=currentCustomer.id 联合查询；未命中统一抛 PortalBillExceptionEnum.BILL_NOT_EXIST_OR_NO_PERMISSION",
+          "ReceivableBillService#portalSubmitFeedback 新建 ReceivableBillFeedback，设置 receivableBillId、billNo、customerId、StrUtil.trim(feedbackContent)、new Date feedbackTime 和 ReceivableBillFeedbackStatusEnum.PENDING(pending)，然后调用 ReceivableBillFeedbackDao#saveOrUpdate",
+          "ReceivableBillFeedback @Table(name=cs_receivable_bill_feedback)；ReceivableBillFeedbackDao extends ModuleBaseDaoSupport；ModuleBaseDaoSupport#saveOrUpdate(Model) 对无ID实体填充 creator/createTime/modifier/modifyTime/companyId/tenancy 后 insert，CommonJpaRepositoryImpl#insert 通过 EntityManager.persist 并 flush",
+          "SctsBillController#customerGetById 与 ReceivableBillService#portalMiniGetById 读取同一当前客户账单并返回 feedbackList；SctsBillController#customerConfirmBill 与 ReceivableBillService#portalMiniConfirm 修改确认时间并记录确认日志，本接口只新增反馈记录",
+          "PortalCustomerBillController#submitFeedback 与 #feedbackList 分别复用 ReceivableBillService#portalSubmitFeedback 和 #portalListFeedback；数据库当前通用 member-api ProblemFeedbackPortalController#save 合同及 git commit 505baa6 的 ProblemFeedbackService#submit 证明其请求、表、附件和返回ID均不同",
+          "数据库 interface_forwarding_interfaces 与 interface_semantic_index 只读核验：interface_id=e86c5622-d0c3-4ca5-9f3e-6eb4e5ed7e55、service=c12-portal、POST /api/mini/scts/bill/customerFeedbackSubmit、controller_name=供应链贸易账单小程序接口Controller；OpenAPI feedbackContent.minLength=0 与 DTO @NotBlank 存在生成合同表达差异"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-04"
+      }
+    }
+  ]
+}

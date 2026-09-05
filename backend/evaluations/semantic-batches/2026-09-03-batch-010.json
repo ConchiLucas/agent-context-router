@@ -1,0 +1,289 @@
+{
+  "schema_version": "context-router-interface-semantic-batch-v1",
+  "batch_id": "panzhihua-c12-sys-sse-source-system-config-010",
+  "workspace_id": "b9ce65eddc27437d9615177fbd07cb0a",
+  "family_groups": {
+    "SSE连接管理": 4,
+    "来源系统查询": 2,
+    "系统配置": 2
+  },
+  "generation_policy": "按 c12-sys 剩余完整 Controller 家族源码闭环生成 CustomSseEmitterController、SourceSystemController、SystemConfigController；SSE 使用共享 c12-core-sse 源码作证据但只写入 c12-sys 接口身份；区分长连接流式返回与 ResponseData JSON、header/query 参数位置、二选一身份来源、项目全部系统与业务系统、以及系统配置查询与按当前系统编码 upsert。未使用 copy_from_interface_id，未加入 c12-portal 或其他服务的同路径接口。",
+  "items": [
+    {
+      "interface_id": "77089f3e-40a7-4784-a992-ef64ddc6f60f",
+      "expected_identity": {"service": "c12-sys", "method": "GET", "path": "/api/sse/connect"},
+      "semantic": {
+        "purpose": "供 c12-sys 接入端为当前登录用户建立一条 SSE 长连接：身份优先取登录上下文，缺失时才用 query _sid 恢复；header type 为空则用 default 来源系统；可选 query businessType 在建连后订阅；首个 CONNECTION 事件返回后续订阅使用的 connectionId；直接返回 SseEmitter 事件流，不是 ResponseData JSON。",
+        "audiences": ["c12-sys 接入端", "当前登录用户"],
+        "domains": ["实时消息", "SSE连接"],
+        "scenarios": ["已登录客户端在 c12-sys 上打开一条当前用户的服务器推送长连接，以便后续接收连接确认和业务事件。"],
+        "actions": ["connect"],
+        "entities": ["SSE连接", "SSE事件流"],
+        "aliases": ["建立SSE长连接", "打开系统实时事件流", "CustomSseEmitterController.connect"],
+        "resource": "sse_connection",
+        "lookup_keys": ["type", "X-Client-ID", "clientId", "businessType", "_sid", "connectionId"],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "共享 CustomSseEmitterController 部署在 c12-sys，本条身份是 c12-sys GET /api/sse/connect，不得与 c12-portal/c12-mtp/c12-data 同路径记录混用。直接返回一条 SseEmitter 长连接，不是 subscribe 的 ResponseData Boolean，也不是 disconnect 关闭连接。",
+          "身份来源是已有 SessionContext 与 query _sid 二选一，_sid 不是无条件必填。header type 只读请求头，空白时 SourceSystemEnum.DEFAULT=default，注释所称 query 回退在可执行代码中不存在。X-Client-ID/query clientId 被读取但未传入 SseConnectionManager#createConnection。首个 CONNECTION 确认事件实际包含 connectionId，供兄弟订阅接口使用；响应是 SSE 事件流而非普通 JSON。SseEmitter(0L) 无超时；导入合同把返回写成 timeout 对象，与事件流不符。Javadoc 写支持 GET 和 POST，实际只有 GET。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {"canonical": "sse_connection_id", "display_name": "SSE连接ID", "technical_names": ["connectionId"], "aliases": ["长连接ID", "订阅连接ID"], "resource": "sse_connection", "source": "response_stream_event", "confidence": 0.99},
+          {"canonical": "sse_client_id", "display_name": "客户端标识", "technical_names": ["X-Client-ID", "clientId"], "aliases": ["客户端ID"], "resource": "sse_connection", "source": "request_contract", "confidence": 0.9},
+          {"canonical": "sse_business_type", "display_name": "业务类型", "technical_names": ["businessType"], "aliases": ["业务代码"], "resource": "sse_connection", "source": "request_contract", "confidence": 0.95}
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.88,
+        "semantic_evidence": [
+          "CustomSseEmitterController#connect(HttpServletRequest) -> SseEmitter",
+          "HttpServletRequest header type/X-Client-ID/User-Agent，query clientId/businessType/_sid；SessionContext.getSessionUserInfo() 优先，空则 SessionContext.getSessionUserInfo(_sid)",
+          "SseConnectionManager#createConnection 生成内部 connectionId/sessionId，sendConnectionConfirmation 发送 CONNECTION 事件，SseSubscriptionService#subscribe(connectionId, businessType) 在 businessType 非空时写入 Redis",
+          "SseMessage.connectionId 标注 Fastjson @JSONField(serialize=false)，但实际 payload 使用 Hutool 5.8.36 JSONUtil.toJsonStr；锁定依赖版本的最小复现实测确认 Hutool 不读取该 Fastjson 注解，CONNECTION 事件仍序列化 connectionId。sessionId 未进入公开请求或响应；导入 response_schema 仅有 timeout，与 SSE 流冲突"
+        ]
+      }
+    },
+    {
+      "interface_id": "e01c73f6-6619-47e2-858b-c080418285eb",
+      "expected_identity": {"service": "c12-sys", "method": "GET", "path": "/api/sse/disconnect"},
+      "semantic": {
+        "purpose": "供 c12-sys 当前登录用户按 query type（缺省 default）关闭本人在该来源系统下的一条已有 SSE 连接；方法返回 void，不是 ResponseData JSON。",
+        "audiences": ["c12-sys 接入端", "当前登录用户"],
+        "domains": ["实时消息", "SSE连接"],
+        "scenarios": ["已登录客户端主动断开自己在指定来源系统上的 c12-sys 实时推送连接。"],
+        "actions": ["disconnect"],
+        "entities": ["SSE连接"],
+        "aliases": ["断开SSE连接", "关闭当前用户实时推送", "CustomSseEmitterController.disconnect"],
+        "resource": "sse_connection",
+        "lookup_keys": ["type"],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "按当前登录 userId 加来源系统关闭连接，不接收 connectionId；type 是 query 且可空，空则 default。只关闭 findFirst 命中的一条活跃连接，不是 unsubscribe 取消业务订阅，也不是 connect 返回事件流。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "CustomSseEmitterController#disconnect(@RequestParam(required=false) String type) -> void",
+          "query type；SessionContext.getSessionUserInfo() 校验 userId；空白 type 使用 SourceSystemEnum.DEFAULT",
+          "SseConnectionManager#closeUserConnection(userId, sourceSystem) -> findExistingConnection 取该用户该来源系统第一条活跃连接后 removeConnection",
+          "共享 c12-core-sse Controller，本条为 c12-sys GET /api/sse/disconnect"
+        ]
+      }
+    },
+    {
+      "interface_id": "e464de75-33a2-4a44-a78d-9cac4980604e",
+      "expected_identity": {"service": "c12-sys", "method": "GET", "path": "/api/sse/subscribe"},
+      "semantic": {
+        "purpose": "供 c12-sys 接入端按 query connectionId 和 businessType 为已有 SSE 连接增加 Redis 业务订阅，返回 ResponseData Boolean；连接不存在时内部直接返回且仍成功。",
+        "audiences": ["c12-sys 接入端"],
+        "domains": ["实时消息", "SSE订阅"],
+        "scenarios": ["调用方在 c12-sys 长连接建立后，按连接 ID 为该连接订阅一类或多类逗号分隔的业务事件。"],
+        "actions": ["subscribe"],
+        "entities": ["SSE业务订阅"],
+        "aliases": ["订阅SSE业务", "按连接ID增加业务订阅", "CustomSseEmitterController.subscribe"],
+        "resource": "sse_subscription",
+        "lookup_keys": ["connectionId", "businessType"],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "无条件校验 query connectionId 与 businessType 非空；只按连接 ID 定位本地 SseConnection，不按当前用户 self 过滤。businessType 可按逗号拆成多个业务代码写入 Redis。不同于 connect 建流和 unsubscribe 退订。默认登录拦截存在，但订阅归属仍是 connectionId。"
+        ],
+        "required_inputs": [
+          {"name": "connectionId", "zh_name": "SSE连接ID", "location": "query", "required": true, "schema_type": "String"},
+          {"name": "businessType", "zh_name": "业务类型", "location": "query", "required": true, "schema_type": "String"}
+        ],
+        "business_identifiers": [
+          {"canonical": "sse_connection_id", "display_name": "SSE连接ID", "technical_names": ["connectionId"], "aliases": ["连接标识"], "resource": "sse_subscription", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "sse_business_type", "display_name": "业务类型", "technical_names": ["businessType"], "aliases": ["业务代码"], "resource": "sse_subscription", "source": "request_contract", "confidence": 0.99}
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "CustomSseEmitterController#subscribe(HttpServletRequest) -> ResponseData.success(true)",
+          "query connectionId、businessType；StrUtil.isBlank 任一为空则 ServiceException 连接ID和业务代码不能为空",
+          "SseSubscriptionService#subscribe(connectionId, bizCode) -> SseDistributedService#handleDistributedSub -> SseSubscriptionService#subscribe(SubscribeMessage)",
+          "按 connectionId 取 SseConnectionManager#getSseConnection，空则 return；否则 RedisSetUtils.subscriptionCache(connectionId, userId, bizCode)。共享 Controller，本条为 c12-sys GET /api/sse/subscribe"
+        ]
+      }
+    },
+    {
+      "interface_id": "e4eb6cd3-ebf7-40bc-8d59-fa5f5427d697",
+      "expected_identity": {"service": "c12-sys", "method": "GET", "path": "/api/sse/unsubscribe"},
+      "semantic": {
+        "purpose": "供 c12-sys 接入端按 query connectionId 和 businessType 取消已有 SSE 连接上的 Redis 业务订阅，返回 ResponseData Boolean；不断开底层长连接。",
+        "audiences": ["c12-sys 接入端"],
+        "domains": ["实时消息", "SSE订阅"],
+        "scenarios": ["调用方按连接 ID 停止接收某类业务推送，但保持 c12-sys SSE 长连接仍然打开。"],
+        "actions": ["unsubscribe"],
+        "entities": ["SSE业务订阅"],
+        "aliases": ["取消SSE业务订阅", "按连接ID退订业务事件", "CustomSseEmitterController.unsubscribe"],
+        "resource": "sse_subscription",
+        "lookup_keys": ["connectionId", "businessType"],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "无条件校验 query connectionId 与 businessType；按连接 ID 删除 Redis 订阅，不校验是否当前用户，也不调用 closeUserConnection。连接不存在时内部直接返回，Controller 仍返回成功。不同于 subscribe 增订和 disconnect 关连接。"
+        ],
+        "required_inputs": [
+          {"name": "connectionId", "zh_name": "SSE连接ID", "location": "query", "required": true, "schema_type": "String"},
+          {"name": "businessType", "zh_name": "业务类型", "location": "query", "required": true, "schema_type": "String"}
+        ],
+        "business_identifiers": [
+          {"canonical": "sse_connection_id", "display_name": "SSE连接ID", "technical_names": ["connectionId"], "aliases": ["连接标识"], "resource": "sse_subscription", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "sse_business_type", "display_name": "业务类型", "technical_names": ["businessType"], "aliases": ["业务代码"], "resource": "sse_subscription", "source": "request_contract", "confidence": 0.99}
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "CustomSseEmitterController#unsubscribe(HttpServletRequest) -> ResponseData.success(true)",
+          "query connectionId、businessType；StrUtil.isBlank 主动校验",
+          "SseSubscriptionService#unsubscribe(connectionId, businessType) -> SseDistributedService#handleDistributedSub -> RedisSetUtils.removeSubscriptionCache",
+          "SseConnection 按 connectionId 定位，空则 return；异常被内部吞掉。共享 Controller，本条为 c12-sys GET /api/sse/unsubscribe"
+        ]
+      }
+    },
+    {
+      "interface_id": "51070aa4-c36e-40f1-a5e3-7acdf57ddbcb",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/sourceSystem/projectSupportedList"},
+      "semantic": {
+        "purpose": "供权限管理前端或 Feign 调用方查询当前软件项目 SourceEnum.PROJECT_SUPPORTED_SYSTEMS 中的全部可展示系统，含 admin、app、auth 等非业务入口，返回多条 code/name/enumCode，不读库。",
+        "audiences": ["权限管理前端", "c12-sys Feign 调用方"],
+        "domains": ["来源系统", "系统目录"],
+        "scenarios": ["权限或登录配置页加载当前项目支持的完整系统下拉，包括运营端、小程序端和公共权限等。"],
+        "actions": ["query", "list"],
+        "entities": ["来源系统"],
+        "aliases": ["查询项目支持的全部系统", "获取完整系统清单", "SourceSystemController.projectSupportedList"],
+        "resource": "source_system",
+        "lookup_keys": ["code", "enumCode", "name"],
+        "cardinality": "many",
+        "ownership": "unknown",
+        "discriminators": [
+          "静态返回 PROJECT_SUPPORTED_SYSTEMS：ADMIN、APP、HYDROGEN、SCT、PORTAL_ADMIN、PORTAL、MULTIMODAL_TRANSPORT、WMS、PARK、EGPS、RCC、FTP、NFTP、AUTH、GICS；范围是当前软件项目编译期目录，不是登录用户 self，也不是 SourceEnum 全部值。不同于 businessSupportedList 排除 admin/app/auth。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {"canonical": "source_system_code", "display_name": "来源系统编码", "technical_names": ["code"], "aliases": ["系统编码"], "resource": "source_system", "source": "response_contract", "confidence": 0.99},
+          {"canonical": "source_system_enum_code", "display_name": "来源系统枚举名", "technical_names": ["enumCode"], "aliases": ["枚举编码"], "resource": "source_system", "source": "response_contract", "confidence": 0.99}
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.99,
+        "semantic_evidence": [
+          "SourceSystemController#projectSupportedList() -> ResponseData<List<SourceSystemQuery>>",
+          "无请求体；SourceSystemQuery.code/name/enumCode",
+          "SourceSystemService#projectSupportedList -> toQueryList(SourceEnum.PROJECT_SUPPORTED_SYSTEMS)",
+          "c12-auth-ui/c12-auth-admin-ui 调用 /sys/api/sourceSystem/projectSupportedList；RemoteSourceSystemService#projectSupportedList"
+        ]
+      }
+    },
+    {
+      "interface_id": "ca37475e-723f-4c0e-922b-66239a62610e",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/sourceSystem/businessSupportedList"},
+      "semantic": {
+        "purpose": "供权限管理前端或 Feign 调用方查询当前软件项目 SourceEnum.PROJECT_SUPPORTED_BUSINESS_SYSTEMS 业务入口系统，排除 admin、app、auth，返回多条 code/name/enumCode，不读库。",
+        "audiences": ["权限管理前端", "c12-sys Feign 调用方"],
+        "domains": ["来源系统", "系统目录"],
+        "scenarios": ["菜单授权或业务入口配置加载当前项目支持的业务系统清单，不包含运营端、小程序端和公共权限。"],
+        "actions": ["query", "list"],
+        "entities": ["来源系统", "业务系统"],
+        "aliases": ["查询项目支持的业务系统", "获取业务系统清单", "SourceSystemController.businessSupportedList"],
+        "resource": "source_system",
+        "lookup_keys": ["code", "enumCode", "name"],
+        "cardinality": "many",
+        "ownership": "unknown",
+        "discriminators": [
+          "静态返回 PROJECT_SUPPORTED_BUSINESS_SYSTEMS：HYDROGEN、SCT、PORTAL_ADMIN、PORTAL、MULTIMODAL_TRANSPORT、WMS、PARK、EGPS、RCC、FTP、NFTP、GICS，排除 ADMIN/APP/AUTH；也不是登录页专用 PROJECT_SUPPORTED_LOGIN_SYSTEMS。范围同为当前软件项目编译期目录。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {"canonical": "source_system_code", "display_name": "来源系统编码", "technical_names": ["code"], "aliases": ["系统编码"], "resource": "source_system", "source": "response_contract", "confidence": 0.99},
+          {"canonical": "source_system_enum_code", "display_name": "来源系统枚举名", "technical_names": ["enumCode"], "aliases": ["枚举编码"], "resource": "source_system", "source": "response_contract", "confidence": 0.99}
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.99,
+        "semantic_evidence": [
+          "SourceSystemController#businessSupportedList() -> ResponseData<List<SourceSystemQuery>>",
+          "无请求体；SourceSystemQuery.code/name/enumCode",
+          "SourceSystemService#businessSupportedList -> toQueryList(SourceEnum.PROJECT_SUPPORTED_BUSINESS_SYSTEMS)",
+          "c12-auth-ui/c12-auth-admin-ui 调用 /sys/api/sourceSystem/businessSupportedList；RemoteSourceSystemService#businessSupportedList"
+        ]
+      }
+    },
+    {
+      "interface_id": "4ca7390d-c26e-424f-9cb3-f550730f5a6d",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/systemConfig/getSystemConfig"},
+      "semantic": {
+        "purpose": "供登录页或后台在 @OptionalLogin 下查询一条系统外观与登录配置：请求体可空；systemCode 优先取 body，缺省用配置项或 X-System-Code，再空则回落空白编码默认行；返回站点名称、登录方式、Logo/背景文件 ID 及其签名 URL。",
+        "audiences": ["登录页", "系统配置后台", "未登录或已登录调用端"],
+        "domains": ["系统配置", "站点外观"],
+        "scenarios": ["登录页或系统设置按系统编码读取当前系统或默认系统的网站名称、版权、登录方式和背景 Logo。"],
+        "actions": ["query"],
+        "entities": ["系统配置"],
+        "aliases": ["查询系统配置", "获取站点登录外观配置", "SystemConfigController.getSystemConfig"],
+        "resource": "system_config",
+        "lookup_keys": ["systemCode", "id", "siteName", "authType", "siteLogo", "navbarIcon", "loginBg", "homeBg"],
+        "cardinality": "one",
+        "ownership": "unknown",
+        "discriminators": [
+          "@OptionalLogin 且 @RequestBody(required=false)，登录用户和 condition/systemCode 都不是无条件必填。命中顺序是精确 systemCode，其次空白 systemCode 默认行，否则空 SystemConfigQuery。只读并补 CustomFile 签名 URL，不是 save 的 upsert。范围是请求系统编码或运行时当前系统，不是 self/all。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {"canonical": "system_config_id", "display_name": "系统配置ID", "technical_names": ["id"], "aliases": ["配置主键"], "resource": "system_config", "source": "response_contract", "confidence": 0.99},
+          {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode"], "aliases": ["X-System-Code"], "resource": "system_config", "source": "request_response_and_runtime_context", "confidence": 0.99},
+          {"canonical": "site_logo_file_id", "display_name": "站点Logo文件ID", "technical_names": ["siteLogo"], "aliases": ["站点Logo"], "resource": "system_config", "source": "response_contract", "confidence": 0.99},
+          {"canonical": "navbar_icon_file_id", "display_name": "导航栏图标文件ID", "technical_names": ["navbarIcon"], "aliases": ["导航图标"], "resource": "system_config", "source": "response_contract", "confidence": 0.99},
+          {"canonical": "login_bg_file_id", "display_name": "登录背景文件ID", "technical_names": ["loginBg"], "aliases": ["登录背景"], "resource": "system_config", "source": "response_contract", "confidence": 0.99},
+          {"canonical": "home_bg_file_id", "display_name": "首页背景文件ID", "technical_names": ["homeBg"], "aliases": ["首页背景"], "resource": "system_config", "source": "response_contract", "confidence": 0.99}
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.94,
+        "semantic_evidence": [
+          "SystemConfigController#getSystemConfig(@RequestBody(required=false) SystemConfigCondition) -> ResponseData<SystemConfigQuery>，方法标注 @OptionalLogin",
+          "SystemConfigCondition.systemCode；SystemConfigQuery 含 id/systemCode/站点与文件字段及 *Url",
+          "SystemConfigRepository#getSystemConfig -> resolveSystemCode：condition.systemCode 优先，否则 SystemCodeUtil.requiredSystemCode()（配置 chinaservices.system.code 或 header X-System-Code，空白返回空串不抛错）",
+          "SystemConfigService#list + systemConfig_query_getList.sql 查 sys_system_config；精确编码优先，否则空白 system_code 默认行；fillFileUrl -> CustomFile#getObjectSignUrl。种子 DDL 001_system_config_tables.sql 未列出 site_name 等列，与实体和查询 SQL 不一致"
+        ]
+      }
+    },
+    {
+      "interface_id": "038967c9-4240-44ab-8074-9f5292014587",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/systemConfig/save"},
+      "semantic": {
+        "purpose": "供已登录后台按运行时系统编码保存一条 sys_system_config：无行则 insert、有行则 update；请求体 systemCode 会被覆盖；叶子字段均非后端无条件必填；返回空 data 的成功响应。",
+        "audiences": ["系统配置后台", "当前登录用户"],
+        "domains": ["系统配置", "站点外观"],
+        "scenarios": ["运营人员在系统设置中保存当前系统的网站名称、版权、登录方式和 Logo/背景文件。"],
+        "actions": ["save", "create", "update"],
+        "entities": ["系统配置"],
+        "aliases": ["保存系统配置", "更新站点登录外观", "SystemConfigController.save"],
+        "resource": "system_config",
+        "lookup_keys": ["systemCode", "siteName", "siteLogo", "navbarIcon", "loginBg", "homeBg", "authType"],
+        "cardinality": "one",
+        "ownership": "unknown",
+        "discriminators": [
+          "必须登录；定位键是 SystemCodeUtil.requiredSystemCode() 而不是请求 id 或 body.systemCode。getCurrentSystemConfig 命中则 BeanUtil.copyProperties 后 update，否则 insert，因此 create/update 都是可执行分支。前端 systemConfigEdit 把 systemCode/siteName 标成必填，后端无 Bean Validation 且空白 {} 也可走保存。范围是当前请求系统，不是 self/all。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode"], "aliases": ["X-System-Code"], "resource": "system_config", "source": "runtime_context_and_request_contract", "confidence": 0.99},
+          {"canonical": "site_logo_file_id", "display_name": "站点Logo文件ID", "technical_names": ["siteLogo"], "aliases": ["站点Logo"], "resource": "system_config", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "navbar_icon_file_id", "display_name": "导航栏图标文件ID", "technical_names": ["navbarIcon"], "aliases": ["导航图标"], "resource": "system_config", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "login_bg_file_id", "display_name": "登录背景文件ID", "technical_names": ["loginBg"], "aliases": ["登录背景"], "resource": "system_config", "source": "request_contract", "confidence": 0.99},
+          {"canonical": "home_bg_file_id", "display_name": "首页背景文件ID", "technical_names": ["homeBg"], "aliases": ["首页背景"], "resource": "system_config", "source": "request_contract", "confidence": 0.99}
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "SystemConfigController#save(@RequestBody SystemConfigItem) -> ResponseData<Void>",
+          "SystemConfigItem 继承 ModuleBaseUpdateItem，无 id、无 @NotNull/@NotBlank；Swagger 写 systemCode 由后端从请求头写入",
+          "SystemConfigRepository#save：SessionContext.get() 空则 QUERY_USER_EMPTY；systemCode=SystemCodeUtil.requiredSystemCode()；SystemConfigService#getCurrentSystemConfig + preSave；id 空 insert 否则 update",
+          "持久化 sys_system_config，uk_sys_system_config_system(system_code)；auth-admin-ui /sys/api/systemConfig/save"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,180 @@
+{
+  "schema_version": "context-router-interface-semantic-batch-v1",
+  "batch_id": "panzhihua-mtp-priority-families-001",
+  "workspace_id": "b9ce65eddc27437d9615177fbd07cb0a",
+  "generation_policy": "完整家族补全；远程接口继承已审核同职责兄弟语义，并显式标注内部远程调用差异。",
+  "items": [
+    {
+      "interface_id": "e7264645-4156-4299-9ecc-77101b932640",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/inner/message/batchSend"},
+      "semantic": {
+        "purpose": "内部服务一次提交多条独立站内消息请求并批量发送，每个 items 元素表示一条待发送消息。",
+        "audiences": ["内部服务"],
+        "domains": ["消息中心", "站内消息"],
+        "scenarios": ["内部服务批量发送多条消息"],
+        "actions": ["create", "execute"],
+        "entities": ["内部消息", "消息接收人"],
+        "aliases": ["内部批量发送站内消息", "一次发送多条消息", "MessageApiController.batchSend"],
+        "resource": "internal_message",
+        "lookup_keys": ["items"],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": ["请求体是消息 items 列表，一次发送多条；不是 /inner/message/send 的单条消息请求，也不是运营人员手工发送入口。"],
+        "semantic_model": "codex-gpt5-contract-review-2026-09-02",
+        "semantic_confidence": 0.97,
+        "semantic_evidence": ["接口路径和控制器家族", "请求合同包含 items 数组", "与单条内部发送及运营端手工发送兄弟接口对比"]
+      }
+    },
+    {
+      "interface_id": "d131b5bb-72a3-41b6-8c3f-eaf7a53f5f77",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/inner/message/send"},
+      "semantic": {
+        "purpose": "内部服务提交一条消息发送请求，指定模板、发送方、接收人和模板参数后发送站内消息。",
+        "audiences": ["内部服务"],
+        "domains": ["消息中心", "站内消息"],
+        "scenarios": ["内部服务发送单条消息请求"],
+        "actions": ["create", "execute"],
+        "entities": ["内部消息", "消息模板", "消息接收人"],
+        "aliases": ["内部发送一条站内消息", "按模板发送内部消息", "MessageApiController.send"],
+        "resource": "internal_message",
+        "lookup_keys": ["templateId", "senderId", "receivers", "sourceService"],
+        "cardinality": "one",
+        "ownership": "all",
+        "discriminators": ["请求体表示一条消息发送任务；不是 /inner/message/batchSend 的消息列表，也不是运营端 manual/send 手工发送入口。"],
+        "semantic_model": "codex-gpt5-contract-review-2026-09-02",
+        "semantic_confidence": 0.97,
+        "semantic_evidence": ["接口路径和控制器家族", "请求合同包含 templateId、receivers、senderId", "与批量内部发送及运营端手工发送兄弟接口对比"]
+      }
+    },
+    {
+      "interface_id": "68e4c36d-59a9-41fb-9270-fcefbca2a526",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/inner/message/template/group/page"},
+      "semantic": {
+        "purpose": "内部服务分页查询消息模板分组，可按分组编码、名称、通知类型及短信或邮件发送方筛选。",
+        "audiences": ["内部服务"],
+        "domains": ["消息中心", "消息模板"],
+        "scenarios": ["内部选择消息模板分组"],
+        "actions": ["page"],
+        "entities": ["消息模板分组"],
+        "aliases": ["内部消息模板分组分页", "查询模板组", "MessageTemplateApiController.groupPage"],
+        "resource": "message_template_group",
+        "lookup_keys": ["code", "name", "notifyTypes", "smsSenderId", "emailSenderId"],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": ["查询模板分组而不是具体模板；不同于 /inner/message/template/page。"],
+        "semantic_model": "codex-gpt5-contract-review-2026-09-02",
+        "semantic_confidence": 0.96,
+        "semantic_evidence": ["接口路径和控制器家族", "分页请求合同", "与具体消息模板分页接口对比"]
+      }
+    },
+    {
+      "interface_id": "9221390a-1e4b-41cb-a729-076ea992b776",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/inner/message/template/page"},
+      "semantic": {
+        "purpose": "内部服务分页查询具体消息模板，可按模板编码、名称、标题、通知类型和模板分组筛选。",
+        "audiences": ["内部服务"],
+        "domains": ["消息中心", "消息模板"],
+        "scenarios": ["内部选择具体消息模板"],
+        "actions": ["page"],
+        "entities": ["消息模板"],
+        "aliases": ["内部消息模板分页", "查询具体模板", "MessageTemplateApiController.page"],
+        "resource": "message_template",
+        "lookup_keys": ["code", "name", "title", "notifyTypes", "templateGroupId", "smsTemplateId"],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": ["查询具体消息模板而不是模板分组；不同于 /inner/message/template/group/page。"],
+        "semantic_model": "codex-gpt5-contract-review-2026-09-02",
+        "semantic_confidence": 0.96,
+        "semantic_evidence": ["接口路径和控制器家族", "分页请求合同", "与消息模板分组分页接口对比"]
+      }
+    },
+    {
+      "interface_id": "7892c587-a4ce-4aa1-9a7e-70ded9515018",
+      "copy_from_interface_id": "1b69d729-93a8-4a93-b29e-716add3754ad",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/highway-api/portal/carrierOrder/remote/listByEntrustedOrderNo"},
+      "purpose_prefix": "供内部服务通过门户远程接口调用；",
+      "audiences_add": ["内部服务"],
+      "aliases_add": ["内部远程按委托单查公路承运单"],
+      "discriminators_add": ["remote 内部远程调用入口；不是面向门户用户直接调用的同名接口。"],
+      "semantic": {"audiences": ["内部服务"], "semantic_model": "codex-gpt5-sibling-contract-review-2026-09-02", "semantic_confidence": 0.96, "semantic_evidence": ["与非 remote 同职责兄弟接口逐字段对比", "请求和返回合同核对", "remote 控制器及路径证据"]}
+    },
+    {
+      "interface_id": "98ac828d-2266-4ba4-85f6-ba00df2c2f94", "copy_from_interface_id": "b246346f-1988-4167-98be-d52954ab2cec",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/highway-api/portal/dispatchOrder/remote/getById"},
+      "purpose_prefix": "供内部服务通过门户远程接口调用；", "semantic": {"audiences": ["内部服务"], "semantic_model": "codex-gpt5-sibling-contract-review-2026-09-02", "semantic_confidence": 0.98, "semantic_evidence": ["非 remote 兄弟语义", "请求返回合同", "remote 路径"]},
+      "aliases_add": ["内部远程按ID查公路运输订单"], "discriminators_add": ["remote 内部远程详情入口；不是门户用户直接调用的同名接口。"]
+    },
+    {
+      "interface_id": "d6b7cc45-30bb-4422-915c-980e2127b106", "copy_from_interface_id": "12f272a2-9078-47ab-9b49-b14ffaaea1b6",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/highway-api/portal/dispatchOrder/remote/getDispatchInfo"},
+      "purpose_prefix": "供内部服务通过门户远程接口调用；", "semantic": {"audiences": ["内部服务"], "semantic_model": "codex-gpt5-sibling-contract-review-2026-09-02", "semantic_confidence": 0.98, "semantic_evidence": ["非 remote 兄弟语义", "请求返回合同", "remote 路径"]},
+      "aliases_add": ["内部远程按运单号查公路调度信息"], "discriminators_add": ["remote 内部远程轨迹详情入口；不是门户用户直接调用的同名接口。"]
+    },
+    {
+      "interface_id": "c3b217e8-7b87-4d29-b33d-29f91cb85ba8", "copy_from_interface_id": "44f93363-2e6c-407e-be2d-cc0683fae5a4",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/highway-api/portal/dispatchOrder/remote/getLoadInfo"},
+      "purpose_prefix": "供内部服务通过门户远程接口调用；", "semantic": {"audiences": ["内部服务"], "semantic_model": "codex-gpt5-sibling-contract-review-2026-09-02", "semantic_confidence": 0.98, "semantic_evidence": ["非 remote 兄弟语义", "请求返回合同", "remote 路径"]},
+      "aliases_add": ["内部远程查询公路装货详情"], "discriminators_add": ["remote 内部远程装货详情入口；不是执行或修改装货。"]
+    },
+    {
+      "interface_id": "1199f354-76fb-4bf2-888e-259e758ab084", "copy_from_interface_id": "65fb00b7-273e-463d-8732-3979db9e07a5",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/highway-api/portal/dispatchOrder/remote/getRedispatchDetail"},
+      "purpose_prefix": "供内部服务通过门户远程接口调用；", "semantic": {"audiences": ["内部服务"], "semantic_model": "codex-gpt5-sibling-contract-review-2026-09-02", "semantic_confidence": 0.96, "semantic_evidence": ["非 remote 兄弟语义", "请求返回合同", "remote 路径"]},
+      "aliases_add": ["内部远程查询公路重新调度详情"], "discriminators_add": ["remote 内部远程只读入口；不是执行重新调度。"]
+    },
+    {
+      "interface_id": "795955a0-292e-444c-b0b6-19c51c1e6a44", "copy_from_interface_id": "9104f825-bf65-40f4-90a4-16a0c05da048",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/highway-api/portal/dispatchOrder/remote/getUnloadInfo"},
+      "purpose_prefix": "供内部服务通过门户远程接口调用；", "semantic": {"audiences": ["内部服务"], "semantic_model": "codex-gpt5-sibling-contract-review-2026-09-02", "semantic_confidence": 0.96, "semantic_evidence": ["非 remote 兄弟语义", "请求返回合同", "remote 路径"]},
+      "aliases_add": ["内部远程查询公路卸货详情"], "discriminators_add": ["remote 内部远程只读入口；不是执行或修改卸货。"]
+    },
+    {
+      "interface_id": "dbe4c670-3eba-443e-88cc-23f78f02f75f", "copy_from_interface_id": "8484bbef-e4ae-4f58-992b-f770e623c0a4",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/highway-api/portal/dispatchOrder/remote/load"},
+      "purpose_prefix": "供内部服务通过门户远程接口调用；", "semantic": {"audiences": ["内部服务"], "semantic_model": "codex-gpt5-sibling-contract-review-2026-09-02", "semantic_confidence": 0.98, "semantic_evidence": ["非 remote 兄弟语义", "装货请求合同", "remote 路径"]},
+      "aliases_add": ["内部远程执行公路首次装货"], "discriminators_add": ["remote 内部远程执行入口；不是直接门户装货接口。"]
+    },
+    {
+      "interface_id": "85fca7c8-8d60-4148-9820-ac0426e54c69", "copy_from_interface_id": "9d947de0-f509-4127-994e-983d021f5479",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/highway-api/portal/dispatchOrder/remote/modifyLoadInfo"},
+      "purpose_prefix": "供内部服务通过门户远程接口调用；", "semantic": {"audiences": ["内部服务"], "semantic_model": "codex-gpt5-sibling-contract-review-2026-09-02", "semantic_confidence": 0.98, "semantic_evidence": ["非 remote 兄弟语义", "修改装货合同", "remote 路径"]},
+      "aliases_add": ["内部远程修改公路装货信息"], "discriminators_add": ["remote 内部远程修改入口；不是首次装货。"]
+    },
+    {
+      "interface_id": "3eeafdc7-9dd7-4a78-b21d-a53fef1b22a0", "copy_from_interface_id": "847843c5-294d-4e66-9851-b90988b8e274",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/highway-api/portal/dispatchOrder/remote/modifyUnloadInfo"},
+      "purpose_prefix": "供内部服务通过门户远程接口调用；", "semantic": {"audiences": ["内部服务"], "semantic_model": "codex-gpt5-sibling-contract-review-2026-09-02", "semantic_confidence": 0.98, "semantic_evidence": ["非 remote 兄弟语义", "修改卸货合同", "remote 路径"]},
+      "aliases_add": ["内部远程修改公路卸货信息"], "discriminators_add": ["remote 内部远程修改入口；不是首次卸货。"]
+    },
+    {
+      "interface_id": "df647df1-ae7d-47ad-a8c4-dcd811cb04b1", "copy_from_interface_id": "303952b5-6501-487f-bc92-93fa03d3c047",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/highway-api/portal/dispatchOrder/remote/page"},
+      "purpose_prefix": "供内部服务通过门户远程接口调用；", "semantic": {"audiences": ["内部服务"], "ownership": "all", "semantic_model": "codex-gpt5-sibling-contract-review-2026-09-02", "semantic_confidence": 0.97, "semantic_evidence": ["非 remote 兄弟语义", "分页合同", "remote 路径"]},
+      "aliases_add": ["内部远程分页查询公路调度订单"], "discriminators_add": ["remote 内部远程分页入口；不会依赖门户当前登录角色自动限定数据。"]
+    },
+    {
+      "interface_id": "3a42b11b-136e-4d4c-82b0-a91ba3f7c398", "copy_from_interface_id": "5c31373d-1191-4799-8d01-2209158aee91",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/highway-api/portal/dispatchOrder/remote/pageByCarrierNo"},
+      "purpose_prefix": "供内部服务通过门户远程接口调用；", "semantic": {"audiences": ["内部服务"], "ownership": "by_id", "semantic_model": "codex-gpt5-sibling-contract-review-2026-09-02", "semantic_confidence": 0.97, "semantic_evidence": ["非 remote 兄弟语义", "分页合同", "remote 路径"]},
+      "aliases_add": ["内部远程按承运单号分页查公路调度单"], "discriminators_add": ["remote 内部远程入口，以显式承运订单号查询；不是当前承运商自有列表。"]
+    },
+    {
+      "interface_id": "4381dcf5-f9d8-4cf6-b5ce-8e3841d7c1fa", "copy_from_interface_id": "e9a00315-6fa7-4fa0-b89d-391bce79aca5",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/highway-api/portal/dispatchOrder/remote/redispatch"},
+      "purpose_prefix": "供内部服务通过门户远程接口调用；", "semantic": {"audiences": ["内部服务"], "semantic_model": "codex-gpt5-sibling-contract-review-2026-09-02", "semantic_confidence": 0.98, "semantic_evidence": ["非 remote 兄弟语义", "重新调度合同", "remote 路径"]},
+      "aliases_add": ["内部远程重新调度公路运输订单"], "discriminators_add": ["remote 内部远程执行入口；不是只读重新调度详情。"]
+    },
+    {
+      "interface_id": "a2f3727c-e420-45cd-948c-6c71d1854b9b", "copy_from_interface_id": "73e97160-7a75-470d-82e7-7f2658418706",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/highway-api/portal/dispatchOrder/remote/settlementDispatchPage"},
+      "purpose_prefix": "供内部服务通过门户远程接口调用；", "semantic": {"audiences": ["内部服务"], "ownership": "all", "semantic_model": "codex-gpt5-sibling-contract-review-2026-09-02", "semantic_confidence": 0.98, "semantic_evidence": ["非 remote 兄弟语义", "结算选单分页合同", "remote 路径"]},
+      "aliases_add": ["内部远程公路结算运输单分页"], "discriminators_add": ["remote 内部远程结算选单入口；不是直接门户结算选单接口。"]
+    },
+    {
+      "interface_id": "e0644977-5ecb-43d5-870f-36ce871fc676", "copy_from_interface_id": "9fa37c30-ff9b-4176-bde8-6e0e38ee3aee",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/highway-api/portal/dispatchOrder/remote/unload"},
+      "purpose_prefix": "供内部服务通过门户远程接口调用；", "semantic": {"audiences": ["内部服务"], "semantic_model": "codex-gpt5-sibling-contract-review-2026-09-02", "semantic_confidence": 0.98, "semantic_evidence": ["非 remote 兄弟语义", "卸货请求合同", "remote 路径"]},
+      "aliases_add": ["内部远程执行公路首次卸货"], "discriminators_add": ["remote 内部远程执行入口；不是直接门户卸货接口。"]
+    }
+  ]
+}

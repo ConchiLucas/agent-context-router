@@ -37,6 +37,10 @@ from context_router.services.runtime_materialization import (
     RuntimeMaterializationError,
     RuntimeMaterializationService,
 )
+from context_router.services.workspace_shared_files import (
+    WorkspaceSharedFilesError,
+    WorkspaceSharedFilesService,
+)
 
 FULL_BUILD_FILE_NAMES = {
     "pom.xml",
@@ -66,6 +70,7 @@ PZH_WORKSPACE_ROOT = Path("/Users/conchi/workforce/company_workforce/panzhihua_d
 HOST_RUNTIME_ACTIONS = {
     "pzh.ensure-host-runtime",
     "pzh.status-host-runtime",
+    "pzh.start-and-check",
 }
 
 
@@ -87,6 +92,7 @@ class WorkspaceRuntimeOrchestrationService:
         materialization_service: RuntimeMaterializationService,
         runner_available: Callable[[], bool] | None = None,
         local_mapping: LocalWorkspaceMappingService | None = None,
+        shared_files_service: WorkspaceSharedFilesService | None = None,
     ) -> None:
         self._task_repository = task_repository
         self._registry = registry
@@ -96,6 +102,7 @@ class WorkspaceRuntimeOrchestrationService:
         self._materialization = materialization_service
         self._runner_available = runner_available
         self._local_mapping = local_mapping
+        self._shared_files = shared_files_service
 
     def apply_changes(
         self,
@@ -314,6 +321,15 @@ class WorkspaceRuntimeOrchestrationService:
                 "host_action_workspace_not_allowed", "当前工作空间不允许执行该宿主机动作"
             )
 
+        if self._shared_files is not None:
+            try:
+                self._shared_files.synchronize_if_stale(workspace_id)
+            except WorkspaceSharedFilesError as exc:
+                raise WorkspaceRuntimeOrchestrationError(
+                    "workspace_files_sync_failed",
+                    f"宿主机动作执行前同步数据库工作空间文件失败：{exc}",
+                ) from exc
+
         run_id = uuid4().hex
         return self._create_view(
             RuntimeOperationDraft(
@@ -493,6 +509,7 @@ class WorkspaceRuntimeOrchestrationService:
             finished_at=step.finished_at,
             log=content,
             log_truncated=truncated,
+            readiness=step.readiness,
         )
 
     def _read_log(self, relative_path: str, max_characters: int) -> tuple[str, bool]:

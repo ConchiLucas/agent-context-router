@@ -7,6 +7,7 @@ from context_router.schemas.context import (
 )
 
 TASK_INTENT_TYPES: tuple[TaskIntentType, ...] = (
+    "interface_search",
     "interface_execute",
     "data_query",
     "task_execute",
@@ -25,9 +26,21 @@ def build_task_execution_contract(
     required_steps: list[str]
     visualization_targets: list[str]
     instructions: list[str]
-    mutation_policy = "forbidden" if intent_type == "bug_investigate" else "allowed"
+    mutation_policy = (
+        "forbidden" if intent_type in {"interface_search", "bug_investigate"} else "allowed"
+    )
 
-    if intent_type == "interface_execute":
+    if intent_type == "interface_search":
+        required_steps = ["search_forwarding_interfaces"]
+        visualization_targets = ["task"]
+        instructions = [
+            "本任务只定位接口，不得准备或执行接口请求，也不得修改工作空间。",
+            "先调用 search_forwarding_interfaces 获取高召回候选；第一名证据不足或候选职责接近时，"
+            "调用 compare_forwarding_interfaces 比较 2 到 5 个候选。",
+            "确定最终接口后调用 read_forwarding_interface_detail 读取完整语义和请求合同；"
+            "若证据仍不足，应明确说明歧义，不得凭空选择或调用接口。",
+        ]
+    elif intent_type == "interface_execute":
         required_steps = [
             "search_forwarding_interfaces",
             "prepare_forwarding_request",

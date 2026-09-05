@@ -89,6 +89,7 @@ def build_service(
     tmp_path: Path,
     *,
     intent_type: str = "task_execute",
+    shared_files_service: object | None = None,
 ) -> WorkspaceRuntimeOrchestrationService:
     workspace_root = tmp_path / "workspace"
     for relative in ("apps/admin/src", "services/api", "shared"):
@@ -121,6 +122,7 @@ def build_service(
         workspace_runtime_repository=workspace_configs,
         operation_repository=InMemoryRuntimeOperationRepository(),
         materialization_service=RuntimeMaterializationService(tmp_path / "runtime"),
+        shared_files_service=shared_files_service,  # type: ignore[arg-type]
     )
 
 
@@ -194,7 +196,15 @@ def test_bug_investigation_intent_rejects_runtime_mutations(tmp_path: Path) -> N
 
 
 def test_host_action_is_allowlisted_and_defaults_to_local(tmp_path: Path, monkeypatch) -> None:
-    service = build_service(tmp_path)
+    class SharedFiles:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def synchronize_if_stale(self, workspace_id: str) -> None:
+            self.calls.append(workspace_id)
+
+    shared_files = SharedFiles()
+    service = build_service(tmp_path, shared_files_service=shared_files)
     monkeypatch.setattr(
         "context_router.services.workspace_runtime_orchestration.PZH_WORKSPACE_ROOT",
         service._registry.snapshot.resolved_root_path,  # type: ignore[attr-defined]
@@ -206,3 +216,22 @@ def test_host_action_is_allowlisted_and_defaults_to_local(tmp_path: Path, monkey
     assert operation.environment == "local"
     assert operation.action == "pzh.ensure-host-runtime"
     assert [(step.owner_type, step.mode) for step in operation.steps] == [("workspace", "host")]
+    assert shared_files.calls == ["workspace1"]
+
+
+def test_start_and_check_host_action_is_allowlisted(tmp_path: Path, monkeypatch) -> None:
+    service = build_service(tmp_path)
+    monkeypatch.setattr(
+        "context_router.services.workspace_runtime_orchestration.PZH_WORKSPACE_ROOT",
+        service._registry.snapshot.resolved_root_path,  # type: ignore[attr-defined]
+    )
+
+    operation = service.run_host_action(
+        workspace_id="workspace1",
+        action="pzh.start-and-check",
+        trigger="ui",
+    )
+
+    assert operation.kind == "host_action"
+    assert operation.trigger == "ui"
+    assert operation.action == "pzh.start-and-check"

@@ -1,0 +1,43 @@
+{
+  "schema_version": "context-router-interface-search-baseline-v1",
+  "frozen_on": "2026-09-02",
+  "evaluation_kind": "fixed-200-case-blind-mcp-selection",
+  "top_k": 15,
+  "observed": {
+    "case_count": 200,
+    "final_correct": 191,
+    "final_accuracy": 0.955,
+    "candidate_recall_at_k": 1.0,
+    "retrieval_miss_count": 0,
+    "selected_count": 184,
+    "selected_correct": 182,
+    "selection_accuracy": 0.9891
+  },
+  "quality_gates": {
+    "minimum_case_count": 200,
+    "minimum_final_accuracy": 0.95,
+    "minimum_candidate_recall_at_k": 1.0,
+    "minimum_selection_accuracy": 0.98,
+    "maximum_retrieval_miss_count": 0
+  },
+  "source_artifacts": {
+    "report": {
+      "name": "report-general-fix-source-audited-v2.json",
+      "sha256": "378ae6c42bce156af2fd39109f6188cb7e382d4e631953a5a41b148631939fae"
+    },
+    "model_result": {
+      "name": "result-general-fix-source-audited-v2.json",
+      "sha256": "952f6ff451d545c7b7b484a328c43c15e57a2882dc11ffb358622cc1c3d3b7bd"
+    },
+    "freeze_manifest": {
+      "name": "freeze-manifest.json",
+      "sha256": "26bc5c5351b37a0b372a8004c55936eb95483e4b3f55834e8dd61f1b40c330cd"
+    }
+  },
+  "policy": {
+    "code_must_remain_workspace_agnostic": true,
+    "semantic_data_may_be_workspace_specific": true,
+    "fixed_set_is_for_regression_only": true,
+    "new_quality_claims_require_an_unseen_set": true
+  }
+}

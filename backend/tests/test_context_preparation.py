@@ -280,6 +280,30 @@ def test_prepare_persists_declared_bug_investigation_contract(tmp_path: Path) ->
     assert repository.created[0]["intent_source"] == "agent_declared"
 
 
+def test_interface_search_contract_is_read_only_and_progressive(tmp_path: Path) -> None:
+    registry, _ = build_registry(tmp_path)
+    repository = FakeTaskRepository()
+    service = ContextPreparationService(registry, repository)
+
+    result = service.prepare(
+        task="查找并比较批量查询货物的接口，不执行",
+        cwd=str(tmp_path / "project" / "src"),
+        agent_name="codex",
+        intent_type="interface_search",
+        intent_summary="只定位最符合语义的接口",
+    )
+
+    contract = result.execution_contract
+    assert contract.intent_type == "interface_search"
+    assert contract.mutation_policy == "forbidden"
+    assert contract.required_steps == ["search_forwarding_interfaces"]
+    instructions = " ".join(contract.instructions)
+    assert "compare_forwarding_interfaces" in instructions
+    assert "read_forwarding_interface_detail" in instructions
+    assert "不得准备或执行接口请求" in instructions
+    assert repository.created[0]["intent_type"] == "interface_search"
+
+
 def test_data_query_contract_prefers_direct_mapping_random_selection(tmp_path: Path) -> None:
     registry, _ = build_registry(tmp_path)
     repository = FakeTaskRepository()

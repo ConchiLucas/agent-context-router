@@ -10,6 +10,7 @@ TaskScope = Literal["project", "workspace"]
 DatabaseEnvironment = str
 DatabaseEnvironmentSelection = Literal["workspace_default", "task_explicit", "task_description"]
 TaskIntentType = Literal[
+    "interface_search",
     "interface_execute",
     "data_query",
     "task_execute",

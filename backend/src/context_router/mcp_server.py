@@ -88,8 +88,10 @@ MCP_CLIENT_NAME_HEADER = "X-Agent-Name"
 MCP_CLIENT_AGENT_NAMES = frozenset({"codex", "gemini", "antigravity"})
 MCP_SERVER_INSTRUCTIONS = (
     "Call prepare_task_context once at the start of a new workspace task. First classify the "
-    "user's primary intent as interface_execute, data_query, task_execute, bug_investigate, or "
-    "bug_fix and pass it as intent_type. Set error_signal=true only when a Bug request contains "
+    "user's primary intent as interface_search, interface_execute, data_query, task_execute, "
+    "bug_investigate, or bug_fix and pass it as intent_type. Use interface_search when the user "
+    "only wants to locate, compare, or inspect an interface; this intent never authorizes request "
+    "preparation or execution. Set error_signal=true only when a Bug request contains "
     "or points to actual runtime error evidence. Preserve the "
     "returned task_id and pass it to every document or database call for that task. Every "
     "successful traced tool response includes tool_call_id; reuse that exact ID in later "
@@ -210,6 +212,8 @@ MCP_SERVER_INSTRUCTIONS = (
 ) = CONTEXT_ROUTER_TABLE_RELATION_TOOL_NAMES
 (
     SEARCH_FORWARDING_INTERFACES_TOOL_NAME,
+    COMPARE_FORWARDING_INTERFACES_TOOL_NAME,
+    READ_FORWARDING_INTERFACE_DETAIL_TOOL_NAME,
     READ_FORWARDING_REQUEST_HISTORY_TOOL_NAME,
     PREPARE_FORWARDING_REQUEST_TOOL_NAME,
     EXECUTE_FORWARDING_REQUEST_TOOL_NAME,
@@ -286,7 +290,9 @@ SAVE_TASK_VISUALIZATION_RESULT_TOOL_DESCRIPTION = (
     "verification objects. Repeated calls update the same task record and increase its revision."
 )
 PREPARE_TOOL_DESCRIPTION = (
-    "First classify the user's primary intent and pass intent_type. Locate the registered "
+    "First classify the user's primary intent and pass intent_type. Use interface_search for "
+    "locating, comparing, or inspecting interfaces without calling them, and interface_execute "
+    "only when the user explicitly wants an interface request sent. Locate the registered "
     "workspace for cwd, create a server-side task number, and "
     "return a task-local document projection. A real workspace AGENTS.md is always level 1; "
     "without one, the active project or synthetic workspace entry is level 1. The result has "
@@ -408,8 +414,20 @@ RESOLVE_VALUE_CANDIDATES_TOOL_DESCRIPTION = (
     "unconfigured data source."
 )
 SEARCH_FORWARDING_INTERFACES_TOOL_DESCRIPTION = (
-    "Search imported interfaces in the task Workspace and report whether each is callable in "
-    "the task environment. Prefer an exact Chinese business meaning, path fragment, or Controller."
+    "High-recall hybrid semantic search over imported interfaces in the task Workspace. Returns "
+    "up to 20 compact candidates in retrieval order with matched and conflicting evidence and "
+    "whether each is callable in the task environment. When close candidates remain, call "
+    "compare_forwarding_interfaces before choosing."
+)
+COMPARE_FORWARDING_INTERFACES_TOOL_DESCRIPTION = (
+    "Compare 2 to 5 candidates returned by search_forwarding_interfaces. Returns only the "
+    "business purpose, audience, domain, action, cardinality, lookup key, required-input, and "
+    "discriminator differences needed to choose; it does not execute or mutate an interface."
+)
+READ_FORWARDING_INTERFACE_DETAIL_TOOL_DESCRIPTION = (
+    "Read one searched interface's complete persisted semantics, request/response schema paths, "
+    "business identifiers, interface-family metadata, and original contracts. Use only after "
+    "search or comparison when compact candidate evidence is insufficient."
 )
 READ_FORWARDING_REQUEST_HISTORY_TOOL_DESCRIPTION = (
     "Read the newest bounded request history for one imported interface in the task Workspace "
@@ -730,6 +748,7 @@ def create_context_router_mcp(
             ),
         ] = None,
         intent_type: Literal[
+            "interface_search",
             "interface_execute",
             "data_query",
             "task_execute",
@@ -1436,6 +1455,44 @@ def create_context_router_mcp(
                 service=service,
                 role=role,
                 limit=limit,
+            )
+        except InterfaceForwardingContextError as exc:
+            raise ToolError(f"{exc.code}: {exc}") from exc
+
+    @server.tool(
+        name=COMPARE_FORWARDING_INTERFACES_TOOL_NAME,
+        description=COMPARE_FORWARDING_INTERFACES_TOOL_DESCRIPTION,
+        annotations=READ_TOOL_ANNOTATIONS,
+    )
+    def compare_forwarding_interfaces(
+        task_id: Annotated[int, Field(ge=1, strict=True)],
+        interface_ids: Annotated[list[str], Field(min_length=2, max_length=5)],
+    ) -> dict[str, object]:
+        if interface_forwarding_context_service is None:
+            raise ToolError("interface_forwarding_disabled: 接口转发 MCP 当前不可用")
+        try:
+            return interface_forwarding_context_service.compare(
+                task_id=task_id,
+                interface_ids=interface_ids,
+            )
+        except InterfaceForwardingContextError as exc:
+            raise ToolError(f"{exc.code}: {exc}") from exc
+
+    @server.tool(
+        name=READ_FORWARDING_INTERFACE_DETAIL_TOOL_NAME,
+        description=READ_FORWARDING_INTERFACE_DETAIL_TOOL_DESCRIPTION,
+        annotations=READ_TOOL_ANNOTATIONS,
+    )
+    def read_forwarding_interface_detail(
+        task_id: Annotated[int, Field(ge=1, strict=True)],
+        interface_id: Annotated[str, Field(min_length=1, max_length=36)],
+    ) -> dict[str, object]:
+        if interface_forwarding_context_service is None:
+            raise ToolError("interface_forwarding_disabled: 接口转发 MCP 当前不可用")
+        try:
+            return interface_forwarding_context_service.detail(
+                task_id=task_id,
+                interface_id=interface_id,
             )
         except InterfaceForwardingContextError as exc:
             raise ToolError(f"{exc.code}: {exc}") from exc

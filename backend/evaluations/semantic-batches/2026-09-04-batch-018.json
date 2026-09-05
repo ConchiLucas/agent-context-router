@@ -1,0 +1,4989 @@
+{
+  "schema_version": "context-router-interface-semantic-batch-v1",
+  "batch_id": "panzhihua-c12-portal-wms-stocktake-018",
+  "workspace_id": "b9ce65eddc27437d9615177fbd07cb0a",
+  "family_groups": {
+    "WMS库存查询": 3,
+    "WMS盘点任务": 7,
+    "WMS盘点单": 6,
+    "WMS门户盘点兼容入口": 3,
+    "WMS移动端盘点": 7,
+    "WMS选择表格": 5,
+    "WMS门户Dashboard": 2,
+    "WMS移动端Dashboard": 3,
+    "WMS仓库查询": 2
+  },
+  "generation_policy": "完整覆盖 c12-portal 九个 WMS Controller 共 38 个有效接口。BFF 转发 c12-wms 门户/后台盘点、库存、Dashboard、仓库与选择表格。按库存查询、盘点任务、盘点单、兼容入口、移动端盘点、选择表格、门户/移动端 Dashboard、仓库查询分组。源码追到 Feign、WMS Service/DAO/SQL、会话手机号货主和状态副作用。门户任务 page 必须盘点单号/任务号/任务ID 四选一且走后台 page；移动端任务 page 走 portalPage。pageBySkuLoc 实际 pageBySkuLocLot。未使用 copy_from_interface_id，未写入 c12-wms 同源 /wms/api/*。",
+  "items": [
+    {
+      "interface_id": "64c95114-b454-4c18-882c-f8fae0493d2d",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/inventory/pageByOwner"
+      },
+      "semantic": {
+        "purpose": "供仓储门户按当前登录货主汇总库存：BFF 写入会话手机号后转发 c12-wms portalPageByOwner，SQL 按货主+仓库分组返回数量，不是盘点单也不是按 SKU/库位明细。",
+        "audiences": [
+          "仓储门户",
+          "货主"
+        ],
+        "domains": [
+          "仓储库存",
+          "货主库存"
+        ],
+        "scenarios": [
+          "货主在门户库存总览按仓库查看本货主各仓合计库存、冻结和可用数量，而不是打开盘点任务或按商品行展开。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "货主库存",
+          "批次库位库存"
+        ],
+        "aliases": [
+          "门户按货主查库存",
+          "货主库存汇总分页",
+          "WmsInventoryPortalController.pageByOwner"
+        ],
+        "resource": "wms_inventory",
+        "lookup_keys": [
+          "warehouseId",
+          "ownerId",
+          "ownerCode",
+          "pageNumber",
+          "pageSize",
+          "qty",
+          "availableQty"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal BFF POST /member-api/portal/wms/inventory/pageByOwner，WmsInventoryPortalService 用 currentMobile() 覆盖 phone 后调 RemoteInvLotLocFeign#portalPageByOwner；不是 pageBySku、pageBySkuLoc，也不是盘点接口。",
+          "InvLotLocService#portalPageByOwner 按手机号解析唯一货主并覆盖 ownerId，请求 ownerId 不能扩大范围；无货主返回空页。SQL invLotLoc_query_getPageByOwner 按 owner_id+warehouse_id 分组，返回 min(id)/ownerId/ownerCode/warehouseName/qty，不含 sku、loc、lotNum、warehouseId。",
+          "无货主时 emptyPage 不走 SqlExecutor.page，pageSize 不是所有成功路径必填；有库存数据时 SqlExecutor.page 空 pageSize 会拆箱 NPE。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "inventory_lot_loc_id",
+            "display_name": "库存记录ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "库存主键"
+            ],
+            "resource": "wms_inventory",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "owner_id",
+            "display_name": "货主ID",
+            "technical_names": [
+              "ownerId"
+            ],
+            "aliases": [
+              "货主主键"
+            ],
+            "resource": "wms_inventory",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "owner_code",
+            "display_name": "货主编码",
+            "technical_names": [
+              "ownerCode"
+            ],
+            "aliases": [
+              "货主代码"
+            ],
+            "resource": "wms_inventory",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "WmsInventoryPortalController#pageByOwner(PortalOwnerInvLotLocPageCondition) -> WmsInventoryPortalService#pageByOwner -> RemoteInvLotLocFeign#portalPageByOwner",
+          "InvLotLocController#portalPageByOwner -> InvLotLocService#portalPageByOwner -> fillOwnerByPhone -> pageByOwner -> InvLotLocDao#pageByOwner",
+          "findOwnerByPhone：RemoteUserService.getPortalUserList(mobile) 映射 Owner.userId，多货主抛 OWNER_MOBILE_MULTIPLE_FOUND",
+          "SQL invLotLoc_query_getPageByOwner：cs_inv_lot_loc qty>0 且 owner_id=:ownerId，group by owner_id,warehouse_id"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "2f95f053-e0e4-4bd4-ac92-c07eba9a0971",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/inventory/pageBySku"
+      },
+      "semantic": {
+        "purpose": "供仓储门户按当前登录货主分页查看商品维度库存汇总：同一货主+SKU+仓库一行，不含库位和批次，不是按货主仓汇总也不是盘点。",
+        "audiences": [
+          "仓储门户",
+          "货主"
+        ],
+        "domains": [
+          "仓储库存",
+          "商品库存"
+        ],
+        "scenarios": [
+          "货主在门户库存页按商品编码或名称翻看各仓该 SKU 的合计库存，用来对账品类而不是按库位盘点。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "商品库存",
+          "货主库存"
+        ],
+        "aliases": [
+          "门户按商品查库存",
+          "货主SKU库存分页",
+          "WmsInventoryPortalController.pageBySku"
+        ],
+        "resource": "wms_inventory",
+        "lookup_keys": [
+          "skuId",
+          "skuCode",
+          "skuName",
+          "warehouseId",
+          "ownerId",
+          "ownerCode",
+          "pageNumber",
+          "pageSize"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "路径 /wms/inventory/pageBySku，下游 portalPageBySku -> pageBySku；SQL invLotLoc_query_getPageBySku 按 owner_id+sku_id+warehouse_id 分组，返回 skuId/skuCode/ownerId/ownerCode/warehouseName，无 loc、lotNum、行 id。",
+          "与 pageByOwner 同为门户货主范围，但聚合粒度是商品而非仓库合计；与 pageBySkuLoc 不同，后者实际走 pageBySkuLocLot。",
+          "无货主空页不校验 pageSize；有货主后 SqlExecutor.page 空 pageSize 拆箱 NPE。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "owner_id",
+            "display_name": "货主ID",
+            "technical_names": [
+              "ownerId"
+            ],
+            "aliases": [
+              "货主主键"
+            ],
+            "resource": "wms_inventory",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "owner_code",
+            "display_name": "货主编码",
+            "technical_names": [
+              "ownerCode"
+            ],
+            "aliases": [
+              "货主代码"
+            ],
+            "resource": "wms_inventory",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sku_id",
+            "display_name": "商品ID",
+            "technical_names": [
+              "skuId"
+            ],
+            "aliases": [
+              "SKU主键"
+            ],
+            "resource": "wms_inventory",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sku_code",
+            "display_name": "商品编码",
+            "technical_names": [
+              "skuCode"
+            ],
+            "aliases": [
+              "SKU编码"
+            ],
+            "resource": "wms_inventory",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "WmsInventoryPortalController#pageBySku -> WmsInventoryPortalService#pageBySku -> RemoteInvLotLocFeign#portalPageBySku",
+          "InvLotLocService#portalPageBySku -> fillOwnerByPhone -> pageBySku -> InvLotLocDao#pageBySku",
+          "SQL invLotLoc_query_getPageBySku：group by t.owner_id,t.sku_id,t.warehouse_id，可选 sku_id/warehouse_id/owner_id"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "3d8e1fdc-2532-46bb-a4cd-9ded71dfc07a",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/inventory/pageBySkuLoc"
+      },
+      "semantic": {
+        "purpose": "供仓储门户按当前登录货主查看商品+库位+批次库存：路径名是 pageBySkuLoc，执行链实际调用 pageBySkuLocLot，按仓库+SKU+库位编码+批次号分组。",
+        "audiences": [
+          "仓储门户",
+          "货主"
+        ],
+        "domains": [
+          "仓储库存",
+          "库位库存",
+          "批次库存"
+        ],
+        "scenarios": [
+          "货主在门户库存明细里按库位和批次核对某 SKU 在哪些库位、哪个批次还有货，而不是看货主仓汇总或盘点实盘。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "批次库位库存",
+          "商品库存"
+        ],
+        "aliases": [
+          "门户按库位批次查库存",
+          "货主SKU库位批次库存",
+          "WmsInventoryPortalController.pageBySkuLoc"
+        ],
+        "resource": "wms_inventory",
+        "lookup_keys": [
+          "skuId",
+          "skuCode",
+          "locId",
+          "locCode",
+          "lotNum",
+          "warehouseId",
+          "ownerId",
+          "ownerCode",
+          "pageNumber",
+          "pageSize"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "门户路径名为 pageBySkuLoc，WMS InvLotLocService#portalPageBySkuLoc 实际调用 pageBySkuLocLot 而非 pageBySkuLoc；SQL invLotLoc_query_getPageBySkuLocLot 按 warehouse_id+sku_id+loc_code+lot_num 分组。",
+          "公开返回 skuId/skuCode/locId/locCode/lotNum/ownerId/ownerCode/warehouseName，不含库存行 id 与 warehouseId/warehouseCode。",
+          "与 pageBySku 无库位批次、pageByOwner 仅仓汇总、盘点明细 actualCount 均不同。无货主空页不强制 pageSize。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "owner_id",
+            "display_name": "货主ID",
+            "technical_names": [
+              "ownerId"
+            ],
+            "aliases": [
+              "货主主键"
+            ],
+            "resource": "wms_inventory",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "owner_code",
+            "display_name": "货主编码",
+            "technical_names": [
+              "ownerCode"
+            ],
+            "aliases": [
+              "货主代码"
+            ],
+            "resource": "wms_inventory",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sku_id",
+            "display_name": "商品ID",
+            "technical_names": [
+              "skuId"
+            ],
+            "aliases": [
+              "SKU主键"
+            ],
+            "resource": "wms_inventory",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sku_code",
+            "display_name": "商品编码",
+            "technical_names": [
+              "skuCode"
+            ],
+            "aliases": [
+              "SKU编码"
+            ],
+            "resource": "wms_inventory",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_loc_id",
+            "display_name": "库位ID",
+            "technical_names": [
+              "locId"
+            ],
+            "aliases": [
+              "库位主键"
+            ],
+            "resource": "wms_inventory",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_loc_code",
+            "display_name": "库位编码",
+            "technical_names": [
+              "locCode"
+            ],
+            "aliases": [
+              "库位代码"
+            ],
+            "resource": "wms_inventory",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "lot_num",
+            "display_name": "批次号",
+            "technical_names": [
+              "lotNum"
+            ],
+            "aliases": [
+              "商品批次号"
+            ],
+            "resource": "wms_inventory",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.9,
+        "semantic_evidence": [
+          "WmsInventoryPortalController#pageBySkuLoc -> RemoteInvLotLocFeign#portalPageBySkuLoc",
+          "InvLotLocService#portalPageBySkuLoc 注释写商品/库位，代码 return pageBySkuLocLot(condition)，与同文件 pageBySkuLoc SQL 不是同一条",
+          "InvLotLocDao#pageBySkuLocLot -> SQL invLotLoc_query_getPageBySkuLocLot",
+          "路径/Swagger 为 pageBySkuLoc，可执行链路是 Sku+Loc+Lot 分组，属命名与执行冲突"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "10e7da6f-b0e8-4b6c-8d1a-f5c0d9dcd432",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/stocktakeTask/page"
+      },
+      "semantic": {
+        "purpose": "供仓储门户在已持有本货主盘点单号、任务号或任务ID后分页查盘点任务：先校验归属再走 WMS 后台 page，不是移动端 portalPage，也不创建盘点单。",
+        "audiences": [
+          "仓储门户",
+          "货主"
+        ],
+        "domains": [
+          "仓储盘点",
+          "盘点任务"
+        ],
+        "scenarios": [
+          "货主在门户盘点任务页输入本企业盘点单号后翻看该单下各任务进度、分配状态和去盘点按钮，而不是从零列出全部任务。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "盘点任务",
+          "盘点单"
+        ],
+        "aliases": [
+          "门户盘点任务分页",
+          "按盘点单查任务",
+          "WmsStocktakeTaskPortalController.page"
+        ],
+        "resource": "wms_stocktake_task",
+        "lookup_keys": [
+          "stocktakeNo",
+          "taskNo",
+          "taskNoList",
+          "businessIds",
+          "warehouseId",
+          "taskStatus",
+          "taskAllocation",
+          "pageSize",
+          "id"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "POST /wms/stocktakeTask/page 调 WmsStocktakeTaskPortalService#page：validateTaskPageCondition 要求 stocktakeNo、taskNo、taskNoList、businessIds 四选一，否则“盘点单号不能为空”；随后 Feign page 而非 portalPage。",
+          "与移动端 /wms/mobile/inventoryStocktakeTask/page 的 portalPage（按手机号货主列出任务）不同；与兼容路径 /wms/inventoryStocktakeTask/page 执行相同但 URL 不同。",
+          "校验通过后 InventoryStocktakeTaskDao#page 走 SqlExecutor.page，pageSize 空值拆箱 NPE。范围是当前登录货主单据下的任务，因此 ownership=self。"
+        ],
+        "required_inputs": [
+          {
+            "name": "pageSize",
+            "zh_name": "每页条数",
+            "location": "body",
+            "required": true,
+            "schema_type": "Integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "stocktake_task_id",
+            "display_name": "盘点任务ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "任务主键",
+              "taskId"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "stocktake_task_no",
+            "display_name": "盘点任务号",
+            "technical_names": [
+              "taskNo"
+            ],
+            "aliases": [
+              "任务编号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "stocktake_order_no",
+            "display_name": "盘点单号",
+            "technical_names": [
+              "stocktakeNo"
+            ],
+            "aliases": [
+              "盘点单编号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_id",
+            "display_name": "仓库ID",
+            "technical_names": [
+              "warehouseId"
+            ],
+            "aliases": [
+              "仓库主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "WmsStocktakeTaskPortalController#page(StocktakeTaskPageCondition) -> WmsStocktakeTaskPortalService#page",
+          "validateTaskPageCondition：stocktakeNo/taskNo/taskNoList/businessIds 四选一；validateStocktakeNo 用门户盘点单 page 核对货主",
+          "RemoteInventoryStocktakeTaskFeign#page -> InventoryStocktakeTaskService#page -> InventoryStocktakeTaskDao#page",
+          "SQL inventory_stocktake_task_query_getPageList：cs_inventory_stocktake_task 联盘点单，exists owner_id 条件",
+          "WmsStocktakeTaskPortalService 通过 validateStocktakeNo/validateTaskId 将任务所属盘点单与当前登录手机号对应货主核对，故数据范围为当前货主 self。"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "d4f39740-0890-44be-ae3a-ba883c76c122",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/stocktakeTask/getByTaskNo/{taskNo}"
+      },
+      "semantic": {
+        "purpose": "供仓储门户按任务号查看一条盘点任务及明细：先走 WMS getByTaskNo 再核对该任务盘点单属于当前货主，返回任务头和 detailsQueryList。",
+        "audiences": [
+          "仓储门户",
+          "货主"
+        ],
+        "domains": [
+          "仓储盘点",
+          "盘点任务"
+        ],
+        "scenarios": [
+          "货主从任务列表点开某个任务号，查看库存数、实盘数和明细行，准备分配盘点员或去盘点。"
+        ],
+        "actions": [
+          "detail",
+          "query"
+        ],
+        "entities": [
+          "盘点任务",
+          "盘点任务明细"
+        ],
+        "aliases": [
+          "门户盘点任务详情",
+          "按任务号查盘点任务",
+          "WmsStocktakeTaskPortalController.getByTaskNo"
+        ],
+        "resource": "wms_stocktake_task",
+        "lookup_keys": [
+          "taskNo",
+          "id",
+          "stocktakeNo",
+          "warehouseId",
+          "skuId",
+          "skuNo",
+          "locId",
+          "lotNum",
+          "ownerId",
+          "warehouseZoneId",
+          "palletNum",
+          "snNoList",
+          "labelList"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "路径 /wms/stocktakeTask/getByTaskNo/{taskNo}，BFF 调 getByTaskNo（WMS 后台详情）再 validateStocktakeNo；移动端同名方法走 portalGetByTaskNo。",
+          "返回 StocktakeTaskQuery，含任务 id/taskNo/stocktakeNo 和 detailsQueryList（明细 id、skuId、skuNo、locId、lotNum），不是盘点单 GetById。",
+          "taskNo 空则 WMS STOCKTAKE_TASK_NOT_EXIST；无权货主抛“无权查询其他货主盘点任务”。"
+        ],
+        "required_inputs": [
+          {
+            "name": "taskNo",
+            "zh_name": "盘点任务号",
+            "location": "path",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "stocktake_task_id",
+            "display_name": "盘点任务ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "任务主键",
+              "taskId"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "stocktake_task_no",
+            "display_name": "盘点任务号",
+            "technical_names": [
+              "taskNo"
+            ],
+            "aliases": [
+              "任务编号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "stocktake_order_no",
+            "display_name": "盘点单号",
+            "technical_names": [
+              "stocktakeNo"
+            ],
+            "aliases": [
+              "盘点单编号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_id",
+            "display_name": "仓库ID",
+            "technical_names": [
+              "warehouseId"
+            ],
+            "aliases": [
+              "仓库主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "stocktake_detail_id",
+            "display_name": "盘点明细ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "任务明细主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sku_id",
+            "display_name": "商品ID",
+            "technical_names": [
+              "skuId"
+            ],
+            "aliases": [
+              "SKU主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sku_no",
+            "display_name": "商品编号",
+            "technical_names": [
+              "skuNo"
+            ],
+            "aliases": [
+              "商品代码"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "owner_id",
+            "display_name": "货主ID",
+            "technical_names": [
+              "ownerId"
+            ],
+            "aliases": [
+              "货主主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_loc_id",
+            "display_name": "库位ID",
+            "technical_names": [
+              "locId"
+            ],
+            "aliases": [
+              "库位主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "lot_num",
+            "display_name": "批次号",
+            "technical_names": [
+              "lotNum"
+            ],
+            "aliases": [
+              "商品批次号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_zone_id",
+            "display_name": "库区ID",
+            "technical_names": [
+              "warehouseZoneId"
+            ],
+            "aliases": [
+              "任务库区主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "pallet_num",
+            "display_name": "托盘号",
+            "technical_names": [
+              "palletNum"
+            ],
+            "aliases": [
+              "托盘编号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "serial_no",
+            "display_name": "商品序列号",
+            "technical_names": [
+              "snNoList"
+            ],
+            "aliases": [
+              "SN",
+              "序列号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "label_no",
+            "display_name": "商品唛号",
+            "technical_names": [
+              "labelList"
+            ],
+            "aliases": [
+              "唛号",
+              "标签号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "WmsStocktakeTaskPortalController#getByTaskNo -> WmsStocktakeTaskPortalService#getByTaskNo",
+          "RemoteInventoryStocktakeTaskFeign#getByTaskNo -> InventoryStocktakeTaskService#getByTaskNo：findByTaskNo + 盘点单 + findQueryByTaskNoList",
+          "validateStocktakeNo -> WmsStocktakeOrderPortalService.page 按 stocktakeNo+phone 核对",
+          "WmsStocktakeTaskPortalService 通过 validateStocktakeNo/validateTaskId 将任务所属盘点单与当前登录手机号对应货主核对，故数据范围为当前货主 self。",
+          "StocktakeTaskDetailsQuery 公开返回 warehouseZoneId、palletNum、snNoList、labelList；三个任务详情入口复用同一公开返回合同。"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "636bc2a6-4131-435f-9669-40afc8681e78",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/stocktakeTask/taskDetailsPage"
+      },
+      "semantic": {
+        "purpose": "供仓储门户按任务号取出该盘点任务已加载的明细列表并包装成分页结果：不查独立明细表分页，pageSize 不参与，返回的是任务明细行。",
+        "audiences": [
+          "仓储门户",
+          "货主"
+        ],
+        "domains": [
+          "仓储盘点",
+          "盘点任务明细"
+        ],
+        "scenarios": [
+          "货主在门户任务详情里展开某任务号的商品/库位/批次实盘明细表，而不是翻任务头列表。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "盘点任务明细",
+          "盘点任务"
+        ],
+        "aliases": [
+          "门户盘点任务明细分页",
+          "任务明细列表",
+          "WmsStocktakeTaskPortalController.taskDetailsPage"
+        ],
+        "resource": "wms_stocktake_task",
+        "lookup_keys": [
+          "taskNo",
+          "id",
+          "skuId",
+          "skuNo",
+          "locId",
+          "lotNum",
+          "ownerId",
+          "stocktakeNo",
+          "warehouseZoneId",
+          "palletNum",
+          "snNoList",
+          "labelList"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "taskDetailsPage 只接受 StocktakeTaskPageCondition.taskNo，空白抛“盘点任务号不能为空”；先 getByTaskNo 再把 detailsQueryList 整表塞进 PageResult，不调用 SqlExecutor.page。",
+          "不是任务头 page，也不是移动端任务分页；pageSize 不是必填。",
+          "数据范围随该任务号所属盘点单的货主校验，不能写成全局 all。"
+        ],
+        "required_inputs": [
+          {
+            "name": "taskNo",
+            "zh_name": "盘点任务号",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "stocktake_detail_id",
+            "display_name": "盘点明细ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "任务明细主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "stocktake_task_no",
+            "display_name": "盘点任务号",
+            "technical_names": [
+              "taskNo"
+            ],
+            "aliases": [
+              "任务编号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "stocktake_order_no",
+            "display_name": "盘点单号",
+            "technical_names": [
+              "stocktakeNo"
+            ],
+            "aliases": [
+              "盘点单编号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sku_id",
+            "display_name": "商品ID",
+            "technical_names": [
+              "skuId"
+            ],
+            "aliases": [
+              "SKU主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sku_no",
+            "display_name": "商品编号",
+            "technical_names": [
+              "skuNo"
+            ],
+            "aliases": [
+              "商品代码"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "owner_id",
+            "display_name": "货主ID",
+            "technical_names": [
+              "ownerId"
+            ],
+            "aliases": [
+              "货主主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_loc_id",
+            "display_name": "库位ID",
+            "technical_names": [
+              "locId"
+            ],
+            "aliases": [
+              "库位主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "lot_num",
+            "display_name": "批次号",
+            "technical_names": [
+              "lotNum"
+            ],
+            "aliases": [
+              "商品批次号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_zone_id",
+            "display_name": "库区ID",
+            "technical_names": [
+              "warehouseZoneId"
+            ],
+            "aliases": [
+              "仓库库区主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "pallet_num",
+            "display_name": "托盘号",
+            "technical_names": [
+              "palletNum"
+            ],
+            "aliases": [
+              "托盘编号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "serial_no",
+            "display_name": "商品序列号",
+            "technical_names": [
+              "snNoList"
+            ],
+            "aliases": [
+              "SN",
+              "序列号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "label_no",
+            "display_name": "商品唛号",
+            "technical_names": [
+              "labelList"
+            ],
+            "aliases": [
+              "唛号",
+              "标签号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "WmsStocktakeTaskPortalController#taskDetailsPage -> WmsStocktakeTaskPortalService#taskDetailsPage",
+          "StrUtil.isBlank(taskNo) -> BusinessException；getByTaskNo 后 new PageResult<>(details.size(), details)",
+          "明细来自 InventoryStocktakeTaskDetailsService#findQueryByTaskNoList，无独立明细 SQL 分页",
+          "WmsStocktakeTaskPortalService 通过 validateStocktakeNo/validateTaskId 将任务所属盘点单与当前登录手机号对应货主核对，故数据范围为当前货主 self。",
+          "StocktakeTaskDetailsQuery 公开返回 warehouseZoneId、palletNum、snNoList、labelList，与任务详情中的 detailsQueryList 标识合同一致。"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "400477c5-f01d-4736-a44d-91e51c97763a",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/stocktakeTask/batchAssignment"
+      },
+      "semantic": {
+        "purpose": "供仓储门户给本货主盘点任务批量指定盘点员：写入 personnelId/personnelName 并将 taskAllocation 置为已分配，不修改实盘数量。",
+        "audiences": [
+          "仓储门户",
+          "货主"
+        ],
+        "domains": [
+          "仓储盘点",
+          "盘点任务"
+        ],
+        "scenarios": [
+          "货主在门户把若干待盘任务一次性分给某个仓管员，之后对方才能按任务去盘点。"
+        ],
+        "actions": [
+          "update"
+        ],
+        "entities": [
+          "盘点任务",
+          "盘点员"
+        ],
+        "aliases": [
+          "门户分配盘点员",
+          "批量指派盘点任务",
+          "WmsStocktakeTaskPortalController.batchAssignment"
+        ],
+        "resource": "wms_stocktake_task",
+        "lookup_keys": [
+          "idList",
+          "personnelId",
+          "personnelName",
+          "taskNo",
+          "stocktakeNo"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "仅门户 /wms/stocktakeTask/batchAssignment，移动端盘点 Controller 无此操作。BFF 校验 idList 非空并逐个 validateTaskId。",
+          "WMS @Valid 要求 idList、personnelId、personnelName；batchAssignment 更新任务分配字段，不改 taskStatus、不写明细。",
+          "任务必须能通过本货主盘点单号校验，否则“盘点任务不存在”或无权。"
+        ],
+        "required_inputs": [
+          {
+            "name": "idList",
+            "zh_name": "任务ID列表",
+            "location": "body",
+            "required": true,
+            "schema_type": "List<Long>"
+          },
+          {
+            "name": "personnelId",
+            "zh_name": "盘点人ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          },
+          {
+            "name": "personnelName",
+            "zh_name": "盘点人名称",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "stocktake_task_id",
+            "display_name": "盘点任务ID",
+            "technical_names": [
+              "idList",
+              "id"
+            ],
+            "aliases": [
+              "任务主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "personnel_id",
+            "display_name": "盘点人ID",
+            "technical_names": [
+              "personnelId"
+            ],
+            "aliases": [
+              "盘点员用户ID"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "WmsStocktakeTaskPortalController#batchAssignment(StocktakeTaskAssignmentItem) -> WmsStocktakeTaskPortalService#batchAssignment",
+          "InventoryStocktakeTaskController#batchAssignment @Valid -> InventoryStocktakeTaskService#batchAssignment：dao.batchUpdate personnelId/Name/taskAllocation",
+          "StocktakeTaskAssignmentItem：@NotEmpty idList、@NotNull personnelId、@NotBlank personnelName",
+          "WmsStocktakeTaskPortalService 通过 validateStocktakeNo/validateTaskId 将任务所属盘点单与当前登录手机号对应货主核对，故数据范围为当前货主 self。"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "2fd4f81f-ee4e-4fce-b588-9cd9c2f43678",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/stocktakeTask/closeTask/{id}"
+      },
+      "semantic": {
+        "purpose": "供仓储门户关闭一条本货主盘点任务：任务状态改为关闭并记结束时间；若该盘点单下任务全部关闭则单据变为完全盘点。",
+        "audiences": [
+          "仓储门户",
+          "货主"
+        ],
+        "domains": [
+          "仓储盘点",
+          "盘点任务"
+        ],
+        "scenarios": [
+          "货主确认某任务已盘完，在门户点关闭任务，而不是取消整张盘点单或提交实盘数。"
+        ],
+        "actions": [
+          "complete"
+        ],
+        "entities": [
+          "盘点任务",
+          "盘点单"
+        ],
+        "aliases": [
+          "门户关闭盘点任务",
+          "完成单条盘点任务",
+          "WmsStocktakeTaskPortalController.closeTask"
+        ],
+        "resource": "wms_stocktake_task",
+        "lookup_keys": [
+          "id",
+          "taskNo",
+          "stocktakeNo"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "路径 closeTask/{id} 单条关闭；batchCloseTask 才是批量。移动端无关闭任务接口。",
+          "已关闭任务再关抛 STOCKTAKE_TASK_CLOSE_ERROR。全部任务关闭时 updateByStocktakeNo 为 COMPLETE_CHECK 并发布 WmsStocktakeTaskSyncEvent。",
+          "BFF validateTaskId 用后台 page(businessIds) 再核对盘点单货主。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "盘点任务ID",
+            "location": "path",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "stocktake_task_id",
+            "display_name": "盘点任务ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "任务主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "WmsStocktakeTaskPortalController#closeTask -> WmsStocktakeTaskPortalService#closeTask -> RemoteInventoryStocktakeTaskFeign#closeTask",
+          "InventoryStocktakeTaskService#closeTask：taskStatus=CLOSE、taskEndTime、可能把盘点单改为完全盘点",
+          "wmsStocktakeTaskSyncEventPublisher.publishByStocktakeNo",
+          "WmsStocktakeTaskPortalService 通过 validateStocktakeNo/validateTaskId 将任务所属盘点单与当前登录手机号对应货主核对，故数据范围为当前货主 self。"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "d7ac0acd-4e34-4e83-b6c4-f24d9b7e2023",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/stocktakeTask/batchCloseTask"
+      },
+      "semantic": {
+        "purpose": "供仓储门户按任务ID列表批量关闭本货主盘点任务：跳过已关闭/已取消，其余置关闭；某盘点单任务全关则单据完全盘点。",
+        "audiences": [
+          "仓储门户",
+          "货主"
+        ],
+        "domains": [
+          "仓储盘点",
+          "盘点任务"
+        ],
+        "scenarios": [
+          "货主一次勾选多个已盘完任务在门户批量关闭，避免逐条 closeTask。"
+        ],
+        "actions": [
+          "complete"
+        ],
+        "entities": [
+          "盘点任务",
+          "盘点单"
+        ],
+        "aliases": [
+          "门户批量关闭盘点任务",
+          "批量完成盘点任务",
+          "WmsStocktakeTaskPortalController.batchCloseTask"
+        ],
+        "resource": "wms_stocktake_task",
+        "lookup_keys": [
+          "ids",
+          "id",
+          "taskNo",
+          "stocktakeNo"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "body IdsCondition.ids，不是路径 id；WMS 无 @Valid 但 Service 空 ids 抛 IDS_NOT_EMPTY，BFF 同样校验。",
+          "与 cancelByIdList（取消盘点单及任务）不同，本接口只关任务。移动端无批量关闭。",
+          "ids 必须都能通过本货主 validateTaskId。"
+        ],
+        "required_inputs": [
+          {
+            "name": "ids",
+            "zh_name": "任务ID列表",
+            "location": "body",
+            "required": true,
+            "schema_type": "List<Long>"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "stocktake_task_id",
+            "display_name": "盘点任务ID",
+            "technical_names": [
+              "ids",
+              "id"
+            ],
+            "aliases": [
+              "任务主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "WmsStocktakeTaskPortalController#batchCloseTask(IdsCondition) -> WmsStocktakeTaskPortalService#batchCloseTask",
+          "InventoryStocktakeTaskService#batchCloseTask：过滤非 CLOSE/CANCEL 后 batchUpdate，全关则更新盘点单",
+          "IdsCondition.@NotEmpty ids；门户 CollUtil.isEmpty 抛“主键不能为空”",
+          "WmsStocktakeTaskPortalService 通过 validateStocktakeNo/validateTaskId 将任务所属盘点单与当前登录手机号对应货主核对，故数据范围为当前货主 self。"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "abc23a4b-f740-45fc-835b-5592ec59c4a7",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/stocktakeTask/stocktakeByTask"
+      },
+      "semantic": {
+        "purpose": "供仓储门户按任务ID提交实盘明细：更新或新增任务明细实盘数量，可选序列号/唛号；有实盘时任务改盘点中、单据可由创建改部分盘点。",
+        "audiences": [
+          "仓储门户",
+          "货主"
+        ],
+        "domains": [
+          "仓储盘点",
+          "盘点任务明细"
+        ],
+        "scenarios": [
+          "货主或盘点员在门户任务里录入各商品库位的实盘数并保存，而不是只关闭任务或只改盘点单头。"
+        ],
+        "actions": [
+          "stocktake",
+          "save"
+        ],
+        "entities": [
+          "盘点任务明细",
+          "盘点任务",
+          "盘点单"
+        ],
+        "aliases": [
+          "门户任务去盘点",
+          "提交盘点实盘数",
+          "WmsStocktakeTaskPortalController.stocktakeByTask"
+        ],
+        "resource": "wms_stocktake_task",
+        "lookup_keys": [
+          "taskId",
+          "id",
+          "lotLocId",
+          "skuId",
+          "locId",
+          "lotNum",
+          "actualCount",
+          "snNoList",
+          "labelList",
+          "warehouseId",
+          "ownerId",
+          "warehouseZoneId",
+          "palletNum",
+          "skuNo"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "门户特有 stocktakeByTask，移动端盘点 Controller 不提供。WMS @Valid 要求 taskId 与非空 detailsItemList。",
+          "已关闭/已取消任务不可盘。明细有 id 则改 actualCount，无 id 则新增明细；SN/唛号按明细覆盖写入。",
+          "有实盘数量时任务 CREATE→IN_PROGRESS，单据 CREATE→PARTIAL_CHECK。明细 id 与 lotLocId 是更新/新增条件字段，不进 required_inputs。"
+        ],
+        "required_inputs": [
+          {
+            "name": "taskId",
+            "zh_name": "盘点任务ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          },
+          {
+            "name": "detailsItemList",
+            "zh_name": "任务明细数据",
+            "location": "body",
+            "required": true,
+            "schema_type": "List<StocktakeTaskDetailsItem>"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "stocktake_task_id",
+            "display_name": "盘点任务ID",
+            "technical_names": [
+              "taskId"
+            ],
+            "aliases": [
+              "任务主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "stocktake_detail_id",
+            "display_name": "盘点明细ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "任务明细主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "inventory_lot_loc_id",
+            "display_name": "库存记录ID",
+            "technical_names": [
+              "lotLocId"
+            ],
+            "aliases": [
+              "批次库位库存主键"
+            ],
+            "resource": "wms_inventory",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sku_id",
+            "display_name": "商品ID",
+            "technical_names": [
+              "skuId"
+            ],
+            "aliases": [
+              "SKU主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_loc_id",
+            "display_name": "库位ID",
+            "technical_names": [
+              "locId"
+            ],
+            "aliases": [
+              "库位主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "lot_num",
+            "display_name": "批次号",
+            "technical_names": [
+              "lotNum"
+            ],
+            "aliases": [
+              "商品批次号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sku_no",
+            "display_name": "商品编号",
+            "technical_names": [
+              "skuNo"
+            ],
+            "aliases": [
+              "商品代码"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_id",
+            "display_name": "仓库ID",
+            "technical_names": [
+              "warehouseId"
+            ],
+            "aliases": [
+              "仓库主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "owner_id",
+            "display_name": "货主ID",
+            "technical_names": [
+              "ownerId"
+            ],
+            "aliases": [
+              "货主主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_zone_id",
+            "display_name": "库区ID",
+            "technical_names": [
+              "warehouseZoneId"
+            ],
+            "aliases": [
+              "仓库库区主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "pallet_num",
+            "display_name": "托盘号",
+            "technical_names": [
+              "palletNum"
+            ],
+            "aliases": [
+              "托盘编号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "serial_no",
+            "display_name": "商品序列号",
+            "technical_names": [
+              "snNoList"
+            ],
+            "aliases": [
+              "SN",
+              "序列号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "label_no",
+            "display_name": "商品唛号",
+            "technical_names": [
+              "labelList"
+            ],
+            "aliases": [
+              "唛号",
+              "标签号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "WmsStocktakeTaskPortalController#stocktakeByTask(StocktakeTaskItem) -> WmsStocktakeTaskPortalService#stocktakeByTask",
+          "InventoryStocktakeTaskController#stocktakeByTask @Valid -> InventoryStocktakeTaskService#stocktakeByTask",
+          "StocktakeTaskItem：@NotNull taskId、@NotEmpty detailsItemList；明细 id 空为新增、有 id 为改实盘",
+          "WmsStocktakeTaskPortalService 通过 validateStocktakeNo/validateTaskId 将任务所属盘点单与当前登录手机号对应货主核对，故数据范围为当前货主 self。",
+          "StocktakeTaskDetailsItem 公开请求包含 warehouseId、ownerId、warehouseZoneId、palletNum、skuNo、snNoList、labelList，新增明细或覆盖序列号/唛号时由服务实际消费。"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "dd71e35f-638b-4dda-9b80-62715a8debf2",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/stocktakeOrder/page"
+      },
+      "semantic": {
+        "purpose": "供仓储门户分页查询当前登录手机号对应货主的盘点单：含单号、仓库、状态和任务进度，不是库存汇总也不是任务列表。",
+        "audiences": [
+          "仓储门户",
+          "货主"
+        ],
+        "domains": [
+          "仓储盘点",
+          "盘点单"
+        ],
+        "scenarios": [
+          "货主在门户盘点单列表按单号或状态翻看本货主草稿/盘点中/已完成单据，决定去生成任务还是取消。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "盘点单"
+        ],
+        "aliases": [
+          "门户盘点单分页",
+          "货主盘点单列表",
+          "WmsStocktakeOrderPortalController.page"
+        ],
+        "resource": "wms_stocktake_order",
+        "lookup_keys": [
+          "stocktakeNo",
+          "warehouseId",
+          "warehouseCode",
+          "stocktakeStatus",
+          "stocktakeRange",
+          "stocktakeType",
+          "dataSource",
+          "pageSize",
+          "id"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "POST /wms/stocktakeOrder/page 与移动端 /wms/mobile/inventoryStocktakeOrder/page 共用 WmsStocktakeOrderPortalService#page -> WMS portalPage。",
+          "portalPage 按手机号解析货主并写 ownerId；请求 ownerId 与会话货主不一致则空页。SQL 返回 id/stocktakeNo/warehouseId/warehouseCode，ownerName 来自条件表拼接。",
+          "SQL 把 warehouse_name like 写成 :warehouseCode，warehouseName 条件未按字段名消费。无货主空页不强制 pageSize。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "stocktake_order_id",
+            "display_name": "盘点单ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "盘点单主键"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "stocktake_order_no",
+            "display_name": "盘点单号",
+            "technical_names": [
+              "stocktakeNo"
+            ],
+            "aliases": [
+              "盘点单编号"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_id",
+            "display_name": "仓库ID",
+            "technical_names": [
+              "warehouseId"
+            ],
+            "aliases": [
+              "仓库主键"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_code",
+            "display_name": "仓库编码",
+            "technical_names": [
+              "warehouseCode"
+            ],
+            "aliases": [
+              "仓库代码"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.9,
+        "semantic_evidence": [
+          "WmsStocktakeOrderPortalController#page(PortalStocktakeOrderPageCondition) -> WmsStocktakeOrderPortalService#page 设置 phone=currentMobile()",
+          "InventoryStocktakeOrderService#portalPage -> page -> InventoryStocktakeOrderDao#page",
+          "SQL inventory_stocktake_order_query_getPageList：exists owner_id=:ownerId；warehouse_name like concat('%',:warehouseCode,'%') 与字段名冲突",
+          "后置补 warehouseZoneName/taskProgress/showGenerateTaskBtn 等按钮位",
+          "WmsStocktakeOrderPortalService 使用 currentPhoneCondition，且下游 validPortalOrderOwner 校验当前手机号对应货主，故数据范围为当前货主 self。"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "a865637b-51cf-466f-a762-06b8b0610548",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/stocktakeOrder/save"
+      },
+      "semantic": {
+        "purpose": "供仓储门户为当前货主新建草稿盘点单：强制清空 id/单号，默认明盘与直接生成任务，写入盘点单和条件行，不自动生成任务。",
+        "audiences": [
+          "仓储门户",
+          "货主"
+        ],
+        "domains": [
+          "仓储盘点",
+          "盘点单"
+        ],
+        "scenarios": [
+          "货主在门户填写仓库和盘点范围后保存一张新的草稿盘点单，稍后用 generaTask 生成任务。"
+        ],
+        "actions": [
+          "create",
+          "save"
+        ],
+        "entities": [
+          "盘点单",
+          "盘点条件"
+        ],
+        "aliases": [
+          "门户创建盘点单",
+          "保存货主盘点草稿",
+          "WmsStocktakeOrderPortalController.save"
+        ],
+        "resource": "wms_stocktake_order",
+        "lookup_keys": [
+          "warehouseId",
+          "warehouseCode",
+          "warehouseName",
+          "stocktakeRange",
+          "stocktakeType",
+          "taskType"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "与移动端 /mobile/inventoryStocktakeOrder/save 同一 portalSave；门户另有 generaTask，移动端没有。portalSave 将 id、stocktakeNo 置空，只能新增不能改已有单。",
+          "WMS portalSave 无 @Valid，父类 StocktakeOrderItem 的 warehouseId/Code/Name @NotNull 不生效；默认 stocktakeType=明盘、空 taskType=直接生成、非全仓则部分盘点，条件行填当前货主。",
+          "无对应货主时静默 return 仍返回成功。save 落 cs_inventory_stocktake_order 草稿并 batchInsert 条件，generaTaskByOrder 被注释不自动执行。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "warehouse_id",
+            "display_name": "仓库ID",
+            "technical_names": [
+              "warehouseId"
+            ],
+            "aliases": [
+              "仓库主键"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_code",
+            "display_name": "仓库编码",
+            "technical_names": [
+              "warehouseCode"
+            ],
+            "aliases": [
+              "仓库代码"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "WmsStocktakeOrderPortalController#save(PortalStocktakeOrderItem) 写入 phone/tenancy/companyId 后 portalSave",
+          "InventoryStocktakeOrderController#portalSave 无 @Valid，对比 /save 有 @Valid StocktakeOrderItem",
+          "InventoryStocktakeOrderService#portalSave -> save -> dao.insert + stocktakeConditionService.batchInsert，状态 DRAFT",
+          "paramValid 按盘点范围条件校验目标/动碰时间/容器/批次，不是无条件必填",
+          "WmsStocktakeOrderPortalService 使用 currentPhoneCondition，且下游 validPortalOrderOwner 校验当前手机号对应货主，故数据范围为当前货主 self。",
+          "portalSave 在执行链中清空客户端 stocktakeNo，且响应为 Void；该字段不是可用的公开检索键。"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "dcceae52-0399-4a94-863f-26dadca62dad",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/stocktakeOrder/generaTask/{id}"
+      },
+      "semantic": {
+        "purpose": "供仓储门户把本货主草稿盘点单生成盘点任务及明细：按库存快照建任务，单据从草稿改为创建，并发布任务同步事件。",
+        "audiences": [
+          "仓储门户",
+          "货主"
+        ],
+        "domains": [
+          "仓储盘点",
+          "盘点任务"
+        ],
+        "scenarios": [
+          "货主保存草稿盘点单后，在门户点生成任务，系统按仓库/货主条件拉取库存并拆出可执行任务。"
+        ],
+        "actions": [
+          "create"
+        ],
+        "entities": [
+          "盘点任务",
+          "盘点任务明细",
+          "盘点单"
+        ],
+        "aliases": [
+          "门户生成盘点任务",
+          "草稿盘点单生成任务",
+          "WmsStocktakeOrderPortalController.generaTask"
+        ],
+        "resource": "wms_stocktake_order",
+        "lookup_keys": [
+          "id",
+          "stocktakeNo",
+          "taskNo",
+          "warehouseId"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "仅门户 /stocktakeOrder/generaTask/{id}，移动端盘点 Controller 无此动作；不是去盘点 stocktakeByTask。",
+          "必须草稿，否则 INVENTORY_STOCKTAKE_ORDER_NOT_DRAFT；无库存抛 LOT_LOC_NO_DATA。任务号=盘点单号-序号。",
+          "BFF 用 currentPhoneCondition 调 portalGeneraTask，先 validPortalOrderOwner。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "盘点单ID",
+            "location": "path",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "stocktake_order_id",
+            "display_name": "盘点单ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "盘点单主键"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "WmsStocktakeOrderPortalController#generaTask -> WmsStocktakeOrderPortalService#generaTask -> RemoteInventoryStocktakeOrderFeign#portalGeneraTask",
+          "InventoryStocktakeOrderService#generaTask：getStockData + buildTaskAndDetailsData，status=CREATE，publishByStocktakeNo",
+          "validPortalOrderOwner：条件表 ownerId 必须全等于当前货主",
+          "WmsStocktakeOrderPortalService 使用 currentPhoneCondition，且下游 validPortalOrderOwner 校验当前手机号对应货主，故数据范围为当前货主 self。"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "8eb8b6c6-d758-421c-9e67-0d82eaf63fea",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/stocktakeOrder/getById/{id}"
+      },
+      "semantic": {
+        "purpose": "供仓储门户按盘点单ID查看本货主单据头和盘点条件：返回仓库、范围、方式及 conditionQueryList，不含任务明细分页。",
+        "audiences": [
+          "仓储门户",
+          "货主"
+        ],
+        "domains": [
+          "仓储盘点",
+          "盘点单"
+        ],
+        "scenarios": [
+          "货主在门户打开某张盘点单，核对仓库、货主条件和任务生成方式后再决定生成任务或取消。"
+        ],
+        "actions": [
+          "detail",
+          "query"
+        ],
+        "entities": [
+          "盘点单",
+          "盘点条件"
+        ],
+        "aliases": [
+          "门户盘点单详情",
+          "按ID查看盘点单",
+          "WmsStocktakeOrderPortalController.getById"
+        ],
+        "resource": "wms_stocktake_order",
+        "lookup_keys": [
+          "id",
+          "stocktakeNo",
+          "warehouseId",
+          "warehouseCode",
+          "ownerId",
+          "ownerCode",
+          "areaId",
+          "warehouseLocCode",
+          "lotNum"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "正式路径 /wms/stocktakeOrder/getById/{id}，兼容路径 /wms/inventoryStocktakeOrder/getById/{id} 与移动端 /mobile/.../getById/{id} 都走同一 portalGetById。",
+          "返回 StocktakeOrderGetByIdQuery，无 stocktakeStatus 字段，与列表 StocktakeOrderQuery 不同；条件里分别有 ownerId/ownerCode、areaId/areaCode、warehouseLocId/warehouseLocCode。",
+          "先 validPortalOrderOwner，单据不存在或混有其他货主条件则失败。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "盘点单ID",
+            "location": "path",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "stocktake_order_id",
+            "display_name": "盘点单ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "盘点单主键"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "stocktake_order_no",
+            "display_name": "盘点单号",
+            "technical_names": [
+              "stocktakeNo"
+            ],
+            "aliases": [
+              "盘点单编号"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_id",
+            "display_name": "仓库ID",
+            "technical_names": [
+              "warehouseId"
+            ],
+            "aliases": [
+              "仓库主键"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_code",
+            "display_name": "仓库编码",
+            "technical_names": [
+              "warehouseCode"
+            ],
+            "aliases": [
+              "仓库代码"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "owner_id",
+            "display_name": "货主ID",
+            "technical_names": [
+              "ownerId"
+            ],
+            "aliases": [
+              "货主主键"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "owner_code",
+            "display_name": "货主编码",
+            "technical_names": [
+              "ownerCode"
+            ],
+            "aliases": [
+              "货主代码"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "area_id",
+            "display_name": "区域ID",
+            "technical_names": [
+              "areaId"
+            ],
+            "aliases": [
+              "盘点区域主键"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "area_code",
+            "display_name": "区域编码",
+            "technical_names": [
+              "areaCode"
+            ],
+            "aliases": [
+              "盘点区域代码"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_zone_id",
+            "display_name": "库区ID",
+            "technical_names": [
+              "warehouseZoneId"
+            ],
+            "aliases": [
+              "盘点库区主键"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_zone_code",
+            "display_name": "库区编码",
+            "technical_names": [
+              "warehouseZoneCode"
+            ],
+            "aliases": [
+              "盘点库区代码"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_loc_id",
+            "display_name": "库位ID",
+            "technical_names": [
+              "warehouseLocId"
+            ],
+            "aliases": [
+              "盘点库位主键"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_loc_code",
+            "display_name": "库位编码",
+            "technical_names": [
+              "warehouseLocCode"
+            ],
+            "aliases": [
+              "盘点库位代码"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "lot_num",
+            "display_name": "批次号",
+            "technical_names": [
+              "lotNum"
+            ],
+            "aliases": [
+              "商品批次号"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "pallet_code",
+            "display_name": "容器编码",
+            "technical_names": [
+              "palletCode"
+            ],
+            "aliases": [
+              "托盘号"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "WmsStocktakeOrderPortalController#getById -> WmsStocktakeOrderPortalService#getById -> portalGetById",
+          "InventoryStocktakeOrderService#getById：copyProperties 订单 + findItemByStocktakeNo 条件",
+          "StocktakeOrderGetByIdQuery 无 stocktakeStatus，列表 DTO 有该字段",
+          "WmsStocktakeOrderPortalService 使用 currentPhoneCondition，且下游 validPortalOrderOwner 校验当前手机号对应货主，故数据范围为当前货主 self。",
+          "三个盘点单详情入口复用 StocktakeOrderGetByIdQuery 与同一 portalGetById 构造链，公开查询键按同源合同对齐。"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "e0f51d12-6bd4-412a-863c-c296bbde56ae",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/stocktakeOrder/cancelByIdList/{idList}"
+      },
+      "semantic": {
+        "purpose": "供仓储门户批量取消本货主盘点单：单据和关联任务状态一并改为取消；已取消或已关闭不可再取消。",
+        "audiences": [
+          "仓储门户",
+          "货主"
+        ],
+        "domains": [
+          "仓储盘点",
+          "盘点单"
+        ],
+        "scenarios": [
+          "货主在门户勾选未关闭的盘点单批量取消，任务随单作废，而不是删除草稿或关闭已盘完任务。"
+        ],
+        "actions": [
+          "cancel"
+        ],
+        "entities": [
+          "盘点单",
+          "盘点任务"
+        ],
+        "aliases": [
+          "门户批量取消盘点单",
+          "取消货主盘点单",
+          "WmsStocktakeOrderPortalController.cancelByIdList"
+        ],
+        "resource": "wms_stocktake_order",
+        "lookup_keys": [
+          "idList",
+          "id",
+          "stocktakeNo"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "路径 idList 批量；移动端是 cancelById/{id} 单条，内部同样 portalCancelByIdList(List.of(id))。",
+          "SQL inventory_stocktake_order_updateStatusByIdList 同时更新订单与任务 status=4。供应链来源额外发取消事件。",
+          "与 deleteByIdList（仅草稿物理删）和 closeTask（关任务）不同。"
+        ],
+        "required_inputs": [
+          {
+            "name": "idList",
+            "zh_name": "盘点单ID列表",
+            "location": "path",
+            "required": true,
+            "schema_type": "List<Long>"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "stocktake_order_id",
+            "display_name": "盘点单ID",
+            "technical_names": [
+              "idList",
+              "id"
+            ],
+            "aliases": [
+              "盘点单主键"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "WmsStocktakeOrderPortalController#cancelByIdList -> portalCancelByIdList -> cancelByIdList",
+          "validPortalOrderOwner 空 idList 抛 STOCKTAKE_ORDER_ID_EMPTY",
+          "InventoryStocktakeOrderDao#updateStatusByIdList 联表更新 cs_inventory_stocktake_order 与 cs_inventory_stocktake_task",
+          "WmsStocktakeOrderPortalService 使用 currentPhoneCondition，且下游 validPortalOrderOwner 校验当前手机号对应货主，故数据范围为当前货主 self。"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "b61adaad-0c88-48a1-b49c-9e6c2b18ac36",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/stocktakeOrder/deleteByIdList/{idList}"
+      },
+      "semantic": {
+        "purpose": "供仓储门户批量删除本货主草稿盘点单：同时删条件、任务和明细；非草稿或供应链来源不允许删。",
+        "audiences": [
+          "仓储门户",
+          "货主"
+        ],
+        "domains": [
+          "仓储盘点",
+          "盘点单"
+        ],
+        "scenarios": [
+          "货主丢掉尚未生成任务的草稿盘点单，从列表清除而不是取消已执行单据。"
+        ],
+        "actions": [
+          "delete"
+        ],
+        "entities": [
+          "盘点单",
+          "盘点任务",
+          "盘点条件"
+        ],
+        "aliases": [
+          "门户删除草稿盘点单",
+          "批量删除盘点单",
+          "WmsStocktakeOrderPortalController.deleteByIdList"
+        ],
+        "resource": "wms_stocktake_order",
+        "lookup_keys": [
+          "idList",
+          "id",
+          "stocktakeNo"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "仅草稿可删；scts 来源抛 STOCKTAKE_ORDER_SCTS_SOURCE_DELETE_ERROR。移动端 deleteById 单条封装同一下游。",
+          "物理删除订单/条件/任务/明细，不是改取消状态。",
+          "idList 经 validPortalOrderOwner 校验货主。"
+        ],
+        "required_inputs": [
+          {
+            "name": "idList",
+            "zh_name": "盘点单ID列表",
+            "location": "path",
+            "required": true,
+            "schema_type": "List<Long>"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "stocktake_order_id",
+            "display_name": "盘点单ID",
+            "technical_names": [
+              "idList",
+              "id"
+            ],
+            "aliases": [
+              "盘点单主键"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "WmsStocktakeOrderPortalController#deleteByIdList -> portalDeleteByIdList -> deleteByIdList",
+          "InventoryStocktakeOrderService#deleteByIdList：deleteByStocktakeNoList 条件与任务后 dao.delete",
+          "非 DRAFT 抛 STOCKTAKE_ORDER_CANCEL_DEL_ERROR",
+          "WmsStocktakeOrderPortalService 使用 currentPhoneCondition，且下游 validPortalOrderOwner 校验当前手机号对应货主，故数据范围为当前货主 self。"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "5ab3e167-6ea0-44a9-bdb9-71932eb242bb",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/inventoryStocktakeTask/page"
+      },
+      "semantic": {
+        "purpose": "门户兼容路径分页查询盘点任务：执行链与 /wms/stocktakeTask/page 相同，必须带盘点单号/任务号/任务ID，不是移动端按货主列出任务。",
+        "audiences": [
+          "仓储门户",
+          "货主"
+        ],
+        "domains": [
+          "仓储盘点",
+          "盘点任务"
+        ],
+        "scenarios": [
+          "旧门户菜单仍请求 /wms/inventoryStocktakeTask/page，按已有盘点单号查看任务列表。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "盘点任务",
+          "盘点单"
+        ],
+        "aliases": [
+          "兼容盘点任务分页",
+          "旧路径任务列表",
+          "WmsInventoryStocktakePortalController.taskPage"
+        ],
+        "resource": "wms_stocktake_task",
+        "lookup_keys": [
+          "stocktakeNo",
+          "taskNo",
+          "taskNoList",
+          "businessIds",
+          "warehouseId",
+          "taskStatus",
+          "pageSize",
+          "id",
+          "taskAllocation"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "WmsInventoryStocktakePortalController 注释为兼容控制器，路径 /wms/inventoryStocktakeTask/page，方法仍调 WmsStocktakeTaskPortalService#page，不是 portalPage。",
+          "与正式 /wms/stocktakeTask/page 合同相同但路径不同；与移动端 /wms/mobile/inventoryStocktakeTask/page 下游不同。",
+          "四选一标识 + pageSize 拆箱规则同正式任务分页。"
+        ],
+        "required_inputs": [
+          {
+            "name": "pageSize",
+            "zh_name": "每页条数",
+            "location": "body",
+            "required": true,
+            "schema_type": "Integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "stocktake_task_id",
+            "display_name": "盘点任务ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "任务主键",
+              "taskId"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "stocktake_task_no",
+            "display_name": "盘点任务号",
+            "technical_names": [
+              "taskNo"
+            ],
+            "aliases": [
+              "任务编号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "stocktake_order_no",
+            "display_name": "盘点单号",
+            "technical_names": [
+              "stocktakeNo"
+            ],
+            "aliases": [
+              "盘点单编号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_id",
+            "display_name": "仓库ID",
+            "technical_names": [
+              "warehouseId"
+            ],
+            "aliases": [
+              "仓库主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "WmsInventoryStocktakePortalController#taskPage(StocktakeTaskPageCondition) -> WmsStocktakeTaskPortalService#page",
+          "未使用 PortalStocktakeTaskPageCondition，不写 phone，不调 portalPage",
+          "WmsStocktakeTaskPortalService 通过 validateStocktakeNo/validateTaskId 将任务所属盘点单与当前登录手机号对应货主核对，故数据范围为当前货主 self。"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "032aea15-f98b-4c2c-8c3e-c12c58cc9f15",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/inventoryStocktakeTask/getByTaskNo/{taskNo}"
+      },
+      "semantic": {
+        "purpose": "门户兼容路径按任务号查盘点任务详情：与 /wms/stocktakeTask/getByTaskNo 同一 getByTaskNo+货主校验，不是移动端 portalGetByTaskNo。",
+        "audiences": [
+          "仓储门户",
+          "货主"
+        ],
+        "domains": [
+          "仓储盘点",
+          "盘点任务"
+        ],
+        "scenarios": [
+          "旧前端用 inventoryStocktakeTask 路径打开任务详情，核对实盘与库存。"
+        ],
+        "actions": [
+          "detail",
+          "query"
+        ],
+        "entities": [
+          "盘点任务",
+          "盘点任务明细"
+        ],
+        "aliases": [
+          "兼容盘点任务详情",
+          "旧路径按任务号查询",
+          "WmsInventoryStocktakePortalController.getByTaskNo"
+        ],
+        "resource": "wms_stocktake_task",
+        "lookup_keys": [
+          "taskNo",
+          "id",
+          "stocktakeNo",
+          "skuId",
+          "skuNo",
+          "locId",
+          "lotNum",
+          "warehouseId",
+          "ownerId",
+          "warehouseZoneId",
+          "palletNum",
+          "snNoList",
+          "labelList"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "兼容路径 /wms/inventoryStocktakeTask/getByTaskNo/{taskNo}，服务方法与正式门户 getByTaskNo 相同。",
+          "移动端同名走 portalGetByTaskNo。Swagger 旧标题“按任务编号查询WMS库存盘点”实际返回任务不是库存行。"
+        ],
+        "required_inputs": [
+          {
+            "name": "taskNo",
+            "zh_name": "盘点任务号",
+            "location": "path",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "stocktake_task_id",
+            "display_name": "盘点任务ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "任务主键",
+              "taskId"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "stocktake_task_no",
+            "display_name": "盘点任务号",
+            "technical_names": [
+              "taskNo"
+            ],
+            "aliases": [
+              "任务编号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "stocktake_order_no",
+            "display_name": "盘点单号",
+            "technical_names": [
+              "stocktakeNo"
+            ],
+            "aliases": [
+              "盘点单编号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_id",
+            "display_name": "仓库ID",
+            "technical_names": [
+              "warehouseId"
+            ],
+            "aliases": [
+              "仓库主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "stocktake_detail_id",
+            "display_name": "盘点明细ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "任务明细主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sku_id",
+            "display_name": "商品ID",
+            "technical_names": [
+              "skuId"
+            ],
+            "aliases": [
+              "SKU主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sku_no",
+            "display_name": "商品编号",
+            "technical_names": [
+              "skuNo"
+            ],
+            "aliases": [
+              "商品代码"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "owner_id",
+            "display_name": "货主ID",
+            "technical_names": [
+              "ownerId"
+            ],
+            "aliases": [
+              "货主主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_loc_id",
+            "display_name": "库位ID",
+            "technical_names": [
+              "locId"
+            ],
+            "aliases": [
+              "库位主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "lot_num",
+            "display_name": "批次号",
+            "technical_names": [
+              "lotNum"
+            ],
+            "aliases": [
+              "商品批次号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_zone_id",
+            "display_name": "库区ID",
+            "technical_names": [
+              "warehouseZoneId"
+            ],
+            "aliases": [
+              "任务库区主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "pallet_num",
+            "display_name": "托盘号",
+            "technical_names": [
+              "palletNum"
+            ],
+            "aliases": [
+              "托盘编号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "serial_no",
+            "display_name": "商品序列号",
+            "technical_names": [
+              "snNoList"
+            ],
+            "aliases": [
+              "SN",
+              "序列号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "label_no",
+            "display_name": "商品唛号",
+            "technical_names": [
+              "labelList"
+            ],
+            "aliases": [
+              "唛号",
+              "标签号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": [
+          "WmsInventoryStocktakePortalController#getByTaskNo -> WmsStocktakeTaskPortalService#getByTaskNo",
+          "导入标题写库存盘点，执行返回 StocktakeTaskQuery",
+          "WmsStocktakeTaskPortalService 通过 validateStocktakeNo/validateTaskId 将任务所属盘点单与当前登录手机号对应货主核对，故数据范围为当前货主 self。",
+          "StocktakeTaskDetailsQuery 公开返回 warehouseZoneId、palletNum、snNoList、labelList；三个任务详情入口复用同一公开返回合同。"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "3784bafa-2448-44de-988d-8a47899739d8",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/inventoryStocktakeOrder/getById/{id}"
+      },
+      "semantic": {
+        "purpose": "门户兼容路径按盘点单ID查看本货主单据详情：与 /wms/stocktakeOrder/getById 同一 portalGetById，返回单据头和条件。",
+        "audiences": [
+          "仓储门户",
+          "货主"
+        ],
+        "domains": [
+          "仓储盘点",
+          "盘点单"
+        ],
+        "scenarios": [
+          "旧门户库存盘点菜单用 inventoryStocktakeOrder/getById 打开单据，而不是查库存余额。"
+        ],
+        "actions": [
+          "detail",
+          "query"
+        ],
+        "entities": [
+          "盘点单",
+          "盘点条件"
+        ],
+        "aliases": [
+          "兼容盘点单详情",
+          "旧路径盘点单查询",
+          "WmsInventoryStocktakePortalController.getByOrderId"
+        ],
+        "resource": "wms_stocktake_order",
+        "lookup_keys": [
+          "id",
+          "stocktakeNo",
+          "warehouseId",
+          "warehouseCode",
+          "ownerId",
+          "ownerCode",
+          "areaId",
+          "warehouseLocCode",
+          "lotNum"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "兼容路径 /wms/inventoryStocktakeOrder/getById/{id}，不是库存 invLotLoc，也不是任务详情。",
+          "导入标题“查询WMS库存盘点”实际是盘点单 GetById。与移动端同后缀路径的 Controller 不同。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "盘点单ID",
+            "location": "path",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "stocktake_order_id",
+            "display_name": "盘点单ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "盘点单主键"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "stocktake_order_no",
+            "display_name": "盘点单号",
+            "technical_names": [
+              "stocktakeNo"
+            ],
+            "aliases": [
+              "盘点单编号"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_id",
+            "display_name": "仓库ID",
+            "technical_names": [
+              "warehouseId"
+            ],
+            "aliases": [
+              "仓库主键"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_code",
+            "display_name": "仓库编码",
+            "technical_names": [
+              "warehouseCode"
+            ],
+            "aliases": [
+              "仓库代码"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "owner_id",
+            "display_name": "货主ID",
+            "technical_names": [
+              "ownerId"
+            ],
+            "aliases": [
+              "货主主键"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "owner_code",
+            "display_name": "货主编码",
+            "technical_names": [
+              "ownerCode"
+            ],
+            "aliases": [
+              "货主代码"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "area_id",
+            "display_name": "区域ID",
+            "technical_names": [
+              "areaId"
+            ],
+            "aliases": [
+              "盘点区域主键"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "area_code",
+            "display_name": "区域编码",
+            "technical_names": [
+              "areaCode"
+            ],
+            "aliases": [
+              "盘点区域代码"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_zone_id",
+            "display_name": "库区ID",
+            "technical_names": [
+              "warehouseZoneId"
+            ],
+            "aliases": [
+              "盘点库区主键"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_zone_code",
+            "display_name": "库区编码",
+            "technical_names": [
+              "warehouseZoneCode"
+            ],
+            "aliases": [
+              "盘点库区代码"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_loc_id",
+            "display_name": "库位ID",
+            "technical_names": [
+              "warehouseLocId"
+            ],
+            "aliases": [
+              "盘点库位主键"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_loc_code",
+            "display_name": "库位编码",
+            "technical_names": [
+              "warehouseLocCode"
+            ],
+            "aliases": [
+              "盘点库位代码"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "lot_num",
+            "display_name": "批次号",
+            "technical_names": [
+              "lotNum"
+            ],
+            "aliases": [
+              "商品批次号"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "pallet_code",
+            "display_name": "容器编码",
+            "technical_names": [
+              "palletCode"
+            ],
+            "aliases": [
+              "托盘号"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": [
+          "WmsInventoryStocktakePortalController#getByOrderId -> WmsStocktakeOrderPortalService#getById -> portalGetById",
+          "标题与执行对象冲突：标题写库存盘点，DTO 为 StocktakeOrderGetByIdQuery",
+          "WmsStocktakeOrderPortalService 使用 currentPhoneCondition，且下游 validPortalOrderOwner 校验当前手机号对应货主，故数据范围为当前货主 self。",
+          "三个盘点单详情入口复用 StocktakeOrderGetByIdQuery 与同一 portalGetById 构造链，公开查询键按同源合同对齐。"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "e4490934-e859-434d-8e4d-e4af51666214",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/mobile/inventoryStocktakeOrder/page"
+      },
+      "semantic": {
+        "purpose": "供仓储移动端分页查询当前登录货主的盘点单：与门户 /stocktakeOrder/page 同一 portalPage，路径和端别不同。",
+        "audiences": [
+          "仓储移动端",
+          "货主"
+        ],
+        "domains": [
+          "仓储盘点",
+          "盘点单"
+        ],
+        "scenarios": [
+          "货主在小程序/App 盘点首页滑动查看本货主盘点单状态，点进去继续盘或取消。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "盘点单"
+        ],
+        "aliases": [
+          "移动端盘点单分页",
+          "小程序盘点单列表",
+          "MobileWmsInventoryStocktakePortalController.orderPage"
+        ],
+        "resource": "wms_stocktake_order",
+        "lookup_keys": [
+          "stocktakeNo",
+          "warehouseId",
+          "warehouseCode",
+          "stocktakeStatus",
+          "stocktakeRange",
+          "pageSize",
+          "id",
+          "stocktakeType",
+          "dataSource"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "路径 /wms/mobile/inventoryStocktakeOrder/page，Controller 为 MobileWmsInventoryStocktakePortalController，下游与门户 page 相同。",
+          "不是移动端任务分页，也不是库存 pageByOwner。无货主空页不强制 pageSize。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "stocktake_order_id",
+            "display_name": "盘点单ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "盘点单主键"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "stocktake_order_no",
+            "display_name": "盘点单号",
+            "technical_names": [
+              "stocktakeNo"
+            ],
+            "aliases": [
+              "盘点单编号"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_id",
+            "display_name": "仓库ID",
+            "technical_names": [
+              "warehouseId"
+            ],
+            "aliases": [
+              "仓库主键"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_code",
+            "display_name": "仓库编码",
+            "technical_names": [
+              "warehouseCode"
+            ],
+            "aliases": [
+              "仓库代码"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.9,
+        "semantic_evidence": [
+          "MobileWmsInventoryStocktakePortalController#orderPage -> WmsStocktakeOrderPortalService#page",
+          "与门户共用 InventoryStocktakeOrderService#portalPage 及 inventory_stocktake_order_query_getPageList",
+          "SQL warehouse_name 绑定 :warehouseCode 的冲突同样存在",
+          "WmsStocktakeOrderPortalService 使用 currentPhoneCondition，且下游 validPortalOrderOwner 校验当前手机号对应货主，故数据范围为当前货主 self。",
+          "移动端与门户盘点单分页复用 PortalStocktakeOrderPageCondition 和 portalPage，stocktakeType、dataSource 均为实际筛选字段。"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "c72932fd-0e86-4e19-a8a5-d5f0bf332e91",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/mobile/inventoryStocktakeOrder/save"
+      },
+      "semantic": {
+        "purpose": "供仓储移动端为当前货主新建草稿盘点单：与门户 save 同一 portalSave，移动端没有随后的 generaTask 接口。",
+        "audiences": [
+          "仓储移动端",
+          "货主"
+        ],
+        "domains": [
+          "仓储盘点",
+          "盘点单"
+        ],
+        "scenarios": [
+          "货主在小程序选择仓库后提交一张新盘点草稿，稍后再到门户生成任务或在任务接口查看。"
+        ],
+        "actions": [
+          "create",
+          "save"
+        ],
+        "entities": [
+          "盘点单",
+          "盘点条件"
+        ],
+        "aliases": [
+          "移动端创建盘点单",
+          "小程序保存盘点草稿",
+          "MobileWmsInventoryStocktakePortalController.saveOrder"
+        ],
+        "resource": "wms_stocktake_order",
+        "lookup_keys": [
+          "warehouseId",
+          "warehouseCode",
+          "warehouseName",
+          "stocktakeRange",
+          "stocktakeType",
+          "taskType"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "移动端路径 /wms/mobile/inventoryStocktakeOrder/save，无 generaTask 兄弟接口。执行 portalSave，强制新增草稿。",
+          "门户同方法可紧接着 generaTask；移动端保存后不能在本 Controller 生成任务。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "warehouse_id",
+            "display_name": "仓库ID",
+            "technical_names": [
+              "warehouseId"
+            ],
+            "aliases": [
+              "仓库主键"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_code",
+            "display_name": "仓库编码",
+            "technical_names": [
+              "warehouseCode"
+            ],
+            "aliases": [
+              "仓库代码"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "MobileWmsInventoryStocktakePortalController#saveOrder -> WmsStocktakeOrderPortalService#save -> portalSave",
+          "WMS MobileInventoryStocktakeOrderController#save 也走 portalSave，RedisLock 名不同",
+          "WmsStocktakeOrderPortalService 使用 currentPhoneCondition，且下游 validPortalOrderOwner 校验当前手机号对应货主，故数据范围为当前货主 self。"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "13bbca5b-7071-42d6-9106-0d559e97fe54",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/mobile/inventoryStocktakeOrder/getById/{id}"
+      },
+      "semantic": {
+        "purpose": "供仓储移动端按盘点单ID查看本货主单据详情：与门户 getById 同一 portalGetById。",
+        "audiences": [
+          "仓储移动端",
+          "货主"
+        ],
+        "domains": [
+          "仓储盘点",
+          "盘点单"
+        ],
+        "scenarios": [
+          "货主在小程序点开某张盘点单，查看仓库和盘点条件后再取消或删除草稿。"
+        ],
+        "actions": [
+          "detail",
+          "query"
+        ],
+        "entities": [
+          "盘点单",
+          "盘点条件"
+        ],
+        "aliases": [
+          "移动端盘点单详情",
+          "小程序查看盘点单",
+          "MobileWmsInventoryStocktakePortalController.getOrderById"
+        ],
+        "resource": "wms_stocktake_order",
+        "lookup_keys": [
+          "id",
+          "stocktakeNo",
+          "warehouseId",
+          "warehouseCode",
+          "ownerId",
+          "ownerCode",
+          "areaId",
+          "warehouseLocCode",
+          "lotNum"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "移动端路径含 /mobile/，门户正式路径是 /wms/stocktakeOrder/getById/{id}。下游同 portalGetById。",
+          "返回 StocktakeOrderGetByIdQuery，不是任务详情。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "盘点单ID",
+            "location": "path",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "stocktake_order_id",
+            "display_name": "盘点单ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "盘点单主键"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "stocktake_order_no",
+            "display_name": "盘点单号",
+            "technical_names": [
+              "stocktakeNo"
+            ],
+            "aliases": [
+              "盘点单编号"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_id",
+            "display_name": "仓库ID",
+            "technical_names": [
+              "warehouseId"
+            ],
+            "aliases": [
+              "仓库主键"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_code",
+            "display_name": "仓库编码",
+            "technical_names": [
+              "warehouseCode"
+            ],
+            "aliases": [
+              "仓库代码"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "owner_id",
+            "display_name": "货主ID",
+            "technical_names": [
+              "ownerId"
+            ],
+            "aliases": [
+              "货主主键"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "owner_code",
+            "display_name": "货主编码",
+            "technical_names": [
+              "ownerCode"
+            ],
+            "aliases": [
+              "货主代码"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "area_id",
+            "display_name": "区域ID",
+            "technical_names": [
+              "areaId"
+            ],
+            "aliases": [
+              "盘点区域主键"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "area_code",
+            "display_name": "区域编码",
+            "technical_names": [
+              "areaCode"
+            ],
+            "aliases": [
+              "盘点区域代码"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_zone_id",
+            "display_name": "库区ID",
+            "technical_names": [
+              "warehouseZoneId"
+            ],
+            "aliases": [
+              "盘点库区主键"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_zone_code",
+            "display_name": "库区编码",
+            "technical_names": [
+              "warehouseZoneCode"
+            ],
+            "aliases": [
+              "盘点库区代码"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_loc_id",
+            "display_name": "库位ID",
+            "technical_names": [
+              "warehouseLocId"
+            ],
+            "aliases": [
+              "盘点库位主键"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_loc_code",
+            "display_name": "库位编码",
+            "technical_names": [
+              "warehouseLocCode"
+            ],
+            "aliases": [
+              "盘点库位代码"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "lot_num",
+            "display_name": "批次号",
+            "technical_names": [
+              "lotNum"
+            ],
+            "aliases": [
+              "商品批次号"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "pallet_code",
+            "display_name": "容器编码",
+            "technical_names": [
+              "palletCode"
+            ],
+            "aliases": [
+              "托盘号"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "MobileWmsInventoryStocktakePortalController#getOrderById -> WmsStocktakeOrderPortalService#getById",
+          "WmsStocktakeOrderPortalService 使用 currentPhoneCondition，且下游 validPortalOrderOwner 校验当前手机号对应货主，故数据范围为当前货主 self。",
+          "三个盘点单详情入口复用 StocktakeOrderGetByIdQuery 与同一 portalGetById 构造链，公开查询键按同源合同对齐。"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "e772f297-8ba0-4382-9662-3127e278da2b",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/mobile/inventoryStocktakeOrder/cancelById/{id}"
+      },
+      "semantic": {
+        "purpose": "供仓储移动端取消一张本货主盘点单：单条路径 id，内部转 portalCancelByIdList，单据和任务改为取消。",
+        "audiences": [
+          "仓储移动端",
+          "货主"
+        ],
+        "domains": [
+          "仓储盘点",
+          "盘点单"
+        ],
+        "scenarios": [
+          "货主在小程序对尚未关闭的盘点单点取消，不必使用门户批量 idList。"
+        ],
+        "actions": [
+          "cancel"
+        ],
+        "entities": [
+          "盘点单",
+          "盘点任务"
+        ],
+        "aliases": [
+          "移动端取消盘点单",
+          "小程序取消盘点",
+          "MobileWmsInventoryStocktakePortalController.cancelOrderById"
+        ],
+        "resource": "wms_stocktake_order",
+        "lookup_keys": [
+          "id",
+          "stocktakeNo"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "移动端 cancelById/{id} 单条；门户 cancelByIdList/{idList} 批量。下游同一 cancel SQL。",
+          "不是删除草稿，也不是关闭任务。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "盘点单ID",
+            "location": "path",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "stocktake_order_id",
+            "display_name": "盘点单ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "盘点单主键"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "MobileWmsInventoryStocktakePortalController#cancelOrderById -> cancelById -> cancelByIdList(List.of(id))",
+          "WmsStocktakeOrderPortalService 使用 currentPhoneCondition，且下游 validPortalOrderOwner 校验当前手机号对应货主，故数据范围为当前货主 self。"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "610868c4-489f-455e-a7b2-f0b25397a50e",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/mobile/inventoryStocktakeOrder/deleteById/{id}"
+      },
+      "semantic": {
+        "purpose": "供仓储移动端删除一张本货主草稿盘点单：单条路径 id，内部转 portalDeleteByIdList。",
+        "audiences": [
+          "仓储移动端",
+          "货主"
+        ],
+        "domains": [
+          "仓储盘点",
+          "盘点单"
+        ],
+        "scenarios": [
+          "货主在小程序删掉未生成任务的草稿盘点单。"
+        ],
+        "actions": [
+          "delete"
+        ],
+        "entities": [
+          "盘点单"
+        ],
+        "aliases": [
+          "移动端删除盘点单",
+          "小程序删除草稿盘点",
+          "MobileWmsInventoryStocktakePortalController.deleteOrderById"
+        ],
+        "resource": "wms_stocktake_order",
+        "lookup_keys": [
+          "id",
+          "stocktakeNo"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "移动端 deleteById/{id}；门户 deleteByIdList/{idList}。仅草稿、非 scts。",
+          "与取消接口不同，是物理删除。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "盘点单ID",
+            "location": "path",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "stocktake_order_id",
+            "display_name": "盘点单ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "盘点单主键"
+            ],
+            "resource": "wms_stocktake_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "MobileWmsInventoryStocktakePortalController#deleteOrderById -> deleteByIdList(List.of(id))",
+          "WmsStocktakeOrderPortalService 使用 currentPhoneCondition，且下游 validPortalOrderOwner 校验当前手机号对应货主，故数据范围为当前货主 self。"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "1f3c2759-5fba-4e0d-a833-e3e6bb11ed61",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/mobile/inventoryStocktakeTask/page"
+      },
+      "semantic": {
+        "purpose": "供仓储移动端按当前登录货主分页列出盘点任务：走 WMS portalPage 写 ownerId，不要求先传盘点单号。",
+        "audiences": [
+          "仓储移动端",
+          "货主"
+        ],
+        "domains": [
+          "仓储盘点",
+          "盘点任务"
+        ],
+        "scenarios": [
+          "货主打开小程序盘点任务页，直接看到本货主待盘/盘点中任务，而不必先输入盘点单号。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "盘点任务"
+        ],
+        "aliases": [
+          "移动端盘点任务分页",
+          "小程序盘点任务列表",
+          "MobileWmsInventoryStocktakePortalController.taskPage"
+        ],
+        "resource": "wms_stocktake_task",
+        "lookup_keys": [
+          "stocktakeNo",
+          "taskNo",
+          "warehouseId",
+          "taskStatus",
+          "ownerId",
+          "pageSize",
+          "id"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "移动端 portalPage：WmsStocktakeTaskPortalService#portalPage 设 phone 后 WMS 按货主过滤；门户 /stocktakeTask/page 必须四选一标识且走后台 page。",
+          "请求 ownerId 与会话货主不一致则空页。无货主空页不强制 pageSize。",
+          "不是库存列表，也不是盘点单分页。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "stocktake_task_id",
+            "display_name": "盘点任务ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "任务主键",
+              "taskId"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "stocktake_task_no",
+            "display_name": "盘点任务号",
+            "technical_names": [
+              "taskNo"
+            ],
+            "aliases": [
+              "任务编号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "stocktake_order_no",
+            "display_name": "盘点单号",
+            "technical_names": [
+              "stocktakeNo"
+            ],
+            "aliases": [
+              "盘点单编号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_id",
+            "display_name": "仓库ID",
+            "technical_names": [
+              "warehouseId"
+            ],
+            "aliases": [
+              "仓库主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "MobileWmsInventoryStocktakePortalController#taskPage(PortalStocktakeTaskPageCondition) -> portalPage",
+          "InventoryStocktakeTaskService#portalPage 设 ownerId 后 page -> inventory_stocktake_task_query_getPageList",
+          "移动端任务接口使用 currentPhoneCondition 调用 portalPage/portalGetByTaskNo，并按当前手机号对应货主校验，故数据范围为 self。"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "0614178f-d455-4b76-b984-668509a83a36",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/mobile/inventoryStocktakeTask/getByTaskNo/{taskNo}"
+      },
+      "semantic": {
+        "purpose": "供仓储移动端按任务号查看本货主盘点任务详情：走 WMS portalGetByTaskNo，在下游按货主校验后再组装明细。",
+        "audiences": [
+          "仓储移动端",
+          "货主"
+        ],
+        "domains": [
+          "仓储盘点",
+          "盘点任务"
+        ],
+        "scenarios": [
+          "货主在小程序点开任务号，查看库存与实盘明细，准备去盘或确认进度。"
+        ],
+        "actions": [
+          "detail",
+          "query"
+        ],
+        "entities": [
+          "盘点任务",
+          "盘点任务明细"
+        ],
+        "aliases": [
+          "移动端盘点任务详情",
+          "小程序按任务号查询",
+          "MobileWmsInventoryStocktakePortalController.getTaskByTaskNo"
+        ],
+        "resource": "wms_stocktake_task",
+        "lookup_keys": [
+          "taskNo",
+          "id",
+          "stocktakeNo",
+          "skuId",
+          "skuNo",
+          "locId",
+          "lotNum",
+          "warehouseId",
+          "ownerId",
+          "warehouseZoneId",
+          "palletNum",
+          "snNoList",
+          "labelList"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "移动端 portalGetByTaskNo：WMS validPortalTaskOwner 后 getByTaskNo。门户同路径方法走后台 getByTaskNo 再由 BFF 核盘点单。",
+          "无对应货主返回 null 成功空数据；任务不存在或条件含其他货主抛异常。"
+        ],
+        "required_inputs": [
+          {
+            "name": "taskNo",
+            "zh_name": "盘点任务号",
+            "location": "path",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "stocktake_task_id",
+            "display_name": "盘点任务ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "任务主键",
+              "taskId"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "stocktake_task_no",
+            "display_name": "盘点任务号",
+            "technical_names": [
+              "taskNo"
+            ],
+            "aliases": [
+              "任务编号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "stocktake_order_no",
+            "display_name": "盘点单号",
+            "technical_names": [
+              "stocktakeNo"
+            ],
+            "aliases": [
+              "盘点单编号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_id",
+            "display_name": "仓库ID",
+            "technical_names": [
+              "warehouseId"
+            ],
+            "aliases": [
+              "仓库主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "stocktake_detail_id",
+            "display_name": "盘点明细ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "任务明细主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sku_id",
+            "display_name": "商品ID",
+            "technical_names": [
+              "skuId"
+            ],
+            "aliases": [
+              "SKU主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sku_no",
+            "display_name": "商品编号",
+            "technical_names": [
+              "skuNo"
+            ],
+            "aliases": [
+              "商品代码"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "owner_id",
+            "display_name": "货主ID",
+            "technical_names": [
+              "ownerId"
+            ],
+            "aliases": [
+              "货主主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_loc_id",
+            "display_name": "库位ID",
+            "technical_names": [
+              "locId"
+            ],
+            "aliases": [
+              "库位主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "lot_num",
+            "display_name": "批次号",
+            "technical_names": [
+              "lotNum"
+            ],
+            "aliases": [
+              "商品批次号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_zone_id",
+            "display_name": "库区ID",
+            "technical_names": [
+              "warehouseZoneId"
+            ],
+            "aliases": [
+              "任务库区主键"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "pallet_num",
+            "display_name": "托盘号",
+            "technical_names": [
+              "palletNum"
+            ],
+            "aliases": [
+              "托盘编号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "serial_no",
+            "display_name": "商品序列号",
+            "technical_names": [
+              "snNoList"
+            ],
+            "aliases": [
+              "SN",
+              "序列号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "label_no",
+            "display_name": "商品唛号",
+            "technical_names": [
+              "labelList"
+            ],
+            "aliases": [
+              "唛号",
+              "标签号"
+            ],
+            "resource": "wms_stocktake_task",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "MobileWmsInventoryStocktakePortalController#getTaskByTaskNo -> portalGetByTaskNo(taskNo, currentPhoneCondition)",
+          "InventoryStocktakeTaskService#portalGetByTaskNo -> validPortalTaskOwner -> getByTaskNo",
+          "移动端任务接口使用 currentPhoneCondition 调用 portalPage/portalGetByTaskNo，并按当前手机号对应货主校验，故数据范围为 self。",
+          "StocktakeTaskDetailsQuery 公开返回 warehouseZoneId、palletNum、snNoList、labelList；三个任务详情入口复用同一公开返回合同。"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "3b0d176b-9ec7-4d59-9802-b57a14ff89c4",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/selectTable/warehouseLoc/page"
+      },
+      "semantic": {
+        "purpose": "供仓储门户表单选择库位：分页返回库位编码/名称，并默认隐藏过渡库位、理货站、加工台，不是库存余额分页。",
+        "audiences": [
+          "仓储门户",
+          "货主"
+        ],
+        "domains": [
+          "仓储主数据",
+          "库位"
+        ],
+        "scenarios": [
+          "货主在新建盘点单或库存筛选里打开库位选择表格，挑可用存储库位。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "库位"
+        ],
+        "aliases": [
+          "门户库位选择表格",
+          "盘点选库位",
+          "WmsSelectTablePortalController.warehouseLocPage"
+        ],
+        "resource": "wms_warehouse_loc",
+        "lookup_keys": [
+          "locCode",
+          "locName",
+          "warehouseId",
+          "zoneId",
+          "locUseType",
+          "hideLocUseType",
+          "pageSize",
+          "id"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "selectTable/warehouseLoc/page 不是 /wms/inventory 库存分页。BFF 追加 hideLocUseType=STAGE/SORTATION/PS。",
+          "RemoteLocService#page -> warehouseLoc_query_getPageList，不按当前货主过滤。",
+          "SqlExecutor.page 空 pageSize 拆箱 NPE。登录只作访问策略。"
+        ],
+        "required_inputs": [
+          {
+            "name": "pageSize",
+            "zh_name": "每页条数",
+            "location": "body",
+            "required": true,
+            "schema_type": "Integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "warehouse_loc_id",
+            "display_name": "库位ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "库位主键"
+            ],
+            "resource": "wms_warehouse_loc",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_loc_code",
+            "display_name": "库位编码",
+            "technical_names": [
+              "locCode"
+            ],
+            "aliases": [
+              "库位代码"
+            ],
+            "resource": "wms_warehouse_loc",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_zone_id",
+            "display_name": "库区ID",
+            "technical_names": [
+              "zoneId"
+            ],
+            "aliases": [
+              "库区主键"
+            ],
+            "resource": "wms_warehouse_zone",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_id",
+            "display_name": "仓库ID",
+            "technical_names": [
+              "warehouseId"
+            ],
+            "aliases": [
+              "仓库主键"
+            ],
+            "resource": "wms_warehouse_loc",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "WmsSelectTablePortalController#warehouseLocPage -> WmsSelectTablePortalService#warehouseLocPage",
+          "WarehouseLocUseTypeEnum STAGE/SORTATION/PS 写入 hideLocUseType",
+          "WarehouseLocDao#page SQL warehouseLoc_query_getPageList"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "a3cb7fd5-52bf-478e-98eb-5e80cdc5d194",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/selectTable/warehouseZone/page"
+      },
+      "semantic": {
+        "purpose": "供仓储门户表单选择库区：分页返回库区编码/名称，可按仓库或区域过滤，不是库存或盘点任务列表。",
+        "audiences": [
+          "仓储门户",
+          "货主"
+        ],
+        "domains": [
+          "仓储主数据",
+          "库区"
+        ],
+        "scenarios": [
+          "货主在盘点条件或库位筛选前先选库区。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "库区"
+        ],
+        "aliases": [
+          "门户库区选择表格",
+          "选择仓库库区",
+          "WmsSelectTablePortalController.warehouseZonePage"
+        ],
+        "resource": "wms_warehouse_zone",
+        "lookup_keys": [
+          "zoneCode",
+          "zoneName",
+          "warehouseId",
+          "areaId",
+          "pageSize",
+          "id"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "selectTable/warehouseZone/page 直转 RemoteZoneService#page，无货主过滤，无 hideLocUseType。",
+          "不是库位选择，也不是库存分页。pageSize 必填。"
+        ],
+        "required_inputs": [
+          {
+            "name": "pageSize",
+            "zh_name": "每页条数",
+            "location": "body",
+            "required": true,
+            "schema_type": "Integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "warehouse_zone_id",
+            "display_name": "库区ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "库区主键"
+            ],
+            "resource": "wms_warehouse_zone",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_zone_code",
+            "display_name": "库区编码",
+            "technical_names": [
+              "zoneCode"
+            ],
+            "aliases": [
+              "库区代码"
+            ],
+            "resource": "wms_warehouse_zone",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "area_id",
+            "display_name": "区域ID",
+            "technical_names": [
+              "areaId"
+            ],
+            "aliases": [
+              "区域主键"
+            ],
+            "resource": "wms_warehouse_area",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_id",
+            "display_name": "仓库ID",
+            "technical_names": [
+              "warehouseId"
+            ],
+            "aliases": [
+              "仓库主键"
+            ],
+            "resource": "wms_warehouse_zone",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "WmsSelectTablePortalController#warehouseZonePage -> RemoteZoneService#page /wms/api/warehouse/warehouseZone/page"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "d34bfdb8-0ec6-4999-967e-2610658d0c72",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/selectTable/warehouseArea/page"
+      },
+      "semantic": {
+        "purpose": "供仓储门户表单选择仓库区域：分页返回区域编码/名称，可按仓库过滤，不是库区/库位选择。",
+        "audiences": [
+          "仓储门户",
+          "货主"
+        ],
+        "domains": [
+          "仓储主数据",
+          "仓库区域"
+        ],
+        "scenarios": [
+          "货主在部分盘点条件里先选区域，再带出库区库位。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "仓库区域"
+        ],
+        "aliases": [
+          "门户区域选择表格",
+          "选择仓库区域",
+          "WmsSelectTablePortalController.warehouseAreaPage"
+        ],
+        "resource": "wms_warehouse_area",
+        "lookup_keys": [
+          "areaCode",
+          "areaName",
+          "warehouseId",
+          "pageSize",
+          "id"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "selectTable/warehouseArea/page 直转 RemoteAreaService#page，无当前货主过滤。",
+          "与 warehouseZone/warehouseLoc 选择表格平级，不是库存。"
+        ],
+        "required_inputs": [
+          {
+            "name": "pageSize",
+            "zh_name": "每页条数",
+            "location": "body",
+            "required": true,
+            "schema_type": "Integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "area_id",
+            "display_name": "区域ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "区域主键"
+            ],
+            "resource": "wms_warehouse_area",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "area_code",
+            "display_name": "区域编码",
+            "technical_names": [
+              "areaCode"
+            ],
+            "aliases": [
+              "区域代码"
+            ],
+            "resource": "wms_warehouse_area",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_id",
+            "display_name": "仓库ID",
+            "technical_names": [
+              "warehouseId"
+            ],
+            "aliases": [
+              "仓库主键"
+            ],
+            "resource": "wms_warehouse_area",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "WmsSelectTablePortalController#warehouseAreaPage -> RemoteAreaService#page /wms/api/warehouse/warehouseArea/page",
+          "SQL warehouseArea_query_getPageList"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "f91d7e9d-8b92-4327-b502-cf65919e0982",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/selectTable/owner/page"
+      },
+      "semantic": {
+        "purpose": "供仓储门户表单选择货主：分页返回货主编码/名称，BFF 不写入当前手机号，因此是全局货主下拉而不是当前货主。",
+        "audiences": [
+          "仓储门户",
+          "货主"
+        ],
+        "domains": [
+          "仓储主数据",
+          "货主"
+        ],
+        "scenarios": [
+          "门户盘点或库存表单打开货主选择表格，按编码或名称挑货主，不自动限定登录人。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "货主"
+        ],
+        "aliases": [
+          "门户货主选择表格",
+          "货主下拉分页",
+          "WmsSelectTablePortalController.ownerPage"
+        ],
+        "resource": "wms_owner",
+        "lookup_keys": [
+          "ownerCode",
+          "ownerName",
+          "status",
+          "userIds",
+          "pageSize",
+          "id"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "selectTable/owner/page 不调 currentMobile()；对比 skuPage 会按手机号解析货主。请求可带 tel，WMS OwnerService#page 才把 tel 转 userIds。",
+          "不是库存、不是盘点单。登录不影响数据范围。pageSize 必填。"
+        ],
+        "required_inputs": [
+          {
+            "name": "pageSize",
+            "zh_name": "每页条数",
+            "location": "body",
+            "required": true,
+            "schema_type": "Integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "owner_id",
+            "display_name": "货主ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "货主主键"
+            ],
+            "resource": "wms_owner",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "owner_code",
+            "display_name": "货主编码",
+            "technical_names": [
+              "ownerCode"
+            ],
+            "aliases": [
+              "货主代码"
+            ],
+            "resource": "wms_owner",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "owner_user_id",
+            "display_name": "货主用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "关联门户用户ID"
+            ],
+            "resource": "wms_owner",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "portal_enterprise_id",
+            "display_name": "门户企业ID",
+            "technical_names": [
+              "portalEnterpriseId"
+            ],
+            "aliases": [
+              "认证企业ID"
+            ],
+            "resource": "wms_owner",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "WmsSelectTablePortalController#ownerPage -> RemoteOwnerService#page",
+          "OwnerService#page：tel 非空则 resolveUserIdsByMobile 后 SQL user_id in (:userIds)；本门户入口未设 tel",
+          "SQL owner_query_getPageList 无 tel 列过滤"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "a14e0e91-01e6-4bb6-b7f4-903f20eeea0e",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/selectTable/sku/page"
+      },
+      "semantic": {
+        "purpose": "供仓储门户表单选择当前登录货主的商品：先按手机号查货主再强制 ownerId 分页 SKU，无货主返回空页。",
+        "audiences": [
+          "仓储门户",
+          "货主"
+        ],
+        "domains": [
+          "仓储主数据",
+          "商品"
+        ],
+        "scenarios": [
+          "货主在库存或盘点条件里打开商品选择表格，只看到本货主 SKU。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "商品",
+          "货主"
+        ],
+        "aliases": [
+          "门户商品选择表格",
+          "货主SKU下拉",
+          "WmsSelectTablePortalController.skuPage"
+        ],
+        "resource": "wms_sku",
+        "lookup_keys": [
+          "skuCode",
+          "skuName",
+          "ownerId",
+          "barCode",
+          "status",
+          "pageSize",
+          "id",
+          "goodsId"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "skuPage 用 currentMobile() 查 ownerPage(tel,pageSize=1) 后覆盖 condition.ownerId，与 owner/page 全局货主不同。",
+          "请求里的 ownerId 会被覆盖。无货主 emptySkuPage，此时 pageSize 非必填；有货主后走 sku_query_getPageList。",
+          "不是库存数量分页。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "sku_id",
+            "display_name": "商品ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "SKU主键"
+            ],
+            "resource": "wms_sku",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sku_code",
+            "display_name": "商品编码",
+            "technical_names": [
+              "skuCode"
+            ],
+            "aliases": [
+              "SKU编码"
+            ],
+            "resource": "wms_sku",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "goods_id",
+            "display_name": "运营端商品ID",
+            "technical_names": [
+              "goodsId"
+            ],
+            "aliases": [
+              "超级运营商品ID"
+            ],
+            "resource": "wms_sku",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "owner_id",
+            "display_name": "货主ID",
+            "technical_names": [
+              "ownerId"
+            ],
+            "aliases": [
+              "货主主键"
+            ],
+            "resource": "wms_sku",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "WmsSelectTablePortalController#skuPage -> WmsSelectTablePortalService#skuPage",
+          "buildOwnerPageCondition(tel=currentMobile) -> RemoteOwnerService#page -> 取 rows.getFirst().id 写入 SkuPageCondition.ownerId",
+          "RemoteSkuService#page SQL sku_query_getPageList and t.owner_id = :ownerId"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "94045468-c32a-4c6a-9b61-a0ed17b3b63c",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/dashboard/accountOverview"
+      },
+      "semantic": {
+        "purpose": "供仓储门户工作台展示当前登录货主账户概览：库存总量、SKU 种类、待入库单数、待出库单数，不是列表也不是盘点状态分布。",
+        "audiences": [
+          "仓储门户",
+          "货主"
+        ],
+        "domains": [
+          "仓储工作台",
+          "库存统计"
+        ],
+        "scenarios": [
+          "货主打开门户仓储工作台，看本货主总库存和待入出库单据张数卡片。"
+        ],
+        "actions": [
+          "query"
+        ],
+        "entities": [
+          "货主库存概览",
+          "入库单",
+          "出库单"
+        ],
+        "aliases": [
+          "门户仓储账户概览",
+          "货主库存待办统计",
+          "WmsDashboardPortalController.accountOverview"
+        ],
+        "resource": "wms_dashboard",
+        "lookup_keys": [
+          "inventoryTotal",
+          "skuCategoryCount",
+          "pendingInboundCount",
+          "pendingOutboundCount"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "POST /wms/dashboard/accountOverview 无请求体，BFF currentMobile() 后 Feign /api/dashboard/portal/accountOverview/{phone}。",
+          "移动端另有 accountOverview/{phone} 可传任意手机号。返回四项汇总，不是趋势、不是库存分页。",
+          "无货主返回全 0 概览。SQL 按 owner_id 汇总 cs_inv_lot_loc、待收 ASN、待发 SO。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "WmsDashboardPortalController#accountOverview -> WmsDashboardPortalService#accountOverview -> RemotePortalDashboardFeign#accountOverview(phone)",
+          "PortalDashboardService#accountOverview(phone) -> PortalDashboardDao#accountOverview(ownerId)",
+          "SQL portal_dashboard_account_overview：inventory_total/sku_category_count/pending_inbound_count/pending_outbound_count"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "5f29a3a6-1040-42e5-939f-517b621e5fda",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/dashboard/inboundOutboundTrend"
+      },
+      "semantic": {
+        "purpose": "供仓储门户工作台展示当前货主近 30 天每日出入库 EA 趋势：按日补齐日期，不是单据列表也不是账户卡片。",
+        "audiences": [
+          "仓储门户",
+          "货主"
+        ],
+        "domains": [
+          "仓储工作台",
+          "出入库统计"
+        ],
+        "scenarios": [
+          "货主在门户工作台看最近一个月每天入库量和出库量折线。"
+        ],
+        "actions": [
+          "query"
+        ],
+        "entities": [
+          "出入库趋势"
+        ],
+        "aliases": [
+          "门户出入库趋势",
+          "近一个月仓储趋势",
+          "WmsDashboardPortalController.inboundOutboundTrend"
+        ],
+        "resource": "wms_dashboard",
+        "lookup_keys": [
+          "date",
+          "inboundQty",
+          "outboundQty"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "BFF 用会话手机号组 PortalDashboardTrendCondition，忽略调用方自带天数；WMS 固定 DEFAULT_TREND_DAYS=30。",
+          "与 accountOverview 卡片不同；与库存/盘点分页不同。无货主返回空列表。",
+          "SQL 按 ASN 收货 EA 与 SO 发运 EA 按日汇总后 fillTrendDates。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "WmsDashboardPortalController#inboundOutboundTrend -> WmsDashboardPortalService#inboundOutboundTrend",
+          "PortalDashboardService#inboundOutboundTrend(condition) 使用 LocalDate.now 与 30 天，不读请求 days",
+          "SQL portal_dashboard_inbound_outbound_trend"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "48d23ce1-c3de-4f2b-a55b-a795f616e412",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/mobile/dashboard/accountOverview"
+      },
+      "semantic": {
+        "purpose": "供仓储移动端首页展示当前登录货主账户概览：与门户 accountOverview 同一会话手机号统计四项汇总。",
+        "audiences": [
+          "仓储移动端",
+          "货主"
+        ],
+        "domains": [
+          "仓储工作台",
+          "库存统计"
+        ],
+        "scenarios": [
+          "货主打开小程序仓储首页，看库存总量和待入出库卡片。"
+        ],
+        "actions": [
+          "query"
+        ],
+        "entities": [
+          "货主库存概览"
+        ],
+        "aliases": [
+          "移动端仓储账户概览",
+          "小程序库存待办卡片",
+          "MobileWmsDashboardPortalController.accountOverview()"
+        ],
+        "resource": "wms_dashboard",
+        "lookup_keys": [
+          "inventoryTotal",
+          "skuCategoryCount",
+          "pendingInboundCount",
+          "pendingOutboundCount"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "路径 /wms/mobile/dashboard/accountOverview，无 path phone，使用 currentMobile()；区别于同 Controller 的 /accountOverview/{phone}。",
+          "与门户 /wms/dashboard/accountOverview 执行相同统计 SQL，端别和路径不同。不是列表。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "MobileWmsDashboardPortalController#accountOverview() -> WmsDashboardPortalService#accountOverview()",
+          "与门户共用 PortalDashboardDao#accountOverview"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "61927f98-c56a-491d-801d-435d0e6546e3",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/mobile/dashboard/accountOverview/{phone}"
+      },
+      "semantic": {
+        "purpose": "供仓储移动端按路径手机号取货主账户概览：BFF 不覆盖为当前会话手机，可查询请求指定号码对应货主的四项汇总。",
+        "audiences": [
+          "仓储移动端",
+          "货主"
+        ],
+        "domains": [
+          "仓储工作台",
+          "库存统计"
+        ],
+        "scenarios": [
+          "小程序按已选或传入的货主手机号刷新首页库存卡片，不一定等于当前登录号。"
+        ],
+        "actions": [
+          "query"
+        ],
+        "entities": [
+          "货主库存概览"
+        ],
+        "aliases": [
+          "移动端按手机号账户概览",
+          "指定货主工作台统计",
+          "MobileWmsDashboardPortalController.accountOverview(String)"
+        ],
+        "resource": "wms_dashboard",
+        "lookup_keys": [
+          "phone",
+          "inventoryTotal",
+          "skuCategoryCount",
+          "pendingInboundCount",
+          "pendingOutboundCount"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "唯一带 {phone} 的门户 Dashboard。WmsDashboardPortalService#accountOverview(phone) 不调用 currentMobile()。",
+          "默认会话版 accountOverview 与本接口路径不同。phone 可指向其他货主，故不是严格 self。",
+          "空号或无货主返回全 0，不抛错。"
+        ],
+        "required_inputs": [
+          {
+            "name": "phone",
+            "zh_name": "货主手机号",
+            "location": "path",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "owner_phone",
+            "display_name": "货主手机号",
+            "technical_names": [
+              "phone"
+            ],
+            "aliases": [
+              "登录手机号"
+            ],
+            "resource": "wms_owner",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "MobileWmsDashboardPortalController#accountOverview(String phone) -> remotePortalDashboardFeign.accountOverview(phone)",
+          "PortalDashboardService#accountOverview(String) 直接 findOwnerByPhone(phone)",
+          "WMS PortalDashboardController 仅有 /accountOverview/{phone}，门户无参版由 BFF 补手机号"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "0cd8e551-cdf2-40e3-beda-8e2bc358b4b5",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/mobile/dashboard/inboundOutboundTrend"
+      },
+      "semantic": {
+        "purpose": "供仓储移动端首页展示当前货主近 30 天出入库趋势：与门户 inboundOutboundTrend 同一会话手机号和补齐日期逻辑。",
+        "audiences": [
+          "仓储移动端",
+          "货主"
+        ],
+        "domains": [
+          "仓储工作台",
+          "出入库统计"
+        ],
+        "scenarios": [
+          "货主在小程序工作台查看近一个月每天出入库量。"
+        ],
+        "actions": [
+          "query"
+        ],
+        "entities": [
+          "出入库趋势"
+        ],
+        "aliases": [
+          "移动端出入库趋势",
+          "小程序仓储趋势图",
+          "MobileWmsDashboardPortalController.inboundOutboundTrend"
+        ],
+        "resource": "wms_dashboard",
+        "lookup_keys": [
+          "date",
+          "inboundQty",
+          "outboundQty"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "路径 /wms/mobile/dashboard/inboundOutboundTrend，BFF 仍用 currentMobile()，没有按 path phone 的趋势接口。",
+          "不是账户概览卡片，也不是库存分页。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "MobileWmsDashboardPortalController#inboundOutboundTrend -> WmsDashboardPortalService#inboundOutboundTrend",
+          "与门户共用 portal_dashboard_inbound_outbound_trend"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "82f9db20-eaed-4c17-ba70-98c207796817",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/warehouse/page"
+      },
+      "semantic": {
+        "purpose": "供仓储门户分页查询已启用仓库名片：名称、地区、库容状态和脱敏联系方式，可选登录，不按当前货主过滤。",
+        "audiences": [
+          "仓储门户"
+        ],
+        "domains": [
+          "仓储主数据",
+          "仓库"
+        ],
+        "scenarios": [
+          "访客或货主在门户仓库黄页按城市或库容状态浏览可合作仓库，而不是查本货主库存。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "仓库"
+        ],
+        "aliases": [
+          "门户启用仓库分页",
+          "仓库黄页列表",
+          "WmsWarehousePortalController.page"
+        ],
+        "resource": "wms_warehouse",
+        "lookup_keys": [
+          "warehouseName",
+          "warehouseCode",
+          "provinceCode",
+          "cityCode",
+          "countyCode",
+          "warehouseType",
+          "capacityStatus",
+          "pageSize",
+          "id"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "@OptionalLogin POST /wms/warehouse/page，转发 portalEnabledInfoPage，SQL 固定 status=1。登录与否不改变结果集。",
+          "分页组装 WmsWarehousePortalQuery，status 写死 1，联系方式脱敏，不做地理编码；getById 才补坐标和完整字段。",
+          "不是 selectTable 库位/货主，也不是库存。pageSize 空值拆箱 NPE。"
+        ],
+        "required_inputs": [
+          {
+            "name": "pageSize",
+            "zh_name": "每页条数",
+            "location": "body",
+            "required": true,
+            "schema_type": "Integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "warehouse_id",
+            "display_name": "仓库ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "仓库主键"
+            ],
+            "resource": "wms_warehouse",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_code",
+            "display_name": "仓库编码",
+            "technical_names": [
+              "warehouseCode"
+            ],
+            "aliases": [
+              "仓库代码"
+            ],
+            "resource": "wms_warehouse",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "WmsWarehousePortalController#page @OptionalLogin -> WmsWarehousePortalService#page",
+          "RemoteWarehouseService#portalEnabledInfoPage -> WarehouseService#enabledInfoPage 脱敏 tel/mobile",
+          "SQL warehouse_enabled_info_query_getPageList：cs_warehouse deleted=0 and status='1'"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "9c5cda32-1de8-409c-9e8e-02f7503e9ab6",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/wms/warehouse/getById/{id}"
+      },
+      "semantic": {
+        "purpose": "供仓储门户按仓库ID查看已启用或任意仓库详情：含省市区编码、面积库容和备注，并尝试高德地理编码，可选登录。",
+        "audiences": [
+          "仓储门户"
+        ],
+        "domains": [
+          "仓储主数据",
+          "仓库"
+        ],
+        "scenarios": [
+          "用户从仓库黄页点进某仓库，看完整地址、联系人和地图坐标。"
+        ],
+        "actions": [
+          "detail",
+          "query"
+        ],
+        "entities": [
+          "仓库"
+        ],
+        "aliases": [
+          "门户仓库详情",
+          "按ID查看仓库",
+          "WmsWarehousePortalController.getById"
+        ],
+        "resource": "wms_warehouse",
+        "lookup_keys": [
+          "id",
+          "warehouseCode",
+          "provinceCode",
+          "cityCode",
+          "countyCode",
+          "attachmentUuid",
+          "longitude",
+          "latitude"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "@OptionalLogin getById/{id} 调 portalGetById，WMS 即 WarehouseService#getById，不限制 status=1。",
+          "详情 toPortalQuery(WarehouseItem) 含 volume/remark/省市区代码，fillCoordinate 调 AmapOpenApiService；分页行无这些字段。",
+          "id 空 WMS 抛 ID_NOT_EMPTY。contactLoginRequired 字段未赋值。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "仓库ID",
+            "location": "path",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "warehouse_id",
+            "display_name": "仓库ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "仓库主键"
+            ],
+            "resource": "wms_warehouse",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_code",
+            "display_name": "仓库编码",
+            "technical_names": [
+              "warehouseCode"
+            ],
+            "aliases": [
+              "仓库代码"
+            ],
+            "resource": "wms_warehouse",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "province_code",
+            "display_name": "省编码",
+            "technical_names": [
+              "provinceCode"
+            ],
+            "aliases": [
+              "省份代码"
+            ],
+            "resource": "wms_warehouse",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "city_code",
+            "display_name": "市编码",
+            "technical_names": [
+              "cityCode"
+            ],
+            "aliases": [
+              "城市代码"
+            ],
+            "resource": "wms_warehouse",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "county_code",
+            "display_name": "区县编码",
+            "technical_names": [
+              "countyCode"
+            ],
+            "aliases": [
+              "区县代码"
+            ],
+            "resource": "wms_warehouse",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "attachment_uuid",
+            "display_name": "附件UUID",
+            "technical_names": [
+              "attachmentUuid"
+            ],
+            "aliases": [
+              "仓库附件UUID"
+            ],
+            "resource": "wms_warehouse",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "WmsWarehousePortalController#getById @OptionalLogin -> WmsWarehousePortalService#getById",
+          "RemoteWarehouseService#portalGetById -> WarehouseService#getById(dao.findById)",
+          "fillCoordinate：amapOpenApiService.geocode(fullAddress) 失败不影响详情"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    }
+  ]
+}

@@ -230,6 +230,8 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "resolve_value_candidates",
         "execute_mapped_data_query",
         "search_forwarding_interfaces",
+        "compare_forwarding_interfaces",
+        "read_forwarding_interface_detail",
         "read_forwarding_request_history",
         "prepare_forwarding_request",
         "execute_forwarding_request",
@@ -259,6 +261,8 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
             "search_value_mappings",
             "resolve_value_candidates",
             "search_forwarding_interfaces",
+            "compare_forwarding_interfaces",
+            "read_forwarding_interface_detail",
             "read_forwarding_request_history",
         )
     )
@@ -316,6 +320,7 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
     assert "^[a-z][a-z0-9_-]{0,31}$" in environment_schema
     assert "detect a registered environment alias" in environment_schema
     assert "bug_investigate" in str(prepare_schema["properties"]["intent_type"])
+    assert "interface_search" in str(prepare_schema["properties"]["intent_type"])
     assert "execution_contract" in PREPARE_TOOL_DESCRIPTION
     assert "read_task_context" in PREPARE_TOOL_DESCRIPTION
     assert "sensitive" in READ_TASK_CONTEXT_TOOL_DESCRIPTION

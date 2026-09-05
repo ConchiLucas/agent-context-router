@@ -20,13 +20,13 @@ const ACTION_COPY: Record<
 > = {
   restore: {
     title: "从数据库恢复到主目录",
-    description: "删除主目录现有文档和部署文件，再用数据库内容完整替换。",
+    description: "原子恢复数据库中的文档、部署配置和运行脚本；失败时保留原目录。",
     confirm: "确认覆盖主目录",
     busy: "正在恢复…",
   },
   publish: {
     title: "用主目录覆盖数据库",
-    description: "删除数据库原有文档和部署文件，再保存主目录当前内容。",
+    description: "将主目录当前文档、部署配置和运行脚本保存为新的数据库版本。",
     confirm: "确认覆盖数据库",
     busy: "正在保存…",
   },
@@ -71,7 +71,7 @@ export function WorkspaceRuntimeSync({ workspaceId }: WorkspaceRuntimeSyncProps)
       setResult(next);
       setPendingAction(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "文档与部署文件同步失败");
+      setError(caught instanceof Error ? caught.message : "工作空间文件同步失败");
     } finally {
       setBusy(false);
     }
@@ -84,7 +84,7 @@ export function WorkspaceRuntimeSync({ workspaceId }: WorkspaceRuntimeSyncProps)
         className="secondary-button"
         onClick={() => setOpen(true)}
       >
-        文档与部署文件
+        工作空间文件
       </button>
       {open ? (
         <div className="project-settings-modal" role="presentation">
@@ -104,7 +104,7 @@ export function WorkspaceRuntimeSync({ workspaceId }: WorkspaceRuntimeSyncProps)
             <header>
               <div>
                 <span className="file-chip">主映射目录</span>
-                <h2 id="workspace-shared-files-title">文档与部署文件</h2>
+                <h2 id="workspace-shared-files-title">工作空间文件</h2>
               </div>
               <button
                 ref={closeButtonRef}
@@ -120,12 +120,12 @@ export function WorkspaceRuntimeSync({ workspaceId }: WorkspaceRuntimeSyncProps)
 
             <div className="workspace-shared-files-content">
               <p className="workspace-runtime-sync-note">
-                文档可由配置的共享目录读取；部署文件只属于这个主目录。两种操作都是全量覆盖。
+                数据库保存带摘要的版本；恢复会先暂存并校验，再原子替换主目录中的受管目录。
               </p>
               {error ? <div className="error-banner" role="alert">{error}</div> : null}
               {result ? (
                 <div className="success-banner" role="status">
-                  操作完成：文档 {result.document_count} 个，部署文件 {result.deploy_count} 个。
+                  操作完成：版本 {result.revision}，文档 {result.document_count} 个，部署文件 {result.deploy_count} 个，脚本 {result.script_count + result.host_runtime_count} 个。
                 </div>
               ) : null}
               <div className="workspace-shared-files-actions">

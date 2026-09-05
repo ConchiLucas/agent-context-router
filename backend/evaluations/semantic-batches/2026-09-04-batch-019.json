@@ -1,0 +1,2076 @@
+{
+  "schema_version": "context-router-interface-semantic-batch-v1",
+  "batch_id": "panzhihua-c12-portal-scts-select-table-019",
+  "workspace_id": "b9ce65eddc27437d9615177fbd07cb0a",
+  "family_groups": {
+    "权限组织与部门选择": 3,
+    "当前系统用户选择": 1,
+    "运营销售合同选择": 2,
+    "运营客户与收货地址": 2,
+    "运营供应链部门资料": 1,
+    "运营商品规格包装": 3,
+    "运营仓库选择": 2
+  },
+  "generation_policy": "完整覆盖 c12-portal SctsSelectTableController 14 个有效接口。BFF 前 4 个转发 c12-auth 组织平铺列表、部门树平铺、当前系统用户分页；销售合同/客户/SKU/规格/包装转发 c12-scts SelectTableService；供应链部门与发运仓库走 SCTS 主档分页；收货地址实际走 ConsigneeService.page；库存仓库转发 c12-data inventoryPage。按权限组织部门、用户、销售合同、客户收货地址、供应链部门、商品规格包装、仓库分组。源码追到 Feign、Service/DAO/SQL、数据权限开关和 BFF 平铺。未使用 copy_from_interface_id，未写入 c12-auth/c12-scts/c12-data 同源路径。",
+  "items": [
+    {
+      "interface_id": "62db22f9-24e5-4c4d-aa21-691dc8b2f7c9",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/selectTable/getOrganizationTreeChildrenByPermission"
+      },
+      "semantic": {
+        "purpose": "供供应链贸易小程序按当前登录账号权限列出可选组织：BFF 路径名像懒加载子节点，实际转发 c12-auth listAllByPermission，清空 parentId 后返回 OrganizationQuery 平铺列表，不是组织树。数据权限开启且非超管时只返回直接授权组织；关闭或超管则按名称/编码等条件查全部组织。",
+        "audiences": [
+          "供应链贸易小程序",
+          "运营人员"
+        ],
+        "domains": [
+          "供应链贸易",
+          "组织权限"
+        ],
+        "scenarios": [
+          "运营人员在供应链小程序下拉中挑选自己有权限的组织，用来继续查部门或用户，而不是懒加载组织树子节点。"
+        ],
+        "actions": [
+          "list",
+          "query"
+        ],
+        "entities": [
+          "组织"
+        ],
+        "aliases": [
+          "小程序权限组织平铺列表",
+          "运营小程序可选组织",
+          "SctsSelectTableController.getOrganizationTreeChildrenByPermission"
+        ],
+        "resource": "organization",
+        "lookup_keys": [
+          "name",
+          "keyword",
+          "code",
+          "companyName",
+          "companyCode",
+          "type",
+          "identityCode",
+          "status",
+          "selectableAdministrativeLevel",
+          "organizationIds",
+          "id",
+          "socialCreditCode",
+          "dataSource",
+          "companyId",
+          "tenancy",
+          "codes",
+          "parentId",
+          "externalId"
+        ],
+        "cardinality": "many",
+        "ownership": "unknown",
+        "discriminators": [
+          "c12-portal BFF POST /api/mini/scts/selectTable/getOrganizationTreeChildrenByPermission 实际调 RemoteOrganizationService#listAllByPermission，不是同 Feign 的 getOrganizationTreeChildrenByPermission；返回 List<OrganizationQuery> 无 children。",
+          "OrganizationService#listAllByPermission 固定 setParentId(null)；数据权限开启且非超管时用直接授权组织覆盖 organizationIds，请求 ID 不能扩大范围。数据权限关闭或超管/空会话不过滤授权组织。",
+          "不是 getDepartmentTree/getCommonDeptTreeByPermission：那些要组织且返回平铺部门。tenantId/tenantIds/treeScene 未进入 SQL。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "organization_id",
+            "display_name": "组织ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "公司主键"
+            ],
+            "resource": "organization",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "organization_code",
+            "display_name": "组织编码",
+            "technical_names": [
+              "code",
+              "companyCode"
+            ],
+            "aliases": [
+              "公司编码"
+            ],
+            "resource": "organization",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "social_credit_code",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "socialCreditCode"
+            ],
+            "aliases": [
+              "社会信用代码"
+            ],
+            "resource": "organization",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "parent_organization_id",
+            "display_name": "上级组织ID",
+            "technical_names": [
+              "parentId"
+            ],
+            "aliases": [
+              "父公司ID"
+            ],
+            "resource": "organization",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_id",
+            "display_name": "公司ID",
+            "technical_names": [
+              "companyId"
+            ],
+            "aliases": [
+              "公司主键"
+            ],
+            "resource": "organization",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "external_id",
+            "display_name": "外部组织ID",
+            "technical_names": [
+              "externalId"
+            ],
+            "aliases": [
+              "上游组织主键"
+            ],
+            "resource": "organization",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": [
+          "SctsSelectTableController#getOrganizationTreeChildrenByPermission(OrganizationCondition) -> RemoteOrganizationService#listAllByPermission，Javadoc 写懒加载子节点但未调 getOrganizationTreeChildrenByPermission",
+          "OrganizationController#listAllByPermission -> OrganizationService#listAllByPermission -> OrganizationDao#getTree -> organization_query_getTree.sql",
+          "listAllByPermission 清空 parentId；resolveDirectPermissionOrganizationIds 在数据权限开启且非超管时覆盖 organizationIds",
+          "fillCompanyCompatibleFields 把 name/code 写入 companyName/companyCode；selectableAdministrativeLevel 仅 Java 过滤",
+          "organization_query_getTree.sql 实际消费 dataSource、companyId、tenancy、codes；返回 OrganizationQuery 公开包含 parentId、companyId、externalId。parentId 请求值虽被 listAllByPermission 清空，但返回字段仍具有组织层级检索价值。"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "edd3bb4c-42ff-4472-97cc-3e013324af47",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/selectTable/getDepartmentTree"
+      },
+      "semantic": {
+        "purpose": "供供应链贸易小程序按指定组织取出部门并平铺成列表：BFF 调 c12-auth /tree 后再 flattenDepartmentTree，去掉 children。数据权限开启时请求组织必须落在当前用户授权组织内，然后对该组织返回全量部门，不按部门权限裁剪。",
+        "audiences": [
+          "供应链贸易小程序",
+          "运营人员"
+        ],
+        "domains": [
+          "供应链贸易",
+          "部门权限"
+        ],
+        "scenarios": [
+          "运营人员已选组织后，在小程序分页条件里拿该组织全部部门平铺列表，而不是按部门权限裁剪，也不是供应链资料部门分页。"
+        ],
+        "actions": [
+          "list",
+          "query"
+        ],
+        "entities": [
+          "部门",
+          "组织"
+        ],
+        "aliases": [
+          "小程序指定组织部门平铺列表",
+          "运营小程序部门条件列表",
+          "SctsSelectTableController.getDepartmentTree"
+        ],
+        "resource": "department",
+        "lookup_keys": [
+          "organizationId",
+          "tenantId",
+          "organizationIds",
+          "name",
+          "status",
+          "id",
+          "code",
+          "parentId",
+          "companyId",
+          "externalId"
+        ],
+        "cardinality": "many",
+        "ownership": "unknown",
+        "discriminators": [
+          "c12-portal BFF POST /api/mini/scts/selectTable/getDepartmentTree -> RemoteDepartmentService#tree -> DepartmentService#queryDepartmentTree -> buildDeptTreeByOrganizationPermission + TreeBuildOptions.fullTree，再 flattenDepartmentTree。",
+          "数据权限开启且非超管：请求组织必须属于 getUserPermissionTenantIds，否则空列表；之后 fullTree 把 deptIds 置空，返回该组织全部部门。数据权限关闭时可按请求组织查任意组织部门。无当前组织兜底。",
+          "对比 getCommonDeptTreeByPermission：系统码 scts 且数据权限开启时按用户部门权限+子孙裁剪，本接口不按部门权限裁剪。",
+          "DepartmentCondition @AssertTrue isOrganizationSelected：organizationId/tenantId/organizationIds/tenantIds 四选一，无单叶子无条件必填。code/parentId/type/dataSource/tenancy/externalIds 未进 SQL。",
+          "BFF flattenDepartmentTree 递归平铺并 setChildren(null)，cardinality 是列表不是树。不是 operationsStaffDepartmentPage 的 cs_department 分页。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "department_id",
+            "display_name": "部门ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "部门主键"
+            ],
+            "resource": "department",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "department_code",
+            "display_name": "部门编码",
+            "technical_names": [
+              "code"
+            ],
+            "aliases": [
+              "部门代码"
+            ],
+            "resource": "department",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "organization_id",
+            "display_name": "组织ID",
+            "technical_names": [
+              "organizationId",
+              "tenantId"
+            ],
+            "aliases": [
+              "组织主键",
+              "历史租户ID"
+            ],
+            "resource": "department",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "parent_department_id",
+            "display_name": "上级部门ID",
+            "technical_names": [
+              "parentId"
+            ],
+            "aliases": [
+              "父部门ID"
+            ],
+            "resource": "department",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_id",
+            "display_name": "公司ID",
+            "technical_names": [
+              "companyId"
+            ],
+            "aliases": [
+              "公司主键"
+            ],
+            "resource": "department",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "external_id",
+            "display_name": "外部部门ID",
+            "technical_names": [
+              "externalId"
+            ],
+            "aliases": [
+              "上游部门主键"
+            ],
+            "resource": "department",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "SctsSelectTableController#getDepartmentTree(DepartmentCondition) @Valid -> RemoteDepartmentService#tree -> DepartmentController#queryTree",
+          "DepartmentService#queryDepartmentTree -> buildDeptTreeByOrganizationPermission(filterByPermission=当前系统数据权限) -> buildDeptTreeInternal(fullTree(name))",
+          "DepartmentDao#getTree -> department_query_getTree.sql：organizationId/organizationIds/id/deptIds/status；name 仅内存 contains 搜索",
+          "flattenDepartmentTree 清空 children 后平铺全部节点"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "ca390577-e227-408d-9724-55e2fce9f6e3",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/selectTable/getCommonDeptTreeByPermission"
+      },
+      "semantic": {
+        "purpose": "供供应链贸易小程序按指定组织取权限部门并平铺成列表：BFF 调 getCommonDeptTreeByPermission 后再 flattenDepartmentTree。系统码为 scts 且数据权限开启时按当前用户部门权限及子孙裁剪；非 scts 则与 getDepartmentTree 一样只限制组织后返回该组织全量部门。",
+        "audiences": [
+          "供应链贸易小程序",
+          "运营人员"
+        ],
+        "domains": [
+          "供应链贸易",
+          "部门权限"
+        ],
+        "scenarios": [
+          "运营人员在供应链小程序按已选组织拉取自己有权限的部门平铺列表，用来授权或筛选，而不是拿该组织全部部门。"
+        ],
+        "actions": [
+          "list",
+          "query"
+        ],
+        "entities": [
+          "部门",
+          "组织"
+        ],
+        "aliases": [
+          "小程序权限部门平铺列表",
+          "运营小程序按权限选部门",
+          "SctsSelectTableController.getCommonDeptTreeByPermission"
+        ],
+        "resource": "department",
+        "lookup_keys": [
+          "organizationId",
+          "tenantId",
+          "organizationIds",
+          "name",
+          "status",
+          "id",
+          "code",
+          "parentId",
+          "companyId",
+          "externalId"
+        ],
+        "cardinality": "many",
+        "ownership": "unknown",
+        "discriminators": [
+          "c12-portal BFF POST /api/mini/scts/selectTable/getCommonDeptTreeByPermission -> RemoteDepartmentService#getCommonDeptTreeByPermission -> DepartmentService#getCommonDeptTreeByCurrentSystem，再 flattenDepartmentTree。",
+          "数据权限开启且 SystemCodeUtil.requiredSystemCode()=scts：buildDeptTreeInternal(byPermissionDescendantOnly)，用 getUserDeptPermissionIds 加子孙覆盖 deptIds，不走组织授权 intersect。非 scts 或数据权限关闭时与 getDepartmentTree 同为组织范围+fullTree。",
+          "不是 getCommonDeptTreeByPermissionOrCurrentOrganization，缺组织不会回填当前登录组织。对比 getDepartmentTree：本接口在 scts 下按部门权限裁剪。",
+          "DepartmentCondition @AssertTrue isOrganizationSelected：organizationId/tenantId/organizationIds/tenantIds 四选一，无单叶子无条件必填。code/parentId/type/dataSource/tenancy/externalIds 未进 SQL。",
+          "BFF flattenDepartmentTree 递归平铺并 setChildren(null)，cardinality 是列表不是树。不是 operationsStaffDepartmentPage 的 cs_department 分页。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "department_id",
+            "display_name": "部门ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "部门主键"
+            ],
+            "resource": "department",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "department_code",
+            "display_name": "部门编码",
+            "technical_names": [
+              "code"
+            ],
+            "aliases": [
+              "部门代码"
+            ],
+            "resource": "department",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "organization_id",
+            "display_name": "组织ID",
+            "technical_names": [
+              "organizationId",
+              "tenantId"
+            ],
+            "aliases": [
+              "组织主键",
+              "历史租户ID"
+            ],
+            "resource": "department",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "parent_department_id",
+            "display_name": "上级部门ID",
+            "technical_names": [
+              "parentId"
+            ],
+            "aliases": [
+              "父部门ID"
+            ],
+            "resource": "department",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_id",
+            "display_name": "公司ID",
+            "technical_names": [
+              "companyId"
+            ],
+            "aliases": [
+              "公司主键"
+            ],
+            "resource": "department",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "external_id",
+            "display_name": "外部部门ID",
+            "technical_names": [
+              "externalId"
+            ],
+            "aliases": [
+              "上游部门主键"
+            ],
+            "resource": "department",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "SctsSelectTableController#getCommonDeptTreeByPermission(DepartmentCondition) @Valid -> RemoteDepartmentService#getCommonDeptTreeByPermission",
+          "DepartmentService#getCommonDeptTreeByPermission -> getCommonDeptTreeByCurrentSystem(dataScope, SourceEnum.SCT=scts)",
+          "scts+数据权限：buildDeptTreeInternal(byPermissionDescendantOnly(name))；否则 getCommonDeptTreeByPermission(condition, filterByPermission)",
+          "DepartmentDao#getTree -> department_query_getTree.sql；BFF flattenDepartmentTree 清空 children"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "291244ed-0344-46d7-96a9-bc30f2372065",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/selectTable/getUserPage"
+      },
+      "semantic": {
+        "purpose": "供供应链贸易小程序分页选择当前业务系统非管理员用户：BFF 调 c12-auth currentSystemPage，不是 auth getUserPage。固定按请求或请求头系统码过滤身份关系，排除 admin 来源；登录人有所属公司时覆盖 affiliationCompanyId；数据权限开启时再限制为授权组织。",
+        "audiences": [
+          "供应链贸易小程序",
+          "运营人员"
+        ],
+        "domains": [
+          "供应链贸易",
+          "用户权限"
+        ],
+        "scenarios": [
+          "运营人员在供应链小程序用户下拉里按姓名或手机号翻页挑选当前系统业务用户，而不是选组织、部门或门户用户。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "用户"
+        ],
+        "aliases": [
+          "小程序当前系统用户分页",
+          "运营小程序选用户",
+          "SctsSelectTableController.getUserPage"
+        ],
+        "resource": "user",
+        "lookup_keys": [
+          "userName",
+          "realName",
+          "mobile",
+          "keyword",
+          "identityCode",
+          "status",
+          "organizationId",
+          "tenantId",
+          "roleId",
+          "affiliationCompanyId",
+          "id",
+          "defaultWarehouseId",
+          "pageNumber",
+          "pageSize",
+          "systemCode",
+          "createTimeFrom",
+          "createTimeTo",
+          "roleName",
+          "systemManagerType",
+          "tenancy",
+          "companyIds",
+          "filterUserIds",
+          "subjectIdentityRelationId"
+        ],
+        "cardinality": "many",
+        "ownership": "unknown",
+        "discriminators": [
+          "c12-portal BFF POST /api/mini/scts/selectTable/getUserPage 无 @Valid，转发 RemoteUserService#currentSystemPage，不是 UserController#getUserPage，也不是 currentSystemPermissionPage。",
+          "UserService#pageCurrentSystemUsers：platformQuery=true、excludeAdminSource=true、managerType=NON_ADMIN、source=null；systemCode/dataSource 取请求或 X-System-Code，请求可改系统。登录人 affiliationCompanyId 非空则覆盖请求。数据权限开启且非超管时覆盖 viewerTenantIds。",
+          "remark/warehouseId/warehouseName/warehouseIds 未消费。pageSize 空值在 SqlExecutor.page 拆箱 NPE。返回含 password/salt，检索键不收录。"
+        ],
+        "required_inputs": [
+          {
+            "name": "pageSize",
+            "zh_name": "每页条数",
+            "location": "body",
+            "required": true,
+            "schema_type": "Integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "用户主键"
+            ],
+            "resource": "user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "user_name",
+            "display_name": "登录账号",
+            "technical_names": [
+              "userName"
+            ],
+            "aliases": [
+              "用户名"
+            ],
+            "resource": "user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "用户手机"
+            ],
+            "resource": "user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "affiliation_company_id",
+            "display_name": "所属公司ID",
+            "technical_names": [
+              "affiliationCompanyId"
+            ],
+            "aliases": [
+              "归属公司主键"
+            ],
+            "resource": "user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "organization_id",
+            "display_name": "组织ID",
+            "technical_names": [
+              "organizationId",
+              "tenantId"
+            ],
+            "aliases": [
+              "任职组织ID"
+            ],
+            "resource": "user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "default_warehouse_id",
+            "display_name": "默认仓库ID",
+            "technical_names": [
+              "defaultWarehouseId"
+            ],
+            "aliases": [
+              "默认仓主键"
+            ],
+            "resource": "user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "role_id",
+            "display_name": "角色ID",
+            "technical_names": [
+              "roleId"
+            ],
+            "aliases": [
+              "角色主键"
+            ],
+            "resource": "user",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "subject_identity_relation_id",
+            "display_name": "主体身份关系ID",
+            "technical_names": [
+              "subjectIdentityRelationId"
+            ],
+            "aliases": [
+              "身份关系主键"
+            ],
+            "resource": "user",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.95,
+        "semantic_evidence": [
+          "SctsSelectTableController#getUserPage(UserPageCondition) -> RemoteUserService#currentSystemPage -> UserController#currentSystemPage",
+          "UserService#currentSystemPage -> pageCurrentSystemUsers -> UserDao#page(user_query_getPlatformPageList.sql)",
+          "prepareQueryCondition 互转 organizationId/tenantId 并加密 mobile；getLoginUser 无会话抛 MSG_AUTH_REQUIRE_LOGIN",
+          "fillScopedPageExtraInfo 回填当前系统角色名；SQL 按 dataSource/systemCode 过滤主体身份关系",
+          "UserPageCondition 公开接收 systemCode、createTimeFrom/createTimeTo、roleName、systemManagerType、tenancy、companyIds、filterUserIds，pageCurrentSystemUsers/prepareQueryCondition 后均进入 user_query_getPlatformPageList.sql；UserQuery 公开返回 subjectIdentityRelationId。"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "58ad66e6-e7d3-49d8-a90a-5bb8097d197a",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/selectTable/operationsStaffSalesContractPage"
+      },
+      "semantic": {
+        "purpose": "供供应链贸易小程序分页选择仍有下单余量的销售合同头：BFF 原样转发 c12-scts SelectTableService.salesContractPage，SQL 要求明细 sales_order_quantity<quantity，并回填以销定采采购合同。不按当前用户或组织过滤。",
+        "audiences": [
+          "供应链贸易小程序",
+          "运营人员"
+        ],
+        "domains": [
+          "供应链贸易",
+          "销售合同"
+        ],
+        "scenarios": [
+          "运营人员在小程序开销售订单前翻页挑选还有可下单数量的销售合同头，而不是挑合同商品行。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "销售合同"
+        ],
+        "aliases": [
+          "小程序销售合同选择分页",
+          "运营小程序选销售合同",
+          "SctsSelectTableController.operationsStaffSalesContractPage"
+        ],
+        "resource": "sales_contract",
+        "lookup_keys": [
+          "contractNo",
+          "offlineContractNo",
+          "contractName",
+          "customerId",
+          "customerName",
+          "tenantId",
+          "tenantCode",
+          "tenantName",
+          "expireType",
+          "status",
+          "id",
+          "salesBasedPurchaseContractId",
+          "salesBasedPurchaseContractNo",
+          "pageNumber",
+          "pageSize",
+          "signingDateStart",
+          "signingDateEnd",
+          "validFrom",
+          "validTo"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "c12-portal BFF POST /api/mini/scts/selectTable/operationsStaffSalesContractPage -> RemotePortalOperationsStaffSelectTableService#salesContractPage -> SelectTableService#salesContractPage。",
+          "selectTable_salesContract_query_page.sql 查 cs_sales_contract 头，EXISTS 未下完数量的明细；头表无 deleted=0。fillSalesBasedPurchaseContract 回填采购合同 ID/编号。",
+          "不是 operationsStaffSalesContractDetailPage 的合同商品行，也不是订单用 orderSalesContractPage。请求 tenantId 是销售方组织筛选，不是会话主体。pageSize 空值拆箱 NPE。"
+        ],
+        "required_inputs": [
+          {
+            "name": "pageSize",
+            "zh_name": "每页条数",
+            "location": "body",
+            "required": true,
+            "schema_type": "Integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "sales_contract_id",
+            "display_name": "销售合同ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "sales_contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sales_contract_no",
+            "display_name": "销售合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "sales_contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "offline_contract_no",
+            "display_name": "线下合同号",
+            "technical_names": [
+              "offlineContractNo"
+            ],
+            "aliases": [
+              "线下合同编号"
+            ],
+            "resource": "sales_contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "customer_id",
+            "display_name": "客户ID",
+            "technical_names": [
+              "customerId"
+            ],
+            "aliases": [
+              "客户主键"
+            ],
+            "resource": "sales_contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sales_org_id",
+            "display_name": "销售方组织ID",
+            "technical_names": [
+              "tenantId"
+            ],
+            "aliases": [
+              "销售组织主键"
+            ],
+            "resource": "sales_contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sales_org_code",
+            "display_name": "销售方组织编码",
+            "technical_names": [
+              "tenantCode"
+            ],
+            "aliases": [
+              "销售组织编码"
+            ],
+            "resource": "sales_contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sales_based_purchase_contract_id",
+            "display_name": "以销定采采购合同ID",
+            "technical_names": [
+              "salesBasedPurchaseContractId"
+            ],
+            "aliases": [
+              "采购合同主键"
+            ],
+            "resource": "sales_contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sales_based_purchase_contract_no",
+            "display_name": "以销定采采购合同编号",
+            "technical_names": [
+              "salesBasedPurchaseContractNo"
+            ],
+            "aliases": [
+              "采购合同号"
+            ],
+            "resource": "sales_contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "SctsSelectTableController#operationsStaffSalesContractPage -> PortalOperationsStaffSelectTableService#salesContractPage -> SelectTableService#salesContractPage",
+          "sqlExecutor.page(SelectTableSalesContractQuery, selectTable_salesContract_query_page.sql)",
+          "fillSalesBasedPurchaseContract -> selectTable_salesBasedPurchaseContract_query_list.sql",
+          "SelectTableSalesContractPageCondition 无 Bean Validation；请求筛选字段均进入 SQL",
+          "SelectTableSalesContractPageCondition 的 signingDateStart/signingDateEnd/validFrom/validTo 均由 selectTable_salesContract_query_page.sql 实际用于签约日期和有效期过滤。"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "29dc2918-8d7a-4e0a-85f4-8a8e8247edf4",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/selectTable/operationsStaffSalesContractDetailPage"
+      },
+      "semantic": {
+        "purpose": "供供应链贸易小程序分页选择销售合同商品行：BFF 转发 SelectTableService.salesContractDetailPage，按合同 ID/编号和 SKU 条件查 cs_sales_contract_detail，回填等级限价。salesContractId 不是无条件必填，不按当前用户过滤。",
+        "audiences": [
+          "供应链贸易小程序",
+          "运营人员"
+        ],
+        "domains": [
+          "供应链贸易",
+          "销售合同"
+        ],
+        "scenarios": [
+          "运营人员已选或待选销售合同后，在小程序翻页挑选合同里的商品规格行和剩余可下单数量，而不是选合同头。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "销售合同明细",
+          "商品规格"
+        ],
+        "aliases": [
+          "小程序销售合同商品分页",
+          "运营小程序选合同商品",
+          "SctsSelectTableController.operationsStaffSalesContractDetailPage"
+        ],
+        "resource": "sales_contract_detail",
+        "lookup_keys": [
+          "salesContractId",
+          "salesContractNo",
+          "skuCode",
+          "skuName",
+          "barCode",
+          "categoryId",
+          "categoryName",
+          "taxRate",
+          "saleStatus",
+          "excludeIds",
+          "leftOrderQuantityOnly",
+          "leftOccupiedQuantityOnly",
+          "id",
+          "specId",
+          "skuId",
+          "packageUnitId",
+          "pageNumber",
+          "pageSize"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "c12-portal BFF POST /api/mini/scts/selectTable/operationsStaffSalesContractDetailPage -> SelectTableService#salesContractDetailPage，返回合同明细不是合同头。",
+          "selectTable_salesContractDetail_query_page.sql 以 cs_sales_contract_detail 为主，join 合同头/SKU/包装单位；skuId/specId 都是 d.spec_id。leftOrderQuantityOnly 仅 true 时过滤余量，服务不默认 true。",
+          "salesContractId 无 @NotNull。对比 operationsStaffSkuPage：本接口是合同行不是商品主档。pageSize 空值拆箱 NPE。"
+        ],
+        "required_inputs": [
+          {
+            "name": "pageSize",
+            "zh_name": "每页条数",
+            "location": "body",
+            "required": true,
+            "schema_type": "Integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "sales_contract_detail_id",
+            "display_name": "销售合同明细ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "合同商品行主键"
+            ],
+            "resource": "sales_contract_detail",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sales_contract_id",
+            "display_name": "销售合同ID",
+            "technical_names": [
+              "salesContractId",
+              "contractId"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "sales_contract_detail",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sales_contract_no",
+            "display_name": "销售合同编号",
+            "technical_names": [
+              "salesContractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "sales_contract_detail",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sku_id",
+            "display_name": "商品规格ID",
+            "technical_names": [
+              "skuId",
+              "specId"
+            ],
+            "aliases": [
+              "物料ID",
+              "规格主键"
+            ],
+            "resource": "sales_contract_detail",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sku_code",
+            "display_name": "商品编码",
+            "technical_names": [
+              "skuCode",
+              "specCode"
+            ],
+            "aliases": [
+              "规格编码"
+            ],
+            "resource": "sales_contract_detail",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "package_unit_id",
+            "display_name": "包装单位ID",
+            "technical_names": [
+              "packageUnitId",
+              "unitId"
+            ],
+            "aliases": [
+              "单位主键"
+            ],
+            "resource": "sales_contract_detail",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "category_id",
+            "display_name": "商品分类ID",
+            "technical_names": [
+              "categoryId"
+            ],
+            "aliases": [
+              "分类主键"
+            ],
+            "resource": "sales_contract_detail",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "bar_code",
+            "display_name": "商品条码",
+            "technical_names": [
+              "barCode"
+            ],
+            "aliases": [
+              "条形码"
+            ],
+            "resource": "sales_contract_detail",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "SctsSelectTableController#operationsStaffSalesContractDetailPage -> SelectTableService#salesContractDetailPage",
+          "sqlExecutor.page(SelectTableSalesContractDetailQuery, selectTable_salesContractDetail_query_page.sql)",
+          "fillSalesContractDetailLevelLimitPrice 按 specId 查 selectTable_skuLevelLimitPrice_query_list.sql",
+          "空 excludeIds 置 null；leftOrderQuantityOnly/leftOccupiedQuantityOnly 仅 Freemarker true 分支生效"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "d1865d2f-0972-406d-a3c4-111b4ab7b3f6",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/selectTable/operationsStaffCustomerPage"
+      },
+      "semantic": {
+        "purpose": "供供应链贸易小程序分页选择客户主档：BFF 转发 SelectTableService.customerPage，SQL 查未删除 cs_customer 并带默认联系人和收货完整地址，不按当前用户或组织过滤。",
+        "audiences": [
+          "供应链贸易小程序",
+          "运营人员"
+        ],
+        "domains": [
+          "供应链贸易",
+          "客户"
+        ],
+        "scenarios": [
+          "运营人员在小程序客户下拉里按客户编码、名称或电话翻页挑选客户，而不是选收货方地址或销售合同。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "客户"
+        ],
+        "aliases": [
+          "小程序客户选择分页",
+          "运营小程序选客户",
+          "SctsSelectTableController.operationsStaffCustomerPage"
+        ],
+        "resource": "customer",
+        "lookup_keys": [
+          "customerCode",
+          "customerName",
+          "customerType",
+          "tel",
+          "taxCode",
+          "status",
+          "id",
+          "businessRegistraTionNumber",
+          "pageNumber",
+          "pageSize"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "c12-portal BFF POST /api/mini/scts/selectTable/operationsStaffCustomerPage -> SelectTableService#customerPage -> selectTable_customer_query_page.sql，deleted=0 的客户主档。",
+          "不是 operationsStaffReceiveAddressList 的收货方，也不是销售合同上的客户字段。taxCode 只作请求筛选，响应社会信用代码字段是 businessRegistraTionNumber。",
+          "无会话/组织过滤。pageSize 空值拆箱 NPE。"
+        ],
+        "required_inputs": [
+          {
+            "name": "pageSize",
+            "zh_name": "每页条数",
+            "location": "body",
+            "required": true,
+            "schema_type": "Integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "customer_id",
+            "display_name": "客户ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "客户主键"
+            ],
+            "resource": "customer",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "customer_code",
+            "display_name": "客户编码",
+            "technical_names": [
+              "customerCode"
+            ],
+            "aliases": [
+              "客户代码"
+            ],
+            "resource": "customer",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "business_registration_number",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "businessRegistraTionNumber"
+            ],
+            "aliases": [
+              "工商注册号"
+            ],
+            "resource": "customer",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "SctsSelectTableController#operationsStaffCustomerPage -> SelectTableService#customerPage",
+          "sqlExecutor.page(SelectTableCustomerQuery, selectTable_customer_query_page.sql)",
+          "SQL 消费 customerCode/customerName/customerType/tel/status/taxCode；默认联系人子查询"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "33a4b2a0-0b96-4471-a804-e816f90d9817",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/selectTable/operationsStaffDepartmentPage"
+      },
+      "semantic": {
+        "purpose": "供供应链贸易小程序分页选择供应链部门主档：BFF 转发 SCTS DepartmentService.page 查 cs_department，按编码/名称等值过滤，不走 c12-auth 部门树或权限。",
+        "audiences": [
+          "供应链贸易小程序",
+          "运营人员"
+        ],
+        "domains": [
+          "供应链贸易",
+          "部门资料"
+        ],
+        "scenarios": [
+          "运营人员在小程序资料下拉里翻页挑选供应链部门主数据，而不是选权限部门树或组织。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "供应链部门"
+        ],
+        "aliases": [
+          "小程序供应链部门分页",
+          "运营小程序选资料部门",
+          "SctsSelectTableController.operationsStaffDepartmentPage"
+        ],
+        "resource": "scts_department",
+        "lookup_keys": [
+          "departmentCode",
+          "departmentName",
+          "companyName",
+          "status",
+          "id",
+          "companyId",
+          "pageNumber",
+          "pageSize"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "c12-portal BFF POST /api/mini/scts/selectTable/operationsStaffDepartmentPage -> PortalOperationsStaffSelectTableService#departmentPage -> scts DepartmentService#page -> department_query_getPageList.sql 查 cs_department。",
+          "筛选是等值不是 like，无 deleted、无组织权限。对比 getDepartmentTree/getCommonDeptTreeByPermission：那些是 sys_department 平铺列表且要组织。",
+          "pageSize 空值拆箱 NPE。"
+        ],
+        "required_inputs": [
+          {
+            "name": "pageSize",
+            "zh_name": "每页条数",
+            "location": "body",
+            "required": true,
+            "schema_type": "Integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "scts_department_id",
+            "display_name": "部门ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "供应链部门主键"
+            ],
+            "resource": "scts_department",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "scts_department_code",
+            "display_name": "部门编码",
+            "technical_names": [
+              "departmentCode"
+            ],
+            "aliases": [
+              "部门代码"
+            ],
+            "resource": "scts_department",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_id",
+            "display_name": "公司ID",
+            "technical_names": [
+              "companyId"
+            ],
+            "aliases": [
+              "公司主键"
+            ],
+            "resource": "scts_department",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "SctsSelectTableController#operationsStaffDepartmentPage -> PortalOperationsStaffSelectTableService#departmentPage",
+          "scts DepartmentService#page -> DepartmentDao#page -> department_query_getPageList.sql",
+          "SQL 消费 departmentCode/departmentName/companyName/status 等值条件"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "5e8bbbe2-e7c9-4503-90c1-560ca4906a45",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/selectTable/operationsStaffWarehousePage"
+      },
+      "semantic": {
+        "purpose": "供供应链贸易小程序按货主组织分页选择当前有库存的仓库：BFF 转发 c12-data inventoryPage，用组织统一社会信用代码匹配 WMS 货主后汇总 qty>0 的仓库，不是供应链仓库主档，也不是发运仓库。",
+        "audiences": [
+          "供应链贸易小程序",
+          "运营人员"
+        ],
+        "domains": [
+          "供应链贸易",
+          "仓库库存"
+        ],
+        "scenarios": [
+          "运营人员在小程序按货主组织切换仓库下拉，只看该货主当前有库存的仓和库存总数，而不是选订单发运仓库或收货地址。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "仓库",
+          "货主库存"
+        ],
+        "aliases": [
+          "小程序货主库存仓库分页",
+          "运营小程序按货主选仓库",
+          "SctsSelectTableController.operationsStaffWarehousePage"
+        ],
+        "resource": "warehouse_inventory",
+        "lookup_keys": [
+          "ownerId",
+          "id",
+          "warehouseId",
+          "warehouseCode",
+          "warehouseName",
+          "inventoryQuantity",
+          "pageNumber",
+          "pageSize"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "c12-portal BFF POST /api/mini/scts/selectTable/operationsStaffWarehousePage @Valid WarehouseInventoryPageCondition -> RemoteDataWarehouseInfoAdminService#inventoryPage，不是 SCTS SelectTableService#warehousePage，也不是 orderShipmentWarehousePage。",
+          "warehouseInventory_query_getPageList.sql：ods_scts_cs_warehouse 按 warehouse_code 关联 WMS 仓和 inv_lot_loc，EXISTS 组织 social_credit_code=货主 business_registra_tion_number；只返回该货主 qty>0 的仓。ownerId 无会话校验，可查任意货主组织。",
+          "ownerId @NotNull。控制参数 cpValue 查出未使用。pageSize 空值拆箱 NPE。响应 id 与 warehouseId 都是 SCTS 仓主键。"
+        ],
+        "required_inputs": [
+          {
+            "name": "ownerId",
+            "zh_name": "货主组织ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          },
+          {
+            "name": "pageSize",
+            "zh_name": "每页条数",
+            "location": "body",
+            "required": true,
+            "schema_type": "Integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "warehouse_id",
+            "display_name": "仓库ID",
+            "technical_names": [
+              "id",
+              "warehouseId"
+            ],
+            "aliases": [
+              "仓库主键"
+            ],
+            "resource": "warehouse_inventory",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_code",
+            "display_name": "仓库编码",
+            "technical_names": [
+              "warehouseCode"
+            ],
+            "aliases": [
+              "仓库代码"
+            ],
+            "resource": "warehouse_inventory",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "owner_organization_id",
+            "display_name": "货主组织ID",
+            "technical_names": [
+              "ownerId"
+            ],
+            "aliases": [
+              "货主组织主键"
+            ],
+            "resource": "warehouse_inventory",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "SctsSelectTableController#operationsStaffWarehousePage(WarehouseInventoryPageCondition) @Valid -> RemoteDataWarehouseInfoAdminService#inventoryPage",
+          "DataPortalWarehouseInfoAdminService#inventoryPage -> DataPortalWarehouseInfoDao#inventoryPage -> warehouseInventory_query_getPageList.sql",
+          "WarehouseInventoryPageCondition.ownerId @NotNull；SQL 强制 :ownerId 不是可选片段",
+          "服务读取 WMS_INVENT_AMOUNT_DEFAULT 控制参数后未写入查询或结果"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "f7c1fbdf-6aa7-4b7d-bf18-f5e58af5df2b",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/selectTable/operationsStaffOrderShipmentWarehousePage"
+      },
+      "semantic": {
+        "purpose": "供供应链贸易小程序分页选择订单发运仓库主档：BFF 转发 SCTS WarehouseService.page 查未删除 cs_warehouse，不按货主库存、不调用 setDataAuthority。请求可带 warehouseIds，默认全局。",
+        "audiences": [
+          "供应链贸易小程序",
+          "运营人员"
+        ],
+        "domains": [
+          "供应链贸易",
+          "发运仓库"
+        ],
+        "scenarios": [
+          "运营人员在小程序销售订单里挑选发运仓库主数据，而不是按货主看有库存的仓，也不是选收货地址。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "仓库"
+        ],
+        "aliases": [
+          "小程序订单发运仓库分页",
+          "运营小程序选发运仓库",
+          "SctsSelectTableController.operationsStaffOrderShipmentWarehousePage"
+        ],
+        "resource": "warehouse",
+        "lookup_keys": [
+          "warehouseCode",
+          "warehouseName",
+          "status",
+          "contactPerson",
+          "tel",
+          "provinceCode",
+          "cityCode",
+          "countyCode",
+          "regionName",
+          "warehouseIds",
+          "id",
+          "superiorWarehouseId",
+          "superiorWarehouseCode",
+          "pageNumber",
+          "pageSize",
+          "creditCode"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "c12-portal BFF POST /api/mini/scts/selectTable/operationsStaffOrderShipmentWarehousePage -> PortalOperationsStaffSelectTableService#orderShipmentWarehousePage -> WarehouseService#page -> warehouse_query_getPageList.sql。",
+          "对比 operationsStaffWarehousePage：本接口是 cs_warehouse 主档，无 ownerId、无库存数量。对比 SelectTableService#warehousePage：那个 SQL 强制 status=1 且 DTO 不同，本 BFF 未走该路径。",
+          "WarehouseService#page 未调 CommonService#setDataAuthority；warehouseIds 仅当请求传入才过滤。请求 id/superior*/filtration/isNotFilter 未进 SQL。pageSize 空值拆箱 NPE。"
+        ],
+        "required_inputs": [
+          {
+            "name": "pageSize",
+            "zh_name": "每页条数",
+            "location": "body",
+            "required": true,
+            "schema_type": "Integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "warehouse_id",
+            "display_name": "仓库ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "仓库主键"
+            ],
+            "resource": "warehouse",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_code",
+            "display_name": "仓库编码",
+            "technical_names": [
+              "warehouseCode"
+            ],
+            "aliases": [
+              "仓库代码"
+            ],
+            "resource": "warehouse",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "superior_warehouse_id",
+            "display_name": "上级仓库ID",
+            "technical_names": [
+              "superiorWarehouseId"
+            ],
+            "aliases": [
+              "上级仓主键"
+            ],
+            "resource": "warehouse",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "superior_warehouse_code",
+            "display_name": "上级仓库编码",
+            "technical_names": [
+              "superiorWarehouseCode"
+            ],
+            "aliases": [
+              "上级仓代码"
+            ],
+            "resource": "warehouse",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "credit_code",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "creditCode"
+            ],
+            "aliases": [
+              "仓库公司信用代码"
+            ],
+            "resource": "warehouse",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "SctsSelectTableController#operationsStaffOrderShipmentWarehousePage(WarehousePageCondition) -> WarehouseService#page",
+          "WarehouseDao#page -> warehouse_query_getPageList.sql，deleted=0，可选 warehouseIds",
+          "SQL 消费 warehouseCode/Name/status/contactPerson/tel/省市区/regionName/warehouseIds；不消费请求 id",
+          "WarehouseQuery 公开返回 creditCode（仓库所属公司的统一社会信用代码），与已声明的 credit_code 业务标识一致。"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "473cab37-f10d-4611-b1d0-ce169e563fdd",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/selectTable/operationsStaffSkuPage"
+      },
+      "semantic": {
+        "purpose": "供供应链贸易小程序分页选择商品主档：BFF 转发 SelectTableService.skuPage 查 cs_sku，带包装单位、最新采购价、当前销售限价和客户等级限价，不是规格别名行。",
+        "audiences": [
+          "供应链贸易小程序",
+          "运营人员"
+        ],
+        "domains": [
+          "供应链贸易",
+          "商品"
+        ],
+        "scenarios": [
+          "运营人员在小程序商品下拉里按编码、名称或条码翻页挑选 SKU 主数据及限价，而不是选发票用的规格行或包装单位。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "商品"
+        ],
+        "aliases": [
+          "小程序商品选择分页",
+          "运营小程序选SKU",
+          "SctsSelectTableController.operationsStaffSkuPage"
+        ],
+        "resource": "sku",
+        "lookup_keys": [
+          "skuCode",
+          "skuName",
+          "barCode",
+          "status",
+          "categoryId",
+          "brandName",
+          "includeIds",
+          "excludeIds",
+          "id",
+          "packageId",
+          "unitId",
+          "pageNumber",
+          "pageSize"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "c12-portal BFF POST /api/mini/scts/selectTable/operationsStaffSkuPage -> SelectTableService#skuPage -> selectTable_sku_query_page.sql，再 fillLevelLimitPrice。",
+          "对比 operationsStaffSkuSpecPage：本接口返回包装/采购价/销售限价；skuId/shortName/inventoryCount 未选出。请求 id/shortName/asnNo/categoryName/unitId/unitName/warehouseIds/isNotFilter 未消费。",
+          "无会话过滤。pageSize 空值拆箱 NPE。"
+        ],
+        "required_inputs": [
+          {
+            "name": "pageSize",
+            "zh_name": "每页条数",
+            "location": "body",
+            "required": true,
+            "schema_type": "Integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "sku_id",
+            "display_name": "商品ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "SKU主键"
+            ],
+            "resource": "sku",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sku_code",
+            "display_name": "商品编码",
+            "technical_names": [
+              "skuCode"
+            ],
+            "aliases": [
+              "SKU编码"
+            ],
+            "resource": "sku",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "bar_code",
+            "display_name": "商品条码",
+            "technical_names": [
+              "barCode"
+            ],
+            "aliases": [
+              "条形码"
+            ],
+            "resource": "sku",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "package_id",
+            "display_name": "包装ID",
+            "technical_names": [
+              "packageId"
+            ],
+            "aliases": [
+              "包装主键"
+            ],
+            "resource": "sku",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "unit_id",
+            "display_name": "默认单位ID",
+            "technical_names": [
+              "unitId"
+            ],
+            "aliases": [
+              "单位主键"
+            ],
+            "resource": "sku",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "category_id",
+            "display_name": "商品分类ID",
+            "technical_names": [
+              "categoryId"
+            ],
+            "aliases": [
+              "分类主键"
+            ],
+            "resource": "sku",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "SctsSelectTableController#operationsStaffSkuPage -> SelectTableService#skuPage",
+          "sqlExecutor.page(SelectTableSkuQuery, selectTable_sku_query_page.sql)；空 includeIds/excludeIds 置 null",
+          "fillLevelLimitPrice -> selectTable_skuLevelLimitPrice_query_list.sql 按 skuIds 分组回填 levelLimitPriceList"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "f4e8d5f3-429d-44ca-8c3f-cdd044f8be76",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/selectTable/operationsStaffSkuSpecPage"
+      },
+      "semantic": {
+        "purpose": "供供应链贸易小程序分页选择商品规格行：BFF 转发 SelectTableService.skuSpecPage，仍查 cs_sku，但把 id 同时映射为 skuId/productId，sku_code/sku_name 映射为 specCode/specName，给发票等明细当规格用，不含限价和包装价。",
+        "audiences": [
+          "供应链贸易小程序",
+          "运营人员"
+        ],
+        "domains": [
+          "供应链贸易",
+          "商品规格"
+        ],
+        "scenarios": [
+          "运营人员在小程序发票或明细里按规格编码挑选商品规格行，而不是选带限价的通用商品主档。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "商品规格"
+        ],
+        "aliases": [
+          "小程序商品规格分页",
+          "运营小程序选SKU规格",
+          "SctsSelectTableController.operationsStaffSkuSpecPage"
+        ],
+        "resource": "sku_spec",
+        "lookup_keys": [
+          "productId",
+          "specId",
+          "skuCode",
+          "skuName",
+          "specCode",
+          "specName",
+          "barCode",
+          "status",
+          "saleStatus",
+          "categoryId",
+          "id",
+          "skuId",
+          "unitId",
+          "pageNumber",
+          "pageSize"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "c12-portal BFF POST /api/mini/scts/selectTable/operationsStaffSkuSpecPage -> SelectTableService#skuSpecPage -> selectTable_skuSpec_query_page.sql。注释写明发票明细选规格行，避免影响通用商品选择。",
+          "同一张 cs_sku：id as sku_id/product_id，sku_code as spec_code。对比 skuPage：无采购价/限价/includeIds，且消费 specId/productId/saleStatus。ownerId/ownerName/modelNumber/specType 未选出。",
+          "warehouseIds/isNotFilter 未消费。pageSize 空值拆箱 NPE。"
+        ],
+        "required_inputs": [
+          {
+            "name": "pageSize",
+            "zh_name": "每页条数",
+            "location": "body",
+            "required": true,
+            "schema_type": "Integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "sku_id",
+            "display_name": "规格ID",
+            "technical_names": [
+              "id",
+              "skuId",
+              "productId",
+              "specId"
+            ],
+            "aliases": [
+              "商品ID",
+              "SKU主键"
+            ],
+            "resource": "sku_spec",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sku_code",
+            "display_name": "规格编码",
+            "technical_names": [
+              "skuCode",
+              "specCode"
+            ],
+            "aliases": [
+              "商品编码"
+            ],
+            "resource": "sku_spec",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "bar_code",
+            "display_name": "商品条码",
+            "technical_names": [
+              "barCode"
+            ],
+            "aliases": [
+              "条形码"
+            ],
+            "resource": "sku_spec",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "category_id",
+            "display_name": "商品分类ID",
+            "technical_names": [
+              "categoryId"
+            ],
+            "aliases": [
+              "分类主键"
+            ],
+            "resource": "sku_spec",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "unit_id",
+            "display_name": "计量单位ID",
+            "technical_names": [
+              "unitId",
+              "measurementUnitId"
+            ],
+            "aliases": [
+              "单位主键"
+            ],
+            "resource": "sku_spec",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "SctsSelectTableController#operationsStaffSkuSpecPage -> SelectTableService#skuSpecPage",
+          "sqlExecutor.page(SelectTableSkuSpecQuery, selectTable_skuSpec_query_page.sql) 无限价回填",
+          "SQL 消费 specId/productId/skuCode/skuName/specCode/specName/barCode/status/saleStatus/categoryId"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "75542702-debf-40df-bbcc-ef14a76f820a",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/selectTable/operationsStaffPackageUnitPage"
+      },
+      "semantic": {
+        "purpose": "供供应链贸易小程序分页选择包装单位：BFF 转发 SelectTableService.packageUnitPage 查 cs_package_unit 及所属包装，可按包装、默认标记和编码筛选，不按当前用户过滤。",
+        "audiences": [
+          "供应链贸易小程序",
+          "运营人员"
+        ],
+        "domains": [
+          "供应链贸易",
+          "包装单位"
+        ],
+        "scenarios": [
+          "运营人员在小程序数量录入前翻页挑选包装单位和是否允许小数，而不是选商品或商品规格。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "包装单位"
+        ],
+        "aliases": [
+          "小程序包装单位分页",
+          "运营小程序选包装单位",
+          "SctsSelectTableController.operationsStaffPackageUnitPage"
+        ],
+        "resource": "package_unit",
+        "lookup_keys": [
+          "packageId",
+          "isDefault",
+          "code",
+          "name",
+          "packageCode",
+          "packageName",
+          "status",
+          "excludeIds",
+          "id",
+          "pageNumber",
+          "pageSize"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "c12-portal BFF POST /api/mini/scts/selectTable/operationsStaffPackageUnitPage -> SelectTableService#packageUnitPage -> selectTable_packageUnit_query_page.sql。",
+          "对比 skuPage：本接口选包装单位不是 SKU。请求 String id 未进 SQL，排除用 excludeIds。",
+          "pageSize 空值拆箱 NPE。"
+        ],
+        "required_inputs": [
+          {
+            "name": "pageSize",
+            "zh_name": "每页条数",
+            "location": "body",
+            "required": true,
+            "schema_type": "Integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "package_unit_id",
+            "display_name": "包装单位ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "单位主键"
+            ],
+            "resource": "package_unit",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "package_unit_code",
+            "display_name": "包装单位编码",
+            "technical_names": [
+              "code"
+            ],
+            "aliases": [
+              "单位代码"
+            ],
+            "resource": "package_unit",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "package_id",
+            "display_name": "包装ID",
+            "technical_names": [
+              "packageId"
+            ],
+            "aliases": [
+              "包装主键"
+            ],
+            "resource": "package_unit",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "package_code",
+            "display_name": "包装编码",
+            "technical_names": [
+              "packageCode"
+            ],
+            "aliases": [
+              "包装代码"
+            ],
+            "resource": "package_unit",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "SctsSelectTableController#operationsStaffPackageUnitPage -> SelectTableService#packageUnitPage",
+          "空 excludeIds 置 null 后 sqlExecutor.page(SelectTablePackageUnitQuery, selectTable_packageUnit_query_page.sql)",
+          "SQL 消费 packageId/isDefault/code/name/packageCode/packageName/status/excludeIds"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "758cca2a-1f32-48ac-9e4f-cdd778d5b734",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/selectTable/operationsStaffReceiveAddressList"
+      },
+      "semantic": {
+        "purpose": "供供应链贸易小程序分页选择收货方主档：路径和注释写交货地址列表/客户主键，实际转发 ConsigneeService.page 查 cs_consignee 分页，请求 DTO 没有 customerId，也未走近期销售订单收货地址 SQL。",
+        "audiences": [
+          "供应链贸易小程序",
+          "运营人员"
+        ],
+        "domains": [
+          "供应链贸易",
+          "收货地址"
+        ],
+        "scenarios": [
+          "运营人员在小程序按收货方名称、客户名称或省市区翻页挑选收货方地址，而不是选仓库或客户主档。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "收货方"
+        ],
+        "aliases": [
+          "小程序交货地址分页",
+          "运营小程序选收货方",
+          "SctsSelectTableController.operationsStaffReceiveAddressList"
+        ],
+        "resource": "consignee",
+        "lookup_keys": [
+          "customerName",
+          "consigneeName",
+          "consigneeType",
+          "consigneeContact",
+          "tel",
+          "status",
+          "provinceCode",
+          "cityCode",
+          "countyCode",
+          "id",
+          "consigneeCode",
+          "customerId",
+          "pageNumber",
+          "pageSize",
+          "companyId"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "c12-portal BFF POST /api/mini/scts/selectTable/operationsStaffReceiveAddressList 注释写客户主键近期交货地址，实际 ConsigneeService#page -> consignee_query_getPageList.sql，返回 PageResult 不是 List。",
+          "ConsigneePageCondition 无 customerId；未调用 customer_recent_receive_address_list.sql。对比 operationsStaffWarehousePage/orderShipmentWarehousePage：本接口是收货方不是仓库。warehouseId/fullAddress/street*/businessIds 请求未消费。",
+          "无会话过滤，无 deleted 条件。pageSize 空值拆箱 NPE。"
+        ],
+        "required_inputs": [
+          {
+            "name": "pageSize",
+            "zh_name": "每页条数",
+            "location": "body",
+            "required": true,
+            "schema_type": "Integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "consignee_id",
+            "display_name": "收货方ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "收货方主键"
+            ],
+            "resource": "consignee",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "consignee_code",
+            "display_name": "收货方编号",
+            "technical_names": [
+              "consigneeCode"
+            ],
+            "aliases": [
+              "收货方编码"
+            ],
+            "resource": "consignee",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "customer_id",
+            "display_name": "客户ID",
+            "technical_names": [
+              "customerId"
+            ],
+            "aliases": [
+              "客户主键"
+            ],
+            "resource": "consignee",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_id",
+            "display_name": "公司ID",
+            "technical_names": [
+              "companyId"
+            ],
+            "aliases": [
+              "公司主键"
+            ],
+            "resource": "consignee",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": [
+          "SctsSelectTableController#operationsStaffReceiveAddressList(ConsigneePageCondition) @Valid -> PortalOperationsStaffSelectTableService#receiveAddressList -> ConsigneeService#page",
+          "ConsigneeDao#page -> consignee_query_getPageList.sql；fillDeliveryStatistics 回填送货频次和准时率",
+          "Javadoc/Feign 注释写客户主键近期地址，与可执行链路冲突；CustomerRecentReceiveAddressQuery 仅为未使用 import",
+          "请求消费 customerName/consigneeName/type/contact/tel/status/省市区；SQL 有 businessIds 但 DTO 无 getter 未绑定",
+          "ConsigneeQuery 公开返回 companyId，与已声明的 company_id 业务标识一致。"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    }
+  ]
+}

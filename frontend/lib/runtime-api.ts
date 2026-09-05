@@ -40,6 +40,19 @@ export type RuntimeOperationStatus =
   | "cancelled"
   | "interrupted";
 
+export interface RuntimeReadinessLevel {
+  status: "pending" | "ready" | "failed";
+  duration_ms: number | null;
+  error_message: string | null;
+}
+
+export interface RuntimeReadinessResult {
+  revision: number | null;
+  infrastructure: RuntimeReadinessLevel;
+  services: RuntimeReadinessLevel;
+  business: RuntimeReadinessLevel;
+}
+
 export interface RuntimeOperationStep {
   id: string;
   sequence: number;
@@ -56,6 +69,7 @@ export interface RuntimeOperationStep {
   finished_at: string | null;
   log: string;
   log_truncated: boolean;
+  readiness?: RuntimeReadinessResult | null;
 }
 
 export interface RuntimeOperationSummary {
@@ -68,6 +82,7 @@ export interface RuntimeOperationSummary {
   action:
     | "pzh.ensure-host-runtime"
     | "pzh.status-host-runtime"
+    | "pzh.start-and-check"
     | null;
   status: RuntimeOperationStatus;
   changed_files: string[];
@@ -177,6 +192,41 @@ export function getWorkspaceRuntimeRunnerStatus(
 ): Promise<{ available: boolean }> {
   return runtimeRequest<{ available: boolean }>(
     `/workspaces/${encodeURIComponent(workspaceId)}/runtime-runner-status`,
+  );
+}
+
+export function startAndCheckWorkspace(
+  workspaceId: string,
+): Promise<RuntimeOperationSummary> {
+  return runtimeRequest<RuntimeOperationSummary>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/host-runtime/actions`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        action: "pzh.start-and-check",
+        environment: "local",
+      }),
+    },
+  );
+}
+
+export function getWorkspaceHostRuntimeStatus(
+  workspaceId: string,
+): Promise<{
+  runner_available: boolean;
+  latest_operation: Pick<
+    RuntimeOperationSummary,
+    "id" | "action" | "status"
+  > | null;
+}> {
+  return runtimeRequest<{
+    runner_available: boolean;
+    latest_operation: Pick<
+      RuntimeOperationSummary,
+      "id" | "action" | "status"
+    > | null;
+  }>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/host-runtime/status`,
   );
 }
 

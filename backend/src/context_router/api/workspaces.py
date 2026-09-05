@@ -291,9 +291,10 @@ def refresh_workspace(
 def restore_workspace_shared_files(
     workspace_id: str,
     request: Request,
+    revision: int | None = Query(default=None, ge=1),
 ) -> WorkspaceSharedFilesResult:
     try:
-        return _shared_files_service(request).restore(workspace_id)
+        return _shared_files_service(request).restore(workspace_id, revision)
     except WorkspaceSharedFilesError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -308,6 +309,21 @@ def publish_workspace_shared_files(
 ) -> WorkspaceSharedFilesResult:
     try:
         return _shared_files_service(request).publish(workspace_id)
+    except WorkspaceSharedFilesError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post(
+    "/{workspace_id}/shared-files/publish-runtime-files",
+    response_model=WorkspaceSharedFilesResult,
+)
+def publish_workspace_runtime_files(
+    workspace_id: str,
+    request: Request,
+) -> WorkspaceSharedFilesResult:
+    """Publish only runtime scripts; reserved for trusted local AI/operations calls."""
+    try:
+        return _shared_files_service(request).publish_runtime_files(workspace_id)
     except WorkspaceSharedFilesError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 

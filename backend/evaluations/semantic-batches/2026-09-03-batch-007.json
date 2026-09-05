@@ -1,0 +1,2852 @@
+{
+  "schema_version": "context-router-interface-semantic-batch-v1",
+  "batch_id": "panzhihua-c12-sys-unscanned-007",
+  "workspace_id": "b9ce65eddc27437d9615177fbd07cb0a",
+  "family_groups": {
+    "普通文件资源": 15,
+    "文件导入模板": 6,
+    "文件信息公告": 5,
+    "文件夹": 3
+  },
+  "generation_policy": "完整处理 c12-sys 文件管理家族的 FileController、FileImportTemplateController、FileInformationController、FileFolderController；核对 Controller、请求与返回 DTO、Repository、Service、DAO、SQL、对象存储和调用端；业务事实仅进入本批次，未使用 copy_from_interface_id。",
+  "items": [
+    {
+      "interface_id": "45c2303d-eb20-406f-9e8a-98e403d3a4a6",
+      "expected_identity": {
+        "service": "c12-sys",
+        "method": "POST",
+        "path": "/api/file/page"
+      },
+      "semantic": {
+        "purpose": "供 c12-sys 接入端按系统、业务关联、业务类型、文件夹、分类、名称、上传时间和文件状态分页查询文件元数据，并为每条结果补充签名 URL 与当前系统可编辑标记。",
+        "audiences": [
+          "c12-sys 接入端"
+        ],
+        "domains": [
+          "文件管理",
+          "文件资源"
+        ],
+        "scenarios": [
+          "接入系统的文件管理页面按 systemCodes、businessId/businessIds、businessType/businessTypes、folderId、category/categories、fileName、uploadStartTime/uploadEndTime 或 fileStatus 筛选文件并分页展示。"
+        ],
+        "actions": [
+          "query",
+          "page"
+        ],
+        "entities": [
+          "文件元数据",
+          "文件资源"
+        ],
+        "aliases": [
+          "分页查询文件资源",
+          "文件管理分页",
+          "FileController.page"
+        ],
+        "resource": "sys_file",
+        "lookup_keys": [
+          "pageNumber",
+          "pageSize",
+          "start",
+          "systemCode",
+          "systemCodes",
+          "businessId",
+          "businessIds",
+          "businessType",
+          "businessTypes",
+          "folderId",
+          "category",
+          "categories",
+          "fileName",
+          "uploadStartTime",
+          "uploadEndTime",
+          "fileStatus"
+        ],
+        "cardinality": "many",
+        "ownership": "unknown",
+        "discriminators": [
+          "与 list 不同，本接口返回 PageResult；还支持 businessTypes、上传时间和 fileStatus，且未传 fileStatus 时 Repository 默认只查 UNENCRYPTED 文件。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "sys_file_id",
+            "display_name": "文件元数据ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "文件记录主键"
+            ],
+            "resource": "sys_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "storage_file_id",
+            "display_name": "对象存储文件ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "存储文件标识"
+            ],
+            "resource": "stored_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "file_business_id",
+            "display_name": "文件业务关联ID",
+            "technical_names": [
+              "businessId"
+            ],
+            "aliases": [
+              "关联业务ID"
+            ],
+            "resource": "sys_file",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "file_folder_id",
+            "display_name": "文件夹ID",
+            "technical_names": [
+              "folderId"
+            ],
+            "aliases": [
+              "所属文件夹ID"
+            ],
+            "resource": "file_folder",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "system_code",
+            "display_name": "系统编码",
+            "technical_names": [
+              "systemCode"
+            ],
+            "aliases": [
+              "接入系统编码"
+            ],
+            "resource": "system",
+            "source": "runtime_context",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "FileController#page(FilePageCondition) -> ResponseData<PageResult<FileQuery>>",
+          "FilePageCondition；FileQuery",
+          "SysFileRepository#page -> SysFileService#page；file_query_getPageList.sql 按系统、业务、文件夹、分类、名称、上传时间和状态过滤，SysFileRepository#fillExtraInfo 补 signUrl/editable"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "2e1808e5-734d-485f-b80a-639ea9a16e6b",
+      "expected_identity": {
+        "service": "c12-sys",
+        "method": "POST",
+        "path": "/api/file/list"
+      },
+      "semantic": {
+        "purpose": "供 c12-sys 接入端按系统、业务关联、业务类型、文件夹、分类和文件名称查询不分页文件列表，并补充签名 URL 与当前系统可编辑标记。",
+        "audiences": [
+          "c12-sys 接入端"
+        ],
+        "domains": [
+          "文件管理",
+          "文件资源"
+        ],
+        "scenarios": [
+          "接入系统需要一次取得匹配文件集合时，按 systemCodes、businessId/businessIds、businessType、folderId、category/categories 或 fileName 查询可用文件列表。"
+        ],
+        "actions": [
+          "query",
+          "list"
+        ],
+        "entities": [
+          "文件元数据",
+          "文件资源"
+        ],
+        "aliases": [
+          "查询文件资源列表",
+          "不分页文件列表",
+          "FileController.list"
+        ],
+        "resource": "sys_file",
+        "lookup_keys": [
+          "systemCode",
+          "systemCodes",
+          "businessId",
+          "businessIds",
+          "businessType",
+          "folderId",
+          "category",
+          "categories",
+          "fileName"
+        ],
+        "cardinality": "many",
+        "ownership": "unknown",
+        "discriminators": [
+          "与 page 不同，本接口直接返回 List<FileQuery>，不支持 businessTypes、上传时间或 fileStatus 条件；Repository 固定排除逻辑删除及对象存储已删除记录。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "sys_file_id",
+            "display_name": "文件元数据ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "文件记录主键"
+            ],
+            "resource": "sys_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "storage_file_id",
+            "display_name": "对象存储文件ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "存储文件标识"
+            ],
+            "resource": "stored_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "file_business_id",
+            "display_name": "文件业务关联ID",
+            "technical_names": [
+              "businessId"
+            ],
+            "aliases": [
+              "关联业务ID"
+            ],
+            "resource": "sys_file",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "file_folder_id",
+            "display_name": "文件夹ID",
+            "technical_names": [
+              "folderId"
+            ],
+            "aliases": [
+              "所属文件夹ID"
+            ],
+            "resource": "file_folder",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "system_code",
+            "display_name": "系统编码",
+            "technical_names": [
+              "systemCode"
+            ],
+            "aliases": [
+              "接入系统编码"
+            ],
+            "resource": "system",
+            "source": "runtime_context",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "FileController#list(FileCondition) -> ResponseData<List<FileQuery>>",
+          "FileCondition；FileQuery",
+          "SysFileRepository#list/buildFileCondition -> SysFileService#find；按 systemCode(s)、businessId(s)、businessType、folderId、category/categories、fileName 过滤并排除 deleted/storageDeleted"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "552a15ec-cfd1-499f-a3cf-9d88e6f5ed11",
+      "expected_identity": {
+        "service": "c12-sys",
+        "method": "POST",
+        "path": "/api/file/health"
+      },
+      "semantic": {
+        "purpose": "供运维或接入端探测文件元数据数据库与对象存储的临时写入、删除能力，返回 UP/DOWN、说明和探测时间且不创建业务文件元数据。",
+        "audiences": [
+          "运维探测端",
+          "c12-sys 接入端"
+        ],
+        "domains": [
+          "文件管理",
+          "存储健康"
+        ],
+        "scenarios": [
+          "服务健康检查调用端验证文件元数据查询及对象存储写删链路是否可用，并取得本次探测状态。"
+        ],
+        "actions": [
+          "health"
+        ],
+        "entities": [
+          "文件存储健康状态"
+        ],
+        "aliases": [
+          "探测文件存储健康",
+          "检查文件存储读写",
+          "FileController.health"
+        ],
+        "resource": "file_storage_health",
+        "lookup_keys": [],
+        "cardinality": "one",
+        "ownership": "unknown",
+        "discriminators": [
+          "与文件完整性 verify 不同，本接口不校验任何业务文件哈希，而是 count 元数据后写入并删除随机 probeKey，返回 FileStorageHealthQuery。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [],
+        "semantic_confidence": 0.99,
+        "semantic_evidence": [
+          "FileController#health() -> ResponseData<FileStorageHealthQuery>",
+          "FileStorageHealthQuery",
+          "SysFileRepository#health -> SysFileService#count + FileStorage#putObject/deleteObject；临时 probeKey 位于 __health__/sys-file 且不写 cs_sys_file"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "ee20a1bb-4d38-4aab-8fab-8f85a9be6f52",
+      "expected_identity": {
+        "service": "c12-sys",
+        "method": "POST",
+        "path": "/api/file/upload"
+      },
+      "semantic": {
+        "purpose": "供 c12-sys 接入端上传一个 multipart 文件，可选写入业务关联、目标系统、文件夹、分类和加密标记，持久化一条文件元数据并返回含 fileId 与签名 URL 的文件结果。",
+        "audiences": [
+          "c12-sys 接入端"
+        ],
+        "domains": [
+          "文件管理",
+          "文件上传"
+        ],
+        "scenarios": [
+          "接入系统端提交一个 file，并可用 item 指定 businessId、businessType、targetSystemCode、folderId、category 或 encrypted，获得该单文件的元数据和访问地址。"
+        ],
+        "actions": [
+          "upload",
+          "create"
+        ],
+        "entities": [
+          "文件资源",
+          "文件元数据"
+        ],
+        "aliases": [
+          "上传单个文件",
+          "单文件入库",
+          "FileController.upload"
+        ],
+        "resource": "sys_file",
+        "lookup_keys": [
+          "file",
+          "item",
+          "businessId",
+          "businessType",
+          "targetSystemCode",
+          "folderId",
+          "category",
+          "encrypted"
+        ],
+        "cardinality": "one",
+        "ownership": "unknown",
+        "discriminators": [
+          "与 uploadBatch 不同，本接口只接收一个必填 file 并创建一条元数据；item 可缺省，单文件大小由 Repository 限制为 20 MiB。"
+        ],
+        "required_inputs": [
+          {
+            "name": "file",
+            "zh_name": "上传文件",
+            "location": "body",
+            "required": true,
+            "schema_type": "binary"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "sys_file_id",
+            "display_name": "文件元数据ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "文件记录主键"
+            ],
+            "resource": "sys_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "storage_file_id",
+            "display_name": "对象存储文件ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "存储文件标识"
+            ],
+            "resource": "stored_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "file_business_id",
+            "display_name": "文件业务关联ID",
+            "technical_names": [
+              "businessId"
+            ],
+            "aliases": [
+              "关联业务ID"
+            ],
+            "resource": "sys_file",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "file_folder_id",
+            "display_name": "文件夹ID",
+            "technical_names": [
+              "folderId"
+            ],
+            "aliases": [
+              "所属文件夹ID"
+            ],
+            "resource": "file_folder",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "target_system_code",
+            "display_name": "目标系统编码",
+            "technical_names": [
+              "targetSystemCode"
+            ],
+            "aliases": [
+              "目标归属系统编码"
+            ],
+            "resource": "system",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "FileController#upload(String,MultipartFile) -> ResponseData<FileQuery>",
+          "FileUploadItem；FileQuery",
+          "SysFileRepository#parseUploadItem/upload -> CustomFile#upload -> FileMetadataSupport#build -> SysFileService#insert；validateFile 显式拒绝空文件和超过 20 MiB 的文件"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "a70ac29b-dc7e-47cd-bea8-019085b5f7a5",
+      "expected_identity": {
+        "service": "c12-sys",
+        "method": "POST",
+        "path": "/api/file/uploadBatch"
+      },
+      "semantic": {
+        "purpose": "供文件管理端批量上传 multipart 文件数组，可用 items.fileIndexes 将不同业务归属参数映射到文件下标，写入多条文件元数据并返回文件结果列表。",
+        "audiences": [
+          "文件管理端"
+        ],
+        "domains": [
+          "文件管理",
+          "文件上传"
+        ],
+        "scenarios": [
+          "文件管理端一次提交 files，并可通过 items 中的 fileIndexes 为各文件分配 businessId、businessType、targetSystemCode、folderId、category 和 encrypted。"
+        ],
+        "actions": [
+          "upload",
+          "create"
+        ],
+        "entities": [
+          "文件资源",
+          "文件元数据"
+        ],
+        "aliases": [
+          "批量上传文件",
+          "多文件批量入库",
+          "FileController.uploadBatch"
+        ],
+        "resource": "sys_file",
+        "lookup_keys": [
+          "files",
+          "items",
+          "fileIndexes",
+          "businessId",
+          "businessType",
+          "targetSystemCode",
+          "folderId",
+          "category",
+          "encrypted"
+        ],
+        "cardinality": "many",
+        "ownership": "unknown",
+        "discriminators": [
+          "与 upload 不同，本接口处理必填 files 数组且最多 9 个；items 为空时逐个保存全部文件，items 非空时仅保存 fileIndexes 指向的文件并校验下标。"
+        ],
+        "required_inputs": [
+          {
+            "name": "files",
+            "zh_name": "上传文件数组",
+            "location": "body",
+            "required": true,
+            "schema_type": "array<binary>"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "sys_file_id",
+            "display_name": "文件元数据ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "文件记录主键"
+            ],
+            "resource": "sys_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "storage_file_id",
+            "display_name": "对象存储文件ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "存储文件标识"
+            ],
+            "resource": "stored_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "file_business_id",
+            "display_name": "文件业务关联ID",
+            "technical_names": [
+              "businessId"
+            ],
+            "aliases": [
+              "关联业务ID"
+            ],
+            "resource": "sys_file",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "file_folder_id",
+            "display_name": "文件夹ID",
+            "technical_names": [
+              "folderId"
+            ],
+            "aliases": [
+              "所属文件夹ID"
+            ],
+            "resource": "file_folder",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "target_system_code",
+            "display_name": "目标系统编码",
+            "technical_names": [
+              "targetSystemCode"
+            ],
+            "aliases": [
+              "目标归属系统编码"
+            ],
+            "resource": "system",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "FileController#uploadBatch(String,MultipartFile[]) -> ResponseData<List<FileQuery>>",
+          "FileUploadItem.fileIndexes；FileQuery",
+          "SysFileRepository#parseUploadItems/uploadBatch/saveUploadedFile -> CustomFile#upload -> SysFileService#insert；validateFiles 使用 ArrayUtil.isEmpty 并限制最多 9 个，映射结果为空时抛 FILE_EMPTY"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "46cb5f14-e22a-47a5-8df6-d9ad425065b9",
+      "expected_identity": {
+        "service": "c12-sys",
+        "method": "POST",
+        "path": "/api/file/deleteById/{id}"
+      },
+      "semantic": {
+        "purpose": "供 c12-sys 接入端按一个路径 id 删除文件；数字 id 按文件元数据ID删除对象存储并标记元数据，非数字 id 按对象存储文件ID仅删除存储对象。",
+        "audiences": [
+          "c12-sys 接入端"
+        ],
+        "domains": [
+          "文件管理",
+          "文件删除"
+        ],
+        "scenarios": [
+          "接入系统端用单个文件元数据 id 或对象存储 fileId 删除一个文件资源。"
+        ],
+        "actions": [
+          "delete"
+        ],
+        "entities": [
+          "文件资源",
+          "文件元数据"
+        ],
+        "aliases": [
+          "删除单个文件",
+          "按文件标识删除",
+          "FileController.deleteById"
+        ],
+        "resource": "sys_file",
+        "lookup_keys": [
+          "id",
+          "fileId"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "与 deleteByIds 不同，本接口只处理一个混合标识；数字 id 同步更新 metadata 的 deleted/storageDeleted，非数字 fileId 直接 CustomFile.delete 且不更新元数据。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "文件元数据ID或对象存储文件ID",
+            "location": "path",
+            "required": true,
+            "schema_type": "string"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "sys_file_id",
+            "display_name": "文件元数据ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "文件记录主键"
+            ],
+            "resource": "sys_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "storage_file_id",
+            "display_name": "对象存储文件ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "存储文件标识"
+            ],
+            "resource": "stored_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "FileController#deleteById(String) -> ResponseData<Boolean>",
+          "路径参数 id；SysFile.id 与 SysFile.fileId",
+          "SysFileRepository#deleteById(String/Long)/deleteByFileId；isMetadataId 以全数字区分元数据ID与对象存储文件ID，数字分支更新 cs_sys_file，非数字分支仅调用 CustomFile#delete"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "5fcbb291-d223-49af-8779-af5fa94f5403",
+      "expected_identity": {
+        "service": "c12-sys",
+        "method": "POST",
+        "path": "/api/file/deleteByIds"
+      },
+      "semantic": {
+        "purpose": "供文件管理端批量接收文件元数据ID与对象存储文件ID的混合列表并删除多个文件；元数据ID分支同时标记记录，纯存储ID分支删除对象。",
+        "audiences": [
+          "文件管理端"
+        ],
+        "domains": [
+          "文件管理",
+          "文件删除"
+        ],
+        "scenarios": [
+          "文件管理端在批量操作中提交 ids，统一删除多条由数字文件元数据ID或非数字对象存储 fileId 定位的文件资源。"
+        ],
+        "actions": [
+          "delete"
+        ],
+        "entities": [
+          "文件资源",
+          "文件元数据"
+        ],
+        "aliases": [
+          "批量删除文件",
+          "按文件标识集合删除",
+          "FileController.deleteByIds"
+        ],
+        "resource": "sys_file",
+        "lookup_keys": [
+          "ids",
+          "id",
+          "fileId"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "与 deleteById 不同，本接口要求 ids 非空并拆分、去重多个元数据ID和存储ID；直接提供的存储ID只删对象，不标记对应元数据。"
+        ],
+        "required_inputs": [
+          {
+            "name": "ids",
+            "zh_name": "文件标识列表",
+            "location": "body",
+            "required": true,
+            "schema_type": "array"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "sys_file_id",
+            "display_name": "文件元数据ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "文件记录主键"
+            ],
+            "resource": "sys_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "storage_file_id",
+            "display_name": "对象存储文件ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "存储文件标识"
+            ],
+            "resource": "stored_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "FileController#deleteByIds(FileIdsCondition) -> ResponseData<Boolean>",
+          "FileIdsCondition.ids @NotEmpty；SysFile.id 与 SysFile.fileId",
+          "SysFileRepository#deleteByIds(FileIdsCondition)/splitFileReferences；元数据分支 CustomFile#delete + SysFileService#batchUpdate，存储ID分支直接 CustomFile#delete"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "f075b881-3e5b-423c-b72a-efdb44db1d21",
+      "expected_identity": {
+        "service": "c12-sys",
+        "method": "GET",
+        "path": "/api/file/download/{id}"
+      },
+      "semantic": {
+        "purpose": "供 c12-sys 接入端按文件元数据ID或对象存储文件ID下载一个原始文件二进制流；有元数据时按 encrypted 标记解密并更新最后访问时间。",
+        "audiences": [
+          "c12-sys 接入端"
+        ],
+        "domains": [
+          "文件管理",
+          "文件下载"
+        ],
+        "scenarios": [
+          "接入系统端用单个数字文件元数据 id 或非数字对象存储 fileId 获取原始附件下载流。"
+        ],
+        "actions": [
+          "download"
+        ],
+        "entities": [
+          "文件资源"
+        ],
+        "aliases": [
+          "下载单个原始文件",
+          "获取文件附件流",
+          "FileController.download"
+        ],
+        "resource": "sys_file",
+        "lookup_keys": [
+          "id",
+          "fileId"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "与 preview 不同，本接口通过 Content-disposition=attachment 返回原始下载；与 signUrl 不同，它直接输出二进制流而不是临时 URL。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "文件元数据ID或对象存储文件ID",
+            "location": "path",
+            "required": true,
+            "schema_type": "string"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "sys_file_id",
+            "display_name": "文件元数据ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "文件记录主键"
+            ],
+            "resource": "sys_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "storage_file_id",
+            "display_name": "对象存储文件ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "存储文件标识"
+            ],
+            "resource": "stored_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "FileController#download(String,HttpServletResponse) -> void",
+          "路径参数 id；SysFile.fileId/encrypted",
+          "SysFileRepository#downloadById/downloadByFileId -> CustomFile#download/writeDownload；有元数据时解密、更新 lastAccessTime，非数字标识无元数据时直接按存储ID下载"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "af9b1c20-7f6c-401a-863b-11a579a180dd",
+      "expected_identity": {
+        "service": "c12-sys",
+        "method": "POST",
+        "path": "/api/file/batchDownload"
+      },
+      "semantic": {
+        "purpose": "供文件管理端按文件元数据ID与对象存储文件ID混合列表打包下载多个文件，生成临时 ZIP 流并在响应完成后删除临时对象。",
+        "audiences": [
+          "文件管理端"
+        ],
+        "domains": [
+          "文件管理",
+          "文件下载"
+        ],
+        "scenarios": [
+          "文件管理端提交非空 ids，可选 zipName，将多个加密或未加密文件汇总为一个压缩包下载。"
+        ],
+        "actions": [
+          "download"
+        ],
+        "entities": [
+          "文件资源",
+          "压缩包"
+        ],
+        "aliases": [
+          "批量打包下载文件",
+          "下载文件压缩包",
+          "FileController.batchDownload"
+        ],
+        "resource": "sys_file",
+        "lookup_keys": [
+          "ids",
+          "id",
+          "fileId",
+          "zipName"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "与单文件 download 不同，本接口处理多个混合标识并输出一个临时 ZIP；元数据文件按 encrypted 解密，完成后清理 ZIP 对象。"
+        ],
+        "required_inputs": [
+          {
+            "name": "ids",
+            "zh_name": "文件标识列表",
+            "location": "body",
+            "required": true,
+            "schema_type": "array"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "sys_file_id",
+            "display_name": "文件元数据ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "文件记录主键"
+            ],
+            "resource": "sys_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "storage_file_id",
+            "display_name": "对象存储文件ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "存储文件标识"
+            ],
+            "resource": "stored_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "FileController#batchDownload(FileBatchDownloadRequest,HttpServletResponse) -> void",
+          "FileBatchDownloadRequest.ids @NotEmpty、zipName",
+          "SysFileRepository#batchDownload -> CustomFile#batchDownload(Map,String)；临时 ZIP 上传后下载，并在 finally 中 CustomFile#delete，元数据记录更新 lastAccessTime"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "e2e8f7af-e23e-41f3-870f-a5c2fbcab6c2",
+      "expected_identity": {
+        "service": "c12-sys",
+        "method": "GET",
+        "path": "/api/file/preview/{id}"
+      },
+      "semantic": {
+        "purpose": "供 c12-sys 接入端按文件元数据ID或对象存储文件ID在线预览一个文件二进制内容；有元数据时按 encrypted 标记解密并更新最后访问时间。",
+        "audiences": [
+          "c12-sys 接入端"
+        ],
+        "domains": [
+          "文件管理",
+          "文件预览"
+        ],
+        "scenarios": [
+          "接入系统页面用单个数字文件元数据 id 或非数字对象存储 fileId 内嵌展示图片、PDF 或可转换的 Word 内容。"
+        ],
+        "actions": [
+          "preview"
+        ],
+        "entities": [
+          "文件资源"
+        ],
+        "aliases": [
+          "预览单个文件",
+          "在线查看文件内容",
+          "FileController.preview"
+        ],
+        "resource": "sys_file",
+        "lookup_keys": [
+          "id",
+          "fileId"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "与 download 不同，本接口以内联内容方式预览且 Word 会转换为 HTML；与 signUrl 不同，它直接返回内容流。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "文件元数据ID或对象存储文件ID",
+            "location": "path",
+            "required": true,
+            "schema_type": "string"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "sys_file_id",
+            "display_name": "文件元数据ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "文件记录主键"
+            ],
+            "resource": "sys_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "storage_file_id",
+            "display_name": "对象存储文件ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "存储文件标识"
+            ],
+            "resource": "stored_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "FileController#preview(String,HttpServletResponse) -> void",
+          "路径参数 id；SysFile.fileId/encrypted",
+          "SysFileRepository#previewById/previewByFileId -> CustomFile#preview/writePreview；Word 分支转 HTML，有元数据时更新 lastAccessTime"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "aa444e13-6c50-49a0-948b-fc26e6908d3c",
+      "expected_identity": {
+        "service": "c12-sys",
+        "method": "POST",
+        "path": "/api/file/verify/{id}"
+      },
+      "semantic": {
+        "purpose": "供文件管理端按文件元数据ID或对象存储文件ID手动校验一个加密文件的原始内容哈希，写入校验记录、刷新文件状态并返回 CONSISTENT 或 INCONSISTENT。",
+        "audiences": [
+          "文件管理端"
+        ],
+        "domains": [
+          "文件管理",
+          "文件完整性"
+        ],
+        "scenarios": [
+          "文件管理端用一个数字文件元数据 id 或非数字对象存储 fileId 发起手动完整性校验，并取得该文件的一致性结果编码。"
+        ],
+        "actions": [
+          "verify"
+        ],
+        "entities": [
+          "加密文件",
+          "完整性校验记录"
+        ],
+        "aliases": [
+          "校验单个文件完整性",
+          "手动比对文件哈希",
+          "FileController.verify"
+        ],
+        "resource": "file_integrity",
+        "lookup_keys": [
+          "id",
+          "fileId"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "与 verifyRecord 不同，本接口实际重新计算一个加密文件哈希并新增 MANUAL 记录，返回原始 String 结果；不支持未加密文件。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "文件元数据ID或对象存储文件ID",
+            "location": "path",
+            "required": true,
+            "schema_type": "string"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "sys_file_id",
+            "display_name": "文件元数据ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "文件记录主键"
+            ],
+            "resource": "sys_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "storage_file_id",
+            "display_name": "对象存储文件ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "存储文件标识"
+            ],
+            "resource": "stored_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "FileController#verify(String) -> ResponseData<String>",
+          "路径参数 id；FileIntegrityVerifyResult；SysFile.hashValue/fileId/encrypted",
+          "SysFileRepository#verify/getVerifyEntity/verifySingleFile -> CustomFile#calculateOriginalHash -> SysFileVerifyRecordService#insert；更新 fileStatus，首次异常时发布站内信"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "4ba3e6eb-6ba2-4592-90e7-b8ac03f73efe",
+      "expected_identity": {
+        "service": "c12-sys",
+        "method": "POST",
+        "path": "/api/file/verifyRecord/{id}"
+      },
+      "semantic": {
+        "purpose": "供文件管理端按文件元数据ID或对象存储文件ID查询一个文件的历次完整性校验记录，并按校验时间与记录ID倒序返回多条结果。",
+        "audiences": [
+          "文件管理端"
+        ],
+        "domains": [
+          "文件管理",
+          "文件完整性"
+        ],
+        "scenarios": [
+          "文件管理端用数字文件元数据 id 或非数字对象存储 fileId 查看该文件的 MANUAL/JOB 校验历史及一致性结果。"
+        ],
+        "actions": [
+          "query",
+          "list"
+        ],
+        "entities": [
+          "文件完整性校验记录"
+        ],
+        "aliases": [
+          "查询文件校验记录",
+          "查看完整性校验历史",
+          "FileController.verifyRecord"
+        ],
+        "resource": "file_verify_record",
+        "lookup_keys": [
+          "id",
+          "fileId",
+          "sysFileId",
+          "storageFileId"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "与 verify 不同，本接口不重新计算哈希，只按 sysFileId 或 storageFileId 返回多条历史记录；结果按 createTime、记录 id 倒序。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "文件元数据ID或对象存储文件ID",
+            "location": "path",
+            "required": true,
+            "schema_type": "string"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "file_verify_record_id",
+            "display_name": "文件校验记录ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "校验记录主键"
+            ],
+            "resource": "file_verify_record",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "verified_sys_file_id",
+            "display_name": "被校验文件元数据ID",
+            "technical_names": [
+              "sysFileId"
+            ],
+            "aliases": [
+              "校验对象元数据ID"
+            ],
+            "resource": "sys_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "verified_storage_file_id",
+            "display_name": "被校验对象存储文件ID",
+            "technical_names": [
+              "storageFileId"
+            ],
+            "aliases": [
+              "校验对象存储ID"
+            ],
+            "resource": "stored_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "FileController#verifyRecord(String) -> ResponseData<List<FileIntegrityVerifyRecordQuery>>",
+          "FileIntegrityVerifyRecordQuery；SysFileVerifyRecord",
+          "SysFileRepository#verifyRecordList/buildVerifyRecordCondition -> SysFileVerifyRecordService#find；数字路径值映射 sysFileId，非数字值映射 storageFileId，按 createTime/id DESC"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "48cffbe1-6837-4a0a-a9d3-e4354a776be5",
+      "expected_identity": {
+        "service": "c12-sys",
+        "method": "POST",
+        "path": "/api/file/signUrl/{id}"
+      },
+      "semantic": {
+        "purpose": "供 c12-sys 接入端按文件元数据ID或对象存储文件ID为一个文件生成临时签名访问 URL，并返回文件标识及可用文件名。",
+        "audiences": [
+          "c12-sys 接入端"
+        ],
+        "domains": [
+          "文件管理",
+          "签名地址"
+        ],
+        "scenarios": [
+          "接入系统端用数字文件元数据 id 或非数字对象存储 fileId 获取一个文件的临时签名 URL，而不直接传输文件内容。"
+        ],
+        "actions": [
+          "sign",
+          "query"
+        ],
+        "entities": [
+          "文件签名地址"
+        ],
+        "aliases": [
+          "获取单个文件签名地址",
+          "生成文件临时URL",
+          "FileController.getSignUrl"
+        ],
+        "resource": "file_sign_url",
+        "lookup_keys": [
+          "id",
+          "fileId"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "与 signUrl/batch 不同，本接口只返回一个 FileSignUrlQuery；与 preview/download 不同，它返回 signUrl JSON 而非二进制流。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "文件元数据ID或对象存储文件ID",
+            "location": "path",
+            "required": true,
+            "schema_type": "string"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "sys_file_id",
+            "display_name": "文件元数据ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "文件记录主键"
+            ],
+            "resource": "sys_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "storage_file_id",
+            "display_name": "对象存储文件ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "存储文件标识"
+            ],
+            "resource": "stored_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "FileController#getSignUrl(String) -> ResponseData<FileSignUrlQuery>",
+          "FileSignUrlQuery.id/fileId/fileName/signUrl",
+          "SysFileRepository#getSignUrl/getSignUrlByFileId/toSignUrlQuery -> CustomFile#getObjectSignUrl；非数字分支仅返回 fileId 与 signUrl"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "7dae07cc-5540-466b-b481-75e346503e84",
+      "expected_identity": {
+        "service": "c12-sys",
+        "method": "POST",
+        "path": "/api/file/signUrl/batch"
+      },
+      "semantic": {
+        "purpose": "供文件管理端按文件元数据ID与对象存储文件ID混合列表批量生成多个文件的临时签名 URL，返回对应的签名地址结果集合。",
+        "audiences": [
+          "文件管理端"
+        ],
+        "domains": [
+          "文件管理",
+          "签名地址"
+        ],
+        "scenarios": [
+          "文件管理端提交非空 ids，为多条数字元数据ID或非数字对象存储 fileId 一次取得签名 URL。"
+        ],
+        "actions": [
+          "sign",
+          "query"
+        ],
+        "entities": [
+          "文件签名地址"
+        ],
+        "aliases": [
+          "批量获取文件签名地址",
+          "生成多个文件临时URL",
+          "FileController.getSignUrlList"
+        ],
+        "resource": "file_sign_url",
+        "lookup_keys": [
+          "ids",
+          "id",
+          "fileId"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "与单个 signUrl/{id} 不同，本接口要求 ids 非空并返回 List<FileSignUrlQuery>；元数据与直接存储ID会合并且避免重复 fileId。"
+        ],
+        "required_inputs": [
+          {
+            "name": "ids",
+            "zh_name": "文件标识列表",
+            "location": "body",
+            "required": true,
+            "schema_type": "array"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "sys_file_id",
+            "display_name": "文件元数据ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "文件记录主键"
+            ],
+            "resource": "sys_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "storage_file_id",
+            "display_name": "对象存储文件ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "存储文件标识"
+            ],
+            "resource": "stored_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "FileController#getSignUrlList(FileIdsCondition) -> ResponseData<List<FileSignUrlQuery>>",
+          "FileIdsCondition.ids @NotEmpty；FileSignUrlQuery",
+          "SysFileRepository#getSignUrlList/splitFileReferences -> CustomFile#getObjectSignUrl；metadataStorageFileIds 用于避免混合输入重复"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "6430ee32-cff9-44c1-a9d7-896e5cdc762a",
+      "expected_identity": {
+        "service": "c12-sys",
+        "method": "POST",
+        "path": "/api/file/move"
+      },
+      "semantic": {
+        "purpose": "供文件管理端将当前 systemCode 下由多个文件元数据ID定位的文件批量移动到一个 targetFolderId，并更新每条文件的 folderId。",
+        "audiences": [
+          "文件管理端"
+        ],
+        "domains": [
+          "文件管理",
+          "文件移动"
+        ],
+        "scenarios": [
+          "文件管理端提交非空 ids 和 targetFolderId，把当前系统的多条文件元数据改挂到目标文件夹。"
+        ],
+        "actions": [
+          "move",
+          "update"
+        ],
+        "entities": [
+          "文件元数据",
+          "文件夹"
+        ],
+        "aliases": [
+          "批量移动文件",
+          "文件改挂目标文件夹",
+          "FileController.move"
+        ],
+        "resource": "sys_file",
+        "lookup_keys": [
+          "ids",
+          "targetFolderId",
+          "folderId",
+          "systemCode"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "与文件夹 save 不同，本接口不维护文件夹节点，而是批量改写文件 folderId；可执行代码未校验 targetFolderId 对应文件夹是否存在或同属当前系统。"
+        ],
+        "required_inputs": [
+          {
+            "name": "ids",
+            "zh_name": "文件元数据ID列表",
+            "location": "body",
+            "required": true,
+            "schema_type": "array"
+          },
+          {
+            "name": "targetFolderId",
+            "zh_name": "目标文件夹ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "sys_file_id",
+            "display_name": "文件元数据ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "文件记录主键"
+            ],
+            "resource": "sys_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "target_folder_id",
+            "display_name": "目标文件夹ID",
+            "technical_names": [
+              "targetFolderId"
+            ],
+            "aliases": [
+              "移动目标文件夹"
+            ],
+            "resource": "file_folder",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "file_folder_id",
+            "display_name": "文件夹ID",
+            "technical_names": [
+              "folderId"
+            ],
+            "aliases": [
+              "所属文件夹ID"
+            ],
+            "resource": "file_folder",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "system_code",
+            "display_name": "系统编码",
+            "technical_names": [
+              "systemCode"
+            ],
+            "aliases": [
+              "接入系统编码"
+            ],
+            "resource": "system",
+            "source": "runtime_context",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "FileController#move(FileMoveItem) -> ResponseData<Void>",
+          "FileMoveItem.ids @NotEmpty、targetFolderId @NotNull；SysFile.folderId",
+          "SysFileRepository#move -> getCurrentEntities -> SysFileService#batchUpdate；仅校验源文件属于当前 systemCode，未调用 FileFolderService 校验目标文件夹"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "efc57683-fbb9-4876-9d1e-76bb2fd4c52b",
+      "expected_identity": {
+        "service": "c12-sys",
+        "method": "POST",
+        "path": "/api/file/folder/listTree"
+      },
+      "semantic": {
+        "purpose": "供文件管理端按系统编码集合、文件夹ID、名称或类型查询文件夹，并按 parentId 组装为包含 children 的文件夹树。",
+        "audiences": [
+          "文件管理端"
+        ],
+        "domains": [
+          "文件管理",
+          "文件夹"
+        ],
+        "scenarios": [
+          "文件管理端按 systemCode/systemCodes、id、folderName 或 folderType 查找文件夹层级，用于目录树选择和浏览。"
+        ],
+        "actions": [
+          "query",
+          "list"
+        ],
+        "entities": [
+          "文件夹树",
+          "文件夹"
+        ],
+        "aliases": [
+          "查询文件夹树",
+          "获取目录层级",
+          "FileFolderController.listTree"
+        ],
+        "resource": "file_folder",
+        "lookup_keys": [
+          "systemCode",
+          "systemCodes",
+          "id",
+          "folderName",
+          "folderType",
+          "parentId"
+        ],
+        "cardinality": "many",
+        "ownership": "unknown",
+        "discriminators": [
+          "与普通文件 list 不同，本接口查询 cs_sys_file_folder 并按 parentId 递归生成 children；未传 systemCodes 时默认当前 systemCode。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "file_folder_id",
+            "display_name": "文件夹ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "文件夹主键"
+            ],
+            "resource": "file_folder",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "parent_folder_id",
+            "display_name": "上级文件夹ID",
+            "technical_names": [
+              "parentId"
+            ],
+            "aliases": [
+              "父文件夹ID"
+            ],
+            "resource": "file_folder",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "folder_system_code",
+            "display_name": "文件夹系统编码",
+            "technical_names": [
+              "systemCode"
+            ],
+            "aliases": [
+              "文件夹归属系统"
+            ],
+            "resource": "system",
+            "source": "runtime_context",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "FileFolderController#listTree(FileFolderCondition) -> ResponseData<List<FileFolderQuery>>",
+          "FileFolderCondition；FileFolderQuery.children/parentId",
+          "FileFolderRepository#listTree/buildFolderCondition/buildTree -> FileFolderService#find；按 systemCode(s)、id、folderName、folderType 过滤 deleted=0"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "41c8480d-93a9-4ea6-8921-02dd41ea27de",
+      "expected_identity": {
+        "service": "c12-sys",
+        "method": "POST",
+        "path": "/api/file/folder/save"
+      },
+      "semantic": {
+        "purpose": "供文件管理端新增或编辑一个文件夹；新增时计算 parentId/parentIds 并设置目标系统，编辑时按 id 更新名称、类型、排序和图标。",
+        "audiences": [
+          "文件管理端"
+        ],
+        "domains": [
+          "文件管理",
+          "文件夹"
+        ],
+        "scenarios": [
+          "文件管理端提交必填 folderName，可选 id、parentId、targetSystemCode、folderType、sort 和 icon 来新建目录或修改既有目录。"
+        ],
+        "actions": [
+          "create",
+          "update"
+        ],
+        "entities": [
+          "文件夹"
+        ],
+        "aliases": [
+          "新增或编辑文件夹",
+          "保存文件目录",
+          "FileFolderController.save"
+        ],
+        "resource": "file_folder",
+        "lookup_keys": [
+          "id",
+          "parentId",
+          "targetSystemCode",
+          "folderName",
+          "folderType",
+          "sort",
+          "icon"
+        ],
+        "cardinality": "one",
+        "ownership": "unknown",
+        "discriminators": [
+          "与文件 move 不同，本接口维护文件夹节点本身；编辑分支不更新 parentId/parentIds 或 systemCode。Repository 重复检查在 folderType 非空时允许同名不同类型，但数据库唯一键 uk_sys_file_folder_name 仅含 system_code、parent_id、folder_name，存在可执行约束冲突。"
+        ],
+        "required_inputs": [
+          {
+            "name": "folderName",
+            "zh_name": "文件夹名称",
+            "location": "body",
+            "required": true,
+            "schema_type": "string"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "file_folder_id",
+            "display_name": "文件夹ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "文件夹主键"
+            ],
+            "resource": "file_folder",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "parent_folder_id",
+            "display_name": "上级文件夹ID",
+            "technical_names": [
+              "parentId"
+            ],
+            "aliases": [
+              "父文件夹ID"
+            ],
+            "resource": "file_folder",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "target_system_code",
+            "display_name": "目标系统编码",
+            "technical_names": [
+              "targetSystemCode"
+            ],
+            "aliases": [
+              "目标归属系统编码"
+            ],
+            "resource": "system",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.88,
+        "semantic_evidence": [
+          "FileFolderController#save(FileFolderItem) -> ResponseData<Void>",
+          "FileFolderItem.folderName @NotBlank、id/parentId/targetSystemCode",
+          "FileFolderRepository#save/checkDuplicate/resolveParentIds -> FileFolderService#insert/update；编辑分支只更新 folderName/folderType/sort/icon，不写 parentId/parentIds/systemCode；001_file_tables.sql 的 uk_sys_file_folder_name(system_code,parent_id,folder_name) 与 Repository 在 folderType 非空时的重复判定口径冲突"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "ed4a2699-d0b7-4e72-9036-5aa73d464379",
+      "expected_identity": {
+        "service": "c12-sys",
+        "method": "POST",
+        "path": "/api/file/folder/deleteByIds"
+      },
+      "semantic": {
+        "purpose": "供文件管理端按文件夹ID列表批量逻辑删除当前 systemCode 下的多个文件夹并记录文件夹删除日志。",
+        "audiences": [
+          "文件管理端"
+        ],
+        "domains": [
+          "文件管理",
+          "文件夹"
+        ],
+        "scenarios": [
+          "文件管理端提交非空 ids，批量删除当前系统的多个文件夹节点。"
+        ],
+        "actions": [
+          "delete"
+        ],
+        "entities": [
+          "文件夹"
+        ],
+        "aliases": [
+          "批量删除文件夹",
+          "删除多个目录节点",
+          "FileFolderController.deleteByIds"
+        ],
+        "resource": "file_folder",
+        "lookup_keys": [
+          "ids",
+          "id",
+          "systemCode"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "与文件 deleteByIds 不同，本接口只接受 Long 文件夹ID并将 folder.deleted 标为 1，不删除对象存储文件，也未级联处理子文件夹或目录内文件。"
+        ],
+        "required_inputs": [
+          {
+            "name": "ids",
+            "zh_name": "文件夹ID列表",
+            "location": "body",
+            "required": true,
+            "schema_type": "array"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "file_folder_id",
+            "display_name": "文件夹ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "文件夹主键"
+            ],
+            "resource": "file_folder",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "folder_system_code",
+            "display_name": "文件夹系统编码",
+            "technical_names": [
+              "systemCode"
+            ],
+            "aliases": [
+              "文件夹归属系统"
+            ],
+            "resource": "system",
+            "source": "runtime_context",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "FileFolderController#deleteByIds(IdsCondition) -> ResponseData<Void>",
+          "com.chinaservices.core.domain.IdsCondition.ids @NotEmpty",
+          "FileFolderRepository#deleteByIds/getEntity -> FileFolderService#batchUpdate；getEntity 要求 id 非空、属于当前 SystemCodeUtil.requiredSystemCode 且未删除"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "b6ec0280-3ed7-477d-9953-58c2165a4ee5",
+      "expected_identity": {
+        "service": "c12-sys",
+        "method": "POST",
+        "path": "/api/file/importTemplate/page"
+      },
+      "semantic": {
+        "purpose": "供导入模板管理端按系统、模板编码、模板名称、文件名称和创建时间分页查询模板配置，并补充模板文件签名 URL 与当前系统可编辑标记。",
+        "audiences": [
+          "导入模板管理端"
+        ],
+        "domains": [
+          "文件管理",
+          "导入模板"
+        ],
+        "scenarios": [
+          "模板管理端按 systemCode/systemCodes、templateCode、templateName、fileName 或 createStartTime/createEndTime 筛选导入模板配置并分页展示。"
+        ],
+        "actions": [
+          "query",
+          "page"
+        ],
+        "entities": [
+          "文件导入模板"
+        ],
+        "aliases": [
+          "分页查询导入模板",
+          "导入模板配置分页",
+          "FileImportTemplateController.page"
+        ],
+        "resource": "file_import_template",
+        "lookup_keys": [
+          "pageNumber",
+          "pageSize",
+          "start",
+          "systemCode",
+          "systemCodes",
+          "templateCode",
+          "templateName",
+          "fileName",
+          "createStartTime",
+          "createEndTime"
+        ],
+        "cardinality": "many",
+        "ownership": "unknown",
+        "discriminators": [
+          "与普通文件 page 不同，本接口查询 cs_sys_file_import_template，核心业务键是 templateCode，并按创建时间而非上传时间过滤。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "file_import_template_id",
+            "display_name": "文件导入模板ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "模板配置主键"
+            ],
+            "resource": "file_import_template",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "file_import_template_code",
+            "display_name": "文件导入模板编码",
+            "technical_names": [
+              "templateCode"
+            ],
+            "aliases": [
+              "导入模板编码"
+            ],
+            "resource": "file_import_template",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "template_storage_file_id",
+            "display_name": "模板对象存储文件ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "模板文件存储ID"
+            ],
+            "resource": "stored_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "template_system_code",
+            "display_name": "模板系统编码",
+            "technical_names": [
+              "systemCode"
+            ],
+            "aliases": [
+              "模板归属系统编码"
+            ],
+            "resource": "system",
+            "source": "runtime_context",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "FileImportTemplateController#page(FileImportTemplatePageCondition) -> ResponseData<PageResult<FileImportTemplateQuery>>",
+          "FileImportTemplatePageCondition；FileImportTemplateQuery",
+          "FileImportTemplateRepository#page/fillPageSystemCodes -> FileImportTemplateService#page；importTemplate_query_getPageList.sql 按系统、templateCode、templateName、fileName、创建时间过滤并补 signUrl/editable"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "c18d35c2-713e-4e69-a5da-713c7bee3416",
+      "expected_identity": {
+        "service": "c12-sys",
+        "method": "POST",
+        "path": "/api/file/importTemplate/getById/{id}"
+      },
+      "semantic": {
+        "purpose": "供导入模板管理端按模板配置ID查询一条文件导入模板详情，并返回模板编码、模板文件ID、签名 URL 和可编辑标记。",
+        "audiences": [
+          "导入模板管理端"
+        ],
+        "domains": [
+          "文件管理",
+          "导入模板"
+        ],
+        "scenarios": [
+          "模板管理端用一个模板配置 id 打开导入模板详情，查看 templateCode、templateName 和关联 fileId。"
+        ],
+        "actions": [
+          "query",
+          "detail"
+        ],
+        "entities": [
+          "文件导入模板"
+        ],
+        "aliases": [
+          "查询导入模板详情",
+          "按ID查看模板配置",
+          "FileImportTemplateController.getById"
+        ],
+        "resource": "file_import_template",
+        "lookup_keys": [
+          "id",
+          "templateCode",
+          "fileId"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "与 download/{templateCode} 不同，本接口按数值 id 返回 JSON 配置详情而非模板文件流；Repository#getById 未按当前 systemCode 限制读取。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "文件导入模板ID",
+            "location": "path",
+            "required": true,
+            "schema_type": "integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "file_import_template_id",
+            "display_name": "文件导入模板ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "模板配置主键"
+            ],
+            "resource": "file_import_template",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "file_import_template_code",
+            "display_name": "文件导入模板编码",
+            "technical_names": [
+              "templateCode"
+            ],
+            "aliases": [
+              "导入模板编码"
+            ],
+            "resource": "file_import_template",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "template_storage_file_id",
+            "display_name": "模板对象存储文件ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "模板文件存储ID"
+            ],
+            "resource": "stored_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "FileImportTemplateController#getById(Long) -> ResponseData<FileImportTemplateQuery>",
+          "FileImportTemplateQuery.id/templateCode/fileId/signUrl/editable",
+          "FileImportTemplateRepository#getById/getEntity/toQuery -> FileImportTemplateService#findById；getEntity 只校验 id 和存在性，未校验 systemCode，fillExtraInfo 生成 signUrl/editable"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "3d95128c-fbfb-4ef7-b597-c6f87fc67fd7",
+      "expected_identity": {
+        "service": "c12-sys",
+        "method": "POST",
+        "path": "/api/file/importTemplate/save"
+      },
+      "semantic": {
+        "purpose": "供导入模板管理端按当前 systemCode 新增或更新一条模板配置，要求模板编码、名称、对象存储文件ID和文件名，并返回保存后的模板ID。",
+        "audiences": [
+          "导入模板管理端"
+        ],
+        "domains": [
+          "文件管理",
+          "导入模板"
+        ],
+        "scenarios": [
+          "模板管理端提交 templateCode、templateName、fileId、fileName 和可选 id/remark，保存当前系统的导入模板配置。"
+        ],
+        "actions": [
+          "create",
+          "update"
+        ],
+        "entities": [
+          "文件导入模板"
+        ],
+        "aliases": [
+          "保存导入模板配置",
+          "新增或更新模板文件",
+          "FileImportTemplateController.save"
+        ],
+        "resource": "file_import_template",
+        "lookup_keys": [
+          "id",
+          "templateCode",
+          "templateName",
+          "fileId",
+          "fileName",
+          "systemCode"
+        ],
+        "cardinality": "one",
+        "ownership": "unknown",
+        "discriminators": [
+          "有 id 时更新当前系统内该配置；无 id 时若同一 systemCode+templateCode 已存在则更新原记录而非新增，返回原始 Long 模板ID。"
+        ],
+        "required_inputs": [
+          {
+            "name": "templateCode",
+            "zh_name": "模板编码",
+            "location": "body",
+            "required": true,
+            "schema_type": "string"
+          },
+          {
+            "name": "templateName",
+            "zh_name": "模板名称",
+            "location": "body",
+            "required": true,
+            "schema_type": "string"
+          },
+          {
+            "name": "fileId",
+            "zh_name": "对象存储文件ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "string"
+          },
+          {
+            "name": "fileName",
+            "zh_name": "文件名称",
+            "location": "body",
+            "required": true,
+            "schema_type": "string"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "file_import_template_id",
+            "display_name": "文件导入模板ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "模板配置主键"
+            ],
+            "resource": "file_import_template",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "file_import_template_code",
+            "display_name": "文件导入模板编码",
+            "technical_names": [
+              "templateCode"
+            ],
+            "aliases": [
+              "导入模板编码"
+            ],
+            "resource": "file_import_template",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "template_storage_file_id",
+            "display_name": "模板对象存储文件ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "模板文件存储ID"
+            ],
+            "resource": "stored_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "template_system_code",
+            "display_name": "模板系统编码",
+            "technical_names": [
+              "systemCode"
+            ],
+            "aliases": [
+              "模板归属系统编码"
+            ],
+            "resource": "system",
+            "source": "runtime_context",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "FileImportTemplateController#save(FileImportTemplateItem) -> ResponseData<Long>",
+          "FileImportTemplateItem.templateCode/templateName/fileId/fileName @NotBlank、id",
+          "FileImportTemplateRepository#save/resolveSaveEntity/validateTemplateCodeDuplicate -> FileImportTemplateService#getBySystemCodeAndTemplateCode/insert/update；001_file_tables.sql 唯一键为 system_code+template_code"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "19288af9-fba1-4e41-b139-b2af562f38e7",
+      "expected_identity": {
+        "service": "c12-sys",
+        "method": "POST",
+        "path": "/api/file/importTemplate/deleteByIds"
+      },
+      "semantic": {
+        "purpose": "供导入模板管理端按模板配置ID列表批量删除当前 systemCode 下存在的多个文件导入模板配置。",
+        "audiences": [
+          "导入模板管理端"
+        ],
+        "domains": [
+          "文件管理",
+          "导入模板"
+        ],
+        "scenarios": [
+          "模板管理端提交非空 ids，批量移除当前系统的多条导入模板配置。"
+        ],
+        "actions": [
+          "delete"
+        ],
+        "entities": [
+          "文件导入模板"
+        ],
+        "aliases": [
+          "批量删除导入模板",
+          "删除多个模板配置",
+          "FileImportTemplateController.deleteByIds"
+        ],
+        "resource": "file_import_template",
+        "lookup_keys": [
+          "ids",
+          "id",
+          "systemCode"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "与普通文件 deleteByIds 不同，本接口删除模板配置记录而不调用对象存储删除；查询到的 ids 会过滤为当前 systemCode。"
+        ],
+        "required_inputs": [
+          {
+            "name": "ids",
+            "zh_name": "文件导入模板ID列表",
+            "location": "body",
+            "required": true,
+            "schema_type": "array"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "file_import_template_id",
+            "display_name": "文件导入模板ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "模板配置主键"
+            ],
+            "resource": "file_import_template",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "template_system_code",
+            "display_name": "模板系统编码",
+            "technical_names": [
+              "systemCode"
+            ],
+            "aliases": [
+              "模板归属系统编码"
+            ],
+            "resource": "system",
+            "source": "runtime_context",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "FileImportTemplateController#deleteByIds(IdsCondition) -> ResponseData<Boolean>",
+          "com.chinaservices.core.domain.IdsCondition.ids @NotEmpty",
+          "FileImportTemplateRepository#deleteByIds/getEntities -> FileImportTemplateService#findByIds/delete；getEntities 使用 CollectionUtil.isEmpty 校验并按 SystemCodeUtil.requiredSystemCode 过滤"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "08acdc7e-0788-432e-8964-d44abcaf8d87",
+      "expected_identity": {
+        "service": "c12-sys",
+        "method": "GET",
+        "path": "/api/file/importTemplate/download/{templateCode}"
+      },
+      "semantic": {
+        "purpose": "供业务导入端按 templateCode 和可选 systemCode 定位一条导入模板配置，再按其 fileId 下载原始模板二进制流。",
+        "audiences": [
+          "业务导入端"
+        ],
+        "domains": [
+          "文件管理",
+          "导入模板"
+        ],
+        "scenarios": [
+          "业务导入端用 templateCode 下载指定系统的空白导入模板；未传 systemCode 时使用当前请求头系统编码。"
+        ],
+        "actions": [
+          "download"
+        ],
+        "entities": [
+          "文件导入模板",
+          "模板文件"
+        ],
+        "aliases": [
+          "下载空白导入模板",
+          "按模板编码取模板文件",
+          "FileImportTemplateController.download"
+        ],
+        "resource": "file_import_template",
+        "lookup_keys": [
+          "templateCode",
+          "systemCode",
+          "fileId"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "与 downloadWithData 不同，本接口始终直接下载已配置的原始模板文件，不接收或写入示例数据。"
+        ],
+        "required_inputs": [
+          {
+            "name": "templateCode",
+            "zh_name": "模板编码",
+            "location": "path",
+            "required": true,
+            "schema_type": "string"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "file_import_template_code",
+            "display_name": "文件导入模板编码",
+            "technical_names": [
+              "templateCode"
+            ],
+            "aliases": [
+              "导入模板编码"
+            ],
+            "resource": "file_import_template",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "template_system_code",
+            "display_name": "模板系统编码",
+            "technical_names": [
+              "systemCode"
+            ],
+            "aliases": [
+              "模板归属系统编码"
+            ],
+            "resource": "system",
+            "source": "runtime_context",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "template_storage_file_id",
+            "display_name": "模板对象存储文件ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "模板文件存储ID"
+            ],
+            "resource": "stored_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "FileImportTemplateController#download(String,String,HttpServletResponse) -> void",
+          "路径参数 templateCode；可选 query systemCode；FileImportTemplate.fileId",
+          "FileImportTemplateRepository#download/getEntityByTemplateCode -> FileImportTemplateService#getBySystemCodeAndTemplateCode -> CustomFile#download；templateCode 与模板 fileId 均显式非空校验"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "dcd8c8c8-35a9-449d-bec2-2f88b8f9a43e",
+      "expected_identity": {
+        "service": "c12-sys",
+        "method": "POST",
+        "path": "/api/file/importTemplate/downloadWithData/{templateCode}"
+      },
+      "semantic": {
+        "purpose": "供业务导入端按 templateCode 和可选 systemCode 下载一个导入模板；dataList 非空时清除模板旧数据行并写入示例数据，空时退化为原始模板下载。",
+        "audiences": [
+          "业务导入端"
+        ],
+        "domains": [
+          "文件管理",
+          "导入模板"
+        ],
+        "scenarios": [
+          "业务导入端提交 templateCode 与可选 dataList，将多行示例数据写入首个工作表后下载模板，或在 dataList 为空时取得空白模板。"
+        ],
+        "actions": [
+          "download",
+          "generate"
+        ],
+        "entities": [
+          "文件导入模板",
+          "模板示例数据"
+        ],
+        "aliases": [
+          "下载带示例数据模板",
+          "填充数据后下载模板",
+          "FileImportTemplateController.downloadWithData"
+        ],
+        "resource": "file_import_template",
+        "lookup_keys": [
+          "templateCode",
+          "systemCode",
+          "dataList",
+          "fileId"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "与 download 不同，本接口在 dataList 非空时用 Apache POI 重写首个工作表的数据行再输出；但 dataList 为空时可执行代码直接下载原始模板。"
+        ],
+        "required_inputs": [
+          {
+            "name": "templateCode",
+            "zh_name": "模板编码",
+            "location": "path",
+            "required": true,
+            "schema_type": "string"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "file_import_template_code",
+            "display_name": "文件导入模板编码",
+            "technical_names": [
+              "templateCode"
+            ],
+            "aliases": [
+              "导入模板编码"
+            ],
+            "resource": "file_import_template",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "template_system_code",
+            "display_name": "模板系统编码",
+            "technical_names": [
+              "systemCode"
+            ],
+            "aliases": [
+              "模板归属系统编码"
+            ],
+            "resource": "system",
+            "source": "runtime_context",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "template_storage_file_id",
+            "display_name": "模板对象存储文件ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "模板文件存储ID"
+            ],
+            "resource": "stored_file",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "FileImportTemplateController#downloadWithData(String,String,List<Object>,HttpServletResponse) -> void",
+          "路径参数 templateCode；可选 query systemCode；可选 body dataList",
+          "FileImportTemplateRepository#downloadWithData/writeTemplateWithData；CollectionUtil.isEmpty(dataList) 时调用 CustomFile#download，否则 WorkbookFactory 读取模板、clearDataRows/writeDataRows 后输出二进制流"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "daf02aaa-92b3-4356-9e27-1dd63b5832e3",
+      "expected_identity": {
+        "service": "c12-sys",
+        "method": "POST",
+        "path": "/api/file/information/page"
+      },
+      "semantic": {
+        "purpose": "供信息公告后台管理端按公告编码、名称和修改时间范围分页查询全局富文本信息公告。",
+        "audiences": [
+          "信息公告后台管理端"
+        ],
+        "domains": [
+          "文件管理",
+          "信息公告"
+        ],
+        "scenarios": [
+          "后台管理端按 code、name、modifyStartTime 或 modifyEndTime 检索全局信息公告并分页维护。"
+        ],
+        "actions": [
+          "query",
+          "page"
+        ],
+        "entities": [
+          "信息公告"
+        ],
+        "aliases": [
+          "分页查询信息公告",
+          "后台公告分页管理",
+          "FileInformationController.page"
+        ],
+        "resource": "file_information",
+        "lookup_keys": [
+          "pageNumber",
+          "pageSize",
+          "start",
+          "code",
+          "name",
+          "modifyStartTime",
+          "modifyEndTime"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "与 getOnLogin 不同，本接口返回 PageResult 的多条 rows 和总数供后台管理，不强制只取最新一条；信息公告表已移除 systemCode。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "file_information_id",
+            "display_name": "信息公告ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "公告主键"
+            ],
+            "resource": "file_information",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "file_information_code",
+            "display_name": "信息公告编码",
+            "technical_names": [
+              "code"
+            ],
+            "aliases": [
+              "公告编码"
+            ],
+            "resource": "file_information",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "FileInformationController#page(FileInformationPageCondition) -> ResponseData<PageResult<FileInformationQuery>>",
+          "FileInformationPageCondition；FileInformationQuery",
+          "FileInformationRepository#page -> FileInformationService#page；information_query_getPageList.sql 按 code/name/modifyTime 过滤并按 modify_time DESC；20260630_01_信息公告改为全局公告.sql 移除 system_code"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "aba66912-1e20-47ad-8b0d-cf60924a7cc2",
+      "expected_identity": {
+        "service": "c12-sys",
+        "method": "POST",
+        "path": "/api/file/information/getById/{id}"
+      },
+      "semantic": {
+        "purpose": "供信息公告后台管理端按公告ID查询一条全局富文本信息公告详情。",
+        "audiences": [
+          "信息公告后台管理端"
+        ],
+        "domains": [
+          "文件管理",
+          "信息公告"
+        ],
+        "scenarios": [
+          "后台管理端用一个公告 id 打开信息公告详情，查看 code、name、type 和 content。"
+        ],
+        "actions": [
+          "query",
+          "detail"
+        ],
+        "entities": [
+          "信息公告"
+        ],
+        "aliases": [
+          "查询信息公告详情",
+          "按ID查看公告",
+          "FileInformationController.getById"
+        ],
+        "resource": "file_information",
+        "lookup_keys": [
+          "id",
+          "code"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "与 getOnLogin 不同，本接口必须按显式 id 读取指定公告；与 page 不同，它返回单个 FileInformationQuery。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "信息公告ID",
+            "location": "path",
+            "required": true,
+            "schema_type": "integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "file_information_id",
+            "display_name": "信息公告ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "公告主键"
+            ],
+            "resource": "file_information",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "file_information_code",
+            "display_name": "信息公告编码",
+            "technical_names": [
+              "code"
+            ],
+            "aliases": [
+              "公告编码"
+            ],
+            "resource": "file_information",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "FileInformationController#getById(Long) -> ResponseData<FileInformationQuery>",
+          "FileInformationQuery.id/code/name/type/content",
+          "FileInformationRepository#getById/getEntity -> FileInformationService#findById；getEntity 显式校验 id 非空和记录存在"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "e052f737-f813-4a62-8cb0-f5cdede1501d",
+      "expected_identity": {
+        "service": "c12-sys",
+        "method": "POST",
+        "path": "/api/file/information/save"
+      },
+      "semantic": {
+        "purpose": "供信息公告后台管理端新增或更新一条全局富文本信息公告；有 id 时编辑，无 id 时新增，返回保存是否成功。",
+        "audiences": [
+          "信息公告后台管理端"
+        ],
+        "domains": [
+          "文件管理",
+          "信息公告"
+        ],
+        "scenarios": [
+          "后台管理端提交可选 id 以及 code、name、type、content，创建或修改一条全局信息公告。"
+        ],
+        "actions": [
+          "create",
+          "update"
+        ],
+        "entities": [
+          "信息公告"
+        ],
+        "aliases": [
+          "保存信息公告",
+          "新增或编辑公告",
+          "FileInformationController.save"
+        ],
+        "resource": "file_information",
+        "lookup_keys": [
+          "id",
+          "code",
+          "name",
+          "type"
+        ],
+        "cardinality": "one",
+        "ownership": "all",
+        "discriminators": [
+          "与导入模板 save 不同，本接口 DTO 无字段校验注解，Repository 也未对 code/name/type/content 做非空校验；id 仅用于区分新增与编辑。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "file_information_id",
+            "display_name": "信息公告ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "公告主键"
+            ],
+            "resource": "file_information",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "file_information_code",
+            "display_name": "信息公告编码",
+            "technical_names": [
+              "code"
+            ],
+            "aliases": [
+              "公告编码"
+            ],
+            "resource": "file_information",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "FileInformationController#save(FileInformationItem) -> ResponseData<Boolean>",
+          "FileInformationItem.id/code/name/type/content（无 Bean Validation 必填注解）",
+          "FileInformationRepository#save -> FileInformationService#insert/update；未发现 ObjectUtil/StrUtil/CollectionUtil 非空业务校验，20260630_01_信息公告改为全局公告.sql 证明无 systemCode 维度"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "a0307cbe-3cd6-4f57-a700-cf4631bed974",
+      "expected_identity": {
+        "service": "c12-sys",
+        "method": "POST",
+        "path": "/api/file/information/deleteByIds"
+      },
+      "semantic": {
+        "purpose": "供信息公告后台管理端按公告ID列表批量删除多条全局信息公告。",
+        "audiences": [
+          "信息公告后台管理端"
+        ],
+        "domains": [
+          "文件管理",
+          "信息公告"
+        ],
+        "scenarios": [
+          "后台管理端提交非空 ids，一次删除多条已存在的信息公告。"
+        ],
+        "actions": [
+          "delete"
+        ],
+        "entities": [
+          "信息公告"
+        ],
+        "aliases": [
+          "批量删除信息公告",
+          "删除多个公告",
+          "FileInformationController.deleteByIds"
+        ],
+        "resource": "file_information",
+        "lookup_keys": [
+          "ids",
+          "id"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "与普通文件 deleteByIds 不同，本接口仅删除公告数据库记录，不处理对象存储；空列表或完全查不到记录都会抛错。"
+        ],
+        "required_inputs": [
+          {
+            "name": "ids",
+            "zh_name": "信息公告ID列表",
+            "location": "body",
+            "required": true,
+            "schema_type": "array"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "file_information_id",
+            "display_name": "信息公告ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "公告主键"
+            ],
+            "resource": "file_information",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "FileInformationController#deleteByIds(IdsCondition) -> ResponseData<Boolean>",
+          "com.chinaservices.core.domain.IdsCondition.ids @NotEmpty",
+          "FileInformationRepository#deleteByIds/getEntities -> FileInformationService#findByIds/delete；Repository 以 CollectionUtil.isEmpty 再次校验 ids 和查询结果"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "98915c87-5f80-42b4-9793-7052a78d89fb",
+      "expected_identity": {
+        "service": "c12-sys",
+        "method": "POST",
+        "path": "/api/file/information/getOnLogin"
+      },
+      "semantic": {
+        "purpose": "供登录展示调用端在可选登录状态下按公告编码、名称或修改时间筛选全局信息公告，强制取修改时间最新的一条并记录登录查看日志。",
+        "audiences": [
+          "登录展示调用端"
+        ],
+        "domains": [
+          "文件管理",
+          "信息公告"
+        ],
+        "scenarios": [
+          "认证页面或登录后首页按可选 code、name、modifyStartTime、modifyEndTime 取得一条最新公告用于登录场景展示。"
+        ],
+        "actions": [
+          "query",
+          "detail"
+        ],
+        "entities": [
+          "登录展示信息公告"
+        ],
+        "aliases": [
+          "查询登录展示公告",
+          "获取最新一条公告",
+          "FileInformationController.getOnLogin"
+        ],
+        "resource": "file_information",
+        "lookup_keys": [
+          "code",
+          "name",
+          "modifyStartTime",
+          "modifyEndTime",
+          "pageNumber",
+          "pageSize"
+        ],
+        "cardinality": "one",
+        "ownership": "all",
+        "discriminators": [
+          "与后台 page 不同，本接口标注 @OptionalLogin，Repository 无视来参分页值并强制 pageNumber=1、pageSize=1，只返回 modify_time 倒序第一条；无数据时返回空 DTO。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "file_information_id",
+            "display_name": "信息公告ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "公告主键"
+            ],
+            "resource": "file_information",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "file_information_code",
+            "display_name": "信息公告编码",
+            "technical_names": [
+              "code"
+            ],
+            "aliases": [
+              "公告编码"
+            ],
+            "resource": "file_information",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "FileInformationController#getOnLogin(FileInformationPageCondition) -> ResponseData<FileInformationQuery>，方法标注 @OptionalLogin 且 body 可选",
+          "FileInformationPageCondition；FileInformationQuery",
+          "FileInformationRepository#getOnLogin -> FileInformationService#page；强制 pageNumber=1/pageSize=1，information_query_getPageList.sql 按 modify_time DESC，命中后记录 FILE_INFORMATION_LOGIN_VIEW"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    }
+  ]
+}

@@ -55,11 +55,26 @@ def test_operation_repository_completes_steps_and_parent() -> None:
         operation.id,
         step.id,
         lease.lease_token,
-        RuntimeStepResult(exit_code=0),
+        RuntimeStepResult(
+            exit_code=0,
+            readiness={
+                "revision": 9,
+                "infrastructure": {"status": "ready"},
+                "services": {"status": "ready"},
+                "business": {"status": "ready"},
+            },
+        ),
     )
 
     assert completed.status == "succeeded"
-    assert repository.list_steps(operation.id)[0].status == "succeeded"
+    completed_step = repository.list_steps(operation.id)[0]
+    assert completed_step.status == "succeeded"
+    assert completed_step.readiness == {
+        "revision": 9,
+        "infrastructure": {"status": "ready"},
+        "services": {"status": "ready"},
+        "business": {"status": "ready"},
+    }
 
 
 def test_operation_repository_rejects_a_second_active_workspace_operation() -> None:

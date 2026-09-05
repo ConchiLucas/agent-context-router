@@ -54,9 +54,14 @@ Context Router 前后端不再由 Docker Compose 管理。Docker Desktop 只为�
 
 `scripts/start-native-stack.sh` 会等待 Docker Desktop 和 `http://127.0.0.1:49173/health` 就绪后启动 Runner。不要再单独运行旧的外部 Runner 启动脚本，否则两个 Runner 会争用任务。Runner 注册后可以提交攀枝花白名单动作
 `pzh.ensure-host-runtime`，默认 `environment=local`。该动作调用固定脚本
-`/Users/conchi/script/ensure-panzhihua-host-runtime.sh`，只幂等保障已有容器、共享
+`/Users/conchi/workforce/company_workforce/panzhihua_dev_workforce/deploy/host-runtime/ensure.sh`，只幂等保障已有容器、共享
 Docker 网络、数据库 TCP 转发/代理和宿主机 Nginx 网关；不会构建镜像、创建业务
 容器、拉取代码或执行 Fast/Full。
+
+攀枝花工作空间容器页提供 `pzh.start-and-check` 一键动作。它调用固定的
+`deploy/host-runtime/start-and-check.sh`：先保障基础设施，启动已有业务容器，仅对清单中
+缺失的项目执行 Fast 部署，再按“基础设施 / 项目服务 / 业务入口”输出结构化验收结果。
+旧 `ensure/status` 与单项目 Fast/Full 入口保持不变；一键动作执行期间不要并行提交其他部署。
 
 当前不安装持久化的 macOS LaunchAgent。以后设置登录后自动启动时，LaunchAgent 只需执行 `scripts/start-native-stack.sh`；Docker Desktop 的自动启动和业务容器恢复仍由 Docker Desktop 自身配置负责。旧的 `scripts/start-local-stack.sh` 仅保留为迁移期容器回退入口，不作为默认入口。
 
@@ -155,95 +160,33 @@ CONTEXT_ROUTER_DATABASE_URL=postgresql://USER:PASSWORD@127.0.0.1:5432/context_ro
 UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend alembic upgrade head
 ```
 
-首批接口业务语义与表影响由可重复执行的源码核对种子写入；当前先覆盖 `cs_dsly_order_entrusted`：
+接口导入后会自动建立可检索的 OpenAPI 初始语义；大模型补全结果写入
+`interface_semantic_index`，工作空间词汇写入 `interface_search_workspace_terms`。
+运行时不再读取旧 CRUD、Controller 描述或旧意图档案。
+
+从独立 `api-semantic-navigator` 数据库迁移既有语义时，必须先执行只读 dry-run；
+脚本只接受唯一的服务/方法/路径或方法/规范化路径匹配，不做模糊猜测：
 
 ```bash
-UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_interface_semantics \
-  --workspace <workspace_id> --service c12-mtp \
-  --table cs_dsly_order_entrusted
+UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend \
+  python scripts/import_api_semantic_navigator.py
+
+UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend \
+  python scripts/import_api_semantic_navigator.py --apply
 ```
 
-全部 `/order-api/`、`/line-api/`、`/basic-api/`、`/highway-api/`、`/railway-api/`、`/shipping-api/`、`/settlement-api/`、`/declaration-api/`、`/declaration-interface-api/`、`/operation-api/`、`/message-api/`、`/inner/message/`、`/external-interface-api/`、`/zhiyun/`、`/sms/`、`/job-client-api/`、`/trace-api/` 和 `/admin/` 接口使用源码扫描发布器同步业务语义、CRUD 和表影响；`/admin/` 使用 Web Service 扁平目录扫描器。发布器解析对应模块的 Controller、Service、DAO、JPA Repository 以及 `sql-ext` SQL；basic 路径下实际由 shipping 模块挂载的舱单和轨迹接口也会合并扫描 shipping 源码，内部消息 OpenAPI 中的 `*ApiController` 会回退解析源码 `*Api` 类，智运位置旧路径按真实查询调用发布，短信网关和申报集成权限调用不猜测本地表。任务模块额外按白名单识别 `xxl_job_*` 表和字符串 SQL ID；轨迹模块只发布本地 Controller 语义，不把远程公铁水聚合调用猜成本地表。没有本地源码证据的远程或文件接口只发布语义，不猜测数据表；`/api/`、`/test/`、`/internal/` 和 `/member-api/` 不执行发布：
+新工作空间通过 `PUT /api/interface-forwarding/interfaces/{interface_id}/semantics`
+持久化通用语义 JSON。工作空间差异只能进入数据库词汇和接口语义数据，不得写成
+Python 路径、Controller 或业务名称映射。
 
-```bash
-UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
-  --workspace <workspace_id> --service c12-mtp \
-  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
-
-UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
-  --workspace <workspace_id> --service c12-mtp --module line \
-  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
-
-UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
-  --workspace <workspace_id> --service c12-mtp --module basic \
-  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
-
-UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
-  --workspace <workspace_id> --service c12-mtp --module highway \
-  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
-
-UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
-  --workspace <workspace_id> --service c12-mtp --module railway \
-  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
-
-UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
-  --workspace <workspace_id> --service c12-mtp --module shipping \
-  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
-
-UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
-  --workspace <workspace_id> --service c12-mtp --module settlement \
-  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
-
-UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
-  --workspace <workspace_id> --service c12-mtp --module declaration \
-  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
-
-UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
-  --workspace <workspace_id> --service c12-mtp --module operation \
-  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
-
-UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
-  --workspace <workspace_id> --service c12-mtp --module message \
-  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
-
-UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
-  --workspace <workspace_id> --service c12-mtp --module message \
-  --path-prefix /inner/message/ \
-  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
-
-UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
-  --workspace <workspace_id> --service c12-mtp --module external-interface \
-  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
-
-UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
-  --workspace <workspace_id> --service c12-mtp --module external-interface \
-  --path-prefix /zhiyun/ \
-  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
-
-UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
-  --workspace <workspace_id> --service c12-mtp --module external-interface \
-  --path-prefix /sms/ \
-  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
-
-UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
-  --workspace <workspace_id> --service c12-mtp --module declaration-interface \
-  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
-
-UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
-  --workspace <workspace_id> --service c12-mtp --module web \
-  --path-prefix /admin/ \
-  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
-
-UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
-  --workspace <workspace_id> --service c12-mtp --module job-client \
-  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
-
-UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend python -m context_router.scripts.seed_order_api_semantics \
-  --workspace <workspace_id> --service c12-mtp --module trace \
-  --workspace-root /Users/conchi/workforce/company_workforce/panzhihua_dev_workforce
-```
-
-当前 migration head 为 `20260827_0072`。`0072` 将渐进式 MCP 能力、接口意图评分/响应验证及搜索质量事件归档到 `archived_*`，运行时不再读取；`0071` 已归档 Workspace 接口术语和动态限定标签。`0067` 的接口业务语义、CRUD 分类和源码证据支持的表影响继续保留。客户端必须重新连接并刷新 tools/list。
+当前 migration head 为 `20260905_0078`：`0073` 引入 pgvector、全文检索、工作空间
+词汇、搜索会话和反馈；`0074` 将旧意图表改名归档，并从活动接口表移除
+`crud_type` 与 `controller_description`；`0075` 增加只读 `interface_search` 任务意图，
+把接口定位与接口执行分开；`0076` 为 Workspace 文件副本增加版本、集合摘要和逐文件
+SHA-256，并把 `script/` 与 `deploy/host-runtime/` 纳入同步范围；`0077` 增加攀枝花
+工作空间的一键“启动并检查”白名单动作；`0078` 将三级就绪状态、各阶段耗时和失败
+摘要持久化到运行步骤，页面只对 `0078` 之前的历史记录回退解析日志。历史代码保存在
+`backend/legacy/interface_semantics/`，不属于运行包。
 
 表关联页面的关联数据目前没有自动生成流水线，示例数据由可重复执行的种子脚本写入：
 
@@ -318,9 +261,11 @@ workspaces:
 
 Context Router 的通用使用规则不写入目标工作空间。统一 JSON 文档和 MCP `tools/list` 菜单的展示方式见[系统文档维护说明](./SYSTEM_GUIDES.md)；prepare 不返回这些系统文档。
 
-## 目标 Workspace 的文档与 deploy 文件同步
+## 目标 Workspace 文件同步
 
-目标 Workspace 必须把运行入口保存在仓库内，Context Router 数据库只保存同步副本：
+目标 Workspace 的 `docs/`、`script/`、`deploy/context-router/` 与
+`deploy/host-runtime/` 以 Context Router PostgreSQL 中的当前版本为分发源；工作空间目录是
+运行时物化位置，不要求建立 Git 仓库。运行入口仍使用固定结构：
 
 ```text
 deploy/context-router/manifest.yaml
@@ -331,7 +276,11 @@ deploy/context-router/workspace/start/deploy.sh
 
 每个入口都应能脱离 Context Router 直接运行；`WORKSPACE_HOST_ROOT` 和 `PROJECT_HOST_ROOT` 只能作为 Runtime Runner 的可选覆盖值。`.env.local`、Token、私钥等本机配置不得进入这些目录。
 
-Workspace 详情的“文档与部署文件”只提供两种操作：从数据库全量覆盖主目录，或用主目录全量覆盖数据库。两者都会先确认删除原内容，不做差异、版本和冲突处理。数据库到本地只写主映射目录的 `docs/` 和固定 `deploy/context-router/` 目录；reader 目录不会写入，也不能执行部署。
+Workspace 详情的“工作空间文件”提供两种操作：从数据库当前版本恢复到主目录，或将主目录发布为数据库新版本。数据库保留最近 5 个完整版本；恢复 API 可指定 revision，页面默认恢复当前版本。写入前会校验集合摘要、逐文件 SHA-256、大小、路径和脚本 shebang。文档、部署配置和普通脚本通过同目录暂存、目录交换及失败回滚完成替换；`deploy/host-runtime/` 使用带备份回滚的原位同步，保留已有目录和文件 inode，避免破坏运行中容器的 bind mount。物化状态记录在 `deploy/runtime/context-router-shared-files.json`，不进入同步集合。
+
+历史 Workspace 若已有完整数据库版本、但本地主目录暂时缺少某些 Project 的 fast/full 配置，可由可信本机 AI/运维调用 `POST /api/workspaces/{id}/shared-files/publish-runtime-files`，只发布根 `script/` 与 `deploy/host-runtime/`，并沿用数据库当前版本的文档和 deploy 文件。该入口不能创建首个版本，也不对浏览器开放；不要用空 deploy 脚本绕过全量发布校验。
+
+Host Action 执行前会比较数据库当前版本与本地物化状态；版本或摘要不一致时先自动恢复，再交给 Host Runtime Runner。Runner 还会核对固定 `deploy/host-runtime/ensure.sh` 与状态文件中的哈希，拒绝执行未同步或被篡改的脚本。reader 目录仍不会写入，也不能执行部署。Context Router 自身的 Native Stack 脚本仍属于控制面启动引导，不存入业务 Workspace 文件集合。
 
 Context Router 不可用时，其他 AI 应先阅读目标根 `AGENTS.md` 和 `deploy/context-router/README.md`，然后直接运行 Workspace 或 Project 的 `deploy.sh`。
 

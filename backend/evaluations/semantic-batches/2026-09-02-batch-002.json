@@ -1,0 +1,171 @@
+{
+  "schema_version": "context-router-interface-semantic-batch-v1",
+  "batch_id": "panzhihua-mtp-remaining-002",
+  "workspace_id": "b9ce65eddc27437d9615177fbd07cb0a",
+  "generation_policy": "补全剩余 c12-mtp 接口；基于源码、请求返回合同和完整兄弟家族，不把兼容别名误写成不同业务。",
+  "items": [
+    {
+      "interface_id": "940900d7-2c23-474e-a91a-3766a59ccb1d",
+      "expected_identity": {"service": "c12-mtp", "method": "GET", "path": "/api/sse/connect"},
+      "semantic": {"purpose": "为当前客户端建立服务器发送事件 SSE 长连接，用于后续接收服务端实时推送。", "audiences": ["客户端", "内部服务"], "domains": ["实时消息", "SSE"], "scenarios": ["建立实时事件连接"], "actions": ["connect"], "entities": ["SSE连接"], "aliases": ["建立SSE连接", "打开服务端事件流", "CustomSseEmitterController.connect"], "resource": "sse_connection", "lookup_keys": [], "cardinality": "one", "ownership": "self", "discriminators": ["建立并保持SSE连接；不是订阅具体事件，也不是断开连接。"], "semantic_model": "codex-gpt5-contract-review-2026-09-02", "semantic_confidence": 0.9, "semantic_evidence": ["接口路径和控制器", "SSE响应合同", "connect/disconnect/subscribe/unsubscribe家族对比"]}
+    },
+    {
+      "interface_id": "e0a9a3d4-ee0c-4a7b-a546-510c7173da99",
+      "expected_identity": {"service": "c12-mtp", "method": "GET", "path": "/api/sse/disconnect"},
+      "semantic": {"purpose": "主动断开当前客户端已经建立的服务器发送事件 SSE 长连接。", "audiences": ["客户端", "内部服务"], "domains": ["实时消息", "SSE"], "scenarios": ["关闭实时事件连接"], "actions": ["disconnect"], "entities": ["SSE连接"], "aliases": ["断开SSE连接", "关闭服务端事件流", "CustomSseEmitterController.disconnect"], "resource": "sse_connection", "lookup_keys": [], "cardinality": "one", "ownership": "self", "discriminators": ["关闭已有SSE连接；不是取消某类事件订阅，也不是建立连接。"], "semantic_model": "codex-gpt5-contract-review-2026-09-02", "semantic_confidence": 0.9, "semantic_evidence": ["接口路径和控制器", "SSE连接家族对比"]}
+    },
+    {
+      "interface_id": "47edc34c-8a4e-4f8c-a449-bd6e1dd1f3be",
+      "expected_identity": {"service": "c12-mtp", "method": "GET", "path": "/api/sse/subscribe"},
+      "semantic": {"purpose": "让已建立连接的客户端订阅SSE实时事件，开始接收对应服务端推送。", "audiences": ["客户端", "内部服务"], "domains": ["实时消息", "SSE"], "scenarios": ["订阅实时事件"], "actions": ["subscribe"], "entities": ["SSE事件订阅"], "aliases": ["订阅SSE事件", "开始接收实时推送", "CustomSseEmitterController.subscribe"], "resource": "sse_subscription", "lookup_keys": [], "cardinality": "one", "ownership": "self", "discriminators": ["订阅事件；不是建立底层SSE连接，也不是取消订阅。"], "semantic_model": "codex-gpt5-contract-review-2026-09-02", "semantic_confidence": 0.88, "semantic_evidence": ["接口路径和控制器", "connect/disconnect/subscribe/unsubscribe家族对比"]}
+    },
+    {
+      "interface_id": "023d120a-a0af-45a5-9d70-41b860c34c76",
+      "expected_identity": {"service": "c12-mtp", "method": "GET", "path": "/api/sse/unsubscribe"},
+      "semantic": {"purpose": "取消当前客户端的SSE实时事件订阅，停止接收对应推送但不等同于断开连接。", "audiences": ["客户端", "内部服务"], "domains": ["实时消息", "SSE"], "scenarios": ["取消实时事件订阅"], "actions": ["unsubscribe"], "entities": ["SSE事件订阅"], "aliases": ["取消订阅SSE事件", "停止接收实时推送", "CustomSseEmitterController.unsubscribe"], "resource": "sse_subscription", "lookup_keys": [], "cardinality": "one", "ownership": "self", "discriminators": ["取消事件订阅；不是断开底层SSE连接，也不是新增订阅。"], "semantic_model": "codex-gpt5-contract-review-2026-09-02", "semantic_confidence": 0.88, "semantic_evidence": ["接口路径和控制器", "connect/disconnect/subscribe/unsubscribe家族对比"]}
+    },
+    {
+      "interface_id": "39742081-783a-4ce5-b8db-da878cf245a8",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/basic-api/admin/common/getTemplateFileUrl"},
+      "semantic": {"purpose": "运营端按模板编码下载基础资料导入模板文件；服务端把文件流直接写入响应。未指定时使用货物基础价格模板，并兼容历史fileName。", "audiences": ["运营端"], "domains": ["基础数据", "导入模板"], "scenarios": ["下载基础资料Excel导入模板"], "actions": ["download"], "entities": ["导入模板文件"], "aliases": ["下载基础数据导入模板", "获取模板文件", "CommonController.getTemplateFileUrl"], "resource": "basic_import_template", "lookup_keys": ["templateCode", "fileName"], "cardinality": "one", "ownership": "by_id", "discriminators": ["直接返回模板文件流，不是只返回URL；与getTempleFileUrl为同一方法的兼容拼写路径。"], "semantic_model": "codex-gpt5-source-review-2026-09-02", "semantic_confidence": 0.99, "semantic_evidence": ["CommonController.java:52-55", "模板编码解析逻辑", "兼容路径注释"]}
+    },
+    {
+      "interface_id": "00973e33-767b-4f60-b8d2-119054283050",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/basic-api/admin/common/getTempleFileUrl"},
+      "semantic": {"purpose": "运营端按模板编码下载基础资料导入模板文件；这是getTemplateFileUrl的历史拼写兼容路径，业务和返回文件流完全相同。", "audiences": ["运营端"], "domains": ["基础数据", "导入模板"], "scenarios": ["通过历史兼容路径下载基础资料模板"], "actions": ["download"], "entities": ["导入模板文件"], "aliases": ["历史拼写模板下载", "getTemplateFileUrl兼容路径", "CommonController.getTempleFileUrl"], "resource": "basic_import_template", "lookup_keys": ["templateCode", "fileName"], "cardinality": "one", "ownership": "by_id", "discriminators": ["与getTemplateFileUrl是同一个Controller方法的等价路径，仅拼写不同；直接返回文件流。"], "semantic_model": "codex-gpt5-source-review-2026-09-02", "semantic_confidence": 0.99, "semantic_evidence": ["CommonController.java:52-55", "同一PostMapping声明两个路径", "兼容历史拼写注释"]}
+    },
+    {
+      "interface_id": "2aa96179-6925-44f0-b349-a2c6805050ea",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/basic-api/admin/division/findAll"},
+      "semantic": {"purpose": "运营端一次查询全部组织分区基础数据，返回分区编码、名称、父分区等列表，不分页。", "audiences": ["运营端"], "domains": ["基础数据", "组织分区"], "scenarios": ["加载全部分区选项"], "actions": ["list"], "entities": ["组织分区"], "aliases": ["查询全部分区", "分区完整列表", "DivisionController.findAll"], "resource": "division", "lookup_keys": [], "cardinality": "many", "ownership": "all", "discriminators": ["返回全部分区列表，不是分区树、单条详情或分页查询。"], "semantic_model": "codex-gpt5-source-review-2026-09-02", "semantic_confidence": 0.97, "semantic_evidence": ["DivisionController.findAll源码", "响应列表合同", "分区Controller兄弟接口对比"]}
+    },
+    {
+      "interface_id": "21606416-52a7-4529-9519-08320ef5413c",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/basic-api/admin/site/fee/findAllSite"},
+      "semantic": {"purpose": "运营端一次查询全部站点作业费用配置主档，返回站点及其货物、计费区间和单价配置，不分页。", "audiences": ["运营端", "内部服务"], "domains": ["基础数据", "站点作业费用"], "scenarios": ["线路或费用模块加载全部站点费用配置"], "actions": ["list"], "entities": ["站点费用配置", "货物费用配置", "计费区间"], "aliases": ["查询全部站点费用配置", "站点作业费完整列表", "SiteFeeAdminController.findAllSite"], "resource": "site_fee_config", "lookup_keys": [], "cardinality": "many", "ownership": "all", "discriminators": ["返回带货物和价格区间的站点费用配置，不是普通站点主档列表或站点费用分页。"], "semantic_model": "codex-gpt5-source-review-2026-09-02", "semantic_confidence": 0.98, "semantic_evidence": ["SiteFeeAdminController.java:178-180", "嵌套响应合同", "SiteFeeAdminLocalApi调用关系"]}
+    },
+    {
+      "interface_id": "416d4289-3402-4b06-a49c-515dcae63c86",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/highway-api/portal/parkAppointment/report"},
+      "semantic": {"purpose": "公路门户对已有园区预约执行到场报到，提交园区、运输订单号、预计到达时间、操作类型和备注。", "audiences": ["门户端", "承运商", "司机"], "domains": ["公路运输", "园区预约"], "scenarios": ["车辆到园区后预约报到"], "actions": ["execute", "update"], "entities": ["园区预约", "运输订单"], "aliases": ["园区预约报到", "车辆到场报到", "HighwayParkAppointmentPortalController.report"], "resource": "highway_park_appointment", "lookup_keys": ["parkId", "dispatchOrderNo"], "cardinality": "one", "ownership": "by_id", "discriminators": ["对已有预约执行到场报到；不是新增预约、修改预约或失效后重新预约。"], "semantic_model": "codex-gpt5-source-contract-review-2026-09-02", "semantic_confidence": 0.98, "semantic_evidence": ["RemoteParkAppointmentPortalService.report", "请求字段合同", "预约edit/reappoint家族对比"]}
+    },
+    {
+      "interface_id": "b02588ee-bbeb-43c5-b78d-7ac1e04d6021",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/internal/task-center/callback"},
+      "semantic": {"purpose": "接收任务中心对异步任务的内部回调，回传任务状态、业务编号、处理行、结果数量以及成功或错误文件标识。", "audiences": ["内部服务", "任务中心"], "domains": ["异步任务", "任务回调"], "scenarios": ["导入导出或批处理任务完成后回调"], "actions": ["callback", "update"], "entities": ["异步任务", "任务处理结果"], "aliases": ["任务中心结果回调", "异步任务完成通知", "TaskCenterCallbackController.callback"], "resource": "task_center_callback", "lookup_keys": ["taskId", "taskTraceId", "bizNos", "fileUuid", "errorFileUuid"], "cardinality": "one", "ownership": "by_id", "discriminators": ["由任务中心回调业务系统更新结果；不是主动创建、触发或查询任务。"], "semantic_model": "codex-gpt5-contract-review-2026-09-02", "semantic_confidence": 0.96, "semantic_evidence": ["接口路径和控制器", "完整回调请求合同", "任务状态及结果字段"]}
+    },
+    {
+      "interface_id": "79857cf3-4096-4792-9c8a-94eb8e5c3a1b",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/line-api/admin/route/getTemplateFileUrl"},
+      "semantic": {"purpose": "运营端下载线路数据Excel导入模板，服务端直接返回模板文件流。", "audiences": ["运营端"], "domains": ["线路管理", "导入模板"], "scenarios": ["导入线路前下载模板"], "actions": ["download"], "entities": ["线路导入模板"], "aliases": ["下载线路导入模板", "线路Excel模板", "RouteAdminController.getTemplateFileUrl"], "resource": "route_import_template", "lookup_keys": [], "cardinality": "one", "ownership": "all", "discriminators": ["下载线路导入模板，不是站点模板；与getTempleFileUrl为等价兼容路径。"], "semantic_model": "codex-gpt5-source-review-2026-09-02", "semantic_confidence": 0.99, "semantic_evidence": ["RouteAdminController.java:179-183", "兼容前端历史拼写注释"]}
+    },
+    {
+      "interface_id": "94a4c512-624d-4aa5-bde2-e5b5a7ec1477",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/line-api/admin/route/getTempleFileUrl"},
+      "semantic": {"purpose": "运营端通过历史拼写兼容路径下载线路数据Excel导入模板，与getTemplateFileUrl业务完全相同。", "audiences": ["运营端"], "domains": ["线路管理", "导入模板"], "scenarios": ["通过兼容路径下载线路模板"], "actions": ["download"], "entities": ["线路导入模板"], "aliases": ["线路模板历史拼写下载", "getTemplateFileUrl等价路径", "RouteAdminController.getTempleFileUrl"], "resource": "route_import_template", "lookup_keys": [], "cardinality": "one", "ownership": "all", "discriminators": ["与线路getTemplateFileUrl是同一个方法的等价路径，仅拼写不同；不是站点模板。"], "semantic_model": "codex-gpt5-source-review-2026-09-02", "semantic_confidence": 0.99, "semantic_evidence": ["RouteAdminController.java:179-183", "同一PostMapping声明两个路径"]}
+    },
+    {
+      "interface_id": "e0bbf339-4e3a-4b34-8f8f-4b62718e3052",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/line-api/admin/station/getTemplateFileUrl"},
+      "semantic": {"purpose": "运营端下载铁路站点主数据Excel导入模板，服务端直接返回模板文件流。", "audiences": ["运营端"], "domains": ["铁路站点", "导入模板"], "scenarios": ["导入站点前下载模板"], "actions": ["download"], "entities": ["站点导入模板"], "aliases": ["下载站点导入模板", "场站Excel模板", "StationAdminController.getTemplateFileUrl"], "resource": "station_import_template", "lookup_keys": [], "cardinality": "one", "ownership": "all", "discriminators": ["下载站点导入模板，不是执行站点数据导入；与getTempleFileUrl为等价兼容路径。"], "semantic_model": "codex-gpt5-source-review-2026-09-02", "semantic_confidence": 0.99, "semantic_evidence": ["StationAdminController.java:224-228", "兼容前端历史拼写注释"]}
+    },
+    {
+      "interface_id": "eee44532-e725-4a83-8e3a-792673026b1b",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/line-api/admin/station/getTempleFileUrl"},
+      "semantic": {"purpose": "运营端通过历史拼写兼容路径下载铁路站点Excel导入模板，与getTemplateFileUrl业务完全相同。", "audiences": ["运营端"], "domains": ["铁路站点", "导入模板"], "scenarios": ["通过兼容路径下载站点模板"], "actions": ["download"], "entities": ["站点导入模板"], "aliases": ["站点模板历史拼写下载", "getTemplateFileUrl等价路径", "StationAdminController.getTempleFileUrl"], "resource": "station_import_template", "lookup_keys": [], "cardinality": "one", "ownership": "all", "discriminators": ["与站点getTemplateFileUrl是同一个方法的等价路径，仅拼写不同；不是执行站点导入。"], "semantic_model": "codex-gpt5-source-review-2026-09-02", "semantic_confidence": 0.99, "semantic_evidence": ["StationAdminController.java:224-228", "同一PostMapping声明两个路径"]}
+    },
+    {
+      "interface_id": "e4e88d4d-3f79-4a26-b07f-cd700c1319ee",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/line-api/portal/station/remote/pageList"},
+      "copy_from_interface_id": "e9822353-8a2b-4a6e-bce8-61a55536999c",
+      "purpose_prefix": "供内部服务通过门户远程接口调用；",
+      "semantic": {"audiences": ["内部服务"], "resource": "remote_railway_station_page", "semantic_model": "codex-gpt5-sibling-contract-review-2026-09-02", "semantic_confidence": 0.98, "semantic_evidence": ["已审核内部站点精简分页兄弟接口", "远程分页请求返回合同", "RemoteStationPortalController路径"]},
+      "aliases_add": ["门户远程铁路站点精简分页"],
+      "discriminators_add": ["portal/remote内部远程入口；不是运营端完整站点主档分页，也不是按站名批量匹配。"]
+    },
+    {
+      "interface_id": "f8c54b79-9d4d-46e7-b690-c457c9976827",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/member-api/portal/port/noAuth/allPorts"},
+      "semantic": {"purpose": "门户无需登录即可一次查询全部港口基础信息，用于公开页面加载港口选项。", "audiences": ["门户端", "匿名用户"], "domains": ["基础数据", "港口"], "scenarios": ["未登录页面加载全部港口"], "actions": ["list"], "entities": ["港口"], "aliases": ["免登录查询全部港口", "公开港口列表", "PortNoAuthPortalController.allPorts"], "resource": "port", "lookup_keys": [], "cardinality": "many", "ownership": "all", "discriminators": ["无需登录并返回全部港口；不是运营端港口分页、按ID或按名称查询。"], "semantic_model": "codex-gpt5-source-review-2026-09-02", "semantic_confidence": 0.98, "semantic_evidence": ["PortNoAuthPortalController.java:25-39", "OptionalLogin注解", "列表响应合同"]}
+    },
+    {
+      "interface_id": "4cc58bb4-0de0-4033-85c7-1ffa97266627",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/order-api/admin/entrustedOrder/getOrderattachmentList/{id}"},
+      "semantic": {"purpose": "运营端根据委托订单主键查询该订单已经上传的附件列表。", "audiences": ["运营端"], "domains": ["订单中心", "委托订单", "附件管理"], "scenarios": ["查看委托订单附件列表"], "actions": ["list"], "entities": ["委托订单", "订单附件"], "aliases": ["运营端委托单附件列表", "按订单ID查附件", "OrderEntrustedOrderAdminController.getOrderattachmentList"], "resource": "entrusted_order_attachment", "lookup_keys": ["id", "委托订单ID"], "cardinality": "many", "ownership": "by_id", "discriminators": ["返回指定委托订单的附件元数据列表；不是预览文件流、下载单个附件或上传附件。"], "semantic_model": "codex-gpt5-source-review-2026-09-02", "semantic_confidence": 0.99, "semantic_evidence": ["OrderEntrustedOrderAdminController.java:264-266", "附件列表响应合同", "上传和下载兄弟接口对比"]}
+    },
+    {
+      "interface_id": "0b8fcbdd-49cb-4087-ac8e-e92c6fa62508",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/order-api/admin/entrustedOrder/listByEntrustedOrderNo"},
+      "semantic": {"purpose": "运营端根据委托订单号查询匹配的委托运输订单列表，可携带分页参数。", "audiences": ["运营端"], "domains": ["订单中心", "委托订单"], "scenarios": ["运营端按委托订单号定位订单"], "actions": ["list"], "entities": ["委托订单"], "aliases": ["运营端委托单号查订单", "按委托订单号查询", "OrderEntrustedOrderAdminController.listByEntrustedOrderNo"], "resource": "entrusted_order", "lookup_keys": ["entrustedOrderNo"], "cardinality": "many", "ownership": "all", "discriminators": ["运营端按委托订单号查询；不是门户当前用户范围的同名接口，也不是按主键查单条详情。"], "semantic_model": "codex-gpt5-contract-review-2026-09-02", "semantic_confidence": 0.96, "semantic_evidence": ["接口路径和Controller", "请求分页及entrustedOrderNo字段", "运营端/门户端同名接口对比"]}
+    },
+    {
+      "interface_id": "a3466fe6-b903-40cd-aa01-224cc3d0cc69",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/order-api/admin/entrustedOrder/orderattachmentUpload/{id}"},
+      "semantic": {"purpose": "运营端为指定委托订单上传一个附件文件，并将附件关联到该订单。", "audiences": ["运营端"], "domains": ["订单中心", "委托订单", "附件管理"], "scenarios": ["给委托订单补充附件"], "actions": ["upload", "create"], "entities": ["委托订单", "订单附件"], "aliases": ["运营端上传委托单附件", "按订单ID添加附件", "OrderEntrustedOrderAdminController.orderattachmentUpload"], "resource": "entrusted_order_attachment", "lookup_keys": ["id", "委托订单ID", "file"], "cardinality": "one", "ownership": "by_id", "discriminators": ["上传并关联附件；不是查询附件列表、下载附件或预览文件流。"], "semantic_model": "codex-gpt5-source-review-2026-09-02", "semantic_confidence": 0.99, "semantic_evidence": ["OrderEntrustedOrderAdminController.java:257-259", "MultipartFile和订单ID合同"]}
+    },
+    {
+      "interface_id": "5d3e503c-db63-4e93-bb87-560c2eccd81e",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/order-api/admin/entrustedOrder/OrderDownloadAttachment/{fileId}"},
+      "semantic": {"purpose": "运营端根据附件文件标识下载一个委托订单附件，并把文件内容写入HTTP响应。", "audiences": ["运营端"], "domains": ["订单中心", "委托订单", "附件管理"], "scenarios": ["下载委托订单附件"], "actions": ["download"], "entities": ["订单附件", "文件流"], "aliases": ["运营端下载委托单附件", "按fileId下载订单文件", "OrderEntrustedOrderAdminController.OrderDownloadAttachment"], "resource": "entrusted_order_attachment_content", "lookup_keys": ["fileId"], "cardinality": "one", "ownership": "by_id", "discriminators": ["直接下载文件内容；不是返回附件列表、预览URL或上传附件。"], "semantic_model": "codex-gpt5-source-review-2026-09-02", "semantic_confidence": 0.99, "semantic_evidence": ["OrderEntrustedOrderAdminController.java:270-272", "fileId路径参数和响应流"]}
+    },
+    {
+      "interface_id": "4a88e404-79cc-4264-a72b-197220333144",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/order-api/portal/entrustedOrder/getOrderattachmentList"},
+      "semantic": {"purpose": "货主门户根据委托订单主键查询该订单已经上传的附件列表。", "audiences": ["门户端", "货主"], "domains": ["订单中心", "委托订单", "附件管理"], "scenarios": ["货主查看委托订单附件列表"], "actions": ["list"], "entities": ["委托订单", "订单附件"], "aliases": ["门户委托单附件列表", "货主按订单ID查附件", "OrderEntrustedOrderPortalController.getOrderattachmentList"], "resource": "entrusted_order_attachment", "lookup_keys": ["id", "委托订单ID"], "cardinality": "many", "ownership": "by_id", "discriminators": ["门户端返回指定委托订单附件元数据；不是运营端路径、下载单个附件或预览文件流。"], "semantic_model": "codex-gpt5-source-review-2026-09-02", "semantic_confidence": 0.99, "semantic_evidence": ["OrderEntrustedOrderPortalController.java:87-89", "IdObject请求和列表响应合同"]}
+    },
+    {
+      "interface_id": "c86e648b-2d3c-4714-8df1-ea77f926784b",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/order-api/portal/entrustedOrder/listByEntrustedOrderNo"},
+      "semantic": {"purpose": "货主门户根据委托订单号查询当前门户范围内匹配的委托运输订单列表。", "audiences": ["门户端", "货主"], "domains": ["订单中心", "委托订单"], "scenarios": ["货主按委托订单号定位订单"], "actions": ["list"], "entities": ["委托订单"], "aliases": ["门户委托单号查订单", "货主按委托订单号查询", "OrderEntrustedOrderPortalController.listByEntrustedOrderNo"], "resource": "entrusted_order", "lookup_keys": ["entrustedOrderNo"], "cardinality": "many", "ownership": "self", "discriminators": ["门户当前用户范围的查询；不是运营端同名接口，也不是订单附件列表。"], "semantic_model": "codex-gpt5-contract-review-2026-09-02", "semantic_confidence": 0.96, "semantic_evidence": ["接口路径和Controller", "请求分页及entrustedOrderNo字段", "运营端/门户端同名接口对比"]}
+    },
+    {
+      "interface_id": "65e80593-93f2-43be-98b9-da7e15f36d11",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/order-api/portal/entrustedOrder/OrderDownloadAttachment/{fileId}"},
+      "semantic": {"purpose": "货主门户根据附件文件标识下载一个委托订单附件，并把文件内容写入HTTP响应。", "audiences": ["门户端", "货主"], "domains": ["订单中心", "委托订单", "附件管理"], "scenarios": ["货主下载委托订单附件"], "actions": ["download"], "entities": ["订单附件", "文件流"], "aliases": ["门户下载委托单附件", "货主按fileId下载订单文件", "OrderEntrustedOrderPortalController.OrderDownloadAttachment"], "resource": "entrusted_order_attachment_content", "lookup_keys": ["fileId"], "cardinality": "one", "ownership": "by_id", "discriminators": ["门户端直接下载文件内容；不是运营端下载路径、附件列表或预览URL。"], "semantic_model": "codex-gpt5-source-review-2026-09-02", "semantic_confidence": 0.99, "semantic_evidence": ["OrderEntrustedOrderPortalController.java:115-117", "fileId路径参数和响应流"]}
+    },
+    {
+      "interface_id": "24651a73-1efe-4331-b2ef-084e0f40236a",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/railway-api/admin/dispatchOrder/railwayTransTrace"},
+      "semantic": {"purpose": "运营端按铁路运单号集合及承运订单信息查询铁路运输轨迹和当前位置，用于后台跟踪多笔铁路调度单。", "audiences": ["运营端"], "domains": ["铁路运输", "运输轨迹"], "scenarios": ["后台查看铁路运单轨迹"], "actions": ["query", "list"], "entities": ["铁路调度订单", "铁路运输轨迹"], "aliases": ["运营端铁路运输轨迹", "按运单号查铁路轨迹", "RailwayDispatchOrderAdminController.railwayTransTrace"], "resource": "railway_transport_trace", "lookup_keys": ["ydhms", "carrierOrderId", "carrierOrderNo", "addressId"], "cardinality": "many", "ownership": "all", "discriminators": ["运营端按多笔运单条件查询轨迹；不是门户分页轨迹，也不是触发全量轨迹同步。"], "semantic_model": "codex-gpt5-contract-review-2026-09-02", "semantic_confidence": 0.97, "semantic_evidence": ["接口路径和Controller", "ydhms及承运订单请求字段", "运营/门户/同步轨迹家族对比"]}
+    },
+    {
+      "interface_id": "82eb201d-8a8b-442b-9f39-893f5ccedea0",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/railway-api/admin/dispatchOrder/syncRailwayTrace"},
+      "semantic": {"purpose": "运营端触发同步铁路运输轨迹数据，将外部或最新轨迹更新到本地铁路调度订单。", "audiences": ["运营端", "调度任务"], "domains": ["铁路运输", "运输轨迹"], "scenarios": ["主动刷新铁路轨迹"], "actions": ["sync", "execute"], "entities": ["铁路运输轨迹", "铁路调度订单"], "aliases": ["同步铁路运输轨迹", "刷新铁路轨迹", "RailwayDispatchOrderAdminController.syncRailwayTrace"], "resource": "railway_transport_trace", "lookup_keys": [], "cardinality": "many", "ownership": "all", "discriminators": ["执行轨迹同步更新；不是只读查询某笔或多笔铁路轨迹。"], "semantic_model": "codex-gpt5-contract-review-2026-09-02", "semantic_confidence": 0.9, "semantic_evidence": ["接口路径和Controller", "无查询条件的执行型合同", "轨迹查询兄弟接口对比"]}
+    },
+    {
+      "interface_id": "d2213bf2-8bb9-4482-960a-efe6492e7a2e",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/railway-api/admin/dispatchOrder/updateDispatchManifest"},
+      "semantic": {"purpose": "运营端触发更新铁路调度订单舱单数据，使调度单关联的铁路舱单信息保持最新。", "audiences": ["运营端", "调度任务"], "domains": ["铁路运输", "铁路舱单"], "scenarios": ["刷新铁路调度舱单"], "actions": ["sync", "update", "execute"], "entities": ["铁路调度订单", "铁路舱单"], "aliases": ["更新铁路调度舱单", "同步铁路舱单", "RailwayDispatchOrderAdminController.updateDispatchManifest"], "resource": "railway_dispatch_manifest", "lookup_keys": [], "cardinality": "many", "ownership": "all", "discriminators": ["更新调度舱单数据；不是查询运输轨迹或同步铁路轨迹。"], "semantic_model": "codex-gpt5-contract-review-2026-09-02", "semantic_confidence": 0.88, "semantic_evidence": ["接口路径和Controller", "无查询条件的执行型合同", "铁路轨迹兄弟接口对比"]}
+    },
+    {
+      "interface_id": "8e277e7e-3a57-4024-94a9-f3b628290acd",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/railway-api/portal/dispatchOrder/railwayTransTrace"},
+      "semantic": {"purpose": "铁路门户分页查询当前门户范围内的铁路运输轨迹，可按托运人名称和铁路运单号集合筛选。", "audiences": ["门户端", "承运商", "货主"], "domains": ["铁路运输", "运输轨迹"], "scenarios": ["门户查看铁路运输轨迹列表"], "actions": ["page"], "entities": ["铁路调度订单", "铁路运输轨迹"], "aliases": ["门户铁路运输轨迹分页", "铁路运单轨迹列表", "RailwayDispatchOrderPortalController.railwayTransTrace"], "resource": "railway_transport_trace", "lookup_keys": ["ydhms", "tyrmc"], "cardinality": "many", "ownership": "self", "discriminators": ["门户端分页轨迹列表；不是运营端多条件轨迹查询，也不是同步轨迹。"], "semantic_model": "codex-gpt5-contract-review-2026-09-02", "semantic_confidence": 0.97, "semantic_evidence": ["接口路径和Controller", "分页及ydhms请求合同", "运营端轨迹接口对比"]}
+    },
+    {
+      "interface_id": "2b494ff1-a37c-48c9-90e3-60baf59ad653",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/shipping-api/portal/carrierOrder/remote/listByEntrustedOrderNo"},
+      "copy_from_interface_id": "063ff57c-0017-405a-97b7-fb9f648a7239",
+      "purpose_prefix": "供内部服务通过门户远程接口调用；",
+      "semantic": {"audiences": ["内部服务"], "semantic_model": "codex-gpt5-sibling-contract-review-2026-09-02", "semantic_confidence": 0.98, "semantic_evidence": ["已审核非remote海运承运订单兄弟接口", "请求返回合同", "ShippingRemoteCarrierOrderPortalController路径"]},
+      "aliases_add": ["内部远程按委托单查海运承运订单"],
+      "discriminators_add": ["remote内部远程调用入口；不是面向门户用户直接调用的同名接口，也不是公路承运订单。"]
+    },
+    {
+      "interface_id": "22e5b1ae-d35e-4bbc-b3c5-8973207f7dbb",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/zhiyun/railwayTransLocation"},
+      "semantic": {"purpose": "智运对接按车号、箱号、客户标识和托运人查询或上报一笔铁路运输当前位置结果。", "audiences": ["外部系统", "内部服务"], "domains": ["铁路运输", "智运对接", "运输位置"], "scenarios": ["智运铁路位置数据交互"], "actions": ["execute", "update"], "entities": ["铁路运输位置"], "aliases": ["智运上报铁路位置", "railwayTransLocation", "RailwayTransportController.railwayTransLocation"], "resource": "railway_transport_location", "lookup_keys": ["ch", "xh", "cid", "tyrmc"], "cardinality": "one", "ownership": "by_id", "discriminators": ["历史railwayTransLocation路径，标题标识为位置上报；不同于railwayTransportLocation查询路径和railwayTransTrace轨迹查询。"], "semantic_model": "codex-gpt5-contract-review-2026-09-02", "semantic_confidence": 0.84, "semantic_evidence": ["接口路径和标题", "请求返回字段合同", "智运三个接口家族对比"]}
+    },
+    {
+      "interface_id": "55c2252c-1bc8-45ec-b315-46a5fa02ff75",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/zhiyun/railwayTransportLocation"},
+      "semantic": {"purpose": "智运对接按车号、箱号、客户标识和托运人查询一笔铁路运输的当前位置及运单状态。", "audiences": ["外部系统", "内部服务"], "domains": ["铁路运输", "智运对接", "运输位置"], "scenarios": ["查询智运铁路当前位置"], "actions": ["detail", "query"], "entities": ["铁路运输位置", "铁路运单"], "aliases": ["智运查询铁路位置", "railwayTransportLocation", "RailwayTransportController.railwayTransportLocation"], "resource": "railway_transport_location", "lookup_keys": ["ch", "xh", "cid", "tyrmc"], "cardinality": "one", "ownership": "by_id", "discriminators": ["返回当前位置和运单状态；不同于railwayTransLocation历史上报路径及railwayTransTrace完整轨迹。"], "semantic_model": "codex-gpt5-contract-review-2026-09-02", "semantic_confidence": 0.88, "semantic_evidence": ["接口路径和标题", "位置响应字段合同", "智运三个接口家族对比"]}
+    },
+    {
+      "interface_id": "e3be20df-b611-4cb8-afa0-34dd1d69b75e",
+      "expected_identity": {"service": "c12-mtp", "method": "POST", "path": "/zhiyun/railwayTransTrace"},
+      "semantic": {"purpose": "智运对接根据铁路运单号、客户标识和托运人查询完整铁路运输轨迹、节点记录、车辆及集装箱运单信息。", "audiences": ["外部系统", "内部服务"], "domains": ["铁路运输", "智运对接", "运输轨迹"], "scenarios": ["查询智运铁路完整轨迹"], "actions": ["detail", "query"], "entities": ["铁路运输轨迹", "铁路运单", "铁路车辆", "铁路集装箱"], "aliases": ["智运查询铁路轨迹", "铁路运单完整轨迹", "RailwayTransportController.railwayTransTrace"], "resource": "railway_transport_trace", "lookup_keys": ["ydhm", "cid", "tyrmc"], "cardinality": "one", "ownership": "by_id", "discriminators": ["返回完整轨迹节点及运单明细；不是只返回铁路当前位置。"], "semantic_model": "codex-gpt5-contract-review-2026-09-02", "semantic_confidence": 0.95, "semantic_evidence": ["接口路径和标题", "trace、waybill、车辆和集装箱响应合同", "智运位置接口对比"]}
+    }
+  ]
+}

@@ -1,0 +1,2198 @@
+{
+  "schema_version": "context-router-interface-semantic-batch-v1",
+  "batch_id": "panzhihua-c12-portal-bidwinning-014",
+  "workspace_id": "b9ce65eddc27437d9615177fbd07cb0a",
+  "family_groups": {
+    "门户中标公示": 4,
+    "小程序中标公示": 4,
+    "中标通知书": 4,
+    "中标合同": 5,
+    "履约保证金": 3
+  },
+  "generation_policy": "完整覆盖 c12-portal PortalBidWinningController 16 个与 MiniPortalBidWinningController 4 个有效接口。门户仅 BFF 转发 c12-egps PortalBidWinningService。按门户中标公示、小程序中标公示、中标通知书、中标合同、履约保证金分组。区分公示/通知书/合同/保证金、首页固定 3 条与普通分页、listAttachments 中标附件与 listFiles 合同文件、查询与领取/签署/支付/增加浏览量。未使用 copy_from_interface_id，未写入 c12-egps 同源 /egps/api/portal/bidWinning。",
+  "items": [
+    {
+      "interface_id": "d9a8691c-98e5-419a-b557-d60b508e4761",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/bidWinning/publicity/page"
+      },
+      "semantic": {
+        "purpose": "供电子招投标门户分页查询中标公示：免登录时按 supplierId=-1 返回全部已开始公示的记录，登录投标人仅返回本供应商中标、报名负责人或联合体成员相关记录；可按项目编号、名称、采购方式、公示状态和公示开始时间筛选，返回不含附件的分页摘要，其中中标记录ID供详情、附件和增加浏览量继续调用。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人",
+          "访客"
+        ],
+        "domains": [
+          "电子招投标",
+          "中标公示"
+        ],
+        "scenarios": [
+          "投标人或未登录访客在门户中标公示列表按项目编号、名称、采购方式和公示状态翻页查看已开始公示的中标结果，不返回附件。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "中标公示"
+        ],
+        "aliases": [
+          "门户中标公示分页",
+          "门户成交公示列表",
+          "PortalBidWinningController.pagePublicity"
+        ],
+        "resource": "bid_winning_publicity",
+        "lookup_keys": [
+          "projectCode",
+          "projectName",
+          "procurementMethod",
+          "publicityStatus",
+          "publishTimeStart",
+          "publishTimeEnd",
+          "pageNumber",
+          "pageSize",
+          "id",
+          "projectId",
+          "bidId"
+        ],
+        "cardinality": "many",
+        "ownership": "unknown",
+        "discriminators": [
+          "c12-portal BFF POST /member-api/portal/egps/bidWinning/publicity/page，@OptionalLogin，转发 c12-egps pagePublicity；不是小程序 /api/mini 首页或分页，也不是通知书/合同分页。",
+          "SQL 固定 award_status in publishing/published/contract_drafted/finished 且 publicity_start_time 非空。supplierId=-1 可见全部合格公示，登录后反而收窄为本供应商中标或报名相关。分页行不含 attachments，详情才带附件。",
+          "请求 supplierId 为隐藏字段，Service 用会话解析结果覆盖，调用方传入值当前未消费。fillPublicity 不填充 procurementMethodName/projectTypeName。"
+        ],
+        "required_inputs": [
+          {
+            "name": "pageSize",
+            "zh_name": "每页条数",
+            "location": "body",
+            "required": true,
+            "schema_type": "Integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "bid_winning_record_id",
+            "display_name": "中标记录ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "中标公示ID",
+              "公示ID"
+            ],
+            "resource": "bid_winning_publicity",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_id",
+            "display_name": "项目ID",
+            "technical_names": [
+              "projectId"
+            ],
+            "aliases": [
+              "采购项目ID"
+            ],
+            "resource": "bid_winning_publicity",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "bid_id",
+            "display_name": "标ID",
+            "technical_names": [
+              "bidId"
+            ],
+            "aliases": [
+              "标包ID"
+            ],
+            "resource": "bid_winning_publicity",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_code",
+            "display_name": "项目编号",
+            "technical_names": [
+              "projectCode"
+            ],
+            "aliases": [
+              "项目编码"
+            ],
+            "resource": "bid_winning_publicity",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalBidWinningController#pagePublicity(@RequestBody @Valid PortalBidWinningPublicityPageCondition) @OptionalLogin -> RemotePortalBidWinningService#pagePublicity",
+          "c12-egps PortalBidWinningService#pagePublicity：condition.setSupplierId(resolveSupplierId()) 覆盖请求 supplierId；PortalSupplierContextSupport 未登录/非投标人/无供应商返回 -1 而非 null，SUPPLIER_ID_EMPTY 实际不可达",
+          "PortalBidWinningDao#pagePublicity -> portal_bidwinning_publicity_query_page.sql：r.publicity_start_time is not null 且 award_status in ('publishing','published','contract_drafted','finished')；:supplierId=-1 或 r.supplier_id 或报名负责人/联合体成员",
+          "PageCondition 无 Bean Validation；SqlExecutor.page 拆箱 pageSize，空值会 NPE。返回 PortalBidWinningPublicityPageQuery，不含 attachments；id 供 getById/listAttachments/increaseViewCount"
+        ],
+        "semantic_model": "grok-4.6+codex-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "5fff7a26-aaa7-4bb8-92ca-b817905af8fc",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/bidWinning/publicity/getById"
+      },
+      "semantic": {
+        "purpose": "供电子招投标门户按中标记录ID查看一条中标公示详情：可见范围与分页相同（免登录看全部已开始公示，登录投标人看本供应商中标或报名相关）；返回公告内容、中标说明和 publicity 类型公示附件，不增加浏览量、不写下载日志。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人",
+          "访客"
+        ],
+        "domains": [
+          "电子招投标",
+          "中标公示"
+        ],
+        "scenarios": [
+          "投标人或访客在门户打开一条中标公示，阅读公告内容和中标说明，并看到公示附件列表。"
+        ],
+        "actions": [
+          "detail"
+        ],
+        "entities": [
+          "中标公示",
+          "公示附件"
+        ],
+        "aliases": [
+          "门户中标公示详情",
+          "门户成交公示详情",
+          "PortalBidWinningController.getPublicityById"
+        ],
+        "resource": "bid_winning_publicity",
+        "lookup_keys": [
+          "id",
+          "projectId",
+          "bidId",
+          "projectCode",
+          "fileId"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "门户 POST .../publicity/getById，返回单条详情且 attachments 为 BidWinningAttachment.publicity；不是分页、不是 listAttachments（后者记下载日志），也不是小程序同尾路径。",
+          "定位键 id 是中标记录/公示ID，不是通知书编号或合同ID。increaseViewCount 才会 UPDATE publicity_view_count。",
+          "可见性 SQL 与分页相同：匿名 supplierId=-1 可按 ID 取任意合格公示。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "中标公示ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "bid_winning_record_id",
+            "display_name": "中标记录ID",
+            "technical_names": [
+              "id",
+              "bizId"
+            ],
+            "aliases": [
+              "中标公示ID",
+              "公示ID"
+            ],
+            "resource": "bid_winning_publicity",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_id",
+            "display_name": "项目ID",
+            "technical_names": [
+              "projectId"
+            ],
+            "aliases": [
+              "采购项目ID"
+            ],
+            "resource": "bid_winning_publicity",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "bid_id",
+            "display_name": "标ID",
+            "technical_names": [
+              "bidId"
+            ],
+            "aliases": [
+              "标包ID"
+            ],
+            "resource": "bid_winning_publicity",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_code",
+            "display_name": "项目编号",
+            "technical_names": [
+              "projectCode"
+            ],
+            "aliases": [
+              "项目编码"
+            ],
+            "resource": "bid_winning_publicity",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "file_id",
+            "display_name": "文件服务ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "附件文件ID"
+            ],
+            "resource": "bid_winning_publicity_attachment",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalBidWinningController#getPublicityById(@Valid PortalBidWinningIdCondition.id @NotNull) -> RemotePortalBidWinningService#getPublicityById",
+          "PortalBidWinningService#getPublicityById：singleParams(id,supplierId) 空 id 抛 ID_EMPTY；fillPublicity 后 listBidWinningFiles(id, BidWinningAttachmentTypeEnum.PUBLICITY)",
+          "portal_bidwinning_publicity_query_getDetail.sql：r.id=:id 且公示开始时间/状态条件与分页相同，供应商可见性含 -1 全量",
+          "返回 PortalBidWinningPublicityDetailQuery.attachments 为 PortalBidWinningFileQuery；不调用 increasePublicityViewCount，也不写 DOWNLOAD 审计"
+        ],
+        "semantic_model": "grok-4.6+codex-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "43a070b9-4852-4107-82e1-7d2c507aebe7",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/bidWinning/publicity/increaseViewCount"
+      },
+      "semantic": {
+        "purpose": "供电子招投标门户按中标记录ID把一条可见中标公示的浏览量加一并写入 egps_bid_winning_record.publicity_view_count；先按与详情相同的可见性校验，成功返回 Boolean，不返回公示正文或附件。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人",
+          "访客"
+        ],
+        "domains": [
+          "电子招投标",
+          "中标公示"
+        ],
+        "scenarios": [
+          "投标人或访客在门户打开中标公示时，系统按该公示ID把浏览次数写入数据库。"
+        ],
+        "actions": [
+          "increment_view_count",
+          "update"
+        ],
+        "entities": [
+          "中标公示"
+        ],
+        "aliases": [
+          "门户中标公示增加浏览量",
+          "门户成交公示浏览次数加一",
+          "PortalBidWinningController.increasePublicityViewCount"
+        ],
+        "resource": "bid_winning_publicity",
+        "lookup_keys": [
+          "id"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "写 publicity_view_count+1，返回 ResponseData<Boolean>，不是查详情也不是 listAttachments。UPDATE 只按记录ID，不再带供应商条件，但之前必须通过 getPublicityDetail 可见性校验。",
+          "与小程序 increaseViewCount 下游相同，仅门户路径 /member-api/portal。匿名可见任意合格公示并可加浏览量。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "中标公示ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "bid_winning_record_id",
+            "display_name": "中标记录ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "中标公示ID",
+              "公示ID"
+            ],
+            "resource": "bid_winning_publicity",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalBidWinningController#increasePublicityViewCount(@Valid PortalBidWinningIdCondition) @OptionalLogin -> RemotePortalBidWinningService#increasePublicityViewCount",
+          "PortalBidWinningService#increasePublicityViewCount @Transactional：先 getPublicityDetail 校验可见，再 PortalBidWinningDao#increasePublicityViewCount(id)",
+          "portal_bidwinning_publicity_update_viewCount.sql：update egps_bid_winning_record set publicity_view_count=ifnull(publicity_view_count,0)+1 where deleted=0 and publicity_start_time is not null and award_status in ('publishing','published','contract_drafted','finished') and id=:id",
+          "成功返回 Boolean true；无公示正文、附件或浏览量字段"
+        ],
+        "semantic_model": "grok-4.6+codex-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "b7c0b5e4-9676-45a1-a5ed-cb6300037e77",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/bidWinning/publicity/listAttachments"
+      },
+      "semantic": {
+        "purpose": "供电子招投标门户按中标记录ID列出该公示的 publicity 类型中标附件（BidWinningAttachment 转 PortalBidWinningFileQuery），并为每个文件写下载审计日志；不返回公示正文，小程序无此接口。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人",
+          "访客"
+        ],
+        "domains": [
+          "电子招投标",
+          "中标公示"
+        ],
+        "scenarios": [
+          "投标人或访客在门户中标公示上点击下载附件，获取该公示的公示类附件清单。"
+        ],
+        "actions": [
+          "list_files"
+        ],
+        "entities": [
+          "公示附件"
+        ],
+        "aliases": [
+          "门户中标公示附件列表",
+          "门户成交公示下载附件",
+          "PortalBidWinningController.listPublicityAttachments"
+        ],
+        "resource": "bid_winning_publicity_attachment",
+        "lookup_keys": [
+          "id",
+          "fileId",
+          "bizId"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "返回 List<PortalBidWinningFileQuery>，来源 BidWinningAttachment.attachmentType=publicity，bizId=中标记录ID；不是通知书 NOTICE 附件，也不是合同 ContractFile。",
+          "内部先 getPublicityById 再对每个文件 businessLog DOWNLOAD_ATTACHMENT；详情接口也返回 attachments 但不记下载日志。小程序 MiniPortalBidWinningController 没有 listAttachments。",
+          "不更新公示表；审计日志不是公示资源本身的 update。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "中标公示ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "bid_winning_record_id",
+            "display_name": "中标记录ID",
+            "technical_names": [
+              "id",
+              "bizId"
+            ],
+            "aliases": [
+              "中标公示ID",
+              "公示ID"
+            ],
+            "resource": "bid_winning_publicity",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "publicity_attachment_id",
+            "display_name": "公示附件记录ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "中标附件ID"
+            ],
+            "resource": "bid_winning_publicity_attachment",
+            "source": "source_contract",
+            "confidence": 0.96
+          },
+          {
+            "canonical": "file_id",
+            "display_name": "文件服务ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "附件文件ID"
+            ],
+            "resource": "bid_winning_publicity_attachment",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalBidWinningController#listPublicityAttachments(@Valid PortalBidWinningIdCondition) -> RemotePortalBidWinningService#listPublicityAttachments",
+          "PortalBidWinningService#listPublicityAttachments：getPublicityById 后取 detail.attachments，循环 EgpsBusinessLogService.log(WINNING_PUBLICITY, DOWNLOAD_ATTACHMENT)",
+          "listBidWinningFiles -> BidWinningAttachmentService#listByRecordAndType(winningRecordId,'publicity') -> BidWinningAttachmentDao 按 winning_record_id+attachment_type+deleted=0",
+          "返回对象 PortalBidWinningFileQuery：id=附件记录ID，bizId=winningRecordId，fileType=publicity；与 contract/listFiles 的 ContractFile 不是同一张表"
+        ],
+        "semantic_model": "grok-4.6+codex-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "494f98c5-914e-4912-bbd2-8b0c9f1ce471",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/egps/bidWinning/publicity/homePage"
+      },
+      "semantic": {
+        "purpose": "供门户小程序首页查询中标公示：请求体可空，服务端强制第1页且每页3条后走与门户分页相同的 c12-egps pagePublicity；免登录返回全部已开始公示记录中的前3条，登录投标人仅返回本供应商中标或报名相关记录；返回分页摘要不含附件。",
+        "audiences": [
+          "门户小程序",
+          "投标人",
+          "访客"
+        ],
+        "domains": [
+          "电子招投标",
+          "中标公示"
+        ],
+        "scenarios": [
+          "用户打开招投标小程序首页，查看最多3条中标公示摘要；未登录也能看到公开公示，登录后只看与自己相关的公示。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "中标公示"
+        ],
+        "aliases": [
+          "小程序首页中标公示",
+          "小程序首页成交公示",
+          "MiniPortalBidWinningController.homePage"
+        ],
+        "resource": "bid_winning_publicity",
+        "lookup_keys": [
+          "projectCode",
+          "projectName",
+          "procurementMethod",
+          "publicityStatus",
+          "publishTimeStart",
+          "publishTimeEnd",
+          "pageNumber",
+          "pageSize",
+          "id",
+          "projectId",
+          "bidId"
+        ],
+        "cardinality": "many",
+        "ownership": "unknown",
+        "discriminators": [
+          "小程序 POST /api/mini/egps/bidWinning/publicity/homePage，HOME_PAGE_SIZE=3、pageNumber=1，body required=false 且无 @Valid；不是小程序 publicity/page，也不是门户分页。",
+          "下游仍是 RemotePortalBidWinningService#pagePublicity，与门户同一 SQL 和可见性；请求里的 pageNumber/pageSize 会被覆盖。Swagger 写成交公示，执行对象是中标公示。",
+          "首页同样不返回 attachments；小程序无 listAttachments，详情才带附件。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "bid_winning_record_id",
+            "display_name": "中标记录ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "中标公示ID",
+              "公示ID"
+            ],
+            "resource": "bid_winning_publicity",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_code",
+            "display_name": "项目编号",
+            "technical_names": [
+              "projectCode"
+            ],
+            "aliases": [
+              "项目编码"
+            ],
+            "resource": "bid_winning_publicity",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_id",
+            "display_name": "项目ID",
+            "technical_names": [
+              "projectId"
+            ],
+            "aliases": [
+              "采购项目ID"
+            ],
+            "resource": "bid_winning_publicity",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "bid_id",
+            "display_name": "标ID",
+            "technical_names": [
+              "bidId"
+            ],
+            "aliases": [
+              "标包ID"
+            ],
+            "resource": "bid_winning_publicity",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": [
+          "MiniPortalBidWinningController#homePage(@RequestBody(required=false) PortalBidWinningPublicityPageCondition) @OptionalLogin：condition 空则 new，setPageNumber(1) setPageSize(3) 后 remotePortalBidWinningService.pagePublicity",
+          "无门户层 @Valid；下游 c12-egps PortalBidWinningController#pagePublicity @Valid 与 PortalBidWinningService#pagePublicity 与门户分页相同",
+          "portal_bidwinning_publicity_query_page.sql 可见性：supplierId=-1 全量，登录后中标/报名负责人/联合体；返回最多 3 条 PageResult，不含 attachments",
+          "Swagger @Tag/@Operation 为成交公示，可执行链路与门户中标公示同一张 egps_bid_winning_record"
+        ],
+        "semantic_model": "grok-4.6+codex-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "b16ccb73-964b-4894-8abf-0596914c9f1a",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/egps/bidWinning/publicity/page"
+      },
+      "semantic": {
+        "purpose": "供门户小程序分页查询中标公示：请求字段、下游 pagePublicity、SQL 可见性和返回摘要均与门户分页相同；仅路径为 /api/mini，不强制 3 条，不返回附件。",
+        "audiences": [
+          "门户小程序",
+          "投标人",
+          "访客"
+        ],
+        "domains": [
+          "电子招投标",
+          "中标公示"
+        ],
+        "scenarios": [
+          "用户在小程序中标公示列表按项目编号、名称、采购方式和公示状态翻页查看公示摘要。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "中标公示"
+        ],
+        "aliases": [
+          "小程序中标公示分页",
+          "小程序成交公示列表",
+          "MiniPortalBidWinningController.page"
+        ],
+        "resource": "bid_winning_publicity",
+        "lookup_keys": [
+          "projectCode",
+          "projectName",
+          "procurementMethod",
+          "publicityStatus",
+          "publishTimeStart",
+          "publishTimeEnd",
+          "pageNumber",
+          "pageSize",
+          "id",
+          "projectId",
+          "bidId"
+        ],
+        "cardinality": "many",
+        "ownership": "unknown",
+        "discriminators": [
+          "小程序 POST /api/mini/egps/bidWinning/publicity/page，@Valid 请求体必填但无叶子必填；不是 homePage（固定 3 条），也不是门户 /member-api/portal 分页。",
+          "与门户分页同一 Feign、同一 SQL、同一可见性（匿名全量/登录收窄）。返回不含附件。请求 supplierId 仍被会话覆盖。"
+        ],
+        "required_inputs": [
+          {
+            "name": "pageSize",
+            "zh_name": "每页条数",
+            "location": "body",
+            "required": true,
+            "schema_type": "Integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "bid_winning_record_id",
+            "display_name": "中标记录ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "中标公示ID",
+              "公示ID"
+            ],
+            "resource": "bid_winning_publicity",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_id",
+            "display_name": "项目ID",
+            "technical_names": [
+              "projectId"
+            ],
+            "aliases": [
+              "采购项目ID"
+            ],
+            "resource": "bid_winning_publicity",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "bid_id",
+            "display_name": "标ID",
+            "technical_names": [
+              "bidId"
+            ],
+            "aliases": [
+              "标包ID"
+            ],
+            "resource": "bid_winning_publicity",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_code",
+            "display_name": "项目编号",
+            "technical_names": [
+              "projectCode"
+            ],
+            "aliases": [
+              "项目编码"
+            ],
+            "resource": "bid_winning_publicity",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": [
+          "MiniPortalBidWinningController#page(@RequestBody @Valid PortalBidWinningPublicityPageCondition) @OptionalLogin -> RemotePortalBidWinningService#pagePublicity",
+          "与门户 PortalBidWinningController#pagePublicity 请求 DTO、Service、SQL 完全相同，仅 BFF 前缀 /api/mini 与方法名 page 不同",
+          "portal_bidwinning_publicity_query_page.sql 筛选键 projectCode/projectName/procurementMethod/publicityStatus/publishTimeStart/publishTimeEnd；id 供小程序 getById/increaseViewCount",
+          "逐项对比：请求字段一致；登录主体与数据范围一致；分页返回与门户一致且都不含附件；小程序未走不同下游",
+          "PageCondition.pageSize 为可空 Integer，但 SqlExecutor.page 传给 int pageSize 发生自动拆箱；空值必然 NPE，因此是运行时无条件必填，pageNumber 空时 getStart() 返回 0"
+        ],
+        "semantic_model": "grok-4.6+codex-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "6b1d42b5-42be-45d2-bff1-15d9655a09da",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/egps/bidWinning/publicity/getById"
+      },
+      "semantic": {
+        "purpose": "供门户小程序按中标记录ID查看一条中标公示详情，含公告内容、中标说明和 publicity 附件；可见性与门户详情相同，不增加浏览量；小程序没有独立附件列表接口，附件只出现在本详情中。",
+        "audiences": [
+          "门户小程序",
+          "投标人",
+          "访客"
+        ],
+        "domains": [
+          "电子招投标",
+          "中标公示"
+        ],
+        "scenarios": [
+          "用户在小程序点开一条中标公示，阅读详情并查看公示附件。"
+        ],
+        "actions": [
+          "detail"
+        ],
+        "entities": [
+          "中标公示",
+          "公示附件"
+        ],
+        "aliases": [
+          "小程序中标公示详情",
+          "小程序成交公示详情",
+          "MiniPortalBidWinningController.getById"
+        ],
+        "resource": "bid_winning_publicity",
+        "lookup_keys": [
+          "id",
+          "projectId",
+          "bidId",
+          "projectCode",
+          "fileId"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "小程序 POST /api/mini/.../publicity/getById，下游 getPublicityById 与门户详情相同并返回 attachments；不是 homePage/page，也不是门户 listAttachments。",
+          "请求字段均为 PortalBidWinningIdCondition.id；登录与可见性与门户详情一致。Swagger 成交公示与执行链中标公示为同一记录。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "中标公示ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "bid_winning_record_id",
+            "display_name": "中标记录ID",
+            "technical_names": [
+              "id",
+              "bizId"
+            ],
+            "aliases": [
+              "中标公示ID",
+              "公示ID"
+            ],
+            "resource": "bid_winning_publicity",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_id",
+            "display_name": "项目ID",
+            "technical_names": [
+              "projectId"
+            ],
+            "aliases": [
+              "采购项目ID"
+            ],
+            "resource": "bid_winning_publicity",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "bid_id",
+            "display_name": "标ID",
+            "technical_names": [
+              "bidId"
+            ],
+            "aliases": [
+              "标包ID"
+            ],
+            "resource": "bid_winning_publicity",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_code",
+            "display_name": "项目编号",
+            "technical_names": [
+              "projectCode"
+            ],
+            "aliases": [
+              "项目编码"
+            ],
+            "resource": "bid_winning_publicity",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "file_id",
+            "display_name": "文件服务ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "附件文件ID"
+            ],
+            "resource": "bid_winning_publicity_attachment",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": [
+          "MiniPortalBidWinningController#getById(@Valid PortalBidWinningIdCondition) @OptionalLogin -> RemotePortalBidWinningService#getPublicityById",
+          "与门户 getPublicityById 同一 Service/SQL/附件装填 listBidWinningFiles(PUBLICITY)；小程序无 listPublicityAttachments",
+          "portal_bidwinning_publicity_query_getDetail.sql 按 id+可见性取单条；id @NotNull 且 singleParams 空 id 抛 ID_EMPTY",
+          "逐项对比门户详情：请求字段一致、登录与数据范围一致、都返回附件、都不增加浏览量、下游逻辑相同"
+        ],
+        "semantic_model": "grok-4.6+codex-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "a66e1e57-1be7-4a6b-9cde-7d8b9b74bfae",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/egps/bidWinning/publicity/increaseViewCount"
+      },
+      "semantic": {
+        "purpose": "供门户小程序按中标记录ID把一条可见中标公示的浏览量加一并写入数据库；与门户增加浏览量走同一 Feign 和 UPDATE SQL，成功返回 Boolean。",
+        "audiences": [
+          "门户小程序",
+          "投标人",
+          "访客"
+        ],
+        "domains": [
+          "电子招投标",
+          "中标公示"
+        ],
+        "scenarios": [
+          "用户在小程序查看中标公示时，系统按该公示ID把浏览次数写入数据库。"
+        ],
+        "actions": [
+          "increment_view_count",
+          "update"
+        ],
+        "entities": [
+          "中标公示"
+        ],
+        "aliases": [
+          "小程序中标公示增加浏览量",
+          "小程序成交公示浏览次数加一",
+          "MiniPortalBidWinningController.increaseViewCount"
+        ],
+        "resource": "bid_winning_publicity",
+        "lookup_keys": [
+          "id"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "小程序 POST /api/mini/.../increaseViewCount，下游与门户 increasePublicityViewCount 相同，真正 UPDATE publicity_view_count；不是只读详情。",
+          "返回 Boolean，不虚构浏览量字段。匿名对可见公示也可加一。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "中标公示ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "bid_winning_record_id",
+            "display_name": "中标记录ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "中标公示ID",
+              "公示ID"
+            ],
+            "resource": "bid_winning_publicity",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": [
+          "MiniPortalBidWinningController#increaseViewCount(@Valid PortalBidWinningIdCondition) @OptionalLogin -> RemotePortalBidWinningService#increasePublicityViewCount",
+          "PortalBidWinningService#increasePublicityViewCount 先 getPublicityDetail 再 Dao#increasePublicityViewCount",
+          "portal_bidwinning_publicity_update_viewCount.sql 对 egps_bid_winning_record.publicity_view_count +1，按 id 更新，确认小程序也会持久化浏览量",
+          "与门户兄弟接口对比：请求 id 一致、可见性一致、都写库、下游无独立小程序逻辑"
+        ],
+        "semantic_model": "grok-4.6+codex-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "11758a3d-2f01-4a60-800a-6f001b64b091",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/bidWinning/notice/page"
+      },
+      "semantic": {
+        "purpose": "供已登录门户投标人分页查询本供应商已发送的中标通知书：严格按会话供应商ID过滤，可按项目编号、名称、接收状态和发送时间筛选；返回中标记录ID、计算得到的通知书编号和领取按钮，不含附件。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "中标通知书"
+        ],
+        "scenarios": [
+          "中标供应商在门户中标通知书列表按未领取/已领取和项目编号查看自己的通知书，准备领取或下载。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "中标通知书"
+        ],
+        "aliases": [
+          "门户中标通知书分页",
+          "投标人通知书列表",
+          "PortalBidWinningController.pageNotice"
+        ],
+        "resource": "bid_winning_notice",
+        "lookup_keys": [
+          "projectCode",
+          "projectName",
+          "receiveStatus",
+          "sendTimeStart",
+          "sendTimeEnd",
+          "pageNumber",
+          "pageSize",
+          "id",
+          "noticeCode"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "门户 POST .../notice/page，无 @OptionalLogin；SQL 要求 r.supplier_id=:supplierId 且 notice_send_time 非空，没有公示那种 -1 全量旁路。",
+          "id 是中标记录ID/通知书定位ID，noticeCode 由 SQL concat('TZ',发送日,id%1000000) 计算，不是库内独立编号列。分页不含 attachments。",
+          "不是公示分页，也不是合同分页。请求 supplierId 被会话覆盖。"
+        ],
+        "required_inputs": [
+          {
+            "name": "pageSize",
+            "zh_name": "每页条数",
+            "location": "body",
+            "required": true,
+            "schema_type": "Integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "bid_winning_record_id",
+            "display_name": "中标记录ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "中标通知书ID",
+              "通知书ID"
+            ],
+            "resource": "bid_winning_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "notice_code",
+            "display_name": "通知书编号",
+            "technical_names": [
+              "noticeCode"
+            ],
+            "aliases": [
+              "中标通知书编号"
+            ],
+            "resource": "bid_winning_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_code",
+            "display_name": "项目编号",
+            "technical_names": [
+              "projectCode"
+            ],
+            "aliases": [
+              "项目编码"
+            ],
+            "resource": "bid_winning_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalBidWinningController#pageNotice(@Valid PortalBidWinningNoticePageCondition) 无 OptionalLogin -> RemotePortalBidWinningService#pageNotice",
+          "PortalBidWinningService#pageNotice：setSupplierId(resolveSupplierId())；validateNoticeReceiveStatus 仅当 receiveStatus 非空",
+          "portal_bidwinning_notice_query_page.sql：r.supplier_id=:supplierId and r.notice_send_time is not null；notice_code 为 concat 计算列；id 供 getById/listAttachments/receive",
+          "fillNotice 设置 receiveBtn=未领取；不查询 BidWinningAttachment",
+          "PageCondition.pageSize 为可空 Integer，但 SqlExecutor.page 传给 int pageSize 发生自动拆箱；空值必然 NPE，因此是运行时无条件必填，pageNumber 可空"
+        ],
+        "semantic_model": "grok-4.6+codex-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "5e97ab5f-d53a-45b0-b32c-c0c748326586",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/bidWinning/notice/getById"
+      },
+      "semantic": {
+        "purpose": "供已登录门户投标人按中标记录ID查看本供应商一条已发送中标通知书详情，含通知书内容和 notice 类型附件；不修改领取状态，也不保证生成 PDF。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "中标通知书"
+        ],
+        "scenarios": [
+          "中标供应商打开一条中标通知书，阅读正文并看到通知书附件。"
+        ],
+        "actions": [
+          "detail"
+        ],
+        "entities": [
+          "中标通知书",
+          "通知书附件"
+        ],
+        "aliases": [
+          "门户中标通知书详情",
+          "投标人查看通知书",
+          "PortalBidWinningController.getNoticeById"
+        ],
+        "resource": "bid_winning_notice",
+        "lookup_keys": [
+          "id",
+          "noticeCode",
+          "projectCode",
+          "fileId"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "单条通知书详情，id 必须属于当前供应商且 notice_send_time 非空；不是公示详情，也不是领取 receive。",
+          "attachments 为 BidWinningAttachment.notice；listAttachments 才会 ensureNoticePdfOrThrow。详情不写领取状态。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "中标通知书ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "bid_winning_record_id",
+            "display_name": "中标记录ID",
+            "technical_names": [
+              "id",
+              "bizId"
+            ],
+            "aliases": [
+              "中标通知书ID",
+              "通知书ID"
+            ],
+            "resource": "bid_winning_notice",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "notice_code",
+            "display_name": "通知书编号",
+            "technical_names": [
+              "noticeCode"
+            ],
+            "aliases": [
+              "中标通知书编号"
+            ],
+            "resource": "bid_winning_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_code",
+            "display_name": "项目编号",
+            "technical_names": [
+              "projectCode"
+            ],
+            "aliases": [
+              "项目编码"
+            ],
+            "resource": "bid_winning_notice",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "file_id",
+            "display_name": "文件服务ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "附件文件ID"
+            ],
+            "resource": "bid_winning_notice_attachment",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalBidWinningController#getNoticeById(@Valid PortalBidWinningIdCondition) -> RemotePortalBidWinningService#getNoticeById",
+          "PortalBidWinningService#getNoticeById：getNoticeDetail(id,supplierId) 空则 NOTICE_NOT_EXIST；listBidWinningFiles(id, NOTICE)",
+          "portal_bidwinning_notice_query_getDetail.sql：r.id=:id and r.supplier_id=:supplierId and notice_send_time is not null；notice_code 计算列",
+          "不调用 BidWinningNoticePdfService；领取态仍为库中 notice_receive_status"
+        ],
+        "semantic_model": "grok-4.6+codex-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "9183454d-0c10-4f80-bf82-ebe40c21f012",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/bidWinning/notice/listAttachments"
+      },
+      "semantic": {
+        "purpose": "供已登录门户投标人按中标记录ID列出本供应商中标通知书的 notice 附件；列表前会确保 PDF 附件存在，必要时生成并 replace 通知书附件，再返回 PortalBidWinningFileQuery 并记下载日志。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "中标通知书"
+        ],
+        "scenarios": [
+          "中标供应商在门户下载中标通知书附件，系统先保证有通知书 PDF 再返回文件清单。"
+        ],
+        "actions": [
+          "list_files"
+        ],
+        "entities": [
+          "通知书附件"
+        ],
+        "aliases": [
+          "门户中标通知书附件列表",
+          "下载中标通知书PDF",
+          "PortalBidWinningController.listNoticeAttachments"
+        ],
+        "resource": "bid_winning_notice_attachment",
+        "lookup_keys": [
+          "id",
+          "fileId",
+          "bizId"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "来源 BidWinningAttachment.notice，不是公示 publicity 附件，也不是合同文件。可能副作用：BidWinningNoticePdfService.ensureNoticePdfOrThrow 在现有 notice 附件并非全部为系统 PDF 时会生成并 replaceByRecordAndType。",
+          "主动作仍是列出文件；已领取/未领取都可下载。返回 List<PortalBidWinningFileQuery>，响应合同不含 noticeCode。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "中标通知书ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "bid_winning_record_id",
+            "display_name": "中标记录ID",
+            "technical_names": [
+              "id",
+              "bizId"
+            ],
+            "aliases": [
+              "中标通知书ID",
+              "通知书ID"
+            ],
+            "resource": "bid_winning_notice",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "notice_attachment_id",
+            "display_name": "通知书附件记录ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "中标附件ID"
+            ],
+            "resource": "bid_winning_notice_attachment",
+            "source": "source_contract",
+            "confidence": 0.96
+          },
+          {
+            "canonical": "file_id",
+            "display_name": "文件服务ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "附件文件ID"
+            ],
+            "resource": "bid_winning_notice_attachment",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalBidWinningController#listNoticeAttachments(@Valid PortalBidWinningIdCondition) -> RemotePortalBidWinningService#listNoticeAttachments",
+          "PortalBidWinningService#listNoticeAttachments：getNoticeById 后 BidWinningNoticePdfService#ensureNoticePdfOrThrow(detail.id)，再 listBidWinningFiles(NOTICE)，并 log DOWNLOAD",
+          "ensureNoticePdfOrThrow：已有 notice 附件且 remark 全为系统自动生成中标通知书PDF-V2 则跳过，否则上传 PDF 并 replaceByRecordAndType",
+          "返回 PortalBidWinningFileQuery，fileType=notice，bizId=winningRecordId"
+        ],
+        "semantic_model": "grok-4.6+codex-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "a7e28e28-aaa7-44ec-92f8-7417324b9834",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/bidWinning/notice/receive"
+      },
+      "semantic": {
+        "purpose": "供已登录门户投标人按中标记录ID领取本供应商中标通知书：先确保通知书 PDF，再把 egps_bid_winning_record.notice_receive_status 更新为 received；已领取则直接成功，返回 Boolean。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "中标通知书"
+        ],
+        "scenarios": [
+          "中标供应商在门户点击领取中标通知书，把该通知书标记为已接收。"
+        ],
+        "actions": [
+          "receive",
+          "update"
+        ],
+        "entities": [
+          "中标通知书"
+        ],
+        "aliases": [
+          "门户领取中标通知书",
+          "接收中标通知书",
+          "PortalBidWinningController.receiveNotice"
+        ],
+        "resource": "bid_winning_notice",
+        "lookup_keys": [
+          "id"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "写 notice_receive_status=received，不是查询详情或附件。已领取幂等返回 true。也会 ensureNoticePdfOrThrow。",
+          "id 为中标记录/通知书ID，必须 notice_send_time 非空且 supplier_id 为当前供应商。返回 Boolean，无通知书对象。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "中标通知书ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "bid_winning_record_id",
+            "display_name": "中标记录ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "中标通知书ID",
+              "通知书ID"
+            ],
+            "resource": "bid_winning_notice",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalBidWinningController#receiveNotice(@Valid PortalBidWinningIdCondition) -> RemotePortalBidWinningService#receiveNotice",
+          "PortalBidWinningService#receiveNotice @Transactional：getNoticeById -> BidWinningRecordService#findForUpdateById -> ensureNoticePdfOrThrow；未领取则 setNoticeReceiveStatus(RECEIVED) saveRecord 并记 RECEIVE 日志",
+          "已领取 alreadyReceived 时仍返回 true，不再更新状态",
+          "成功 ResponseData<Boolean>，不返回 noticeCode 或附件"
+        ],
+        "semantic_model": "grok-4.6+codex-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "d6c0b53c-8c19-412b-8906-f959bf8b8f0d",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/bidWinning/contract/statistics"
+      },
+      "semantic": {
+        "purpose": "供已登录门户投标人按当前供应商统计中标合同数量：筛选条件与合同分页相同（合同编号、项目名称、采购方式、合同状态），忽略分页参数，返回一条含总数、待签署数和已签署数的统计对象。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "中标合同"
+        ],
+        "scenarios": [
+          "中标供应商在门户合同页查看自己有多少份合同、多少待签、多少已签。"
+        ],
+        "actions": [
+          "statistics"
+        ],
+        "entities": [
+          "中标合同"
+        ],
+        "aliases": [
+          "门户中标合同统计",
+          "投标人合同待签已签数量",
+          "PortalBidWinningController.contractStatistics"
+        ],
+        "resource": "bid_winning_contract",
+        "lookup_keys": [
+          "contractNo",
+          "projectName",
+          "procurementMethod",
+          "contractStatus"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "返回单个 PortalBidWinningContractStatisticsQuery，不是合同分页行。SQL 按 party_b_sign_status 是否 signed 计数，且 party_b_sign_status is not null。",
+          "与 pageContract 同 DTO 条件，但不校验 contractStatus 枚举、不使用 pageNumber/pageSize。pageNumber/pageSize 当前未消费。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "bid_winning_contract",
+            "source": "request_contract",
+            "confidence": 0.96
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalBidWinningController#contractStatistics(@Valid PortalBidWinningContractPageCondition) -> RemotePortalBidWinningService#contractStatistics",
+          "PortalBidWinningService#contractStatistics：setSupplierId(resolveSupplierId())，不调用 validateContractStatus；空统计补 0",
+          "portal_bidwinning_contract_query_statistics.sql：c.supplier_id=:supplierId and c.party_b_sign_status is not null；pending_sign_count 为 party_b_sign_status<>'signed'",
+          "返回 totalCount/pendingSignCount/signedCount，无合同ID列表"
+        ],
+        "semantic_model": "grok-4.6+codex-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "b0cf950e-a690-4cb0-ac76-0e0d222461b0",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/bidWinning/contract/page"
+      },
+      "semantic": {
+        "purpose": "供已登录门户投标人分页查询本供应商已进入签署流程的中标合同：要求 party_b_sign_status 非空，可按合同编号、项目名称、采购方式和合同状态筛选；返回合同ID供详情、文件列表、签署及履约保证金继续调用，不含文件。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "中标合同"
+        ],
+        "scenarios": [
+          "中标供应商在门户合同列表按待签/已签和合同编号查看自己的合同，准备签署或下载。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "中标合同"
+        ],
+        "aliases": [
+          "门户中标合同分页",
+          "投标人合同列表",
+          "PortalBidWinningController.pageContract"
+        ],
+        "resource": "bid_winning_contract",
+        "lookup_keys": [
+          "contractNo",
+          "projectName",
+          "procurementMethod",
+          "contractStatus",
+          "pageNumber",
+          "pageSize",
+          "id",
+          "projectCode"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "合同分页，id 是合同ID 不是中标记录ID；SQL 要求 party_b_sign_status is not null，未进入签署的合同不可见。",
+          "不是 statistics，不是履约保证金分页。分页不含 files；签署按钮由乙方签章 waiting/signing 决定。"
+        ],
+        "required_inputs": [
+          {
+            "name": "pageSize",
+            "zh_name": "每页条数",
+            "location": "body",
+            "required": true,
+            "schema_type": "Integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "中标合同ID"
+            ],
+            "resource": "bid_winning_contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "bid_winning_contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_code",
+            "display_name": "项目编号",
+            "technical_names": [
+              "projectCode"
+            ],
+            "aliases": [
+              "项目编码"
+            ],
+            "resource": "bid_winning_contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalBidWinningController#pageContract(@Valid PortalBidWinningContractPageCondition) -> RemotePortalBidWinningService#pageContract",
+          "PortalBidWinningService#pageContract：setSupplierId；validateContractStatus 仅当 contractStatus 非空",
+          "portal_bidwinning_contract_query_page.sql：c.supplier_id=:supplierId and c.party_b_sign_status is not null；模糊 contract_no/project_name",
+          "返回 PortalBidWinningContractPageQuery.id 为合同ID，供 getById/listFiles/sign，以及履约保证金 getById/pay",
+          "PageCondition.pageSize 为可空 Integer，但 SqlExecutor.page 传给 int pageSize 发生自动拆箱；空值必然 NPE，因此是运行时无条件必填，pageNumber 可空"
+        ],
+        "semantic_model": "grok-4.6+codex-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "314cd1c8-820a-442a-a449-744fb57ae0ee",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/bidWinning/contract/getById"
+      },
+      "semantic": {
+        "purpose": "供已登录门户投标人按合同ID查看本供应商一份已进入签署流程的中标合同详情，含甲乙方签章、履约保证金摘要和全部合同文件列表；不执行签署。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "中标合同"
+        ],
+        "scenarios": [
+          "中标供应商打开一份合同，查看金额、签章状态、履约保证金情况和合同文件。"
+        ],
+        "actions": [
+          "detail"
+        ],
+        "entities": [
+          "中标合同",
+          "合同文件"
+        ],
+        "aliases": [
+          "门户中标合同详情",
+          "投标人查看合同",
+          "PortalBidWinningController.getContractById"
+        ],
+        "resource": "bid_winning_contract",
+        "lookup_keys": [
+          "id",
+          "contractNo",
+          "bidRecordId",
+          "projectCode",
+          "fileId"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "id 为合同ID，详情 SQL 要求 supplier_id 匹配且 party_b_sign_status is not null。files 来自 ContractFile 全部类型，不是 BidWinningAttachment。",
+          "不是 listFiles（listFiles 记下载日志），不是 sign。返回 bidRecordId 供理解中标记录关联，签署接口仍用合同ID。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "合同ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "id",
+              "bizId"
+            ],
+            "aliases": [
+              "中标合同ID"
+            ],
+            "resource": "bid_winning_contract",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "bid_winning_contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "bid_winning_record_id",
+            "display_name": "中标记录ID",
+            "technical_names": [
+              "bidRecordId"
+            ],
+            "aliases": [
+              "中标公示ID",
+              "公示ID"
+            ],
+            "resource": "bid_winning_contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_code",
+            "display_name": "项目编号",
+            "technical_names": [
+              "projectCode"
+            ],
+            "aliases": [
+              "项目编码"
+            ],
+            "resource": "bid_winning_contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "file_id",
+            "display_name": "文件服务ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "合同文件ID"
+            ],
+            "resource": "bid_winning_contract_file",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalBidWinningController#getContractById(@Valid PortalBidWinningIdCondition) -> RemotePortalBidWinningService#getContractById",
+          "PortalBidWinningService#getContractById：getContractDetail(id,supplierId) 空则 CONTRACT_NOT_EXIST；listContractFileQueries(id,null) 装填 files",
+          "portal_bidwinning_contract_query_getDetail.sql：c.id=:id and c.supplier_id=:supplierId and party_b_sign_status is not null，选出 bid_record_id",
+          "ContractFileService#listByContractId 全部未删除合同文件；fileType 为 ContractFileTypeEnum 而非 bid_winning_attachment_type"
+        ],
+        "semantic_model": "grok-4.6+codex-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "65d26420-fec2-4dc2-a593-2bf4b224a9bf",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/bidWinning/contract/listFiles"
+      },
+      "semantic": {
+        "purpose": "供已登录门户投标人按合同ID列出该合同的全部 ContractFile 文件（不限文件类型）并记下载审计；id 必须属于当前供应商且乙方签章状态非空。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "中标合同"
+        ],
+        "scenarios": [
+          "中标供应商在门户合同上点击下载，获取该合同的全部合同文件清单。"
+        ],
+        "actions": [
+          "list_files"
+        ],
+        "entities": [
+          "合同文件"
+        ],
+        "aliases": [
+          "门户中标合同文件列表",
+          "下载中标合同文件",
+          "PortalBidWinningController.listContractFiles"
+        ],
+        "resource": "bid_winning_contract_file",
+        "lookup_keys": [
+          "id",
+          "fileId",
+          "bizId"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "listFiles 返回 ContractFile 转 PortalBidWinningFileQuery，bizId=合同ID，fileType 为 contract_file_type；不是 publicity/notice 的 BidWinningAttachment。",
+          "ensureVisibleContract=findOwnedById 且 partyBSignStatus 非空。详情也带 files 但不记 DOWNLOAD。履约保证金详情只返回凭证类型文件。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "合同ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "id",
+              "bizId"
+            ],
+            "aliases": [
+              "中标合同ID"
+            ],
+            "resource": "bid_winning_contract",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "contract_file_id",
+            "display_name": "合同文件记录ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "文件记录ID"
+            ],
+            "resource": "bid_winning_contract_file",
+            "source": "source_contract",
+            "confidence": 0.96
+          },
+          {
+            "canonical": "file_id",
+            "display_name": "文件服务ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "合同文件ID"
+            ],
+            "resource": "bid_winning_contract_file",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalBidWinningController#listContractFiles(@Valid PortalBidWinningIdCondition) -> RemotePortalBidWinningService#listContractFiles",
+          "PortalBidWinningService#listContractFiles：ensureVisibleContract(id, resolveSupplierId()) 后 listContractFileQueries(id,null)；按合同号记 CONTRACT DOWNLOAD 日志",
+          "ContractService#findOwnedById -> ContractDao 按 id+supplierId+deleted=0；partyBSignStatus 空白则 CONTRACT_NOT_EXIST",
+          "ContractFileService#listByContractId 查 egps 合同文件表，不是 bid_winning_attachment"
+        ],
+        "semantic_model": "grok-4.6+codex-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "f5c238b4-84ac-4556-8d2c-9e7603b872c3",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/bidWinning/contract/sign"
+      },
+      "semantic": {
+        "purpose": "供已登录门户投标人按合同ID确认签署本供应商合同：要求乙方签章状态为 waiting 或 signing，将乙方签章改为 signed；若甲方已签则合同置为已签署并 finish 中标记录，否则合同进入签署中；返回 Boolean，不调用第三方 CA。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "中标合同"
+        ],
+        "scenarios": [
+          "中标供应商在门户对一份待签合同点击确认签署，把乙方签章状态更新为已签。"
+        ],
+        "actions": [
+          "sign",
+          "update"
+        ],
+        "entities": [
+          "中标合同"
+        ],
+        "aliases": [
+          "门户确认签署合同",
+          "投标人签署中标合同",
+          "PortalBidWinningController.signContract"
+        ],
+        "resource": "bid_winning_contract",
+        "lookup_keys": [
+          "id"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "写合同签章状态，不是查询、不是 listFiles、不是缴纳履约保证金。无 CA/签章平台调用，只更新 Contract 与可能的 BidWinningRecord.award_status=finished。",
+          "返回 Boolean。乙方已是 signed 时抛 CONTRACT_SIGN_STATUS_INVALID。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "合同ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "中标合同ID"
+            ],
+            "resource": "bid_winning_contract",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalBidWinningController#signContract(@Valid PortalBidWinningIdCondition) -> RemotePortalBidWinningService#signContract",
+          "PortalBidWinningService#signContract @Transactional：ensureVisibleContract；isPendingPartySign(waiting/signing) 否则 CONTRACT_SIGN_STATUS_INVALID；setPartyBSignStatus(SIGNED)",
+          "甲方已 SIGNED 则 contract status/esignStatus=SIGNED，BidWinningRecordService#finishByContractSigned(bidRecordId)，未重复签署时 ContractCooperationSyncService#scheduleAfterCommit；否则合同 SIGNING",
+          "ContractService#update 持久化；返回 Boolean true"
+        ],
+        "semantic_model": "grok-4.6+codex-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "9b47d02b-219c-4502-bbc6-84058a20a97d",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/bidWinning/performanceBond/page"
+      },
+      "semantic": {
+        "purpose": "供已登录门户投标人分页查询本供应商履约保证金缴纳提醒：行主键 id 就是合同ID，另有提醒编号 reminderNo 和合同编号；仅包含已配置保证金金额和截止时间的合同，可按项目名称、提醒状态和截止时间筛选。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "履约保证金"
+        ],
+        "scenarios": [
+          "中标供应商在门户查看哪些合同的履约保证金未缴、已缴或已逾期，准备缴纳或查看凭证。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "履约保证金"
+        ],
+        "aliases": [
+          "门户履约保证金分页",
+          "投标人保证金缴纳提醒列表",
+          "PortalBidWinningController.pagePerformanceBond"
+        ],
+        "resource": "performance_bond",
+        "lookup_keys": [
+          "projectName",
+          "reminderStatus",
+          "deadlineStart",
+          "deadlineEnd",
+          "pageNumber",
+          "pageSize",
+          "id",
+          "reminderNo",
+          "contractNo"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "履约保证金分页，定位键 id 为合同ID，没有独立保证金主键。reminderNo 来自 c.performance_bond_reminder_no，与 contractNo、projectCode 分列。",
+          "不要求 party_b_sign_status；reminderStatus 由 SQL case 计算 paid/overdue/unpaid，不是独立表字段。不是合同分页。"
+        ],
+        "required_inputs": [
+          {
+            "name": "pageSize",
+            "zh_name": "每页条数",
+            "location": "body",
+            "required": true,
+            "schema_type": "Integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "履约保证金定位合同ID"
+            ],
+            "resource": "performance_bond",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "performance_bond_reminder_no",
+            "display_name": "履约保证金提醒编号",
+            "technical_names": [
+              "reminderNo"
+            ],
+            "aliases": [
+              "提醒编号"
+            ],
+            "resource": "performance_bond",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "performance_bond",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_code",
+            "display_name": "项目编号",
+            "technical_names": [
+              "projectCode"
+            ],
+            "aliases": [
+              "项目编码"
+            ],
+            "resource": "performance_bond",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalBidWinningController#pagePerformanceBond(@Valid PortalPerformanceBondPageCondition) -> RemotePortalBidWinningService#pagePerformanceBond",
+          "PortalBidWinningService#pagePerformanceBond：setSupplierId；validatePerformanceBondStatus 仅当 reminderStatus 非空",
+          "portal_performance_bond_query_page.sql：c.supplier_id=:supplierId 且 amount/deadline 非空；reminder_no=performance_bond_reminder_no；id=c.id 合同ID 供 getById/pay",
+          "无独立 performance_bond 表主键；fillPerformanceBond 设置 payBtn=未缴纳",
+          "PageCondition.pageSize 为可空 Integer，但 SqlExecutor.page 传给 int pageSize 发生自动拆箱；空值必然 NPE，因此是运行时无条件必填，pageNumber 可空"
+        ],
+        "semantic_model": "grok-4.6+codex-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "15701f0a-59a6-4044-9e53-9e47251d3322",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/bidWinning/performanceBond/getById"
+      },
+      "semantic": {
+        "purpose": "供已登录门户投标人按合同ID查看本供应商一条履约保证金缴纳提醒详情，并返回 performance_bond_voucher 类型缴纳凭证；没有独立保证金ID。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "履约保证金"
+        ],
+        "scenarios": [
+          "中标供应商打开某份合同的履约保证金提醒，查看金额、截止时间和已上传凭证。"
+        ],
+        "actions": [
+          "detail"
+        ],
+        "entities": [
+          "履约保证金",
+          "缴纳凭证"
+        ],
+        "aliases": [
+          "门户履约保证金详情",
+          "投标人查看保证金提醒",
+          "PortalBidWinningController.getPerformanceBondById"
+        ],
+        "resource": "performance_bond",
+        "lookup_keys": [
+          "id",
+          "reminderNo",
+          "contractNo",
+          "projectCode",
+          "fileId"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "id 为合同ID，SQL 还要求该合同已配置保证金金额和截止时间。voucherFiles 仅 ContractFileTypeEnum.PERFORMANCE_BOND_VOUCHER，不是合同全部文件。",
+          "不是 pay，不是合同 getById。无独立保证金主键。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "合同ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "id",
+              "bizId"
+            ],
+            "aliases": [
+              "履约保证金定位合同ID"
+            ],
+            "resource": "performance_bond",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "performance_bond_reminder_no",
+            "display_name": "履约保证金提醒编号",
+            "technical_names": [
+              "reminderNo"
+            ],
+            "aliases": [
+              "提醒编号"
+            ],
+            "resource": "performance_bond",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "performance_bond",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "file_id",
+            "display_name": "文件服务ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "凭证文件ID"
+            ],
+            "resource": "performance_bond_voucher",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "project_code",
+            "display_name": "项目编号",
+            "technical_names": [
+              "projectCode"
+            ],
+            "aliases": [
+              "项目编码"
+            ],
+            "resource": "performance_bond",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalBidWinningController#getPerformanceBondById(@Valid PortalBidWinningIdCondition) -> RemotePortalBidWinningService#getPerformanceBondById",
+          "PortalBidWinningService#getPerformanceBondById：getPerformanceBondDetail(id,supplierId) 空则 PERFORMANCE_BOND_NOT_EXIST；listContractFileQueries(id, PERFORMANCE_BOND_VOUCHER)",
+          "portal_performance_bond_query_getDetail.sql：c.id=:id and c.supplier_id=:supplierId 且 amount/deadline 非空",
+          "返回 PortalPerformanceBondDetailQuery.voucherFiles 为 PortalBidWinningFileQuery"
+        ],
+        "semantic_model": "grok-4.6+codex-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "f8f40731-7d4f-4467-bf8b-4f2bcdbeb6fa",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/bidWinning/performanceBond/pay"
+      },
+      "semantic": {
+        "purpose": "供已登录门户投标人按合同ID缴纳履约保证金：无条件需要合同ID、缴纳方式和至少一份凭证 fileId；把凭证写入合同文件并标记 performance_bond_paid=是，不调用支付网关，成功返回 Boolean。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "履约保证金"
+        ],
+        "scenarios": [
+          "中标供应商为某份合同选择银行转账或线上支付方式并上传缴纳凭证，提交后该合同保证金记为已缴。"
+        ],
+        "actions": [
+          "pay",
+          "update"
+        ],
+        "entities": [
+          "履约保证金",
+          "缴纳凭证"
+        ],
+        "aliases": [
+          "门户缴纳履约保证金",
+          "投标人提交保证金凭证",
+          "PortalBidWinningController.payPerformanceBond"
+        ],
+        "resource": "performance_bond",
+        "lookup_keys": [
+          "id",
+          "performanceBondPaymentMethod",
+          "fileId"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "写操作：保存 performance_bond_voucher 文件并将合同 performanceBondPaid 置 YES。online_payment 也不会调支付渠道，同样必须上传凭证。",
+          "id 为合同ID；ensureOwnedContract 只校验供应商所有权，不要求 party_b_sign_status。已缴纳抛 PERFORMANCE_BOND_PAID。返回 Boolean。",
+          "voucherFiles @NotEmpty 为无条件，条目 fileId @NotBlank；其余文件名/路径等可选。请求 supplierId 被会话覆盖。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "合同ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          },
+          {
+            "name": "performanceBondPaymentMethod",
+            "zh_name": "履约保证金缴纳方式",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          },
+          {
+            "name": "fileId",
+            "zh_name": "缴纳凭证文件ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "履约保证金定位合同ID"
+            ],
+            "resource": "performance_bond",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "file_id",
+            "display_name": "文件服务ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "凭证文件ID"
+            ],
+            "resource": "performance_bond_voucher",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalBidWinningController#payPerformanceBond(@Valid PortalPerformanceBondPayItem) -> RemotePortalBidWinningService#payPerformanceBond",
+          "PortalPerformanceBondPayItem：id @NotNull，performanceBondPaymentMethod @NotBlank，voucherFiles @Valid @NotEmpty，条目 PortalBidWinningFileItem.fileId @NotBlank；Service 再校验凭证空、支付方式枚举、未缴、金额和截止时间存在",
+          "PortalBidWinningService#payPerformanceBond @Transactional：item.setSupplierId(resolveSupplierId()) 覆盖请求值；ensureOwnedContract；savePerformanceBondVoucherFiles 追加插入不先删旧凭证；contract.setPerformanceBondPaid(YES) ContractService#update",
+          "无支付网关调用；成功 Boolean true"
+        ],
+        "semantic_model": "grok-4.6+codex-source-contract-review-2026-09-04"
+      }
+    }
+  ]
+}

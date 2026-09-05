@@ -1,0 +1,3416 @@
+{
+  "schema_version": "context-router-interface-semantic-batch-v1",
+  "batch_id": "panzhihua-c12-portal-unscanned-005",
+  "workspace_id": "b9ce65eddc27437d9615177fbd07cb0a",
+  "generation_policy": "完整处理 c12-portal 的 ContractAdminController、ContractPortalController、RemoteContractPortalController；核对 Controller、DTO、Service、Feign、DAO 与同源已审核兄弟；业务事实仅进入本批次，未使用 copy_from_interface_id。",
+  "family_groups": {
+    "运营合同主资源": 9,
+    "门户合同本地查询": 5,
+    "门户合同远程查询": 4,
+    "运营有效合同选择": 6,
+    "门户有效合同本地选择": 4,
+    "门户有效合同远程选择": 4,
+    "运营合同关联选择器": 4,
+    "合同港口委托同步": 1
+  },
+  "items": [
+    {
+      "interface_id": "bf2457cd-135e-4059-a8ea-78d3fc24d5de",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/contract/page"
+      },
+      "semantic": {
+        "purpose": "供运营端按合同号、内部合同号、名称、类型、客户、状态、来源、签约与有效期条件分页查看会员合同，并补充创建人和合同附件标识。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "会员合同",
+          "合同管理"
+        ],
+        "scenarios": [
+          "运营人员在合同台账中检索不同客户和有效期的合同，查看状态、经办人及附件入口。"
+        ],
+        "actions": [
+          "query",
+          "page"
+        ],
+        "entities": [
+          "会员合同"
+        ],
+        "aliases": [
+          "运营合同台账分页",
+          "后台会员合同查询",
+          "ContractAdminController.page"
+        ],
+        "resource": "member_contract",
+        "lookup_keys": [
+          "businessIds",
+          "contractNo",
+          "internalContractNo",
+          "contractName",
+          "contractType",
+          "clientId",
+          "clientName",
+          "status",
+          "source",
+          "creator",
+          "signDate",
+          "effectiveStartDate",
+          "effectiveEndDate"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "运营端可查询全量合同并返回创建人、附件标识；门户 page 会强制限定当前登录用户及其角色对应合同类型。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "businessIds",
+              "id"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "internal_contract_no",
+            "display_name": "内部合同编号",
+            "technical_names": [
+              "internalContractNo"
+            ],
+            "aliases": [
+              "内部合同号"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "contract_file_id",
+            "display_name": "合同文件ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "合同附件标识"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "ContractAdminController#page(ContractAdminPageCondition) -> ResponseData<PageResult<ContractAdminQuery>>",
+          "ContractAdminService#page -> ContractDao#adminPage(contract_query_getPageList)，并补充创建人姓名、合同有效期文本和附件 fileId"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "4f46e0f4-5629-4072-bc5d-6626b0f715c9",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/contract/getById/{id}"
+      },
+      "semantic": {
+        "purpose": "供运营端按路径合同 ID 查询单份会员合同；港口作业合同同时返回作业约定和报价明细。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "会员合同",
+          "合同管理"
+        ],
+        "scenarios": [
+          "运营人员从合同台账打开指定合同，核对基础条款以及港口作业合同的作业和报价配置。"
+        ],
+        "actions": [
+          "query",
+          "detail"
+        ],
+        "entities": [
+          "会员合同",
+          "合同作业约定",
+          "合同报价"
+        ],
+        "aliases": [
+          "路径ID查运营合同",
+          "运营合同完整详情",
+          "ContractAdminController.getById"
+        ],
+        "resource": "member_contract",
+        "lookup_keys": [
+          "id"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "合同 ID 位于路径；不同于 getByIdItem 的请求体 ID，且比 getByIds 多返回港口作业合同的作业约定与报价明细。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "合同ID",
+            "location": "path",
+            "required": true,
+            "schema_type": "integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "ContractAdminController#getById(@PathVariable Long id) -> ResponseData<ContractDataAdminQuery>",
+          "ContractAdminService#getByIdAdmin -> ContractBasicService#getById -> ContractDao#findById；港口作业合同追加 ContractOperationBasicService#findByContractId 与 ContractQuoteInfoDao#find"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "036ef0f2-8290-4b0b-9e87-fdc4e30220c2",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/contract/getByIdItem"
+      },
+      "semantic": {
+        "purpose": "供运营端按请求体合同 ID 查询单份会员合同；港口作业合同同时返回作业约定和报价明细。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "会员合同",
+          "合同管理"
+        ],
+        "scenarios": [
+          "运营端统一 ID 请求组件回显合同及其港口作业配置，用于查看或编辑前加载。"
+        ],
+        "actions": [
+          "query",
+          "detail"
+        ],
+        "entities": [
+          "会员合同",
+          "合同作业约定",
+          "合同报价"
+        ],
+        "aliases": [
+          "请求体ID查运营合同",
+          "运营合同编辑回显",
+          "ContractAdminController.getByIdItem"
+        ],
+        "resource": "member_contract",
+        "lookup_keys": [
+          "id"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "合同 ID 来自 IdObject 请求体；返回内容与路径 getById 相同，不是 getByIds 的批量基础信息。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "ContractAdminController#getByIdItem(IdObject) -> ResponseData<ContractDataAdminQuery>",
+          "ContractAdminService#getByIdAdmin -> ContractBasicService#getById；IdObject.id 未声明 Bean Validation 约束"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "538ee42d-1ca4-4c23-b98b-adf82984efb6",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/contract/getByIds"
+      },
+      "semantic": {
+        "purpose": "供运营端按合同 ID 数组批量读取会员合同基础数据，不加载单条详情接口的作业约定和报价明细。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "会员合同",
+          "合同管理"
+        ],
+        "scenarios": [
+          "运营流程批量回填多份合同的编号、客户、有效期和状态等基础信息。"
+        ],
+        "actions": [
+          "query",
+          "list"
+        ],
+        "entities": [
+          "会员合同"
+        ],
+        "aliases": [
+          "批量读取运营合同",
+          "合同ID数组查询",
+          "ContractAdminController.getByIds"
+        ],
+        "resource": "member_contract",
+        "lookup_keys": [
+          "ids"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "请求体是 Long ID 数组，返回多份基础合同；不同于两个单条详情入口，不追加作业约定和报价。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_ids",
+            "display_name": "合同ID集合",
+            "technical_names": [
+              "ids",
+              "id"
+            ],
+            "aliases": [
+              "合同主键集合"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "ContractAdminController#getByIds(List<Long> ids) -> ResponseData<List<ContractDataAdminQuery>>",
+          "ContractAdminService#getByIdsAdmin -> ContractBasicService#getByIds -> ContractDao#findByIds；仅从 Contract 实体批量转换"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "44da1038-d6b2-41c6-9bc0-a4508321d241",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/contract/getByContractNo"
+      },
+      "semantic": {
+        "purpose": "供运营端按合同编号查询一份会员合同摘要及其合同文件标识和文件名。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "会员合同",
+          "合同管理"
+        ],
+        "scenarios": [
+          "运营业务按已知合同号获取合同摘要和附件入口，用于关联合同或打开合同文件。"
+        ],
+        "actions": [
+          "query",
+          "detail"
+        ],
+        "entities": [
+          "会员合同",
+          "合同附件"
+        ],
+        "aliases": [
+          "运营合同号查文件",
+          "按合同编号查摘要",
+          "ContractAdminController.getByContractNo"
+        ],
+        "resource": "member_contract",
+        "lookup_keys": [
+          "contractNo"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "以合同编号而非主键定位，返回 ContractInfoAdminQuery 摘要并附 fileId/fileName，不返回港口作业报价明细。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "contract_file_id",
+            "display_name": "合同文件ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "合同附件标识"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "ContractAdminController#getByContractNo(MemberContractNoAdminCondition) -> ResponseData<ContractInfoAdminQuery>",
+          "ContractAdminService#getByContractNoAdmin -> ContractBasicService#getByContractNo -> ContractDao#findFirst，并由 MemberAttachmentBasicService#findBySourceId 补充文件"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "91fb1e9b-fa9a-47ea-b52f-90f65e161a27",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/contract/save"
+      },
+      "semantic": {
+        "purpose": "供运营端新增或更新会员合同，新增时按合同类型生成合同号，并同步计费模板关联数以及港口作业约定、委托需求和报价。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "会员合同",
+          "合同管理"
+        ],
+        "scenarios": [
+          "运营人员维护合同基础条款；港口作业合同时一并保存委托需求关联、作业约定和分段报价。"
+        ],
+        "actions": [
+          "create",
+          "update"
+        ],
+        "entities": [
+          "会员合同",
+          "合同作业约定",
+          "合同报价"
+        ],
+        "aliases": [
+          "保存运营会员合同",
+          "新增或修改合同",
+          "ContractAdminController.save"
+        ],
+        "resource": "member_contract",
+        "lookup_keys": [
+          "id",
+          "contractNo",
+          "internalContractNo",
+          "contractType",
+          "clientId",
+          "templateId",
+          "operationEntrustedId",
+          "operationEntrustedNo"
+        ],
+        "cardinality": "one",
+        "ownership": "all",
+        "discriminators": [
+          "id 为空时生成合同号并新增，存在时重置为创建状态后更新；港口作业合同额外同步模板、委托需求、作业约定和报价，DTO 虽使用 @Valid 但字段未声明 Bean Validation 约束。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "internal_contract_no",
+            "display_name": "内部合同编号",
+            "technical_names": [
+              "internalContractNo"
+            ],
+            "aliases": [
+              "内部合同号"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "operation_entrusted_id",
+            "display_name": "港口委托需求ID",
+            "technical_names": [
+              "operationEntrustedId"
+            ],
+            "aliases": [
+              "委托需求主键"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "operation_entrusted_no",
+            "display_name": "港口委托需求号",
+            "technical_names": [
+              "operationEntrustedNo"
+            ],
+            "aliases": [
+              "委托需求编号"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "ContractAdminController#save(@RequestBody @Valid ContractAdminItem) -> ResponseData；ContractAdminItem 及嵌套项未声明 Bean Validation 字段约束",
+          "ContractAdminService#save -> ContractBasicService#saveOrUpdate，并调用 RemoteTemplateAdminService#modifyRelateContractCount、ContractOperationAdminService#save、ContractQuoteInfoAdminService#delete/batchInsert 和 #relatePortDemand"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "f2e98561-0a63-4e07-92be-224f68b797dd",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/contract/deleteByIds/{ids}"
+      },
+      "semantic": {
+        "purpose": "供运营端按路径中的一个或多个合同 ID 删除未启用的会员合同及其合同附件。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "会员合同",
+          "合同管理"
+        ],
+        "scenarios": [
+          "运营人员清理尚未启用的合同记录，同时移除其合同附件。"
+        ],
+        "actions": [
+          "delete"
+        ],
+        "entities": [
+          "会员合同",
+          "合同附件"
+        ],
+        "aliases": [
+          "批量删除未启用合同",
+          "删除合同及附件",
+          "ContractAdminController.deleteById"
+        ],
+        "resource": "member_contract",
+        "lookup_keys": [
+          "ids"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "多个合同 ID 位于路径；启用状态合同会被拒绝，删除主体后同步删除合同附件。"
+        ],
+        "required_inputs": [
+          {
+            "name": "ids",
+            "zh_name": "合同ID集合",
+            "location": "path",
+            "required": true,
+            "schema_type": "array"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "contract_ids",
+            "display_name": "合同ID集合",
+            "technical_names": [
+              "ids"
+            ],
+            "aliases": [
+              "合同主键集合"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "ContractAdminController#deleteById(@PathVariable Long... ids) -> ResponseData",
+          "ContractAdminService#deleteById -> ContractBasicService#findByIds/delete；拒绝 ENABLED 合同并调用 MemberAttachmentAdminService#delete"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "cc1c1e44-b340-4a60-bb64-5fcdcd442015",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/contract/changeEnable"
+      },
+      "semantic": {
+        "purpose": "供运营端按合同 ID 集合启用会员合同，并在写入前校验同一客户的运力采购合同有效期不可重叠。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "会员合同",
+          "合同管理"
+        ],
+        "scenarios": [
+          "运营人员审核后批量启用合同，系统阻止同一客户在重叠有效期内出现多份启用合同。"
+        ],
+        "actions": [
+          "enable",
+          "update"
+        ],
+        "entities": [
+          "会员合同"
+        ],
+        "aliases": [
+          "批量启用合同",
+          "启用会员合同",
+          "ContractAdminController.changeEnable"
+        ],
+        "resource": "member_contract",
+        "lookup_keys": [
+          "ids"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "将状态写为 ENABLED，并执行有效期唯一性校验；不同于 changeDisable 直接写为 DISABLED。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_ids",
+            "display_name": "合同ID集合",
+            "technical_names": [
+              "ids"
+            ],
+            "aliases": [
+              "合同主键集合"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "ContractAdminController#changeEnable(MemberIdsObject) -> ResponseData",
+          "ContractAdminService#changeEnable/#check -> ContractDao#adminCheckCapacityPurchaseUnique(check_capacity_purchase_unique) -> ContractBasicService#batchUpdate；MemberIdsObject.ids 无显式非空校验"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "bbabc354-1f09-4523-a1d2-e885d487765a",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/contract/changeDisable"
+      },
+      "semantic": {
+        "purpose": "供运营端按合同 ID 集合将会员合同批量停用。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "会员合同",
+          "合同管理"
+        ],
+        "scenarios": [
+          "运营人员使一批合同退出可用状态，避免后续业务继续选择。"
+        ],
+        "actions": [
+          "disable",
+          "update"
+        ],
+        "entities": [
+          "会员合同"
+        ],
+        "aliases": [
+          "批量停用合同",
+          "禁用会员合同",
+          "ContractAdminController.changeDisable"
+        ],
+        "resource": "member_contract",
+        "lookup_keys": [
+          "ids"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "直接把所选合同状态写为 DISABLED；不同于 changeEnable，不执行有效期重叠校验。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_ids",
+            "display_name": "合同ID集合",
+            "technical_names": [
+              "ids"
+            ],
+            "aliases": [
+              "合同主键集合"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "ContractAdminController#changeDisable(MemberIdsObject) -> ResponseData",
+          "ContractAdminService#changeDisable -> ContractBasicService#findByIds/batchUpdate；MemberIdsObject.ids 无显式非空校验"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "05a73979-3993-4988-b3bf-b4cac28c1b6b",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/contract/page"
+      },
+      "semantic": {
+        "purpose": "供门户端按合同号、名称、状态、来源、签约与有效期条件分页查看当前登录用户的会员合同，并按货主或承运商角色限定合同类型。",
+        "audiences": [
+          "门户端"
+        ],
+        "domains": [
+          "会员合同",
+          "合同管理"
+        ],
+        "scenarios": [
+          "门户用户查看自己的委托、港口作业或运力采购合同台账及有效期。"
+        ],
+        "actions": [
+          "query",
+          "page"
+        ],
+        "entities": [
+          "会员合同"
+        ],
+        "aliases": [
+          "我的合同分页",
+          "门户会员合同查询",
+          "ContractPortalController.page"
+        ],
+        "resource": "member_contract",
+        "lookup_keys": [
+          "businessIds",
+          "contractNo",
+          "contractName",
+          "contractType",
+          "status",
+          "source",
+          "signDate",
+          "effectiveStartDate",
+          "effectiveEndDate"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "ContractPortalService 强制把 clientId 写为当前会话 userId，并按 SHIPPER/CARRIER 角色覆盖 contractTypeList；运营 page 不受该范围限制。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "businessIds",
+              "id"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "ContractPortalController#page(ContractPortalPageCondition) -> ResponseData<PageResult<ContractPortalQuery>>",
+          "ContractPortalService#page 从 SessionContext 读取 userId/roleCodes，覆盖 clientId/contractTypeList 后调用 ContractDao#portalPage(contract_query_getPageList)"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "c3f31ebd-0138-4555-bf04-8799793dafb2",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/contract/getById/{id}"
+      },
+      "semantic": {
+        "purpose": "供门户端按路径合同 ID 查询一份会员合同详情；返回门户合同 DTO，不执行当前用户范围校验。",
+        "audiences": [
+          "门户端"
+        ],
+        "domains": [
+          "会员合同",
+          "合同管理"
+        ],
+        "scenarios": [
+          "门户页面以路径主键打开指定会员合同并展示其基础条款。"
+        ],
+        "actions": [
+          "query",
+          "detail"
+        ],
+        "entities": [
+          "会员合同"
+        ],
+        "aliases": [
+          "路径ID查门户合同",
+          "门户合同详情",
+          "ContractPortalController.getById"
+        ],
+        "resource": "member_contract",
+        "lookup_keys": [
+          "id"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "合同 ID 位于路径且 Service 未附加会话范围；不同于门户 page 的 self 范围，也不同于 getByIdItem 的请求体 ID。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "合同ID",
+            "location": "path",
+            "required": true,
+            "schema_type": "integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "ContractPortalController#getById(@PathVariable Long id) -> ResponseData<ContractDataPortalQuery>",
+          "ContractPortalService#getByIdPortal -> ContractBasicService#getById -> ContractDao#findById；该调用链未读取 SessionContext 进行归属校验"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "1837f486-1079-43c7-b8aa-675845d5fb2d",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/contract/getByIdItem"
+      },
+      "semantic": {
+        "purpose": "供门户端按请求体合同 ID 查询一份会员合同详情；返回门户合同 DTO，不执行当前用户范围校验。",
+        "audiences": [
+          "门户端"
+        ],
+        "domains": [
+          "会员合同",
+          "合同管理"
+        ],
+        "scenarios": [
+          "门户统一 ID 请求组件回显指定合同基础条款。"
+        ],
+        "actions": [
+          "query",
+          "detail"
+        ],
+        "entities": [
+          "会员合同"
+        ],
+        "aliases": [
+          "请求体ID查门户合同",
+          "门户合同回显",
+          "ContractPortalController.getByIdItem"
+        ],
+        "resource": "member_contract",
+        "lookup_keys": [
+          "id"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "合同 ID 来自 IdObject 请求体且无显式字段校验；返回内容与路径 getById 相同，Service 不做会话归属限制。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "ContractPortalController#getByIdItem(IdObject) -> ResponseData<ContractDataPortalQuery>",
+          "ContractPortalService#getByIdPortal -> ContractBasicService#getById；IdObject.id 未声明 Bean Validation，调用链未读取 SessionContext"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "9435c2ea-cd52-4032-8fa1-cf1127f36644",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/contract/getByIds"
+      },
+      "semantic": {
+        "purpose": "供门户端按合同 ID 数组批量读取会员合同基础数据，不执行当前用户范围校验。",
+        "audiences": [
+          "门户端"
+        ],
+        "domains": [
+          "会员合同",
+          "合同管理"
+        ],
+        "scenarios": [
+          "门户业务按一组合同主键批量回填合同编号、客户、状态和有效期。"
+        ],
+        "actions": [
+          "query",
+          "list"
+        ],
+        "entities": [
+          "会员合同"
+        ],
+        "aliases": [
+          "门户批量读取合同",
+          "门户合同ID数组查询",
+          "ContractPortalController.getByIds"
+        ],
+        "resource": "member_contract",
+        "lookup_keys": [
+          "ids"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "请求体为 Long ID 数组，批量返回基础合同且不读取 SessionContext；不同于门户 page 的当前用户分页范围。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_ids",
+            "display_name": "合同ID集合",
+            "technical_names": [
+              "ids",
+              "id"
+            ],
+            "aliases": [
+              "合同主键集合"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "ContractPortalController#getByIds(List<Long>) -> ResponseData<List<ContractDataPortalQuery>>",
+          "ContractPortalService#getByIdsPortal -> ContractBasicService#getByIds -> ContractDao#findByIds；未读取 SessionContext"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "f12e9a07-9f7e-402a-88da-7abe8788c374",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/contract/getByContractNo"
+      },
+      "semantic": {
+        "purpose": "供门户端按合同编号查询一份会员合同摘要及其合同文件标识和文件名。",
+        "audiences": [
+          "门户端"
+        ],
+        "domains": [
+          "会员合同",
+          "合同管理"
+        ],
+        "scenarios": [
+          "门户业务用合同号取得合同摘要和文件入口，以展示或下载关联合同。"
+        ],
+        "actions": [
+          "query",
+          "detail"
+        ],
+        "entities": [
+          "会员合同",
+          "合同附件"
+        ],
+        "aliases": [
+          "门户合同号查文件",
+          "门户按编号查合同",
+          "ContractPortalController.getByContractNo"
+        ],
+        "resource": "member_contract",
+        "lookup_keys": [
+          "contractNo"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "以合同编号定位且不执行会话归属校验；返回摘要和 fileId/fileName，不是完整详情。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "contract_file_id",
+            "display_name": "合同文件ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "合同附件标识"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "ContractPortalController#getByContractNo(ContractNoPortalCondition) -> ResponseData<ContractInfoPortalQuery>",
+          "ContractPortalService#getByContractNoPortal -> ContractBasicService#getByContractNo -> ContractDao#findFirst，并由 MemberAttachmentBasicService#findBySourceId 补充文件"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "4f92acda-4324-47e6-a440-cfd0d75bdd48",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/contract/remote/page"
+      },
+      "semantic": {
+        "purpose": "供内部服务通过 Feign 合同按条件分页读取调用方会话用户的门户会员合同，并按其货主或承运商角色限定合同类型。",
+        "audiences": [
+          "内部服务"
+        ],
+        "domains": [
+          "会员合同",
+          "合同管理"
+        ],
+        "scenarios": [
+          "其他业务服务携带门户会话调用合同服务，分页获取该门户用户可见的合同台账。"
+        ],
+        "actions": [
+          "query",
+          "page"
+        ],
+        "entities": [
+          "会员合同"
+        ],
+        "aliases": [
+          "远程查询我的合同",
+          "内部服务门户合同分页",
+          "RemoteContractPortalController.page"
+        ],
+        "resource": "member_contract",
+        "lookup_keys": [
+          "businessIds",
+          "contractNo",
+          "contractName",
+          "contractType",
+          "status",
+          "source",
+          "signDate",
+          "effectiveStartDate",
+          "effectiveEndDate"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "这是 RemoteContractPortalService 的内部调用入口；执行同一 ContractPortalService#page，仍依赖会话 userId/roleCodes，不是无范围的运营查询。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "businessIds",
+              "id"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "RemoteContractPortalController#page(ContractPortalPageCondition) 实现 RemoteContractPortalService#page -> ResponseData<PageResult<ContractPortalQuery>>",
+          "ContractPortalService#page 从 SessionContext 覆盖 clientId/contractTypeList 后调用 ContractDao#portalPage"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "0c47ca32-0a7d-4ab2-98e0-cd4f9c185bea",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/contract/remote/getByIdItem"
+      },
+      "semantic": {
+        "purpose": "供内部服务按请求体合同 ID 读取一份门户会员合同详情。",
+        "audiences": [
+          "内部服务"
+        ],
+        "domains": [
+          "会员合同",
+          "合同管理"
+        ],
+        "scenarios": [
+          "其他业务服务通过门户合同 Feign 合同按主键回填会员合同基础条款。"
+        ],
+        "actions": [
+          "query",
+          "detail"
+        ],
+        "entities": [
+          "会员合同"
+        ],
+        "aliases": [
+          "远程按ID查门户合同",
+          "内部服务合同详情",
+          "RemoteContractPortalController.getByIdItem"
+        ],
+        "resource": "member_contract",
+        "lookup_keys": [
+          "id"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "内部 Feign 入口按 IdObject.id 定位，执行与本地门户 getByIdItem 相同的 Service；没有路径版 remote 详情。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "RemoteContractPortalController#getByIdItem(IdObject) 实现 RemoteContractPortalService#getByIdItem -> ResponseData<ContractDataPortalQuery>",
+          "ContractPortalService#getByIdPortal -> ContractBasicService#getById -> ContractDao#findById；IdObject.id 无 Bean Validation"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "0bff6117-b24f-4f45-ad76-3c1d475af61c",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/contract/remote/getByIds"
+      },
+      "semantic": {
+        "purpose": "供内部服务按合同 ID 数组批量读取门户会员合同基础数据。",
+        "audiences": [
+          "内部服务"
+        ],
+        "domains": [
+          "会员合同",
+          "合同管理"
+        ],
+        "scenarios": [
+          "其他业务服务通过 Feign 一次回填多份会员合同的基础信息。"
+        ],
+        "actions": [
+          "query",
+          "list"
+        ],
+        "entities": [
+          "会员合同"
+        ],
+        "aliases": [
+          "远程批量查询合同",
+          "内部服务合同ID数组查询",
+          "RemoteContractPortalController.getByIds"
+        ],
+        "resource": "member_contract",
+        "lookup_keys": [
+          "ids"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "内部 Feign 入口接收 Long ID 数组并返回多份基础合同，不读取会话范围，也不加载单条详情的扩展数据。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_ids",
+            "display_name": "合同ID集合",
+            "technical_names": [
+              "ids",
+              "id"
+            ],
+            "aliases": [
+              "合同主键集合"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "RemoteContractPortalController#getByIds(List<Long>) 实现 RemoteContractPortalService#getByIds -> ResponseData<List<ContractDataPortalQuery>>",
+          "ContractPortalService#getByIdsPortal -> ContractBasicService#getByIds -> ContractDao#findByIds"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "a1adbe34-f176-4478-9522-0a5ecc880785",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/contract/remote/getByContractNo"
+      },
+      "semantic": {
+        "purpose": "供内部服务按合同编号读取一份门户会员合同摘要及合同文件标识和文件名。",
+        "audiences": [
+          "内部服务"
+        ],
+        "domains": [
+          "会员合同",
+          "合同管理"
+        ],
+        "scenarios": [
+          "其他业务服务通过合同号取得会员合同摘要与文件入口，供关联业务展示合同文件。"
+        ],
+        "actions": [
+          "query",
+          "detail"
+        ],
+        "entities": [
+          "会员合同",
+          "合同附件"
+        ],
+        "aliases": [
+          "远程合同号查文件",
+          "内部服务按编号查合同",
+          "RemoteContractPortalController.getByContractNo"
+        ],
+        "resource": "member_contract",
+        "lookup_keys": [
+          "contractNo"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "内部 Feign 入口以合同编号定位，返回摘要及 fileId/fileName；不执行门户 page 的会话范围逻辑。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_file_id",
+            "display_name": "合同文件ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "合同附件标识"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "RemoteContractPortalController#getByContractNo(ContractNoPortalCondition) 实现 RemoteContractPortalService#getByContractNo -> ResponseData<ContractInfoPortalQuery>",
+          "ContractPortalService#getByContractNoPortal -> ContractBasicService#getByContractNo -> ContractDao#findFirst + MemberAttachmentBasicService#findBySourceId"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "27a4eff8-4c52-415f-ac5b-6562f95e6475",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/contract/validCarrierPage"
+      },
+      "semantic": {
+        "purpose": "供运营端按线路类型、承运商和合同条件分页选择当前日期有效且已启用的运力采购合同，并补充承运商认证信息。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "会员合同",
+          "合同选择"
+        ],
+        "scenarios": [
+          "运营人员在运输业务中按公路、铁路或海运线路筛选可用承运商合同。"
+        ],
+        "actions": [
+          "query",
+          "page",
+          "select"
+        ],
+        "entities": [
+          "有效承运合同"
+        ],
+        "aliases": [
+          "运营有效承运合同分页",
+          "按线路选择承运合同",
+          "ContractAdminController.validCarrierPage"
+        ],
+        "resource": "valid_member_contract",
+        "lookup_keys": [
+          "routeType",
+          "carrierName",
+          "contractName",
+          "clientName"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "Service 强制 today=当前日期、contractType=CAPACITY_PURCHASE、status=ENABLED，并由 routeType 推导承运商 roleCode；不同于 validCarrierList 的非分页多值名称筛选。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "carrier_id",
+            "display_name": "承运商ID",
+            "technical_names": [
+              "clientId"
+            ],
+            "aliases": [
+              "承运客户主键"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "ContractAdminController#validCarrierPage(ContractValidAdminPageCondition) -> ResponseData<PageResult<ContractValidAdminQuery>>",
+          "ContractAdminService#validCarrierPage -> ContractBasicService#validCarrierPage -> ContractDao#validPage(valid_contract_query_getPageList)，并补充企业信用代码和用户信息"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "b5161ce5-1505-4122-8c37-5d38114465b2",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/contract/validCarrierList"
+      },
+      "semantic": {
+        "purpose": "供运营端按承运商名称集合或统一社会信用代码集合查询可用承运合同列表，并补充承运商认证与联系人信息。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "会员合同",
+          "合同选择"
+        ],
+        "scenarios": [
+          "运营业务按一组承运商名称或信用代码批量匹配承运合同和企业身份信息。"
+        ],
+        "actions": [
+          "query",
+          "list",
+          "select"
+        ],
+        "entities": [
+          "有效承运合同"
+        ],
+        "aliases": [
+          "运营承运合同列表",
+          "按企业代码匹配合同",
+          "ContractAdminController.validCarrierList"
+        ],
+        "resource": "valid_member_contract",
+        "lookup_keys": [
+          "carrierNames",
+          "companyUscis"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "返回普通 List，支持承运商名称和统一社会信用代码数组；Javadoc 误称分页，区别于 validCarrierPage 的 PageResult 和线路类型条件。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUscis",
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": [
+          "ContractAdminController#validCarrierList(ContractValidAdminCondition) -> ResponseData<List<ContractValidAdminQuery>>；Javadoc 写“列表分页”但可执行返回为 List",
+          "ContractAdminService#validCarrierList -> ContractDao#validCarrierList(valid_contract_query_getDetail)，并调用 #fillCarrierCompanyUsci/#fillCarrierAuthUserInfo"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "b3586986-4725-4a96-9765-50f154acf6d7",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/contract/getRailwayValidCarrierList"
+      },
+      "semantic": {
+        "purpose": "供运营端分页查询已启用的铁路承运商合同，并补充承运商统一社会信用代码与用户联系信息。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "会员合同",
+          "合同选择"
+        ],
+        "scenarios": [
+          "运营人员为铁路运输业务分页选择处于启用状态的铁路承运商合同。"
+        ],
+        "actions": [
+          "query",
+          "page",
+          "select"
+        ],
+        "entities": [
+          "铁路承运合同"
+        ],
+        "aliases": [
+          "铁路承运合同分页",
+          "选择铁路启用合同",
+          "ContractAdminController.getRailwayValidCarrierList"
+        ],
+        "resource": "valid_member_contract",
+        "lookup_keys": [
+          "carrierName",
+          "contractName",
+          "clientName",
+          "routeType"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "Service 固定 status=ENABLED 和 roleCode=CARRIER_RAILWAY，但没有像 validCarrierPage 一样强制 today 与 contractType；返回 PageResult。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "carrier_id",
+            "display_name": "承运商ID",
+            "technical_names": [
+              "clientId"
+            ],
+            "aliases": [
+              "承运客户主键"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "ContractAdminController#getRailwayValidCarrierList(ContractValidAdminPageCondition) -> ResponseData<PageResult<ContractValidAdminQuery>>",
+          "ContractAdminService#getRailwayValidCarrierList 固定 ENABLED/CARRIER_RAILWAY -> ContractDao#validPage，并补充企业与用户信息"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "88b7cd07-d95f-404b-b6e3-95082f6c5d2d",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/contract/getValidContractByClientId"
+      },
+      "semantic": {
+        "purpose": "供运营端按客户 ID、客户 ID 集合或合同号集合查询当前日期有效且已启用的运力采购合同列表。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "会员合同",
+          "合同选择"
+        ],
+        "scenarios": [
+          "运营业务按承运客户定位可用于当前运输委托的运力采购合同。"
+        ],
+        "actions": [
+          "query",
+          "list",
+          "select"
+        ],
+        "entities": [
+          "有效承运合同"
+        ],
+        "aliases": [
+          "按客户查有效承运合同",
+          "运营客户合同选择",
+          "ContractAdminController.getValidContractByClientId"
+        ],
+        "resource": "valid_member_contract",
+        "lookup_keys": [
+          "clientId",
+          "clientIds",
+          "contractNos",
+          "routeType"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "Service 覆盖 today、CAPACITY_PURCHASE 和 ENABLED；不同于 getValidShipperContractByClientId 固定 COMMISSION 委托合同。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "client_id",
+            "display_name": "客户ID",
+            "technical_names": [
+              "clientId",
+              "clientIds"
+            ],
+            "aliases": [
+              "承运客户主键"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNos",
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "ContractAdminController#getValidContractByClientId(CarrierValidAdminCondition) -> ResponseData<List<ContractValidAdminQuery>>",
+          "ContractAdminService#getValidContractByClientId 固定 today/CAPACITY_PURCHASE/ENABLED -> ContractDao#adminValidList(valid_contract_query_getPageList)"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "dbbfc11d-bc8c-468b-b7fd-b12c7fcd02cc",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/contract/getValidShipperContractByClientId"
+      },
+      "semantic": {
+        "purpose": "供运营端按客户 ID、客户 ID 集合或合同号集合查询当前日期有效且已启用的委托合同列表。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "会员合同",
+          "合同选择"
+        ],
+        "scenarios": [
+          "运营业务按委托客户定位当前可使用的委托合同。"
+        ],
+        "actions": [
+          "query",
+          "list",
+          "select"
+        ],
+        "entities": [
+          "有效委托合同"
+        ],
+        "aliases": [
+          "按客户查有效委托合同",
+          "运营托运合同选择",
+          "ContractAdminController.getValidShipperContractByClientId"
+        ],
+        "resource": "valid_member_contract",
+        "lookup_keys": [
+          "clientId",
+          "clientIds",
+          "contractNos"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "Service 覆盖 today、COMMISSION 和 ENABLED；不同于 getValidContractByClientId 的 CAPACITY_PURCHASE 承运合同。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "client_id",
+            "display_name": "客户ID",
+            "technical_names": [
+              "clientId",
+              "clientIds"
+            ],
+            "aliases": [
+              "委托客户主键"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNos",
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "ContractAdminController#getValidShipperContractByClientId(CarrierValidAdminCondition) -> ResponseData<List<ContractValidAdminQuery>>",
+          "ContractAdminService#getValidShipperContractByClientId 固定 today/COMMISSION/ENABLED -> ContractDao#adminValidList(valid_contract_query_getPageList)"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "b9f027fd-013a-466c-9af5-64c2dafcd2a5",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/contract/getValidContractByContractNos"
+      },
+      "semantic": {
+        "purpose": "供运营端按合同编号集合批量查询已启用的合同，并补充承运商企业身份和联系人信息。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "会员合同",
+          "合同选择"
+        ],
+        "scenarios": [
+          "内部业务批量校验一组合同号当前是否启用，并取得对应客户和承运商信息。"
+        ],
+        "actions": [
+          "query",
+          "list"
+        ],
+        "entities": [
+          "启用合同"
+        ],
+        "aliases": [
+          "按合同号批量查启用合同",
+          "运营合同号集合查询",
+          "ContractAdminController.getValidContractByContractNos"
+        ],
+        "resource": "valid_member_contract",
+        "lookup_keys": [
+          "contractNos",
+          "clientId",
+          "clientIds"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "仅强制 status=ENABLED，主要按 contractNos 批量定位；没有强制当前日期或合同类型。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNos",
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号集合"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "ContractAdminController#getValidContractByContractNos(CarrierValidAdminCondition) -> ResponseData<List<ContractValidAdminQuery>>",
+          "ContractAdminService#getValidContractByContractNos 固定 ENABLED -> ContractDao#validfindList(valid_contract_query_getPageList)，并补充企业与用户信息"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "ac6c23eb-5df4-4d05-a82f-84434fafcd8d",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/contract/validCarrierPage"
+      },
+      "semantic": {
+        "purpose": "供门户端按线路类型和承运商名称分页选择当前日期有效且已启用的运力采购合同，并补充企业认证与联系人信息。",
+        "audiences": [
+          "门户端"
+        ],
+        "domains": [
+          "会员合同",
+          "合同选择"
+        ],
+        "scenarios": [
+          "门户运输业务按运输方式分页挑选当前可用的承运商合同。"
+        ],
+        "actions": [
+          "query",
+          "page",
+          "select"
+        ],
+        "entities": [
+          "有效承运合同"
+        ],
+        "aliases": [
+          "门户有效承运合同分页",
+          "门户按线路选合同",
+          "ContractPortalController.validCarrierPage"
+        ],
+        "resource": "valid_member_contract",
+        "lookup_keys": [
+          "routeType",
+          "carrierName"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "Service 固定 today/CAPACITY_PURCHASE/ENABLED 并从 routeType 推导 roleCode，但不按当前会话用户限流；不同于门户 page 的 self 合同台账。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "carrier_id",
+            "display_name": "承运商ID",
+            "technical_names": [
+              "clientId"
+            ],
+            "aliases": [
+              "承运客户主键"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "ContractPortalController#validCarrierPage(ContractValidPortalPageCondition) -> ResponseData<PageResult<ContractValidPortalQuery>>",
+          "ContractPortalService#validCarrierPage -> ContractBasicService#validCarrierPage -> ContractDao#validPage，并补充企业信用代码和用户信息；未读取 SessionContext"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "a4b27382-d414-43be-b4d3-a5b21c39959a",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/contract/validCarrierList"
+      },
+      "semantic": {
+        "purpose": "供门户端按承运商名称集合或统一社会信用代码集合查询可用承运合同列表，并补充承运商认证与联系人信息。",
+        "audiences": [
+          "门户端"
+        ],
+        "domains": [
+          "会员合同",
+          "合同选择"
+        ],
+        "scenarios": [
+          "门户业务按企业名称或信用代码批量匹配承运合同。"
+        ],
+        "actions": [
+          "query",
+          "list",
+          "select"
+        ],
+        "entities": [
+          "有效承运合同"
+        ],
+        "aliases": [
+          "门户承运合同列表",
+          "门户按企业代码匹配合同",
+          "ContractPortalController.validCarrierList"
+        ],
+        "resource": "valid_member_contract",
+        "lookup_keys": [
+          "carrierNames",
+          "companyUscis"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "返回普通 List 且不读取当前会话；Javadoc 误称分页，区别于 validCarrierPage 的 PageResult。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUscis",
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": [
+          "ContractPortalController#validCarrierList(ContractValidPortalCondition) -> ResponseData<List<ContractValidPortalQuery>>；Javadoc 写“列表分页”但返回为 List",
+          "ContractPortalService#validCarrierList -> ContractDao#validCarrierList(valid_contract_query_getDetail)，并补充企业和用户信息"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "64597f9b-cec6-4f78-8805-6eb36c01fc4b",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/contract/getValidContractByClientId"
+      },
+      "semantic": {
+        "purpose": "供门户端按客户 ID、客户 ID 集合或合同号集合查询当前日期有效且已启用的运力采购合同列表。",
+        "audiences": [
+          "门户端"
+        ],
+        "domains": [
+          "会员合同",
+          "合同选择"
+        ],
+        "scenarios": [
+          "门户业务为指定承运客户选择当前可用的运力采购合同。"
+        ],
+        "actions": [
+          "query",
+          "list",
+          "select"
+        ],
+        "entities": [
+          "有效承运合同"
+        ],
+        "aliases": [
+          "门户按客户查承运合同",
+          "门户客户合同选择",
+          "ContractPortalController.getValidContractByClientId"
+        ],
+        "resource": "valid_member_contract",
+        "lookup_keys": [
+          "clientId",
+          "clientIds",
+          "contractNos"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "Service 固定 today/CAPACITY_PURCHASE/ENABLED，按请求客户键定位且不读取当前会话；区别于委托合同入口固定 COMMISSION。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "client_id",
+            "display_name": "客户ID",
+            "technical_names": [
+              "clientId",
+              "clientIds"
+            ],
+            "aliases": [
+              "承运客户主键"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNos",
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "ContractPortalController#getValidContractByClientId(CarrierValidPortalCondition) -> ResponseData<List<ContractValidPortalQuery>>",
+          "ContractPortalService#getValidContractByClientId 固定 today/CAPACITY_PURCHASE/ENABLED -> ContractDao#portalValidList；未读取 SessionContext"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "b07c46f7-28c5-4eed-9218-59e5f10c1b67",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/contract/getValidShipperContractByClientId"
+      },
+      "semantic": {
+        "purpose": "供门户端按客户 ID、客户 ID 集合或合同号集合查询当前日期有效且已启用的委托合同列表。",
+        "audiences": [
+          "门户端"
+        ],
+        "domains": [
+          "会员合同",
+          "合同选择"
+        ],
+        "scenarios": [
+          "门户业务为指定委托客户选择当前可用的委托合同。"
+        ],
+        "actions": [
+          "query",
+          "list",
+          "select"
+        ],
+        "entities": [
+          "有效委托合同"
+        ],
+        "aliases": [
+          "门户按客户查委托合同",
+          "门户托运合同选择",
+          "ContractPortalController.getValidShipperContractByClientId"
+        ],
+        "resource": "valid_member_contract",
+        "lookup_keys": [
+          "clientId",
+          "clientIds",
+          "contractNos"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "Service 固定 today/COMMISSION/ENABLED，按请求客户键定位；区别于承运合同入口固定 CAPACITY_PURCHASE。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "client_id",
+            "display_name": "客户ID",
+            "technical_names": [
+              "clientId",
+              "clientIds"
+            ],
+            "aliases": [
+              "委托客户主键"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNos",
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "ContractPortalController#getValidShipperContractByClientId(CarrierValidPortalCondition) -> ResponseData<List<ContractValidPortalQuery>>",
+          "ContractPortalService#getValidShipperContractByClientId 固定 today/COMMISSION/ENABLED -> ContractDao#portalValidList；未读取 SessionContext"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "f62de334-1927-4484-8143-676928b4952f",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/contract/remote/validCarrierPage"
+      },
+      "semantic": {
+        "purpose": "供内部服务分页选择当前日期有效且已启用的运力采购合同，并按线路类型限定承运商角色。",
+        "audiences": [
+          "内部服务"
+        ],
+        "domains": [
+          "会员合同",
+          "合同选择"
+        ],
+        "scenarios": [
+          "其他业务服务通过 Feign 为公路、铁路或海运业务分页获取可用承运合同。"
+        ],
+        "actions": [
+          "query",
+          "page",
+          "select"
+        ],
+        "entities": [
+          "有效承运合同"
+        ],
+        "aliases": [
+          "远程有效承运合同分页",
+          "内部服务按线路选合同",
+          "RemoteContractPortalController.validCarrierPage"
+        ],
+        "resource": "valid_member_contract",
+        "lookup_keys": [
+          "routeType",
+          "carrierName"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "内部 Feign 入口执行 ContractPortalService#validCarrierPage，固定 today/CAPACITY_PURCHASE/ENABLED；该方法不依赖会话归属。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "carrier_id",
+            "display_name": "承运商ID",
+            "technical_names": [
+              "clientId"
+            ],
+            "aliases": [
+              "承运客户主键"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "RemoteContractPortalController#validCarrierPage 实现 RemoteContractPortalService#validCarrierPage -> ResponseData<PageResult<ContractValidPortalQuery>>",
+          "ContractPortalService#validCarrierPage -> ContractBasicService#validCarrierPage -> ContractDao#validPage，并补充企业与用户信息"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "7b4e3f24-ed55-4fb1-9423-8515d6c02fe1",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/contract/remote/validCarrierList"
+      },
+      "semantic": {
+        "purpose": "供内部服务按承运商名称集合或统一社会信用代码集合查询可用承运合同列表。",
+        "audiences": [
+          "内部服务"
+        ],
+        "domains": [
+          "会员合同",
+          "合同选择"
+        ],
+        "scenarios": [
+          "其他业务服务通过 Feign 按企业名称或信用代码批量匹配承运合同。"
+        ],
+        "actions": [
+          "query",
+          "list",
+          "select"
+        ],
+        "entities": [
+          "有效承运合同"
+        ],
+        "aliases": [
+          "远程承运合同列表",
+          "内部服务企业代码匹配合同",
+          "RemoteContractPortalController.validCarrierList"
+        ],
+        "resource": "valid_member_contract",
+        "lookup_keys": [
+          "carrierNames",
+          "companyUscis"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "内部 Feign 入口返回普通 List；Feign Javadoc 写“合同列表”，Controller Javadoc 误称分页，实际不是 PageResult。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUscis",
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": [
+          "RemoteContractPortalController#validCarrierList 实现 RemoteContractPortalService#validCarrierList -> ResponseData<List<ContractValidPortalQuery>>；Controller Javadoc 误称分页",
+          "ContractPortalService#validCarrierList -> ContractDao#validCarrierList(valid_contract_query_getDetail)，并补充企业和用户信息"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "b92d34fc-2634-4843-91af-ee29082fd167",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/contract/remote/getValidContractByClientId"
+      },
+      "semantic": {
+        "purpose": "供内部服务按客户 ID、客户 ID 集合或合同号集合查询当前日期有效且已启用的运力采购合同列表。",
+        "audiences": [
+          "内部服务"
+        ],
+        "domains": [
+          "会员合同",
+          "合同选择"
+        ],
+        "scenarios": [
+          "其他业务服务通过 Feign 为指定承运客户选择当前可用的运力采购合同。"
+        ],
+        "actions": [
+          "query",
+          "list",
+          "select"
+        ],
+        "entities": [
+          "有效承运合同"
+        ],
+        "aliases": [
+          "远程按客户查承运合同",
+          "内部服务客户合同选择",
+          "RemoteContractPortalController.getValidContractByClientId"
+        ],
+        "resource": "valid_member_contract",
+        "lookup_keys": [
+          "clientId",
+          "clientIds",
+          "contractNos"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "内部 Feign 入口固定 today/CAPACITY_PURCHASE/ENABLED；与 remote 委托合同入口的 COMMISSION 类型不同。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "client_id",
+            "display_name": "客户ID",
+            "technical_names": [
+              "clientId",
+              "clientIds"
+            ],
+            "aliases": [
+              "承运客户主键"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNos",
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "RemoteContractPortalController#getValidContractByClientId 实现 RemoteContractPortalService#getValidContractByClientId -> ResponseData<List<ContractValidPortalQuery>>",
+          "ContractPortalService#getValidContractByClientId 固定 today/CAPACITY_PURCHASE/ENABLED -> ContractDao#portalValidList"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "0a4d785a-d3a2-4410-823f-fd9feede364f",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/contract/remote/getValidShipperContractByClientId"
+      },
+      "semantic": {
+        "purpose": "供内部服务按客户 ID、客户 ID 集合或合同号集合查询当前日期有效且已启用的委托合同列表。",
+        "audiences": [
+          "内部服务"
+        ],
+        "domains": [
+          "会员合同",
+          "合同选择"
+        ],
+        "scenarios": [
+          "其他业务服务通过 Feign 为指定委托客户选择当前可用的委托合同。"
+        ],
+        "actions": [
+          "query",
+          "list",
+          "select"
+        ],
+        "entities": [
+          "有效委托合同"
+        ],
+        "aliases": [
+          "远程按客户查委托合同",
+          "内部服务托运合同选择",
+          "RemoteContractPortalController.getValidShipperContractByClientId"
+        ],
+        "resource": "valid_member_contract",
+        "lookup_keys": [
+          "clientId",
+          "clientIds",
+          "contractNos"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "内部 Feign 入口固定 today/COMMISSION/ENABLED；与 remote 承运合同入口的 CAPACITY_PURCHASE 类型不同。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "client_id",
+            "display_name": "客户ID",
+            "technical_names": [
+              "clientId",
+              "clientIds"
+            ],
+            "aliases": [
+              "委托客户主键"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNos",
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "contract_id",
+            "display_name": "合同ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "valid_member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "RemoteContractPortalController#getValidShipperContractByClientId 实现 RemoteContractPortalService#getValidShipperContractByClientId -> ResponseData<List<ContractValidPortalQuery>>",
+          "ContractPortalService#getValidShipperContractByClientId 固定 today/COMMISSION/ENABLED -> ContractDao#portalValidList"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "2ebb9254-d876-425d-ba56-60f1b435257f",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/contract/configPage"
+      },
+      "semantic": {
+        "purpose": "供运营端按模板编号、名称、描述和关联合同数分页选择合同计费模板。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "会员合同",
+          "计费配置"
+        ],
+        "scenarios": [
+          "运营人员维护合同时分页查找可绑定的计费模板，并查看模板当前关联合同数量。"
+        ],
+        "actions": [
+          "query",
+          "page",
+          "select"
+        ],
+        "entities": [
+          "计费模板"
+        ],
+        "aliases": [
+          "合同计费模板分页",
+          "选择合同费用模板",
+          "ContractAdminController.getTemplatePageList"
+        ],
+        "resource": "contract_billing_template",
+        "lookup_keys": [
+          "templateNo",
+          "templateName",
+          "templateDescription",
+          "relateContractCount"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "该路径虽位于合同 Controller，实际远程调用基础资料模板分页，返回 TemplateAdminQuery，不返回合同。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "template_id",
+            "display_name": "计费模板ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "模板主键"
+            ],
+            "resource": "contract_billing_template",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "template_no",
+            "display_name": "计费模板编号",
+            "technical_names": [
+              "templateNo"
+            ],
+            "aliases": [
+              "模板号"
+            ],
+            "resource": "contract_billing_template",
+            "source": "source_contract",
+            "confidence": 0.99
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "ContractAdminController#getTemplatePageList(TemplateAdminPageCondition) -> ResponseData<PageResult<TemplateAdminQuery>>",
+          "MemberRemoteAdminService#getTemplatePageList -> RemoteTemplateAdminService#page；校验远程响应后返回分页数据"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "5b049d48-dbdd-48e4-93ae-6e9d4f11f0d2",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/contract/pagePortDemands"
+      },
+      "semantic": {
+        "purpose": "供运营端按港口委托需求号、港口、委托人和辖区公司分页选择可关联合同的港口委托需求及报价。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "会员合同",
+          "港口委托"
+        ],
+        "scenarios": [
+          "运营人员保存港口作业合同时查找委托需求，并核对需求报价后建立合同关联。"
+        ],
+        "actions": [
+          "query",
+          "page",
+          "select"
+        ],
+        "entities": [
+          "港口委托需求",
+          "港口报价"
+        ],
+        "aliases": [
+          "合同关联港口需求分页",
+          "选择港口委托需求",
+          "ContractAdminController.pagePortDemands"
+        ],
+        "resource": "contract_port_demand_selector",
+        "lookup_keys": [
+          "operationEntrustedNo",
+          "portName",
+          "shipperName",
+          "precinctCompanyIds"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "实际数据由 MTP 运营委托服务的 entrustedPage 返回，包含需求及报价；不是本库会员合同分页。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "operation_entrusted_id",
+            "display_name": "港口委托需求ID",
+            "technical_names": [
+              "operationEntrustedId"
+            ],
+            "aliases": [
+              "委托需求主键"
+            ],
+            "resource": "contract_port_demand_selector",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "operation_entrusted_no",
+            "display_name": "港口委托需求号",
+            "technical_names": [
+              "operationEntrustedNo"
+            ],
+            "aliases": [
+              "委托需求编号"
+            ],
+            "resource": "contract_port_demand_selector",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "quote_id",
+            "display_name": "报价ID",
+            "technical_names": [
+              "quoteId"
+            ],
+            "aliases": [
+              "港口报价主键"
+            ],
+            "resource": "contract_port_demand_selector",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "ContractAdminController#pagePortDemands(PortDemandPageAdminCondition) -> ResponseData<PageResult<PortDemandAdminQuery>>",
+          "ContractAdminService#pagePortDemands -> RemoteOperationEntrustedAdminService#entrustedPage -> OperationEntrustedAdminController#entrustedPage/OperationEntrustedAdminService#entrustedPage"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "37f5cae2-f066-404e-bd4d-36c1875bd20d",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/contract/selectCargoPage"
+      },
+      "semantic": {
+        "purpose": "供运营端按货物编码、名称、分类、单位和审核状态分页选择合同适用货物。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "会员合同",
+          "货物基础资料"
+        ],
+        "scenarios": [
+          "运营人员配置合同作业范围时分页检索并选择货物基础资料。"
+        ],
+        "actions": [
+          "query",
+          "page",
+          "select"
+        ],
+        "entities": [
+          "货物"
+        ],
+        "aliases": [
+          "合同货物选择分页",
+          "合同配置选择货物",
+          "ContractAdminController.selectCargoPage"
+        ],
+        "resource": "contract_cargo_selector",
+        "lookup_keys": [
+          "cargoCode",
+          "cargoName",
+          "categoryId",
+          "categoryName",
+          "unit",
+          "status",
+          "auditStatus"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "实际远程调用 MTP 基础资料货物选择分页并返回 CargoAdminQuery，不是合同或合同报价列表。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "cargo_id",
+            "display_name": "货物ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "货物主键"
+            ],
+            "resource": "contract_cargo_selector",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "cargo_code",
+            "display_name": "货物编码",
+            "technical_names": [
+              "cargoCode"
+            ],
+            "aliases": [
+              "货物编号"
+            ],
+            "resource": "contract_cargo_selector",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "category_id",
+            "display_name": "货物分类ID",
+            "technical_names": [
+              "categoryId"
+            ],
+            "aliases": [
+              "货类主键"
+            ],
+            "resource": "contract_cargo_selector",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "ContractAdminController#selectCargoPage(CargoAdminPageCondition) -> ResponseData<PageResult<CargoAdminQuery>>",
+          "ContractAdminService#selectCargoPage -> RemoteCargoAdminService#selectCargoPage -> CargoAdminController#selectCargoPage/CargoAdminService#selectCargoPage"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "e42f56d3-77a9-4b37-ad3d-064f81ce921a",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/contract/getUserAllPage"
+      },
+      "semantic": {
+        "purpose": "供运营端按用户名、姓名、手机号、身份、组织、仓库、状态和时间等条件分页选择全部运营用户。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "会员合同",
+          "用户目录"
+        ],
+        "scenarios": [
+          "运营人员在合同相关配置中检索运营用户，用于选择合同经办或关联主体。"
+        ],
+        "actions": [
+          "query",
+          "page",
+          "select"
+        ],
+        "entities": [
+          "运营用户"
+        ],
+        "aliases": [
+          "合同页面选择运营用户",
+          "全部运营用户分页",
+          "ContractAdminController.getUserAllPage"
+        ],
+        "resource": "contract_user_selector",
+        "lookup_keys": [
+          "userName",
+          "realName",
+          "mobile",
+          "keyword",
+          "identityCode",
+          "roleId",
+          "roleName",
+          "organizationId",
+          "companyIds",
+          "warehouseId",
+          "warehouseIds",
+          "status",
+          "createTimeFrom",
+          "createTimeTo"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "实际通过认证服务查询 UserQuery 分页；Controller 使用原始 ResponseData 导致 OpenAPI 响应 data 类型未知，但运行时包装 PageResult<UserQuery>。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "id",
+              "filterUserIds"
+            ],
+            "aliases": [
+              "用户主键"
+            ],
+            "resource": "contract_user_selector",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "user_name",
+            "display_name": "用户名",
+            "technical_names": [
+              "userName"
+            ],
+            "aliases": [
+              "登录名"
+            ],
+            "resource": "contract_user_selector",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "organization_id",
+            "display_name": "组织ID",
+            "technical_names": [
+              "organizationId"
+            ],
+            "aliases": [
+              "组织主键"
+            ],
+            "resource": "contract_user_selector",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.88,
+        "semantic_evidence": [
+          "ContractAdminController#getUserAllPage(UserPageCondition) 声明原始 ResponseData，返回 remoteAuthService.getUserAllPageList(condition)",
+          "MemberRemoteAuthService#getUserAllPageList -> RemoteUserService#userAllPage，实际返回 PageResult<UserQuery>；数据库扫描响应 data 因原始泛型显示 unknown"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "6404721d-7f59-4f9b-9799-7c30bcd73dba",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/contract/syncContractInfo"
+      },
+      "semantic": {
+        "purpose": "供运营端按合同编号同步港口委托需求标识和合同报价；仅当原合同为港口作业合同且报价列表非空时实际更新。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "会员合同",
+          "港口委托"
+        ],
+        "scenarios": [
+          "港口委托需求变更后，把需求编号、需求主键和最新报价同步回对应港口作业合同。"
+        ],
+        "actions": [
+          "sync",
+          "update"
+        ],
+        "entities": [
+          "会员合同",
+          "港口委托需求",
+          "合同报价"
+        ],
+        "aliases": [
+          "同步港口合同报价",
+          "回写合同委托需求",
+          "ContractAdminController.syncContractInfo"
+        ],
+        "resource": "member_contract",
+        "lookup_keys": [
+          "contractNo",
+          "operationEntrustedId",
+          "operationEntrustedNo"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "ContractAdminService 要求请求对象和 operationEntrustedNo 非空，按 contractNo 查原合同；只有 PORT_OPERATION 且 contractQuoteInfoSyncList 非空时才写需求标识并替换报价，否则不落变更。"
+        ],
+        "required_inputs": [
+          {
+            "name": "operationEntrustedNo",
+            "zh_name": "港口委托需求号",
+            "location": "body",
+            "required": true,
+            "schema_type": "string"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "contract_no",
+            "display_name": "合同编号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同号"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          },
+          {
+            "canonical": "operation_entrusted_id",
+            "display_name": "港口委托需求ID",
+            "technical_names": [
+              "operationEntrustedId"
+            ],
+            "aliases": [
+              "委托需求主键"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "operation_entrusted_no",
+            "display_name": "港口委托需求号",
+            "technical_names": [
+              "operationEntrustedNo"
+            ],
+            "aliases": [
+              "委托需求编号"
+            ],
+            "resource": "member_contract",
+            "source": "source_contract",
+            "confidence": 0.99
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "ContractAdminController#syncContractInfo(ContractSyncDTO) -> ResponseData",
+          "ContractAdminService#syncContractInfo 显式校验 syncDTO/operationEntrustedNo，按 ContractDao#findFirst(contractNo) 定位；满足 PORT_OPERATION 且报价列表非空时 ContractDao#saveOrUpdate 并调用 ContractQuoteInfoAdminService#delete/batchInsert"
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    }
+  ]
+}

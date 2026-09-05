@@ -1,0 +1,2422 @@
+{
+  "schema_version": "context-router-interface-semantic-batch-v1",
+  "batch_id": "panzhihua-c12-portal-consortium-registration-016",
+  "workspace_id": "b9ce65eddc27437d9615177fbd07cb0a",
+  "family_groups": {
+    "门户联合体报名查询与辅助": 5,
+    "门户联合体报名草稿与提交": 3,
+    "门户投标文件申报": 2,
+    "小程序联合体报名查询与辅助": 5,
+    "小程序联合体报名草稿与提交": 3,
+    "小程序投标文件申报": 2
+  },
+  "generation_policy": "完整覆盖 c12-portal PortalConsortiumRegistrationController 10 个与 MiniPortalConsortiumRegistrationController 10 个有效接口。二者均为 BFF 转发 RemotePortalConsortiumRegistrationService 至 c12-egps PortalConsortiumRegistrationService/PortalBidSubmissionService。按门户/小程序的查询与辅助、草稿与提交、投标文件申报分组。源码追踪到 DAO/SQL/实体、会话解析、状态默认值和文件副作用。小程序仅 getById/listProjectOptions 转换 memberList 与 maxMembers 展示口径，不改库表与提交校验；其余接口无 BFF 业务改写。page 查当前牵头方已有报名，listProjectOptions 查报名中标包下拉。save 只走草稿默认值并可自动通过/自动提交；submit 提交联合体审核；submitBidSubmission 覆盖投标文件并改申报状态。getById 看报名详情，getBidSubmissionDetail 看确认申报弹窗。未使用 copy_from_interface_id，未写入 c12-egps 同源 /egps/api/portal/consortiumRegistration。",
+  "items": [
+    {
+      "interface_id": "36a65fc1-bb24-4728-b844-c8331cceb1df",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/consortiumRegistration/page"
+      },
+      "semantic": {
+        "purpose": "供电子招投标门户分页查询当前登录投标人作为牵头方的联合体/独立报名记录：无 @OptionalLogin，会话供应商覆盖 hidden supplierId；可按立项编号、项目名称、项目编号或名称合一关键词、审核状态和投标申报状态筛选，返回不含成员名单与附件的分页摘要。不是新增报名时的项目/标包下拉。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "联合体报名"
+        ],
+        "scenarios": [
+          "投标人在门户联合体报名列表翻页查看自己牵头的已有报名，而不是挑选可报名项目。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "联合体报名"
+        ],
+        "aliases": [
+          "门户联合体报名分页",
+          "门户我的联合体报名列表",
+          "PortalConsortiumRegistrationController.page"
+        ],
+        "resource": "consortium_registration",
+        "lookup_keys": [
+          "applicationCode",
+          "projectName",
+          "projectKeyword",
+          "auditStatus",
+          "bidSubmissionStatus",
+          "pageNumber",
+          "pageSize",
+          "id",
+          "registrationCode",
+          "applicationId"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal BFF POST /member-api/portal/egps/consortiumRegistration/page，无 @OptionalLogin，原样转发 RemotePortalConsortiumRegistrationService#page；不是小程序 /api/mini 的 page，也不是 listProjectOptions。",
+          "查 egps_project_registration 中当前牵头方已有报名，不返回 memberList/maxMembers；listProjectOptions 查报名中标包。",
+          "请求 supplierId 为 hidden，Service 用会话覆盖。无关键词时 pageSize 可空默认 10；有 projectKeyword 时 pageSize 运行时必填。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "consortium_registration_id",
+            "display_name": "联合体报名记录ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "报名ID",
+              "报名主键"
+            ],
+            "resource": "consortium_registration",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "registration_code",
+            "display_name": "报名编号",
+            "technical_names": [
+              "registrationCode"
+            ],
+            "aliases": [
+              "联合体报名编号"
+            ],
+            "resource": "consortium_registration",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "application_id",
+            "display_name": "立项申请ID",
+            "technical_names": [
+              "applicationId"
+            ],
+            "aliases": [
+              "项目ID",
+              "采购项目ID"
+            ],
+            "resource": "consortium_registration",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "application_code",
+            "display_name": "立项编号",
+            "technical_names": [
+              "applicationCode"
+            ],
+            "aliases": [
+              "项目编号",
+              "立项申请编号"
+            ],
+            "resource": "consortium_registration",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": [
+          "PortalConsortiumRegistrationController#page(@Valid PortalConsortiumRegistrationPageCondition) -> RemotePortalConsortiumRegistrationService#page",
+          "PortalConsortiumRegistrationService#page：PortalSupplierContextSupport#resolveSupplierId 覆盖 condition.supplierId；非投标人/未关联供应商为 -1；projectKeyword 非空走 PortalConsortiumRegistrationDao#pageRegistration，否则 ProjectRegistrationDao#pagePortal",
+          "无关键词时 OrmPageHelper.page 将空 pageSize 默认 10；有 projectKeyword 时 SqlExecutor.page(portal_consortiumregistration_query_page.sql) 对 Integer pageSize 拆箱，空值 NPE。SQL/ORM 均 leader_supplier_id=:supplierId 且 deleted=0",
+          "Swagger 写 projectKeyword 与 applicationCode/projectName 互斥优先，可执行链路是关键词只切换查询实现，applicationCode/projectName 仍 AND 模糊。enrichPageRows 补 memberCount（不含牵头）、displayStatus、采购方式。返回 id 供 getById/save/deleteById/getBidSubmissionDetail 继续调用"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "f84ca962-6388-421d-88f0-9352efdff23d",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/consortiumRegistration/getById"
+      },
+      "semantic": {
+        "purpose": "供电子招投标门户按报名ID查看当前牵头方的联合体报名详情：BFF 原样返回远程结果，memberList 只含普通成员不含牵头方，maxMembers 为规则原值（不含牵头）。返回联系人、报名材料、投标文件和审核/申报状态，不是确认申报弹窗。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "联合体报名"
+        ],
+        "scenarios": [
+          "投标人在门户打开一条自己牵头的联合体报名，查看成员（不含牵头方）和报名材料，而不是打开确认申报弹窗。"
+        ],
+        "actions": [
+          "detail",
+          "query"
+        ],
+        "entities": [
+          "联合体报名",
+          "联合体成员",
+          "报名材料"
+        ],
+        "aliases": [
+          "门户联合体报名详情",
+          "门户查看联合体报名",
+          "PortalConsortiumRegistrationController.getById"
+        ],
+        "resource": "consortium_registration",
+        "lookup_keys": [
+          "id",
+          "registrationCode",
+          "applicationId",
+          "applicationCode",
+          "leaderSupplierId",
+          "leaderCreditCode",
+          "creditCode",
+          "supplierId",
+          "fileId",
+          "memberId"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal BFF POST /member-api/portal/egps/consortiumRegistration/getById，无成员补齐、不改 maxMembers；小程序同路径会插入牵头方并把 maxMembers+1。",
+          "与 getBidSubmissionDetail 共用 PortalConsortiumRegistrationIdCondition.id，但返回 PortalConsortiumRegistrationQuery 而非确认申报弹窗 DTO。",
+          "loadOwnedRegistration 校验 leaderSupplierId=会话供应商；buildDetailQuery 只把 member_type=member 放入 memberList，牵头方只出现在 leaderSupplierId/Name/CreditCode。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "报名ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "consortium_registration_id",
+            "display_name": "联合体报名记录ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "报名ID",
+              "报名主键"
+            ],
+            "resource": "consortium_registration",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "registration_code",
+            "display_name": "报名编号",
+            "technical_names": [
+              "registrationCode"
+            ],
+            "aliases": [
+              "联合体报名编号"
+            ],
+            "resource": "consortium_registration",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "application_id",
+            "display_name": "立项申请ID",
+            "technical_names": [
+              "applicationId"
+            ],
+            "aliases": [
+              "项目ID",
+              "采购项目ID"
+            ],
+            "resource": "consortium_registration",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "application_code",
+            "display_name": "立项编号",
+            "technical_names": [
+              "applicationCode"
+            ],
+            "aliases": [
+              "项目编号",
+              "立项申请编号"
+            ],
+            "resource": "consortium_registration",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "leader_supplier_id",
+            "display_name": "牵头方供应商ID",
+            "technical_names": [
+              "leaderSupplierId"
+            ],
+            "aliases": [
+              "牵头供应商ID"
+            ],
+            "resource": "consortium_registration",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "leader_unified_social_credit_code",
+            "display_name": "牵头方统一社会信用代码",
+            "technical_names": [
+              "leaderCreditCode"
+            ],
+            "aliases": [
+              "牵头方信用代码"
+            ],
+            "resource": "consortium_leader_supplier",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "member_unified_social_credit_code",
+            "display_name": "成员统一社会信用代码",
+            "technical_names": [
+              "creditCode"
+            ],
+            "aliases": [
+              "成员信用代码"
+            ],
+            "resource": "consortium_member",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "member_supplier_id",
+            "display_name": "成员供应商ID",
+            "technical_names": [
+              "supplierId"
+            ],
+            "aliases": [
+              "供应商ID"
+            ],
+            "resource": "consortium_member",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "consortium_member_id",
+            "display_name": "联合体成员记录ID",
+            "technical_names": [
+              "id",
+              "memberId"
+            ],
+            "aliases": [
+              "成员ID",
+              "材料所属成员ID"
+            ],
+            "resource": "consortium_member",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "consortium_material_id",
+            "display_name": "报名材料记录ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "材料ID",
+              "附件记录ID"
+            ],
+            "resource": "consortium_material",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "file_id",
+            "display_name": "文件服务ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "附件ID"
+            ],
+            "resource": "consortium_material",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "PortalConsortiumRegistrationController#getById(@Valid PortalConsortiumRegistrationIdCondition.id @NotNull) -> RemotePortalConsortiumRegistrationService#getById，无 BFF 转换",
+          "PortalConsortiumRegistrationService#getById：resolveSupplierId 后 loadOwnedRegistration；无权或 deleted=1 抛错。buildDetailQuery 公开 id/registrationCode/applicationId/applicationCode/leaderSupplierId/leaderCreditCode，memberList 不含牵头，qualificationMaterialList 固定 emptyList",
+          "成员来自 egps_project_consortium_member deleted=0；报名材料 material_type=registration，投标文件 material_type=bid_document。maxMembers 取已生效 TenderConsortiumRule 原值，不 +1",
+          "toMemberQuery 不写 memberType，门户成员项该字段通常为 null；联系电话详情解密为明文"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "8bf4e9e2-d5e2-46cc-8b2e-11884c3eaf3f",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/consortiumRegistration/listProjectOptions"
+      },
+      "semantic": {
+        "purpose": "供电子招投标门户在新增联合体报名时分页检索当前报名中且联合体方案已生效的标包选项：登录后才调用，但 SQL 不按当前供应商过滤，也不排除已报名项目。返回 applicationId/bidPackageId/bidCode 和规则原值 maxMembers（不含牵头），BFF 不做人数转换。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "联合体报名"
+        ],
+        "scenarios": [
+          "投标人在门户新建联合体报名时按项目编号、名称或标编号搜索可报名标包，而不是查询自己已有的报名记录。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "标包",
+          "立项申请",
+          "联合体规则"
+        ],
+        "aliases": [
+          "门户可报名项目下拉",
+          "门户联合体报名选择项目",
+          "PortalConsortiumRegistrationController.listProjectOptions"
+        ],
+        "resource": "consortium_project_option",
+        "lookup_keys": [
+          "keyword",
+          "pageNumber",
+          "pageSize",
+          "applicationId",
+          "applicationCode",
+          "bidPackageId",
+          "bidCode"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "c12-portal BFF POST /member-api/portal/egps/consortiumRegistration/listProjectOptions，不改 maxMembers；小程序会把大于 0 的 maxMembers 展示为原值+1。",
+          "不是 page：page 查当前牵头方 egps_project_registration；本接口查 egps_bid_package 且 bid_status=registering、scheme_status=approved。",
+          "Service 强制覆盖 bidStatus/schemeStatus；resolveSupplierId 只校验会话，不写入 SQL。pageSize 经 SqlExecutor.page 拆箱，空值 NPE。"
+        ],
+        "required_inputs": [
+          {
+            "name": "pageSize",
+            "zh_name": "每页条数",
+            "location": "body",
+            "required": true,
+            "schema_type": "Integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "application_id",
+            "display_name": "立项申请ID",
+            "technical_names": [
+              "applicationId"
+            ],
+            "aliases": [
+              "项目ID",
+              "采购项目ID"
+            ],
+            "resource": "consortium_project_option",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "application_code",
+            "display_name": "立项编号",
+            "technical_names": [
+              "applicationCode"
+            ],
+            "aliases": [
+              "项目编号",
+              "立项申请编号"
+            ],
+            "resource": "consortium_project_option",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "bid_package_id",
+            "display_name": "标包ID",
+            "technical_names": [
+              "bidPackageId"
+            ],
+            "aliases": [
+              "标段ID",
+              "标主表ID"
+            ],
+            "resource": "consortium_project_option",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "bid_code",
+            "display_name": "标编号",
+            "technical_names": [
+              "bidCode"
+            ],
+            "aliases": [
+              "标包编号"
+            ],
+            "resource": "consortium_project_option",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalConsortiumRegistrationController#listProjectOptions(@Valid PortalConsortiumProjectOptionCondition) -> RemotePortalConsortiumRegistrationService#listProjectOptions，无 BFF 转换",
+          "PortalConsortiumRegistrationService#listProjectOptions：setBidStatus(REGISTERING)、setSchemeStatus(APPROVED)；PortalConsortiumRegistrationDao#pageProjectOptions -> portal_consortiumregistration_query_listProjectOptions.sql",
+          "SQL 从 egps_bid_package 左连已生效 egps_tender_consortium_rule，keyword 模糊 application_code/project_name/bid_code；无 supplierId、不排除已报名。enrichProjectOptions 回填 maxMembers 原值、qualifyMode、采购方式和预算",
+          "SqlExecutor.page(pageCondition.getPageSize()) 拆箱，pageSize 运行时必填；返回 applicationId 供 save/submit 选择项目，bidPackageId/bidCode 仅本下拉公开"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "ec322773-8e1d-4ccd-a01b-22a715bba79a",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/consortiumRegistration/getLeaderSupplierProfile"
+      },
+      "semantic": {
+        "purpose": "供电子招投标门户按当前登录投标人会话读取牵头方供应商档案：无请求体，不用 supplierId 入参。返回唯一供应商的 supplierId、名称、信用代码和联系方式明文；未关联企业、未审核通过、账号停用或在黑名单时抛错，不返回空对象。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "供应商"
+        ],
+        "scenarios": [
+          "投标人在门户填写联合体报名时，系统按登录会话自动带出当前企业作为牵头方，而不是按单位名称匹配成员。"
+        ],
+        "actions": [
+          "query"
+        ],
+        "entities": [
+          "供应商"
+        ],
+        "aliases": [
+          "门户牵头方供应商信息",
+          "门户当前企业作为牵头方",
+          "PortalConsortiumRegistrationController.getLeaderSupplierProfile"
+        ],
+        "resource": "supplier",
+        "lookup_keys": [
+          "supplierId",
+          "supplierName",
+          "creditCode"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal BFF POST /member-api/portal/egps/consortiumRegistration/getLeaderSupplierProfile，无请求体；不是 matchMemberSupplier。",
+          "PortalSupplierContextSupport#resolveCurrentSupplier 按会话 userId+投标人身份查 egps_supplier；无供应商返回 null 并抛“请先完成企业认证”，不会用 -1 占位。",
+          "还校验审核通过、账号启用且不在黑名单。返回 PortalConsortiumMemberSupplierMatchQuery 单条，不返回列表。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "supplier_id",
+            "display_name": "供应商ID",
+            "technical_names": [
+              "supplierId"
+            ],
+            "aliases": [
+              "牵头方供应商ID"
+            ],
+            "resource": "supplier",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "unified_social_credit_code",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "creditCode"
+            ],
+            "aliases": [
+              "信用代码",
+              "单位信用代码"
+            ],
+            "resource": "supplier",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "PortalConsortiumRegistrationController#getLeaderSupplierProfile() 无 @RequestBody -> RemotePortalConsortiumRegistrationService#getLeaderSupplierProfile",
+          "PortalConsortiumRegistrationService#getLeaderSupplierProfile：resolveCurrentSupplier()，null 抛未找到供应商；auditStatus≠approved 抛不可报名；validateSupplierRegisterable 检查账号启用和 SupplierBlacklistDao#countActiveBySupplierId",
+          "toSupplierMatchQuery 公开 supplierId/supplierName/creditCode=unifiedSocialCreditCode，电话邮箱解密明文。无 required_inputs"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "e925c0c1-42d7-4014-8600-0b6dcdee8ab3",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/consortiumRegistration/matchMemberSupplier"
+      },
+      "semantic": {
+        "purpose": "供电子招投标门户按单位名称精确匹配一名可报名的联合体成员供应商：supplierName 精确等于 egps_supplier.supplier_name，只返回唯一未删除供应商。未找到、重名、未审核通过、账号停用或在黑名单时抛错；不排除当前牵头方，也不做模糊匹配，不返回候选列表。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "供应商"
+        ],
+        "scenarios": [
+          "投标人在门户添加联合体成员时输入完整单位名称，系统精确匹配唯一有效供应商并回填信用代码。"
+        ],
+        "actions": [
+          "match",
+          "query"
+        ],
+        "entities": [
+          "供应商"
+        ],
+        "aliases": [
+          "门户匹配联合体成员供应商",
+          "门户按单位名称精确查找成员",
+          "PortalConsortiumRegistrationController.matchMemberSupplier"
+        ],
+        "resource": "supplier",
+        "lookup_keys": [
+          "supplierName",
+          "supplierId",
+          "creditCode"
+        ],
+        "cardinality": "one",
+        "ownership": "all",
+        "discriminators": [
+          "c12-portal BFF POST /member-api/portal/egps/consortiumRegistration/matchMemberSupplier；不是 getLeaderSupplierProfile，也不是模糊搜索下拉。",
+          "SupplierDao#listActiveBySupplierNameExact 等值匹配 deleted=0，不按审核状态过滤；0 条/多条分别抛未找到/请联系管理员。随后校验 approved+启用+非黑名单。",
+          "resolveSupplierId 只强制会话存在，结果不参与筛选，不排除当前牵头方。cardinality=one，返回单条 Query 而非 List。"
+        ],
+        "required_inputs": [
+          {
+            "name": "supplierName",
+            "zh_name": "单位名称",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "unified_social_credit_code",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "creditCode"
+            ],
+            "aliases": [
+              "信用代码",
+              "单位信用代码"
+            ],
+            "resource": "supplier",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "supplier_id",
+            "display_name": "供应商ID",
+            "technical_names": [
+              "supplierId"
+            ],
+            "aliases": [
+              "成员供应商ID"
+            ],
+            "resource": "supplier",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalConsortiumRegistrationController#matchMemberSupplier(@Valid PortalConsortiumMemberSupplierMatchCondition.supplierName @NotBlank) -> RemotePortalConsortiumRegistrationService#matchMemberSupplier",
+          "PortalConsortiumRegistrationService#matchMemberSupplier：trim 后空串再抛请输入单位名称；SupplierDao#listActiveBySupplierNameExact 对 supplier_name 精确等值",
+          "命中后校验 SupplierAuditStatusEnum.APPROVED 与 validateSupplierRegisterable。返回 toSupplierMatchQuery 的 supplierId/creditCode，供 save/submit 的 memberList.creditCode 使用"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "3ba8de0c-1ecc-49fa-a4d5-6a4c2f2f3544",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/consortiumRegistration/save"
+      },
+      "semantic": {
+        "purpose": "供电子招投标门户保存当前牵头方的联合体/独立报名草稿：无条件只校验 applicationId。id 为空则新增或复用同项目草稿/驳回记录，非空则更新该草稿。默认把 auditStatus 写成 draft（含更新已驳回记录）；新增才生成 registrationCode、registrationStatus=0、bidSubmissionStatus=not_submitted。成功返回报名记录 Long ID。不是提交审核，也不是确认投标文件。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "联合体报名"
+        ],
+        "scenarios": [
+          "投标人在门户把联合体报名先存成待提交草稿，稍后再提交审核或确认申报。"
+        ],
+        "actions": [
+          "create",
+          "update"
+        ],
+        "entities": [
+          "联合体报名",
+          "联合体成员",
+          "报名材料"
+        ],
+        "aliases": [
+          "门户保存联合体报名草稿",
+          "门户暂存联合体报名",
+          "PortalConsortiumRegistrationController.save"
+        ],
+        "resource": "consortium_registration",
+        "lookup_keys": [
+          "id",
+          "applicationId",
+          "creditCode",
+          "fileId"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal BFF POST /member-api/portal/egps/consortiumRegistration/save -> persist(item,false)；不是 submit，也不是 submitBidSubmission。",
+          "草稿路径不强制 memberList/报名材料/联系人。更新时软删除名方法会再删成员并只删 registration 材料、保留 bid_document。save 无论新增还是更新都把 auditStatus 设为 draft，更新不会保留 rejected。",
+          "禁止联合体时 registrationType=supplier，资质齐全可自动审核通过；允许联合体且立项无资质且信息完整时可自动改 pending。submit 接口对独立供应商直接抛错。",
+          "无 id 时 findEditableByApplicationAndLeader 可能命中已有草稿/驳回从而走更新。返回 dao 报名主键，不是投标申报独立表 ID。"
+        ],
+        "required_inputs": [
+          {
+            "name": "applicationId",
+            "zh_name": "立项申请ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "consortium_registration_id",
+            "display_name": "联合体报名记录ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "报名ID",
+              "编辑时传入"
+            ],
+            "resource": "consortium_registration",
+            "source": "request_contract",
+            "confidence": 0.96
+          },
+          {
+            "canonical": "application_id",
+            "display_name": "立项申请ID",
+            "technical_names": [
+              "applicationId"
+            ],
+            "aliases": [
+              "项目ID",
+              "采购项目ID"
+            ],
+            "resource": "consortium_registration",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "unified_social_credit_code",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "creditCode"
+            ],
+            "aliases": [
+              "成员信用代码"
+            ],
+            "resource": "consortium_member",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "file_id",
+            "display_name": "文件服务ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "附件ID"
+            ],
+            "resource": "consortium_material",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalConsortiumRegistrationController#save(@Valid PortalConsortiumRegistrationSaveItem) -> PortalConsortiumRegistrationService#save -> persist(false)",
+          "persist：applicationId 空抛请选择项目；校验标包报名中；leaderSupplierId 固定为会话供应商，忽略请求里的供应商ID。insert 才 SequenceClient 生成 registrationCode 并默认 bidSubmissionStatus=not_submitted；update 不改该默认",
+          "save 分支始终 setAuditStatus(draft)；applyTime 仅空时写入。随后 memberDao.softDeleteByRegistrationId + PortalBidSubmissionService#softDeleteRegistrationMaterials，再插入牵头方/成员和 registration 材料，并写操作日志。成员项 id、qualificationMaterialList 当前未消费",
+          "副作用：qualificationMatchService.initOnRegistrationSubmit；独立供应商可能 tryAutoApproveSingleSupplierRegistration；无资质联合体可能 tryAutoSubmitConsortiumWithoutQualification"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "8a6d97df-736b-4886-9323-5e27e840b44f",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/consortiumRegistration/submit"
+      },
+      "semantic": {
+        "purpose": "供电子招投标门户保存并把当前牵头方的联合体报名提交审核：成功路径仅允许联合体项目（allowed），独立供应商调用会抛“无需提交审核”。无条件需要 applicationId、非空 memberList 与报名材料，且每个成员 creditCode 必填。提交后 auditStatus=pending，新增同样只在 insert 时写入 bidSubmissionStatus=not_submitted。返回报名记录 Long ID，不上传投标文件。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "联合体报名"
+        ],
+        "scenarios": [
+          "投标人在门户把联合体报名连同成员和报名材料一并提交审核，而不是只存草稿或确认投标文件。"
+        ],
+        "actions": [
+          "submit",
+          "create",
+          "update"
+        ],
+        "entities": [
+          "联合体报名",
+          "联合体成员",
+          "报名材料"
+        ],
+        "aliases": [
+          "门户提交联合体报名",
+          "门户保存并提交联合体报名",
+          "PortalConsortiumRegistrationController.submit"
+        ],
+        "resource": "consortium_registration",
+        "lookup_keys": [
+          "id",
+          "applicationId",
+          "creditCode",
+          "fileId"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal BFF POST /member-api/portal/egps/consortiumRegistration/submit -> persist(item,true)；不是 save，也不是 submitBidSubmission。",
+          "validateSubmit：允许联合体时 memberList、registrationMaterialList 非空，成员 creditCode 非空且不重复；禁止联合体直接失败。item.id 非空才校验资质上传完整，新增提交不做该校验。",
+          "submit 无论新增还是更新都把 auditStatus 设为 pending 并刷新 applyTime；驳回/partial 再提交会清空 auditRemark 且 registrationStatus=0。insert 才默认 bidSubmissionStatus=not_submitted。",
+          "提交成功后 init 投标文件检查与保证金；成员审核状态写 pending。返回报名主键。"
+        ],
+        "required_inputs": [
+          {
+            "name": "applicationId",
+            "zh_name": "立项申请ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          },
+          {
+            "name": "memberList",
+            "zh_name": "联合体成员列表",
+            "location": "body",
+            "required": true,
+            "schema_type": "List"
+          },
+          {
+            "name": "registrationMaterialList",
+            "zh_name": "联合体报名材料列表",
+            "location": "body",
+            "required": true,
+            "schema_type": "List"
+          },
+          {
+            "name": "creditCode",
+            "zh_name": "成员统一社会信用代码",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "consortium_registration_id",
+            "display_name": "联合体报名记录ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "报名ID",
+              "编辑时传入"
+            ],
+            "resource": "consortium_registration",
+            "source": "request_contract",
+            "confidence": 0.96
+          },
+          {
+            "canonical": "application_id",
+            "display_name": "立项申请ID",
+            "technical_names": [
+              "applicationId"
+            ],
+            "aliases": [
+              "项目ID",
+              "采购项目ID"
+            ],
+            "resource": "consortium_registration",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "unified_social_credit_code",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "creditCode"
+            ],
+            "aliases": [
+              "成员信用代码"
+            ],
+            "resource": "consortium_member",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "file_id",
+            "display_name": "文件服务ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "附件ID"
+            ],
+            "resource": "consortium_material",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalConsortiumRegistrationController#submit(@Valid PortalConsortiumRegistrationSaveItem) -> PortalConsortiumRegistrationService#submit -> persist(true)",
+          "persist 在 submit=true 且规则非 allowed 时抛单个供应商无需提交审核；validateSubmit 无条件要求成员和报名材料，并按 creditCode 查 egps_supplier",
+          "提交后 auditStatus=pending，bidFileCheckService.initOnRegistrationSubmit 与 portalDepositService.initOnRegistrationSubmit；操作日志为提交报名或重新提交",
+          "与 save 共用同一 Persist 写 egps_project_registration/member/material，但不改 bid_submission_status 为 submitted，也不写 bid_document"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "fe57c943-2e47-4d2d-9fbb-0ddcf78a6952",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/consortiumRegistration/deleteById"
+      },
+      "semantic": {
+        "purpose": "供电子招投标门户按报名ID删除当前牵头方的待提交草稿：仅 auditStatus=draft 可删，pending/approved/rejected 抛错。请求 id 是联合体报名记录ID。DAO 注释写逻辑删除，但 Dialect.forDbDelete 生成 delete from，成员和材料走同名 softDelete 方法。成功返回 Boolean true，cardinality 仍是 one。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "联合体报名"
+        ],
+        "scenarios": [
+          "投标人在门户删除一条尚未提交的联合体报名草稿，已审核记录不能删。"
+        ],
+        "actions": [
+          "delete"
+        ],
+        "entities": [
+          "联合体报名",
+          "联合体成员",
+          "报名材料"
+        ],
+        "aliases": [
+          "门户删除联合体报名草稿",
+          "门户去掉待提交报名",
+          "PortalConsortiumRegistrationController.deleteById"
+        ],
+        "resource": "consortium_registration",
+        "lookup_keys": [
+          "id"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal BFF POST /member-api/portal/egps/consortiumRegistration/deleteById；只删 draft，不是取消已提交或已申报。",
+          "loadOwnedRegistration 校验当前牵头供应商。随后 ProjectRegistrationDao#deleteActiveById、memberDao.softDeleteByRegistrationId、materialDao.softDeleteByRegistrationId（全部材料含投标文件）。",
+          "方法注释写逻辑删除，可执行 SQL 为 delete from。返回 Boolean，不表示 many。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "报名ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "consortium_registration_id",
+            "display_name": "联合体报名记录ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "报名ID",
+              "报名主键"
+            ],
+            "resource": "consortium_registration",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": [
+          "PortalConsortiumRegistrationController#deleteById(@Valid PortalConsortiumRegistrationIdCondition.id @NotNull) -> PortalConsortiumRegistrationService#deleteById",
+          "deleteById：仅 ConsortiumRegistrationAuditStatusEnum.DRAFT 可删，否则“仅待提交状态的报名可删除”；校验 leaderSupplierId",
+          "ProjectRegistrationDao#deleteActiveById 注释为逻辑删除且条件 deleted=0，但 BaseDaoSupport.delete -> Dialect.forDbDelete 拼接 delete from 表；成员/材料同路径。随后 operationLogService.saveLog 记录删除报名"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "95e60a48-518f-48d1-aa7d-620ef03cbf6b",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/consortiumRegistration/getBidSubmissionDetail"
+      },
+      "semantic": {
+        "purpose": "供电子招投标门户按报名ID打开确认申报弹窗：查看当前牵头方该报名的项目编号、牵头方名称、成员人数、审核/申报状态、投标截止时间和已上传投标文件，并给出 canSubmitBid/cannotSubmitReason。不返回成员名单、报名材料、maxMembers 和 applicationId。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "投标申报"
+        ],
+        "scenarios": [
+          "投标人在门户点击确认申报前，查看该报名能否上传投标文件以及已传文件，而不是打开联合体报名详情。"
+        ],
+        "actions": [
+          "detail",
+          "query"
+        ],
+        "entities": [
+          "投标申报",
+          "投标文件"
+        ],
+        "aliases": [
+          "门户确认申报弹窗详情",
+          "门户投标文件申报详情",
+          "PortalConsortiumRegistrationController.getBidSubmissionDetail"
+        ],
+        "resource": "bid_submission",
+        "lookup_keys": [
+          "id",
+          "registrationId",
+          "applicationCode",
+          "fileId"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal BFF POST /member-api/portal/egps/consortiumRegistration/getBidSubmissionDetail，请求 DTO 与 getById 同为 id，但走 PortalBidSubmissionService#getDetail，返回 PortalBidSubmissionDetailQuery。",
+          "响应主键字段是 registrationId 不是 id；有 bidDeadline/canSubmitBid，无 memberList/registrationMaterialList。",
+          "不可申报原因含审核未通过、资质未传齐、无标段、公告未发布、流标、超投标截止、非投标阶段、保证金未缴纳登记。不因已 submitted 禁止再次查看。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "报名ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "consortium_registration_id",
+            "display_name": "联合体报名记录ID",
+            "technical_names": [
+              "id",
+              "registrationId"
+            ],
+            "aliases": [
+              "报名ID",
+              "报名主键"
+            ],
+            "resource": "bid_submission",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "application_code",
+            "display_name": "立项编号",
+            "technical_names": [
+              "applicationCode"
+            ],
+            "aliases": [
+              "项目编号",
+              "立项申请编号"
+            ],
+            "resource": "bid_submission",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "file_id",
+            "display_name": "文件服务ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "附件ID",
+              "投标文件ID"
+            ],
+            "resource": "bid_submission",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "PortalConsortiumRegistrationController#getBidSubmissionDetail(@Valid PortalConsortiumRegistrationIdCondition.id @NotNull) -> PortalBidSubmissionService#getDetail",
+          "getDetail：loadOwnedRegistration 后 BidPackageDao#findByApplicationId；公开 registrationId/applicationCode/leaderSupplierName/memberCount/bidFileList/canSubmitBid",
+          "bidFileList 来自 egps_project_consortium_material material_type=bid_document；memberCount 用 countMember SQL 只统计 member_type=member。不返回 applicationId/bidPackageId"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "0f36946d-354f-45e7-981e-59f67559bc0b",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/egps/consortiumRegistration/submitBidSubmission"
+      },
+      "semantic": {
+        "purpose": "供电子招投标门户为当前牵头方确认申报：按 registrationId 定位报名，整批覆盖保存投标文件为 bid_document 材料，并把 egps_project_registration.bid_submission_status 更新为 submitted、写入 bidSubmitTime/IP。不改报名审核状态，不新增独立投标申报表。返回报名记录 Long ID。已申报且仍在投标窗口时可再次覆盖文件。",
+        "audiences": [
+          "电子招投标门户",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "投标申报"
+        ],
+        "scenarios": [
+          "投标人在门户上传投标文件并确认申报，而不是保存或提交联合体报名审核。"
+        ],
+        "actions": [
+          "submit",
+          "update"
+        ],
+        "entities": [
+          "投标申报",
+          "投标文件",
+          "联合体报名"
+        ],
+        "aliases": [
+          "门户确认申报投标文件",
+          "门户提交投标文件",
+          "PortalConsortiumRegistrationController.submitBidSubmission"
+        ],
+        "resource": "bid_submission",
+        "lookup_keys": [
+          "registrationId",
+          "fileId"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal BFF POST /member-api/portal/egps/consortiumRegistration/submitBidSubmission -> PortalBidSubmissionService#submit；不是 save/submit 报名。",
+          "请求主键是 registrationId，Bean Validation 要求 bidFileList 非空；每条 fileId 必填，文件名取 originalName 或 fileName，扩展名限 pdf/doc/docx/xls/xlsx/zip，数字 fileSize 超 50MB 才拒。",
+          "先按类型软删旧 bid_document 再插入新材料；报名主表改 submitted。随后 ensureRecordAfterBidSubmission、supplierBidRecordWriteService.upsertOnSubmit（仅牵头方）、scheduleSupplierAfterCommit。resolveCannotSubmitReason 不因已 submitted 拒绝。"
+        ],
+        "required_inputs": [
+          {
+            "name": "registrationId",
+            "zh_name": "报名ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          },
+          {
+            "name": "fileId",
+            "zh_name": "附件ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "consortium_registration_id",
+            "display_name": "联合体报名记录ID",
+            "technical_names": [
+              "registrationId"
+            ],
+            "aliases": [
+              "报名ID"
+            ],
+            "resource": "bid_submission",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "file_id",
+            "display_name": "文件服务ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "附件ID",
+              "投标文件ID"
+            ],
+            "resource": "bid_submission",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "PortalConsortiumRegistrationController#submitBidSubmission(@Valid PortalBidSubmissionSaveItem.registrationId @NotNull, bidFileList @NotEmpty) -> PortalBidSubmissionService#submit",
+          "submit：loadOwnedRegistration(registrationId)；resolveCannotSubmitReason 不通过则抛错；validateBidFileItem 要求 fileId 和非空文件名",
+          "materialDao.softDeleteByRegistrationIdAndMaterialTypes(BID_DOCUMENT) 后 insert ProjectConsortiumMaterial；registration.setBidSubmissionStatus(SUBMITTED)+bidSubmitTime，update egps_project_registration。返回 registration.getId()，公开合同无独立 bid_submission_id 字段",
+          "fileSize 非纯数字不校验；空 fileSize 通过。投标文件 memberId 固定 null"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "1a0ebed8-06ba-4634-8165-62ae30aadc08",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/egps/consortiumRegistration/page"
+      },
+      "semantic": {
+        "purpose": "供电子招投标小程序分页查询当前登录投标人作为牵头方的联合体/独立报名记录：无 @OptionalLogin，会话供应商覆盖 hidden supplierId；筛选键与门户 page 相同，BFF 不做 maxMembers 或成员转换。返回的是已有报名分页，不是可报名项目下拉。",
+        "audiences": [
+          "电子招投标小程序",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "联合体报名"
+        ],
+        "scenarios": [
+          "投标人在小程序联合体报名列表翻页查看自己牵头的已有报名，而不是挑选可报名项目。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "联合体报名"
+        ],
+        "aliases": [
+          "小程序联合体报名分页",
+          "小程序我的联合体报名列表",
+          "MiniPortalConsortiumRegistrationController.page"
+        ],
+        "resource": "consortium_registration",
+        "lookup_keys": [
+          "applicationCode",
+          "projectName",
+          "projectKeyword",
+          "auditStatus",
+          "bidSubmissionStatus",
+          "pageNumber",
+          "pageSize",
+          "id",
+          "registrationCode",
+          "applicationId"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal 小程序 BFF POST /api/mini/egps/consortiumRegistration/page，原样转发，无 toMiniDisplayMaxMembers；不是门户 /member-api/portal 的 page，也不是 listProjectOptions。",
+          "下游与门户 page 相同：查当前牵头方已有报名。displayStatus 虽按 MiniRegistrationDisplayStatusEnum 计算，门户同样会 fillDisplayStatus。",
+          "无关键词时 pageSize 可空默认 10；有 projectKeyword 时 SqlExecutor.page 拆箱必填。Swagger 互斥优先与 SQL AND 冲突同门户。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "consortium_registration_id",
+            "display_name": "联合体报名记录ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "报名ID",
+              "报名主键"
+            ],
+            "resource": "consortium_registration",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "registration_code",
+            "display_name": "报名编号",
+            "technical_names": [
+              "registrationCode"
+            ],
+            "aliases": [
+              "联合体报名编号"
+            ],
+            "resource": "consortium_registration",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "application_id",
+            "display_name": "立项申请ID",
+            "technical_names": [
+              "applicationId"
+            ],
+            "aliases": [
+              "项目ID",
+              "采购项目ID"
+            ],
+            "resource": "consortium_registration",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "application_code",
+            "display_name": "立项编号",
+            "technical_names": [
+              "applicationCode"
+            ],
+            "aliases": [
+              "项目编号",
+              "立项申请编号"
+            ],
+            "resource": "consortium_registration",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": [
+          "MiniPortalConsortiumRegistrationController#page(@Valid PortalConsortiumRegistrationPageCondition) -> RemotePortalConsortiumRegistrationService#page，无 BFF 行转换",
+          "PortalConsortiumRegistrationService#page：PortalSupplierContextSupport#resolveSupplierId 覆盖 condition.supplierId；非投标人/未关联供应商为 -1；projectKeyword 非空走 PortalConsortiumRegistrationDao#pageRegistration，否则 ProjectRegistrationDao#pagePortal",
+          "无关键词时 OrmPageHelper.page 将空 pageSize 默认 10；有 projectKeyword 时 SqlExecutor.page(portal_consortiumregistration_query_page.sql) 对 Integer pageSize 拆箱，空值 NPE。SQL/ORM 均 leader_supplier_id=:supplierId 且 deleted=0",
+          "Swagger 写 projectKeyword 与 applicationCode/projectName 互斥优先，可执行链路是关键词只切换查询实现，applicationCode/projectName 仍 AND 模糊。enrichPageRows 补 memberCount（不含牵头）、displayStatus、采购方式。返回 id 供 getById/save/deleteById/getBidSubmissionDetail 继续调用"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "a1408599-1005-4d08-aed1-e3042a0eb198",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/egps/consortiumRegistration/getById"
+      },
+      "semantic": {
+        "purpose": "供电子招投标小程序按报名ID查看当前牵头方的联合体报名详情：先取与门户相同的远程结果，再由 BFF enrichMemberListWithLeader 把牵头方插入 memberList 首位（若尚不存在），并把空白 memberType 补为 member；maxMembers 仅在响应上对大于 0 的原值 +1，展示含牵头方总人数。库表、提交校验仍用原值。不是确认申报弹窗。",
+        "audiences": [
+          "电子招投标小程序",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "联合体报名"
+        ],
+        "scenarios": [
+          "投标人在小程序打开联合体报名详情，成员下拉看到牵头方加普通成员，人数上限按含牵头方展示。"
+        ],
+        "actions": [
+          "detail",
+          "query"
+        ],
+        "entities": [
+          "联合体报名",
+          "联合体成员",
+          "报名材料"
+        ],
+        "aliases": [
+          "小程序联合体报名详情",
+          "小程序查看含牵头方的报名成员",
+          "MiniPortalConsortiumRegistrationController.getById"
+        ],
+        "resource": "consortium_registration",
+        "lookup_keys": [
+          "id",
+          "registrationCode",
+          "applicationId",
+          "applicationCode",
+          "leaderSupplierId",
+          "leaderCreditCode",
+          "creditCode",
+          "supplierId",
+          "fileId",
+          "memberId"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal 小程序 BFF POST /api/mini/egps/consortiumRegistration/getById：成功后 enrichMemberListWithLeader + toMiniDisplayMaxMembers；门户同名接口不改 memberList/maxMembers。",
+          "下游 buildDetailQuery 仍不含牵头方；BFF 用 leaderSupplierId/Name/CreditCode 和联系人构造 MEMBER_TYPE_LEADER，sortNo=0，qualificationMaterialList=emptyList。未给该合成项写成员记录 id。",
+          "toMiniDisplayMaxMembers：null 或 <=0 原样返回，>0 才 +1。只改响应，不改 egps_tender_consortium_rule，也不改 submit 的 maxMembers 校验口径。",
+          "与 getBidSubmissionDetail 请求 DTO 相同但返回报名详情；getBidSubmissionDetail 无此 BFF 转换。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "报名ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "consortium_registration_id",
+            "display_name": "联合体报名记录ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "报名ID",
+              "报名主键"
+            ],
+            "resource": "consortium_registration",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "registration_code",
+            "display_name": "报名编号",
+            "technical_names": [
+              "registrationCode"
+            ],
+            "aliases": [
+              "联合体报名编号"
+            ],
+            "resource": "consortium_registration",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "application_id",
+            "display_name": "立项申请ID",
+            "technical_names": [
+              "applicationId"
+            ],
+            "aliases": [
+              "项目ID",
+              "采购项目ID"
+            ],
+            "resource": "consortium_registration",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "application_code",
+            "display_name": "立项编号",
+            "technical_names": [
+              "applicationCode"
+            ],
+            "aliases": [
+              "项目编号",
+              "立项申请编号"
+            ],
+            "resource": "consortium_registration",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "leader_supplier_id",
+            "display_name": "牵头方供应商ID",
+            "technical_names": [
+              "leaderSupplierId"
+            ],
+            "aliases": [
+              "牵头供应商ID"
+            ],
+            "resource": "consortium_registration",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "leader_unified_social_credit_code",
+            "display_name": "牵头方统一社会信用代码",
+            "technical_names": [
+              "leaderCreditCode"
+            ],
+            "aliases": [
+              "牵头方信用代码"
+            ],
+            "resource": "consortium_leader_supplier",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "member_unified_social_credit_code",
+            "display_name": "成员统一社会信用代码",
+            "technical_names": [
+              "creditCode"
+            ],
+            "aliases": [
+              "成员信用代码"
+            ],
+            "resource": "consortium_member",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "member_supplier_id",
+            "display_name": "成员供应商ID",
+            "technical_names": [
+              "supplierId"
+            ],
+            "aliases": [
+              "供应商ID"
+            ],
+            "resource": "consortium_member",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "consortium_member_id",
+            "display_name": "联合体成员记录ID",
+            "technical_names": [
+              "id",
+              "memberId"
+            ],
+            "aliases": [
+              "成员ID",
+              "材料所属成员ID"
+            ],
+            "resource": "consortium_member",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "consortium_material_id",
+            "display_name": "报名材料记录ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "材料ID",
+              "附件记录ID"
+            ],
+            "resource": "consortium_material",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "file_id",
+            "display_name": "文件服务ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "附件ID"
+            ],
+            "resource": "consortium_material",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "MiniPortalConsortiumRegistrationController#getById(@Valid PortalConsortiumRegistrationIdCondition.id @NotNull) -> remote getById 后 enrichMemberListWithLeader、setMaxMembers(toMiniDisplayMaxMembers)",
+          "enrichMemberListWithLeader：leaderSupplierId 为空则跳过；已存在相同 supplierId 或 memberType=leader 则不重复插入；否则补 memberType=member 并在首位插入牵头方",
+          "下游 PortalConsortiumRegistrationService#buildDetailQuery 与门户相同，公开 id/registrationCode/applicationId/applicationCode/leaderSupplierId/fileId；BFF 不增删这些 ID，只改 memberList 组成和 maxMembers 展示",
+          "数据库与 validateSubmit 仍用规则原值 maxMembers（不含牵头）"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "f2df9316-a420-454c-bba8-dd5210284d28",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/egps/consortiumRegistration/listProjectOptions"
+      },
+      "semantic": {
+        "purpose": "供电子招投标小程序在新增联合体报名时分页检索报名中且联合体方案已生效的标包选项：下游 SQL 与门户相同，BFF 仅把每行大于 0 的 maxMembers 展示为原值+1（含牵头方人数）。只改响应，不改库表规则，也不改提交校验口径。不是查询已有报名分页。",
+        "audiences": [
+          "电子招投标小程序",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "联合体报名"
+        ],
+        "scenarios": [
+          "投标人在小程序新建联合体报名时搜索可报名标包，看到的人数上限包含牵头方，但仍按原规则报名。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "标包",
+          "立项申请",
+          "联合体规则"
+        ],
+        "aliases": [
+          "小程序可报名项目下拉",
+          "小程序联合体报名选择项目",
+          "MiniPortalConsortiumRegistrationController.listProjectOptions"
+        ],
+        "resource": "consortium_project_option",
+        "lookup_keys": [
+          "keyword",
+          "pageNumber",
+          "pageSize",
+          "applicationId",
+          "applicationCode",
+          "bidPackageId",
+          "bidCode"
+        ],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": [
+          "c12-portal 小程序 BFF POST /api/mini/egps/consortiumRegistration/listProjectOptions：遍历 rows 调用 toMiniDisplayMaxMembers；门户同名接口不转换。",
+          "下游仍是 egps_bid_package 报名中 + 方案已生效，无供应商过滤。page 查已有报名，本接口查可报名标包。",
+          "maxMembers 展示含牵头方；submit 校验仍用 consortiumRule.getMaxMembers 原值。pageSize 拆箱必填。"
+        ],
+        "required_inputs": [
+          {
+            "name": "pageSize",
+            "zh_name": "每页条数",
+            "location": "body",
+            "required": true,
+            "schema_type": "Integer"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "application_id",
+            "display_name": "立项申请ID",
+            "technical_names": [
+              "applicationId"
+            ],
+            "aliases": [
+              "项目ID",
+              "采购项目ID"
+            ],
+            "resource": "consortium_project_option",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "application_code",
+            "display_name": "立项编号",
+            "technical_names": [
+              "applicationCode"
+            ],
+            "aliases": [
+              "项目编号",
+              "立项申请编号"
+            ],
+            "resource": "consortium_project_option",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "bid_package_id",
+            "display_name": "标包ID",
+            "technical_names": [
+              "bidPackageId"
+            ],
+            "aliases": [
+              "标段ID",
+              "标主表ID"
+            ],
+            "resource": "consortium_project_option",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "bid_code",
+            "display_name": "标编号",
+            "technical_names": [
+              "bidCode"
+            ],
+            "aliases": [
+              "标包编号"
+            ],
+            "resource": "consortium_project_option",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "MiniPortalConsortiumRegistrationController#listProjectOptions(@Valid PortalConsortiumProjectOptionCondition) 成功后对 PageResult.rows 逐行 setMaxMembers(toMiniDisplayMaxMembers)",
+          "toMiniDisplayMaxMembers 仅响应转换：>0 则 +1，null/<=0 不变；不写库、不改 TenderConsortiumRule、不改 validateSubmit",
+          "下游 portal_consortiumregistration_query_listProjectOptions.sql 与门户相同，公开 applicationId/applicationCode/bidPackageId/bidCode；BFF 不裁剪这些标识",
+          "SqlExecutor.page 拆箱使 pageSize 运行时必填"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "2ad00206-5936-422c-bc24-0179846006a3",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/egps/consortiumRegistration/getLeaderSupplierProfile"
+      },
+      "semantic": {
+        "purpose": "供电子招投标小程序按当前登录投标人会话读取牵头方供应商档案：无请求体，BFF 无转换。未关联企业、未审核通过、停用或黑名单时抛错。返回唯一供应商标识，不是按单位名称匹配成员。",
+        "audiences": [
+          "电子招投标小程序",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "供应商"
+        ],
+        "scenarios": [
+          "投标人在小程序填写联合体报名时，系统按登录会话自动带出当前企业作为牵头方。"
+        ],
+        "actions": [
+          "query"
+        ],
+        "entities": [
+          "供应商"
+        ],
+        "aliases": [
+          "小程序牵头方供应商信息",
+          "小程序当前企业作为牵头方",
+          "MiniPortalConsortiumRegistrationController.getLeaderSupplierProfile"
+        ],
+        "resource": "supplier",
+        "lookup_keys": [
+          "supplierId",
+          "supplierName",
+          "creditCode"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal 小程序 BFF POST /api/mini/egps/consortiumRegistration/getLeaderSupplierProfile，无请求体、无 BFF 转换；路径不是 /member-api/portal。",
+          "与门户共用 resolveCurrentSupplier，不用 -1 占位。不是 matchMemberSupplier。",
+          "返回单条 PortalConsortiumMemberSupplierMatchQuery，cardinality=one。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "supplier_id",
+            "display_name": "供应商ID",
+            "technical_names": [
+              "supplierId"
+            ],
+            "aliases": [
+              "牵头方供应商ID"
+            ],
+            "resource": "supplier",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "unified_social_credit_code",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "creditCode"
+            ],
+            "aliases": [
+              "信用代码",
+              "单位信用代码"
+            ],
+            "resource": "supplier",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "MiniPortalConsortiumRegistrationController#getLeaderSupplierProfile() 无 @RequestBody -> RemotePortalConsortiumRegistrationService#getLeaderSupplierProfile，无 BFF 改写",
+          "PortalConsortiumRegistrationService#getLeaderSupplierProfile 与门户相同：resolveCurrentSupplier + 审核/启用/黑名单校验",
+          "公开 supplierId/supplierName/creditCode，无 required_inputs"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "77cc07ff-430b-42ac-b5f6-0d5635ab4f69",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/egps/consortiumRegistration/matchMemberSupplier"
+      },
+      "semantic": {
+        "purpose": "供电子招投标小程序按单位名称精确匹配一名可报名联合体成员供应商：等值匹配唯一未删除供应商，未找到或重名抛错，再校验审核通过、启用和非黑名单。BFF 无转换，不排除当前牵头方，不返回候选列表。",
+        "audiences": [
+          "电子招投标小程序",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "供应商"
+        ],
+        "scenarios": [
+          "投标人在小程序添加联合体成员时输入完整单位名称，系统精确匹配唯一有效供应商。"
+        ],
+        "actions": [
+          "match",
+          "query"
+        ],
+        "entities": [
+          "供应商"
+        ],
+        "aliases": [
+          "小程序匹配联合体成员供应商",
+          "小程序按单位名称精确查找成员",
+          "MiniPortalConsortiumRegistrationController.matchMemberSupplier"
+        ],
+        "resource": "supplier",
+        "lookup_keys": [
+          "supplierName",
+          "supplierId",
+          "creditCode"
+        ],
+        "cardinality": "one",
+        "ownership": "all",
+        "discriminators": [
+          "c12-portal 小程序 BFF POST /api/mini/egps/consortiumRegistration/matchMemberSupplier，原样转发；不是门户路径，也不是 getLeaderSupplierProfile。",
+          "精确等值而非模糊；0 条/多条抛错；不排除牵头方。cardinality=one。",
+          "supplierName @NotBlank 且 Service trim 后再验空。"
+        ],
+        "required_inputs": [
+          {
+            "name": "supplierName",
+            "zh_name": "单位名称",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "unified_social_credit_code",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "creditCode"
+            ],
+            "aliases": [
+              "信用代码",
+              "单位信用代码"
+            ],
+            "resource": "supplier",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "supplier_id",
+            "display_name": "供应商ID",
+            "technical_names": [
+              "supplierId"
+            ],
+            "aliases": [
+              "成员供应商ID"
+            ],
+            "resource": "supplier",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "MiniPortalConsortiumRegistrationController#matchMemberSupplier(@Valid PortalConsortiumMemberSupplierMatchCondition.supplierName @NotBlank) -> remote matchMemberSupplier，无 BFF 转换",
+          "SupplierDao#listActiveBySupplierNameExact 对 supplier_name 精确等值且 deleted=0；随后 APPROVED+启用+非黑名单",
+          "返回 supplierId/creditCode，供小程序 save/submit 的 memberList.creditCode 使用"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "fa9ca3fd-70a1-4c0e-9e7b-7b9cd491a403",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/egps/consortiumRegistration/save"
+      },
+      "semantic": {
+        "purpose": "供电子招投标小程序保存当前牵头方的联合体/独立报名草稿：BFF 原样转发 persist(false)。无条件只校验 applicationId；新增/更新默认 auditStatus 均为 draft。小程序详情里 +1 后的 maxMembers 不会改这里的保存规则。成功返回报名记录 Long ID，不是提交审核或确认投标文件。",
+        "audiences": [
+          "电子招投标小程序",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "联合体报名"
+        ],
+        "scenarios": [
+          "投标人在小程序把联合体报名先存成待提交草稿，人数规则仍按库表原值。"
+        ],
+        "actions": [
+          "create",
+          "update"
+        ],
+        "entities": [
+          "联合体报名",
+          "联合体成员",
+          "报名材料"
+        ],
+        "aliases": [
+          "小程序保存联合体报名草稿",
+          "小程序暂存联合体报名",
+          "MiniPortalConsortiumRegistrationController.save"
+        ],
+        "resource": "consortium_registration",
+        "lookup_keys": [
+          "id",
+          "applicationId",
+          "creditCode",
+          "fileId"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal 小程序 BFF POST /api/mini/egps/consortiumRegistration/save，无 BFF 改写；不是 submit/submitBidSubmission，也不是门户路径。",
+          "下游与门户 save 相同：草稿不强制成员和材料；更新也写 draft；独立供应商/无资质联合体可能自动通过或自动提交。",
+          "小程序 getById/listProjectOptions 的 maxMembers+1 只影响展示，save 不读取展示值。"
+        ],
+        "required_inputs": [
+          {
+            "name": "applicationId",
+            "zh_name": "立项申请ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "consortium_registration_id",
+            "display_name": "联合体报名记录ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "报名ID",
+              "编辑时传入"
+            ],
+            "resource": "consortium_registration",
+            "source": "request_contract",
+            "confidence": 0.96
+          },
+          {
+            "canonical": "application_id",
+            "display_name": "立项申请ID",
+            "technical_names": [
+              "applicationId"
+            ],
+            "aliases": [
+              "项目ID",
+              "采购项目ID"
+            ],
+            "resource": "consortium_registration",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "unified_social_credit_code",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "creditCode"
+            ],
+            "aliases": [
+              "成员信用代码"
+            ],
+            "resource": "consortium_member",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "file_id",
+            "display_name": "文件服务ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "附件ID"
+            ],
+            "resource": "consortium_material",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "MiniPortalConsortiumRegistrationController#save(@Valid PortalConsortiumRegistrationSaveItem) -> PortalConsortiumRegistrationService#save，无 BFF 转换",
+          "persist(false) 与门户相同：applicationId 必填；insert 才写 registrationCode 与 bidSubmissionStatus=not_submitted；save 新增和更新都 setAuditStatus(draft)",
+          "公开返回 Long 为 egps_project_registration.id；成员 id 字段未消费。自动审核/自动提交副作用同门户"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "dbbc5401-05dc-4fe2-973f-3255f9550340",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/egps/consortiumRegistration/submit"
+      },
+      "semantic": {
+        "purpose": "供电子招投标小程序保存并把联合体报名提交审核：BFF 原样转发 persist(true)。成功路径必须是允许联合体的项目，并无条件需要 applicationId、成员列表、报名材料和成员 creditCode。成员数量上限按规则原值校验，不用小程序 +1 后的展示人数。返回报名记录 Long ID，不写投标文件。",
+        "audiences": [
+          "电子招投标小程序",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "联合体报名"
+        ],
+        "scenarios": [
+          "投标人在小程序提交联合体报名审核，成员上限仍按不含牵头方的原规则校验。"
+        ],
+        "actions": [
+          "submit",
+          "create",
+          "update"
+        ],
+        "entities": [
+          "联合体报名",
+          "联合体成员",
+          "报名材料"
+        ],
+        "aliases": [
+          "小程序提交联合体报名",
+          "小程序保存并提交联合体报名",
+          "MiniPortalConsortiumRegistrationController.submit"
+        ],
+        "resource": "consortium_registration",
+        "lookup_keys": [
+          "id",
+          "applicationId",
+          "creditCode",
+          "fileId"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal 小程序 BFF POST /api/mini/egps/consortiumRegistration/submit，无 BFF 转换；不是 save，也不是 submitBidSubmission。",
+          "validateSubmit 用 consortiumRule.getMaxMembers 原值（不含牵头），即使小程序详情展示 +1。独立供应商调用失败。",
+          "submit 新增和更新都写 pending；insert 才默认 bidSubmissionStatus=not_submitted。"
+        ],
+        "required_inputs": [
+          {
+            "name": "applicationId",
+            "zh_name": "立项申请ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          },
+          {
+            "name": "memberList",
+            "zh_name": "联合体成员列表",
+            "location": "body",
+            "required": true,
+            "schema_type": "List"
+          },
+          {
+            "name": "registrationMaterialList",
+            "zh_name": "联合体报名材料列表",
+            "location": "body",
+            "required": true,
+            "schema_type": "List"
+          },
+          {
+            "name": "creditCode",
+            "zh_name": "成员统一社会信用代码",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "consortium_registration_id",
+            "display_name": "联合体报名记录ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "报名ID",
+              "编辑时传入"
+            ],
+            "resource": "consortium_registration",
+            "source": "request_contract",
+            "confidence": 0.96
+          },
+          {
+            "canonical": "application_id",
+            "display_name": "立项申请ID",
+            "technical_names": [
+              "applicationId"
+            ],
+            "aliases": [
+              "项目ID",
+              "采购项目ID"
+            ],
+            "resource": "consortium_registration",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "unified_social_credit_code",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "creditCode"
+            ],
+            "aliases": [
+              "成员信用代码"
+            ],
+            "resource": "consortium_member",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "file_id",
+            "display_name": "文件服务ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "附件ID"
+            ],
+            "resource": "consortium_material",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "MiniPortalConsortiumRegistrationController#submit(@Valid PortalConsortiumRegistrationSaveItem) -> PortalConsortiumRegistrationService#submit，无 BFF 改写",
+          "validateSubmit 成员数与 maxMembers 原值比较，不使用 toMiniDisplayMaxMembers；creditCode 无条件必填",
+          "提交后 pending + 投标文件检查/保证金初始化；不写 bid_document，返回报名主键"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "38b7eeb8-f9ef-4346-849b-3d382153e532",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/egps/consortiumRegistration/deleteById"
+      },
+      "semantic": {
+        "purpose": "供电子招投标小程序按报名ID删除当前牵头方的待提交草稿：仅 draft 可删，BFF 无转换。请求 id 是联合体报名记录ID。注释写逻辑删除，可执行 SQL 为 delete from。成功返回 Boolean true，cardinality 为 one。",
+        "audiences": [
+          "电子招投标小程序",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "联合体报名"
+        ],
+        "scenarios": [
+          "投标人在小程序删除尚未提交的联合体报名草稿。"
+        ],
+        "actions": [
+          "delete"
+        ],
+        "entities": [
+          "联合体报名",
+          "联合体成员",
+          "报名材料"
+        ],
+        "aliases": [
+          "小程序删除联合体报名草稿",
+          "小程序去掉待提交报名",
+          "MiniPortalConsortiumRegistrationController.deleteById"
+        ],
+        "resource": "consortium_registration",
+        "lookup_keys": [
+          "id"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal 小程序 BFF POST /api/mini/egps/consortiumRegistration/deleteById，原样转发；只删 draft。",
+          "归属校验当前牵头供应商；同时删除成员和全部材料。",
+          "DAO 注释与 delete from 冲突同门户。返回 Boolean 不是 many。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "报名ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "consortium_registration_id",
+            "display_name": "联合体报名记录ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "报名ID",
+              "报名主键"
+            ],
+            "resource": "consortium_registration",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": [
+          "MiniPortalConsortiumRegistrationController#deleteById(@Valid PortalConsortiumRegistrationIdCondition.id @NotNull) -> PortalConsortiumRegistrationService#deleteById，无 BFF 转换",
+          "仅 draft 可删并校验 leaderSupplierId；deleteActiveById + 成员/材料 delete 路径同门户",
+          "Dialect.forDbDelete 为 delete from，与逻辑删除注释冲突；写删除报名操作日志"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "a8057660-05ff-466d-b9a4-d26db5494adf",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/egps/consortiumRegistration/getBidSubmissionDetail"
+      },
+      "semantic": {
+        "purpose": "供电子招投标小程序按报名ID打开确认申报弹窗：BFF 原样返回 PortalBidSubmissionDetailQuery，不做 memberList/maxMembers 转换。查看能否申报、投标截止和已传投标文件，不返回报名成员名单。请求字段是 id，响应主键是 registrationId。",
+        "audiences": [
+          "电子招投标小程序",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "投标申报"
+        ],
+        "scenarios": [
+          "投标人在小程序确认申报前查看该报名的投标文件和是否允许申报，而不是打开含牵头方的报名详情。"
+        ],
+        "actions": [
+          "detail",
+          "query"
+        ],
+        "entities": [
+          "投标申报",
+          "投标文件"
+        ],
+        "aliases": [
+          "小程序确认申报弹窗详情",
+          "小程序投标文件申报详情",
+          "MiniPortalConsortiumRegistrationController.getBidSubmissionDetail"
+        ],
+        "resource": "bid_submission",
+        "lookup_keys": [
+          "id",
+          "registrationId",
+          "applicationCode",
+          "fileId"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal 小程序 BFF POST /api/mini/egps/consortiumRegistration/getBidSubmissionDetail，无 enrichMemberListWithLeader、不改 maxMembers；与小程序 getById 不同。",
+          "请求 DTO 与 getById 同为 id，返回确认申报弹窗而不是 PortalConsortiumRegistrationQuery。",
+          "memberCount 不含牵头方，与小程序详情 memberList 含牵头方的展示口径不同。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "报名ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "consortium_registration_id",
+            "display_name": "联合体报名记录ID",
+            "technical_names": [
+              "id",
+              "registrationId"
+            ],
+            "aliases": [
+              "报名ID",
+              "报名主键"
+            ],
+            "resource": "bid_submission",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "application_code",
+            "display_name": "立项编号",
+            "technical_names": [
+              "applicationCode"
+            ],
+            "aliases": [
+              "项目编号",
+              "立项申请编号"
+            ],
+            "resource": "bid_submission",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "file_id",
+            "display_name": "文件服务ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "附件ID",
+              "投标文件ID"
+            ],
+            "resource": "bid_submission",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "MiniPortalConsortiumRegistrationController#getBidSubmissionDetail(@Valid PortalConsortiumRegistrationIdCondition.id @NotNull) -> PortalBidSubmissionService#getDetail，无 BFF 转换",
+          "返回 registrationId/applicationCode/bidFileList/canSubmitBid；不公开 applicationId/bidPackageId",
+          "不可申报校验与门户相同；bid_document 材料 fileId 供 submitBidSubmission 覆盖上传"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    },
+    {
+      "interface_id": "87f5f31c-e7eb-46a2-ae9d-4fd0eec7e62f",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/egps/consortiumRegistration/submitBidSubmission"
+      },
+      "semantic": {
+        "purpose": "供电子招投标小程序为当前牵头方确认申报：BFF 原样转发，按 registrationId 整批覆盖 bid_document 并把报名 bid_submission_status 更新为 submitted。不改审核状态，返回报名记录 Long ID。不是保存或提交联合体报名。",
+        "audiences": [
+          "电子招投标小程序",
+          "投标人"
+        ],
+        "domains": [
+          "电子招投标",
+          "投标申报"
+        ],
+        "scenarios": [
+          "投标人在小程序上传投标文件并确认申报，人数展示口径不影响本接口。"
+        ],
+        "actions": [
+          "submit",
+          "update"
+        ],
+        "entities": [
+          "投标申报",
+          "投标文件",
+          "联合体报名"
+        ],
+        "aliases": [
+          "小程序确认申报投标文件",
+          "小程序提交投标文件",
+          "MiniPortalConsortiumRegistrationController.submitBidSubmission"
+        ],
+        "resource": "bid_submission",
+        "lookup_keys": [
+          "registrationId",
+          "fileId"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "c12-portal 小程序 BFF POST /api/mini/egps/consortiumRegistration/submitBidSubmission，无 BFF 转换；不是 save/submit。",
+          "请求主键 registrationId；fileId 无条件必填。覆盖写投标文件并改 submitted，可能写解密记录、投标统计和风控任务。",
+          "已申报且仍在窗口可再次覆盖。返回报名 ID 而非独立申报表 ID。"
+        ],
+        "required_inputs": [
+          {
+            "name": "registrationId",
+            "zh_name": "报名ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          },
+          {
+            "name": "fileId",
+            "zh_name": "附件ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "consortium_registration_id",
+            "display_name": "联合体报名记录ID",
+            "technical_names": [
+              "registrationId"
+            ],
+            "aliases": [
+              "报名ID"
+            ],
+            "resource": "bid_submission",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "file_id",
+            "display_name": "文件服务ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "附件ID",
+              "投标文件ID"
+            ],
+            "resource": "bid_submission",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "MiniPortalConsortiumRegistrationController#submitBidSubmission(@Valid PortalBidSubmissionSaveItem) -> PortalBidSubmissionService#submit，无 BFF 改写",
+          "与门户相同：校验归属与申报条件，整批覆盖 bid_document，update bidSubmissionStatus=submitted",
+          "返回 registration.getId()；ensureRecordAfterBidSubmission / upsertOnSubmit / scheduleSupplierAfterCommit 副作用同门户"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-04"
+      }
+    }
+  ]
+}

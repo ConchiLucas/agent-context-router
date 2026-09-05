@@ -1,0 +1,11 @@
+{
+  "schema_version": "context-router-client-acceptance-gates-v1",
+  "minimum_case_count": 50,
+  "minimum_mcp_success_rate": 1.0,
+  "minimum_candidate_recall_at_k": 1.0,
+  "minimum_final_accuracy": 0.95,
+  "minimum_selection_accuracy": 0.98,
+  "maximum_protocol_violation_count": 0,
+  "maximum_prohibited_tool_call_count": 0,
+  "maximum_out_of_candidate_selection_count": 0
+}

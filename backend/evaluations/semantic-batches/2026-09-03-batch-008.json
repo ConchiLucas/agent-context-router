@@ -1,0 +1,539 @@
+{
+  "schema_version": "context-router-interface-semantic-batch-v1",
+  "batch_id": "panzhihua-c12-sys-unscanned-008",
+  "workspace_id": "b9ce65eddc27437d9615177fbd07cb0a",
+  "family_groups": {
+    "消息计数与健康": 2,
+    "当前用户消息操作": 4,
+    "消息推送规则": 2,
+    "消息发送记录与预警": 3,
+    "消息模板管理": 6,
+    "模板消息发送与冷却": 2
+  },
+  "generation_policy": "按 c12-sys 完整消息家族源码闭环生成；区分后台消息管理、当前用户消息操作、内部业务发送与短信冷却查询，并记录 inapp 路径与实际未限定通道的合同冲突。",
+  "items": [
+    {
+      "interface_id": "ef00fd27-cb7c-44d6-8f1d-29728e4db739",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/message/count"},
+      "semantic": {
+        "purpose": "供消息中心前端统计当前登录用户在指定 systemCode/systemCodes 范围内各模板类型的未读站内信数量，返回包含 all、notice、alert、email、sms 键的计数 Map。",
+        "audiences": ["消息中心前端", "当前登录用户"],
+        "domains": ["消息中心", "站内信"],
+        "scenarios": ["当前登录用户进入消息中心时按 systemCode 或 systemCodes 刷新全部、通知、预警、邮件和短信标签的未读站内信数量。"],
+        "actions": ["query", "count"],
+        "entities": ["站内信", "未读消息计数"],
+        "aliases": ["查询消息标签未读数", "统计我的未读站内信", "MessageController.count"],
+        "resource": "message_send_record",
+        "lookup_keys": ["systemCode", "systemCodes", "all", "notice", "alert", "email", "sms"],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": ["只统计当前登录用户、in_app 通道且 readStatus=UNREAD 的记录并按模板类型汇总；不是 health 的服务可用性探测，也不是 sendRecord/stats 的发送总数、送达率和阅读率。"],
+        "required_inputs": [],
+        "business_identifiers": [
+          {"canonical": "message_system_code", "display_name": "消息所属系统编码", "technical_names": ["systemCode", "systemCodes"], "aliases": ["消息系统编码"], "resource": "message_send_record", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "message_receiver_user_id", "display_name": "消息接收用户ID", "technical_names": ["receiverId"], "aliases": ["接收人用户ID"], "resource": "message_send_record", "source": "runtime_context", "confidence": 0.99}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["MessageController#count(MessageSendRecordPageCondition) -> ResponseData<Map<String, Long>>", "MessageSendRecordPageCondition；MessageTemplateType；MessageChannel", "MessageRepository#messageCountByType -> MessageRepository#prepareSendRecordCondition/currentUserId/buildMessageCountCondition -> MessageSendRecordService#listByCondition；ConditionRule 固定 receiverId、channel=in_app、readStatus=UNREAD"]
+      }
+    },
+    {
+      "interface_id": "dc571efd-cfc3-4439-af0b-b95c092d3bb5",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/message/health"},
+      "semantic": {
+        "purpose": "供运维或调用端探测 c12-sys 消息中心的模板库与异步消息事件发布器是否可用，返回 UP/DOWN、说明和探测时间且不发送测试消息。",
+        "audiences": ["运维探测端", "c12-sys 接入端"],
+        "domains": ["消息中心", "服务健康"],
+        "scenarios": ["运维或接入系统在调用消息发送能力前检查消息模板库和消息事件发布器是否处于可用状态。"],
+        "actions": ["health", "query"],
+        "entities": ["消息中心健康状态"],
+        "aliases": ["探测消息中心健康", "检查消息服务可用性", "MessageController.health"],
+        "resource": "message_center_health",
+        "lookup_keys": ["status", "checkedTime"],
+        "cardinality": "one",
+        "ownership": "all",
+        "discriminators": ["仅调用模板库 count 并检查 MessageEventPublishService 是否为 Noop 实现；不会投递测试消息，也不同于 count 的当前用户未读消息统计。"],
+        "required_inputs": [],
+        "business_identifiers": [],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["MessageController#health() -> ResponseData<MessageCenterHealthQuery>", "MessageCenterHealthQuery", "MessageRepository#health -> MessageTemplateService#count；NoopMessageEventPublishService 类型检查"]
+      }
+    },
+    {
+      "interface_id": "c6de528a-3197-4425-8e86-4aa0d2fe101c",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/message/inapp/clear"},
+      "semantic": {
+        "purpose": "供当前登录用户清空本人全部或指定 templateType 的消息发送记录，逐条写入清空时间后删除并返回处理数量；实际实现未限定 in_app 通道。",
+        "audiences": ["消息中心前端", "当前登录用户"],
+        "domains": ["消息中心", "消息记录"],
+        "scenarios": ["当前登录用户按可选 templateType 清空自己的消息记录，并取得本次删除的记录数量。"],
+        "actions": ["clear", "delete", "update"],
+        "entities": ["消息发送记录"],
+        "aliases": ["清空我的消息记录", "按消息类型清空记录", "MessageController.inAppClear"],
+        "resource": "message_send_record",
+        "lookup_keys": ["templateType"],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": ["与 markReadAll 不同，本接口写入 deleteTime 后调用 delete；虽然路径和注释称站内信，MessageSendRecordService#allInAppByTemplateType 的 channel=in_app 条件被注释，实际会处理当前用户该模板类型下的各通道记录。"],
+        "required_inputs": [],
+        "business_identifiers": [
+          {"canonical": "message_send_record_id", "display_name": "消息发送记录ID", "technical_names": ["id"], "aliases": ["消息记录主键"], "resource": "message_send_record", "source": "persistence_model", "confidence": 0.98},
+          {"canonical": "message_receiver_user_id", "display_name": "消息接收用户ID", "technical_names": ["receiverId"], "aliases": ["接收人用户ID"], "resource": "message_send_record", "source": "runtime_context", "confidence": 0.99}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.90,
+        "semantic_evidence": ["MessageController#inAppClear(MessageTemplateTypeRequest) -> ResponseData<Long>", "MessageTemplateTypeRequest；MessageSendRecord", "MessageRepository#inAppClear -> MessageSendRecordService#allInAppByTemplateType/update/delete；ConditionRule 固定 receiverId，可选 templateType，但 channel=in_app 条件已被注释"]
+      }
+    },
+    {
+      "interface_id": "f877604d-d498-44f0-8612-16f9b62185f1",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/message/inapp/markRead"},
+      "semantic": {
+        "purpose": "供当前登录用户按消息记录 id 将本人的一条未读消息标记为已读并写入阅读时间，返回实际更新数量；实现未限定 in_app 通道。",
+        "audiences": ["消息中心前端", "当前登录用户"],
+        "domains": ["消息中心", "消息已读状态"],
+        "scenarios": ["当前登录用户打开一条 id 指定的未读消息后，将该记录标记已读并获取 0 或 1 的更新数量。"],
+        "actions": ["mark_read", "update"],
+        "entities": ["消息发送记录", "消息已读状态"],
+        "aliases": ["标记一条消息已读", "阅读单条消息", "MessageController.inAppMarkRead"],
+        "resource": "message_send_record",
+        "lookup_keys": ["id"],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": ["只处理一个 id 且仅在记录属于当前用户并处于 UNREAD 时更新；不同于 markReadBatch 的 ids 列表和 markReadAll 的范围更新。路径称站内信，但 Service 的 channel=in_app 条件被注释。"],
+        "required_inputs": [{"name": "id", "zh_name": "消息记录ID", "location": "body", "required": true, "schema_type": "Long"}],
+        "business_identifiers": [
+          {"canonical": "message_send_record_id", "display_name": "消息发送记录ID", "technical_names": ["id"], "aliases": ["消息记录主键"], "resource": "message_send_record", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "message_receiver_user_id", "display_name": "消息接收用户ID", "technical_names": ["receiverId"], "aliases": ["接收人用户ID"], "resource": "message_send_record", "source": "runtime_context", "confidence": 0.99}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.90,
+        "semantic_evidence": ["MessageController#inAppMarkRead(IdCondition) -> ResponseData<Long>", "IdCondition.id；MessageSendRecord.readStatus/readTime", "MessageRepository#inAppMarkReadById -> MessageSendRecordService#getUnreadInAppById/update；Repository 主动校验 id，ConditionRule 固定 receiverId 与 UNREAD，但 channel=in_app 条件已被注释"]
+      }
+    },
+    {
+      "interface_id": "e25d7072-4db2-44d6-8245-15854506c970",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/message/inapp/markReadAll"},
+      "semantic": {
+        "purpose": "供当前登录用户将本人全部或指定 templateType 的未读消息批量标记为已读并写入统一阅读时间，返回更新数量；实际实现未限定 in_app 通道。",
+        "audiences": ["消息中心前端", "当前登录用户"],
+        "domains": ["消息中心", "消息已读状态"],
+        "scenarios": ["当前登录用户按可选 templateType 一次把自己的全部未读消息设为已读，并获取更新条数。"],
+        "actions": ["mark_read", "update"],
+        "entities": ["消息发送记录", "消息已读状态"],
+        "aliases": ["全部消息标记已读", "按消息类型全部已读", "MessageController.inAppMarkReadAll"],
+        "resource": "message_send_record",
+        "lookup_keys": ["templateType"],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": ["不接收显式消息 ID，按当前用户、UNREAD 和可选 templateType 批量更新；不同于 markRead/markReadBatch 的 ID 定位，也不同于 clear 的删除。路径称站内信，但 Service 的 channel=in_app 条件被注释。"],
+        "required_inputs": [],
+        "business_identifiers": [
+          {"canonical": "message_send_record_id", "display_name": "消息发送记录ID", "technical_names": ["id"], "aliases": ["消息记录主键"], "resource": "message_send_record", "source": "persistence_model", "confidence": 0.98},
+          {"canonical": "message_receiver_user_id", "display_name": "消息接收用户ID", "technical_names": ["receiverId"], "aliases": ["接收人用户ID"], "resource": "message_send_record", "source": "runtime_context", "confidence": 0.99}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.90,
+        "semantic_evidence": ["MessageController#inAppMarkReadAll(MessageTemplateTypeRequest) -> ResponseData<Long>", "MessageTemplateTypeRequest；MessageSendRecord", "MessageRepository#inAppMarkReadAll -> MessageSendRecordService#allUnreadInAppByTemplateType/update；ConditionRule 固定 receiverId 与 UNREAD，可选 templateType，但 channel=in_app 条件已被注释"]
+      }
+    },
+    {
+      "interface_id": "ee10f4a4-dcf3-4f28-91cb-211f8b3e7364",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/message/inapp/markReadBatch"},
+      "semantic": {
+        "purpose": "供当前登录用户按 ids 批量将本人命中的未读消息标记为已读并写入统一阅读时间，返回实际更新数量；实现未限定 in_app 通道。",
+        "audiences": ["消息中心前端", "当前登录用户"],
+        "domains": ["消息中心", "消息已读状态"],
+        "scenarios": ["当前登录用户勾选多条 ids 指定的未读消息后批量设为已读，并取得命中本人记录的更新条数。"],
+        "actions": ["mark_read", "update"],
+        "entities": ["消息发送记录", "消息已读状态"],
+        "aliases": ["批量标记消息已读", "勾选多条消息设已读", "MessageController.inAppMarkReadBatch"],
+        "resource": "message_send_record",
+        "lookup_keys": ["ids"],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": ["接收非空 ids 列表并只更新属于当前用户且为 UNREAD 的命中记录；不同于单条 markRead 和无 ID 的 markReadAll。路径称站内信，但 Service 的 channel=in_app 条件被注释。"],
+        "required_inputs": [{"name": "ids", "zh_name": "消息记录ID列表", "location": "body", "required": true, "schema_type": "List<Long>"}],
+        "business_identifiers": [
+          {"canonical": "message_send_record_id", "display_name": "消息发送记录ID", "technical_names": ["ids"], "aliases": ["消息记录主键列表"], "resource": "message_send_record", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "message_receiver_user_id", "display_name": "消息接收用户ID", "technical_names": ["receiverId"], "aliases": ["接收人用户ID"], "resource": "message_send_record", "source": "runtime_context", "confidence": 0.99}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.90,
+        "semantic_evidence": ["MessageController#inAppMarkReadBatch(IdsCondition) -> ResponseData<Long>", "IdsCondition.ids；MessageSendRecord.readStatus/readTime", "MessageRepository#inAppMarkReadByIds -> MessageSendRecordService#listUnreadInAppByIds/update；Repository 主动校验 ids 非空，ConditionRule 固定 receiverId 与 UNREAD，但 channel=in_app 条件已被注释"]
+      }
+    },
+    {
+      "interface_id": "9ecf1c04-b610-47a5-af11-7fac02094906",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/message/pushRule/list"},
+      "semantic": {
+        "purpose": "供消息配置端按 receiverId 查询该接收用户在全部已启用站内信模板系统/类型范围内的推送规则，合并已保存规则与默认开关后按系统分组返回。",
+        "audiences": ["消息配置端", "业务接入端"],
+        "domains": ["消息中心", "推送规则"],
+        "scenarios": ["配置端为 receiverId 指定的用户加载各 systemCode、templateType 的 SSE 推送、强提醒和免打扰设置。"],
+        "actions": ["query", "list"],
+        "entities": ["消息推送规则", "站内信模板范围"],
+        "aliases": ["查询用户推送规则", "加载消息提醒设置", "MessageController.pushRuleList"],
+        "resource": "message_push_rule",
+        "lookup_keys": ["receiverId", "systemCode", "templateType"],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": ["按显式 receiverId 读取，结果覆盖已启用 in_app 模板的系统/类型组合并为未保存项生成默认值；不同于 pushRule/save 的持久化写入。"],
+        "required_inputs": [{"name": "receiverId", "zh_name": "接收人用户ID", "location": "body", "required": true, "schema_type": "Long"}],
+        "business_identifiers": [
+          {"canonical": "message_receiver_user_id", "display_name": "消息接收用户ID", "technical_names": ["receiverId"], "aliases": ["推送规则接收人ID"], "resource": "message_push_rule", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "message_system_code", "display_name": "消息所属系统编码", "technical_names": ["systemCode"], "aliases": ["规则系统编码"], "resource": "message_push_rule", "source": "source_contract", "confidence": 0.98}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["MessageController#pushRuleList(MessagePushRuleCondition) -> ResponseData<MessagePushRuleQuery>", "MessagePushRuleCondition.receiverId；MessagePushRuleQuery/MessagePushRuleGroupItem/MessagePushRuleConfigItem", "MessageRepository#listPushRules -> MessagePushRuleService#listByReceiverId；MessageTemplateService#listInAppTemplateScopes；MessageRepository#buildDefaultPushRule"]
+      }
+    },
+    {
+      "interface_id": "ed672ca5-4310-47b5-972e-da3afea32980",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/message/pushRule/save"},
+      "semantic": {
+        "purpose": "供消息配置端按 receiverId 保存多个 systemCode/templateType 范围的 SSE 推送、强提醒和免打扰规则，对已存在规则更新、缺失规则新增。",
+        "audiences": ["消息配置端", "业务接入端"],
+        "domains": ["消息中心", "推送规则"],
+        "scenarios": ["配置端为 receiverId 指定的用户批量保存各系统和模板类型的推送开关、强提醒及免打扰时段。"],
+        "actions": ["save", "create", "update"],
+        "entities": ["消息推送规则"],
+        "aliases": ["保存用户推送规则", "设置消息提醒偏好", "MessageController.pushRuleSave"],
+        "resource": "message_push_rule",
+        "lookup_keys": ["receiverId", "systemRuleList", "systemCode", "templateRuleList", "templateType"],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": ["会按 receiverId+systemCode+templateType 对规则逐项 saveOrUpdate；只接受已启用站内信模板存在的范围，免打扰开启时起止时间都必填；不同于 pushRule/list 的只读默认值合并。"],
+        "required_inputs": [
+          {"name": "receiverId", "zh_name": "接收人用户ID", "location": "body", "required": true, "schema_type": "Long"},
+          {"name": "systemRuleList[].systemCode", "zh_name": "系统编码", "location": "body", "required": true, "schema_type": "String"},
+          {"name": "systemRuleList[].templateRuleList[].templateType", "zh_name": "模板类型", "location": "body", "required": true, "schema_type": "String"},
+          {"name": "systemRuleList[].templateRuleList[].pushEnabled", "zh_name": "SSE推送开关", "location": "body", "required": true, "schema_type": "String"},
+          {"name": "systemRuleList[].templateRuleList[].strongReminder", "zh_name": "强提醒开关", "location": "body", "required": true, "schema_type": "String"},
+          {"name": "systemRuleList[].templateRuleList[].doNotDisturbEnabled", "zh_name": "免打扰开关", "location": "body", "required": true, "schema_type": "String"}
+        ],
+        "business_identifiers": [
+          {"canonical": "message_push_rule_id", "display_name": "消息推送规则ID", "technical_names": ["id"], "aliases": ["推送规则主键"], "resource": "message_push_rule", "source": "persistence_model", "confidence": 0.98},
+          {"canonical": "message_receiver_user_id", "display_name": "消息接收用户ID", "technical_names": ["receiverId"], "aliases": ["推送规则接收人ID"], "resource": "message_push_rule", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "message_system_code", "display_name": "消息所属系统编码", "technical_names": ["systemCode"], "aliases": ["规则系统编码"], "resource": "message_push_rule", "source": "source_contract", "confidence": 0.98}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["MessageController#pushRuleSave(MessagePushRuleItem) -> ResponseData<Void>", "MessagePushRuleItem/MessagePushRuleGroupItem/MessagePushRuleConfigItem Bean Validation", "MessageRepository#savePushRules/validatePushRuleConfig -> MessagePushRuleService#findByScope/saveOrUpdate；sys_message_push_rule 唯一键(receiver_id,system_code,template_type)"]
+      }
+    },
+    {
+      "interface_id": "7ff65eef-c0ec-4bbf-a345-5556ec656884",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/message/sendRecord/page"},
+      "semantic": {
+        "purpose": "供消息中心前端分页查询当前登录用户在指定 systemCode/systemCodes 下的消息发送记录，可按 templateType 和 readStatus 筛选并返回内容、发送状态、阅读状态及失败原因。",
+        "audiences": ["消息中心前端", "当前登录用户"],
+        "domains": ["消息中心", "发送记录"],
+        "scenarios": ["当前登录用户按 systemCode/systemCodes、templateType、readStatus 分页查看自己的消息内容、发送结果、阅读时间和失败原因。"],
+        "actions": ["query", "page"],
+        "entities": ["消息发送记录"],
+        "aliases": ["分页查询我的消息记录", "消息发送记录列表", "MessageController.sendRecordPage"],
+        "resource": "message_send_record",
+        "lookup_keys": ["pageNumber", "pageSize", "start", "systemCode", "systemCodes", "templateType", "readStatus"],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": ["返回多条记录明细并支持 readStatus；Repository 强制把 receiverId 覆盖为当前用户。不同于 sendRecord/stats 返回单个统计对象且忽略 readStatus。"],
+        "required_inputs": [],
+        "business_identifiers": [
+          {"canonical": "message_send_record_id", "display_name": "消息发送记录ID", "technical_names": ["id"], "aliases": ["消息记录主键"], "resource": "message_send_record", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "message_receiver_user_id", "display_name": "消息接收用户ID", "technical_names": ["receiverId"], "aliases": ["接收人用户ID"], "resource": "message_send_record", "source": "runtime_context", "confidence": 0.99},
+          {"canonical": "message_system_code", "display_name": "消息所属系统编码", "technical_names": ["systemCode", "systemCodes"], "aliases": ["消息系统编码"], "resource": "message_send_record", "source": "source_contract", "confidence": 0.98}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["MessageController#sendRecordPage(MessageSendRecordPageCondition) -> ResponseData<PageResult<MessageSendRecordQuery>>", "MessageSendRecordPageCondition；MessageSendRecordQuery", "MessageRepository#sendRecordPage/prepareSendRecordCondition -> MessageSendRecordService#page -> messageSend_query_getPageList.sql；SQL 按 receiverId、systemCode/systemCodes、templateType、readStatus 过滤"]
+      }
+    },
+    {
+      "interface_id": "6ccdce4f-35c5-4051-b5e6-b69e61299455",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/message/sendRecord/stats"},
+      "semantic": {
+        "purpose": "供消息中心前端统计当前登录用户在指定 systemCode/systemCodes 和可选 templateType 范围内的消息总数、发送成功数、已读数、送达率与阅读率，返回一个统计对象。",
+        "audiences": ["消息中心前端", "当前登录用户"],
+        "domains": ["消息中心", "发送记录统计"],
+        "scenarios": ["当前登录用户按 systemCode/systemCodes 和 templateType 查看自己的消息发送总量、送达率与阅读率概览。"],
+        "actions": ["query", "count", "statistics"],
+        "entities": ["消息发送记录统计"],
+        "aliases": ["统计我的消息发送记录", "查询消息送达阅读指标", "MessageController.sendRecordStats"],
+        "resource": "message_send_record_stats",
+        "lookup_keys": ["systemCode", "systemCodes", "templateType", "totalCount", "successCount", "readCount", "deliveryRate", "readRate"],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": ["返回一个包含五项指标的聚合对象，不返回记录分页；统计条件只使用 receiverId、systemCode/systemCodes、templateType，即使请求 DTO 含 readStatus 也不会把它用于统计。"],
+        "required_inputs": [],
+        "business_identifiers": [
+          {"canonical": "message_receiver_user_id", "display_name": "消息接收用户ID", "technical_names": ["receiverId"], "aliases": ["接收人用户ID"], "resource": "message_send_record", "source": "runtime_context", "confidence": 0.99},
+          {"canonical": "message_system_code", "display_name": "消息所属系统编码", "technical_names": ["systemCode", "systemCodes"], "aliases": ["消息系统编码"], "resource": "message_send_record", "source": "source_contract", "confidence": 0.98}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["MessageController#sendRecordStats(MessageSendRecordPageCondition) -> ResponseData<MessageSendRecordStatsQuery>", "MessageSendRecordPageCondition；MessageSendRecordStatsQuery", "MessageRepository#sendRecordStats/buildSendRecordStatsCondition -> MessageSendRecordService#count；分别统计全部、MessageSendStatus.SUCCESS、MessageReadStatus.READ 并计算比率"]
+      }
+    },
+    {
+      "interface_id": "537a6320-a513-475e-bb85-a2f021cdf8ef",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/message/template/detail"},
+      "semantic": {
+        "purpose": "供后台消息模板管理端按模板 id 查询一条消息模板详情，并返回所属系统、模板类型、模板编码、通道、标题、内容模板、内容类型、启停状态和当前系统可编辑标记。",
+        "audiences": ["后台消息模板管理端"],
+        "domains": ["消息中心", "消息模板"],
+        "scenarios": ["后台管理员按模板 id 打开消息模板详情或编辑前加载完整模板配置。"],
+        "actions": ["query", "detail"],
+        "entities": ["消息模板"],
+        "aliases": ["查询消息模板详情", "按ID查看模板配置", "MessageController.templateDetail"],
+        "resource": "message_template",
+        "lookup_keys": ["id"],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": ["按单个 id 返回完整模板与 editable 标记；不同于 template/page 的多条件分页，也不执行 preview 的占位符渲染。Controller 未加 @Valid，但 Repository 明确拒绝空 id。"],
+        "required_inputs": [{"name": "id", "zh_name": "消息模板ID", "location": "body", "required": true, "schema_type": "Long"}],
+        "business_identifiers": [
+          {"canonical": "message_template_id", "display_name": "消息模板ID", "technical_names": ["id"], "aliases": ["模板主键"], "resource": "message_template", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "message_template_code", "display_name": "消息模板编码", "technical_names": ["templateCode"], "aliases": ["模板编号"], "resource": "message_template", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "message_system_code", "display_name": "消息所属系统编码", "technical_names": ["systemCode"], "aliases": ["模板系统编码"], "resource": "message_template", "source": "source_contract", "confidence": 0.98}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["MessageController#templateDetail(IdCondition) -> ResponseData<MessageTemplateQuery>", "IdCondition.id；MessageTemplateQuery", "MessageRepository#templateDetail -> MessageTemplateService#findById；Repository 主动校验 id 与查询结果，并计算 editable"]
+      }
+    },
+    {
+      "interface_id": "4e74fdf4-6529-4ca1-98b7-2a413abdf6bf",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/message/template/disableByIds"},
+      "semantic": {
+        "purpose": "供后台消息模板管理端按非空模板 ids 批量停用当前操作系统有权维护的消息模板，将 enabled 持久化为停用并返回是否有记录更新。",
+        "audiences": ["后台消息模板管理端"],
+        "domains": ["消息中心", "消息模板"],
+        "scenarios": ["后台管理员选择多个模板 ids 后批量停用这些消息模板，阻止后续按模板发送链路继续选用。"],
+        "actions": ["disable", "update"],
+        "entities": ["消息模板", "模板启停状态"],
+        "aliases": ["批量停用消息模板", "禁用选中模板", "MessageController.templateDisableByIds"],
+        "resource": "message_template",
+        "lookup_keys": ["ids"],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": ["把多个 ids 对应模板的 enabled 设为 NO；与 enableByIds 的目标状态相反，且会校验每个模板 systemCode 属于当前操作系统。"],
+        "required_inputs": [{"name": "ids", "zh_name": "消息模板ID数组", "location": "body", "required": true, "schema_type": "Long[]"}],
+        "business_identifiers": [{"canonical": "message_template_id", "display_name": "消息模板ID", "technical_names": ["ids"], "aliases": ["模板主键数组"], "resource": "message_template", "source": "source_contract", "confidence": 0.99}],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["MessageController#templateDisableByIds(Long[]) -> ResponseData<Boolean>", "MessageTemplate.enabled；StatusEnum.NO", "MessageRepository#disableTemplates/updateTemplateStatus -> MessageTemplateService#findByIds/batchUpdate；ArrayUtil 非空校验与 validateTemplateOperateScope"]
+      }
+    },
+    {
+      "interface_id": "a50045c9-b401-48bc-9463-c2cd15219bed",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/message/template/enableByIds"},
+      "semantic": {
+        "purpose": "供后台消息模板管理端按非空模板 ids 批量启用当前操作系统有权维护的消息模板，将 enabled 持久化为启用并返回是否有记录更新。",
+        "audiences": ["后台消息模板管理端"],
+        "domains": ["消息中心", "消息模板"],
+        "scenarios": ["后台管理员选择多个模板 ids 后批量启用这些消息模板，使发送链路可按系统、模板编码和通道选中它们。"],
+        "actions": ["enable", "update"],
+        "entities": ["消息模板", "模板启停状态"],
+        "aliases": ["批量启用消息模板", "启用选中模板", "MessageController.templateEnableByIds"],
+        "resource": "message_template",
+        "lookup_keys": ["ids"],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": ["把多个 ids 对应模板的 enabled 设为 YES；与 disableByIds 的目标状态相反，且会校验每个模板 systemCode 属于当前操作系统。"],
+        "required_inputs": [{"name": "ids", "zh_name": "消息模板ID数组", "location": "body", "required": true, "schema_type": "Long[]"}],
+        "business_identifiers": [{"canonical": "message_template_id", "display_name": "消息模板ID", "technical_names": ["ids"], "aliases": ["模板主键数组"], "resource": "message_template", "source": "source_contract", "confidence": 0.99}],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["MessageController#templateEnableByIds(Long[]) -> ResponseData<Boolean>", "MessageTemplate.enabled；StatusEnum.YES", "MessageRepository#enableTemplates/updateTemplateStatus -> MessageTemplateService#findByIds/batchUpdate；ArrayUtil 非空校验与 validateTemplateOperateScope"]
+      }
+    },
+    {
+      "interface_id": "d088e328-7522-4dc5-8cb5-a67cf955ca75",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/message/template/page"},
+      "semantic": {
+        "purpose": "供后台消息模板管理端按 systemCode/systemCodes、channel、templateType、templateCode 和 title 分页查询消息模板，并为每条结果返回当前操作系统是否可编辑。",
+        "audiences": ["后台消息模板管理端"],
+        "domains": ["消息中心", "消息模板"],
+        "scenarios": ["后台管理员按 systemCode/systemCodes、channel、templateType、templateCode 或 title 筛选消息模板并分页查看启停和可编辑状态。"],
+        "actions": ["query", "page"],
+        "entities": ["消息模板"],
+        "aliases": ["分页查询消息模板", "消息模板管理列表", "MessageController.templatePage"],
+        "resource": "message_template",
+        "lookup_keys": ["pageNumber", "pageSize", "start", "systemCode", "systemCodes", "channel", "templateType", "templateCode", "title"],
+        "cardinality": "many",
+        "ownership": "all",
+        "discriminators": ["查询具体模板记录而非 c12-mtp 的模板分组；支持模板编码和标题模糊查询并返回 editable，不执行 template/detail 的单 ID 定位或 preview 渲染。"],
+        "required_inputs": [],
+        "business_identifiers": [
+          {"canonical": "message_template_id", "display_name": "消息模板ID", "technical_names": ["id"], "aliases": ["模板主键"], "resource": "message_template", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "message_template_code", "display_name": "消息模板编码", "technical_names": ["templateCode"], "aliases": ["模板编号"], "resource": "message_template", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "message_system_code", "display_name": "消息所属系统编码", "technical_names": ["systemCode", "systemCodes"], "aliases": ["模板系统编码"], "resource": "message_template", "source": "source_contract", "confidence": 0.98}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["MessageController#templatePage(MessageTemplatePageCondition) -> ResponseData<PageResult<MessageTemplateQuery>>", "MessageTemplatePageCondition；MessageTemplateQuery", "MessageRepository#templatePage/fillTemplatePageSystemCodes -> MessageTemplateService#page -> messageTemplate_query_getPageList.sql；SQL 按 channel、systemCode/systemCodes、templateType、templateCode、title 过滤"]
+      }
+    },
+    {
+      "interface_id": "7ec8f654-7754-4139-a1b9-d77deeb1113c",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/message/template/preview"},
+      "semantic": {
+        "purpose": "供后台消息模板管理端按模板 id 与可选 templateParams 在内存中渲染一条模板预览，返回模板元数据和替换占位符后的内容，不保存模板也不发送消息。",
+        "audiences": ["后台消息模板管理端"],
+        "domains": ["消息中心", "消息模板渲染"],
+        "scenarios": ["后台管理员在保存或发送前用模板 id 和 templateParams 查看 {} 或 %s 占位符替换后的标题、内容与内容类型。"],
+        "actions": ["preview", "render", "query"],
+        "entities": ["消息模板", "模板预览结果"],
+        "aliases": ["预览消息模板渲染", "测试模板内容替换", "MessageController.templatePreview"],
+        "resource": "message_template_preview",
+        "lookup_keys": ["id", "templateParams"],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": ["只读取 id 对应模板并通过 TemplateRenderUtil 在内存渲染；不执行 template/save 的持久化，也不走 sendByTemplate 的渠道发送、消息事件或发送记录链路。"],
+        "required_inputs": [{"name": "id", "zh_name": "消息模板ID", "location": "body", "required": true, "schema_type": "Long"}],
+        "business_identifiers": [
+          {"canonical": "message_template_id", "display_name": "消息模板ID", "technical_names": ["id", "templateId"], "aliases": ["模板主键"], "resource": "message_template", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "message_template_code", "display_name": "消息模板编码", "technical_names": ["templateCode"], "aliases": ["模板编号"], "resource": "message_template", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "message_system_code", "display_name": "消息所属系统编码", "technical_names": ["systemCode"], "aliases": ["模板系统编码"], "resource": "message_template", "source": "source_contract", "confidence": 0.98}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["MessageController#templatePreview(MessageTemplatePreviewRequest) -> ResponseData<MessageTemplatePreviewResult>", "MessageTemplatePreviewRequest.id/templateParams；MessageTemplatePreviewResult", "MessageRepository#previewTemplate -> MessageTemplateService#findById；TemplateRenderUtil#render 仅替换 {} 与 %s 位置占位符"]
+      }
+    },
+    {
+      "interface_id": "da889fe3-d81e-4ec4-b305-b9a5a908dfdf",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/message/template/save"},
+      "semantic": {
+        "purpose": "供后台消息模板管理端新增或按 id 更新当前操作系统范围内的一条消息模板，保存系统编码、模板类型、模板编码、通道、内容模板、内容类型和启停状态。",
+        "audiences": ["后台消息模板管理端"],
+        "domains": ["消息中心", "消息模板"],
+        "scenarios": ["后台管理员填写 systemCode、templateType、templateCode、channel、contentTemplate、contentType、enabled 新增模板，或带 id 修改已有模板。"],
+        "actions": ["save", "create", "update"],
+        "entities": ["消息模板"],
+        "aliases": ["保存消息模板", "新增或编辑模板配置", "MessageController.templateSave"],
+        "resource": "message_template",
+        "lookup_keys": ["id", "systemCode", "templateType", "templateCode", "channel"],
+        "cardinality": "one",
+        "ownership": "unknown",
+        "discriminators": ["id 为空时新增、非空时更新；校验目标与原模板 systemCode 均属于当前操作系统，并拒绝重复的 systemCode+templateCode+channel。不同于 preview 的临时渲染。"],
+        "required_inputs": [
+          {"name": "systemCode", "zh_name": "系统编码", "location": "body", "required": true, "schema_type": "String"},
+          {"name": "templateType", "zh_name": "模板类型", "location": "body", "required": true, "schema_type": "String"},
+          {"name": "templateCode", "zh_name": "模板编码", "location": "body", "required": true, "schema_type": "String"},
+          {"name": "channel", "zh_name": "消息通道", "location": "body", "required": true, "schema_type": "String"},
+          {"name": "contentTemplate", "zh_name": "内容模板", "location": "body", "required": true, "schema_type": "String"},
+          {"name": "contentType", "zh_name": "内容类型", "location": "body", "required": true, "schema_type": "String"},
+          {"name": "enabled", "zh_name": "启用状态", "location": "body", "required": true, "schema_type": "String"}
+        ],
+        "business_identifiers": [
+          {"canonical": "message_template_id", "display_name": "消息模板ID", "technical_names": ["id"], "aliases": ["模板主键"], "resource": "message_template", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "message_template_code", "display_name": "消息模板编码", "technical_names": ["templateCode"], "aliases": ["模板编号"], "resource": "message_template", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "message_system_code", "display_name": "消息所属系统编码", "technical_names": ["systemCode"], "aliases": ["模板系统编码"], "resource": "message_template", "source": "source_contract", "confidence": 0.99}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["MessageController#templateSave(MessageTemplateItem) -> ResponseData<Void>", "MessageTemplateItem Bean Validation；MessageTemplate", "MessageRepository#saveTemplate -> MessageTemplateService#findById/findAll/saveOrUpdate；validateTemplateOperateScope；sys_message_template 唯一键(system_code,template_code,channel)"]
+      }
+    },
+    {
+      "interface_id": "002ea6ef-0c05-4c5d-b0a9-516a94e119cd",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/message/warning/latest"},
+      "semantic": {
+        "purpose": "供当前登录用户按 limit 查询本人最新的未清空预警站内消息，固定筛选 in_app 通道和 alert 模板类型，按创建时间倒序返回最多 100 条记录。",
+        "audiences": ["消息中心前端", "当前登录用户"],
+        "domains": ["消息中心", "预警消息"],
+        "scenarios": ["当前登录用户在首页或预警入口按 limit 获取自己最近的 alert 类型站内消息，不混入普通通知、短信或邮件记录。"],
+        "actions": ["query", "list"],
+        "entities": ["预警站内消息", "消息发送记录"],
+        "aliases": ["查询最新预警站内信", "获取我的最近预警", "MessageController.latestWarningList"],
+        "resource": "message_warning",
+        "lookup_keys": ["limit"],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": ["固定 receiverId=当前用户、channel=in_app、templateType=alert，并排除 deleted 或 deleteTime 已设置的记录；不限定 readStatus，因此同时可返回已读和未读预警。不同于 sendRecord/page 的普通消息分页。"],
+        "required_inputs": [{"name": "limit", "zh_name": "查询条数", "location": "body", "required": true, "schema_type": "Integer(1-100)"}],
+        "business_identifiers": [
+          {"canonical": "message_send_record_id", "display_name": "消息发送记录ID", "technical_names": ["id"], "aliases": ["预警消息记录ID"], "resource": "message_send_record", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "message_receiver_user_id", "display_name": "消息接收用户ID", "technical_names": ["receiverId"], "aliases": ["预警接收人ID"], "resource": "message_send_record", "source": "runtime_context", "confidence": 0.99},
+          {"canonical": "message_system_code", "display_name": "消息所属系统编码", "technical_names": ["systemCode"], "aliases": ["预警来源系统编码"], "resource": "message_send_record", "source": "source_contract", "confidence": 0.98}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["MessageController#latestWarningList(MessageLatestWarningRequest) -> ResponseData<List<MessageSendRecordQuery>>", "MessageLatestWarningRequest.limit Bean Validation；MessageSendRecordQuery", "MessageRepository#latestWarningList/currentUserId -> MessageSendRecordService#listLatestWarningInApp -> messageSend_query_latestWarningList.sql；SQL 固定 receiverId、in_app、alert、未删除并 LIMIT"]
+      }
+    },
+    {
+      "interface_id": "573f724e-7219-480e-93af-56b1cd778ad8",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/message/send/queryCoolDownTime"},
+      "semantic": {
+        "purpose": "供短信验证码调用端按 systemCode、templateCode 和 templateParams.mobile 查询该手机号对应短信模板的发送冷却剩余秒数，先确认启用短信模板存在，再只读返回 Redis TTL。",
+        "audiences": ["短信验证码调用端", "业务接入前端"],
+        "domains": ["消息中心", "短信发送限制"],
+        "scenarios": ["验证码页面按 systemCode、templateCode、templateParams.mobile 查询再次发送短信前还需等待的冷却秒数。"],
+        "actions": ["query", "calculate"],
+        "entities": ["短信发送冷却时间", "消息模板"],
+        "aliases": ["查询短信冷却秒数", "获取验证码重发等待时间", "MessageSendController.queryCoolDownTime"],
+        "resource": "sms_send_cooldown",
+        "lookup_keys": ["systemCode", "processorSystemCode", "templateCode", "templateParams.mobile"],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": ["只读取以 processorSystemCode+templateCode+mobile 组成的 Redis 冷却键 TTL，返回正数、0 或无过期时间时的 -1；不会生成验证码、写计数器、发布消息事件或创建发送记录。"],
+        "required_inputs": [
+          {"name": "systemCode", "zh_name": "系统编码", "location": "body", "required": true, "schema_type": "String"},
+          {"name": "templateCode", "zh_name": "消息模板编码", "location": "body", "required": true, "schema_type": "String"},
+          {"name": "templateParams.mobile", "zh_name": "手机号", "location": "body", "required": true, "schema_type": "String"}
+        ],
+        "business_identifiers": [
+          {"canonical": "message_template_code", "display_name": "消息模板编码", "technical_names": ["templateCode"], "aliases": ["短信模板编码"], "resource": "message_template", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "message_system_code", "display_name": "消息所属系统编码", "technical_names": ["systemCode"], "aliases": ["模板系统编码"], "resource": "message_template", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "message_processor_system_code", "display_name": "消息处理系统编码", "technical_names": ["processorSystemCode"], "aliases": ["冷却计数系统编码"], "resource": "sms_send_cooldown", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "receiver_mobile", "display_name": "接收手机号", "technical_names": ["templateParams.mobile", "mobile"], "aliases": ["短信接收手机号"], "resource": "sms_recipient", "source": "runtime_validation", "confidence": 0.99}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["MessageSendController#queryCoolDownTime(MessageSendRequest) -> ResponseData<Long>", "MessageSendRequest.systemCode/processorSystemCode/templateCode/templateParams.mobile", "MessageSendController 主动校验 request、systemCode、templateCode、mobile，并调用 MessageRepository#getTemplateByCodeAndChannel；MessageTemplateService#getByCodeAndChannel 固定 enabled=YES；SmsSendValidateService#queryCoolDownTime 读取 Redis TTL"]
+      }
+    },
+    {
+      "interface_id": "e4681f98-6ddb-4822-bdd3-3288e7e7523f",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/message/send/sendByTemplate"},
+      "semantic": {
+        "purpose": "供内部业务服务或接入前端按 systemCode、templateCode、channels、接收主体和 templateParams 通过一个或多个通道发送模板消息；站内信和邮件可面向多个 receiverIds，返回所有消息事件是否成功发布。",
+        "audiences": ["内部业务服务", "业务接入前端"],
+        "domains": ["消息中心", "模板消息发送"],
+        "scenarios": ["业务系统按 systemCode、templateCode、channels、receiverIds 和 templateParams 发送站内信、短信或邮件，并根据布尔结果判断消息事件是否全部发布成功。"],
+        "actions": ["send", "create"],
+        "entities": ["模板消息", "消息接收人", "消息发送记录"],
+        "aliases": ["按模板发送多通道消息", "业务系统发送模板消息", "MessageSendController.sendByTemplate"],
+        "resource": "template_message_delivery",
+        "lookup_keys": ["systemCode", "processorSystemCode", "templateCode", "channels", "receiverIds", "companyId", "userId", "senderId", "templateParams"],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": ["实际发送入口会逐通道查询启用模板、校验通道策略并为每个目标接收人发布 MessageEvent；SMS 还生成验证码并写 Redis 限流计数。与 queryCoolDownTime 的只读 TTL 查询不同，也不同于 c12-mtp /inner/message/send 的合同和消息服务。"],
+        "required_inputs": [
+          {"name": "systemCode", "zh_name": "系统编码", "location": "body", "required": true, "schema_type": "String"},
+          {"name": "templateCode", "zh_name": "消息模板编码", "location": "body", "required": true, "schema_type": "String"},
+          {"name": "channels", "zh_name": "发送通道列表", "location": "body", "required": true, "schema_type": "List<String>"}
+        ],
+        "business_identifiers": [
+          {"canonical": "message_template_code", "display_name": "消息模板编码", "technical_names": ["templateCode"], "aliases": ["发送模板编码"], "resource": "message_template", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "message_system_code", "display_name": "消息所属系统编码", "technical_names": ["systemCode"], "aliases": ["来源系统编码"], "resource": "template_message_delivery", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "message_processor_system_code", "display_name": "消息处理系统编码", "technical_names": ["processorSystemCode"], "aliases": ["处理器系统编码"], "resource": "template_message_delivery", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "message_receiver_user_id", "display_name": "消息接收用户ID", "technical_names": ["receiverIds", "receiverId"], "aliases": ["消息接收人ID"], "resource": "message_send_record", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "message_sender_user_id", "display_name": "消息发送用户ID", "technical_names": ["senderId"], "aliases": ["发送人ID"], "resource": "message_send_record", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "message_business_user_id", "display_name": "消息业务用户ID", "technical_names": ["userId"], "aliases": ["消息创建用户ID"], "resource": "template_message_delivery", "source": "source_contract", "confidence": 0.97},
+          {"canonical": "message_company_id", "display_name": "消息公司ID", "technical_names": ["companyId"], "aliases": ["消息企业ID"], "resource": "template_message_delivery", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "receiver_mobile", "display_name": "接收手机号", "technical_names": ["templateParams.mobile", "mobile"], "aliases": ["短信接收手机号"], "resource": "sms_recipient", "source": "runtime_validation", "confidence": 0.99}
+        ],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03",
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["MessageSendController#sendByTemplate(MessageSendRequest) -> ResponseData<Boolean>；RemoteMessageService#sendByTemplate 为跨服务 Feign 合同", "MessageSendRequest；MessageChannel；MessageTemplateType；MessageEvent", "MessageRepository#sendByTemplate/buildTargetReceiverIds -> MessageTemplateService#getByCodeAndChannel -> MessageEventPublishService#publish；SmsSendValidateService#validateBeforeSend/generateAndStoreCode/setupSendCounters", "MessageEventConsumer#onMessage -> MessageSendRecordService#insert/update -> MessageChannelSendService#send；失败时持久化 sendStatus=FAIL 与 failReason"]
+      }
+    }
+  ]
+}

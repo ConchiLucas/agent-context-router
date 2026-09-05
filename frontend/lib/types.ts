@@ -242,6 +242,10 @@ export interface WorkspaceSharedFilesResult {
   source_root: string;
   document_count: number;
   deploy_count: number;
+  script_count: number;
+  host_runtime_count: number;
+  revision: number;
+  digest: string;
   action: "restore" | "publish";
 }
 
@@ -1042,6 +1046,7 @@ export type AiTaskVisualizationStatus =
   | "unclosed";
 
 export type AiTaskIntentType =
+  | "interface_search"
   | "interface_execute"
   | "data_query"
   | "task_execute"
@@ -1462,18 +1467,10 @@ export interface InterfaceForwardingInterface {
   method: string;
   description: string;
   controller_name: string;
-  controller_description: string;
   operation_id: string;
   operation_kind: "read" | "write" | "destructive" | "unknown";
-  crud_type: "create" | "read" | "update" | "delete" | "unknown";
-  business_entity: string | null;
-  business_action: string | null;
-  business_scenario: string | null;
-  aliases: string[] | null;
-  positive_examples: string[] | null;
-  negative_examples: string[] | null;
-  intent_source: "generated" | "manual" | null;
-  intent_confidence: number | null;
+  semantic: InterfaceRetrievalSemantics | null;
+  semantic_governance: Record<string, unknown> | null;
   table_effects: InterfaceForwardingTableEffect[];
   request_schema: Record<string, unknown>;
   response_schema: Record<string, unknown>;
@@ -1482,14 +1479,25 @@ export interface InterfaceForwardingInterface {
   last_requested_at: string | null;
 }
 
-export interface InterfaceSemanticsWrite {
-  business_entity: string;
-  business_action: string;
-  business_scenario: string;
-  crud_type: InterfaceForwardingInterface["crud_type"];
-  aliases: string[];
-  positive_examples: string[];
-  negative_examples: string[];
+export interface InterfaceRetrievalSemantics {
+  id: string;
+  service: string;
+  method: string;
+  path: string;
+  operation_id: string;
+  title: string;
+  purpose: string;
+  audiences: string[];
+  domains: string[];
+  resource: string;
+  actions: string[];
+  entities?: string[];
+  scenarios?: string[];
+  aliases?: string[];
+  lookup_keys?: string[];
+  cardinality?: "one" | "many";
+  ownership?: "self" | "all" | "by_id";
+  discriminators?: string[];
 }
 
 export interface InterfaceForwardingTableEffect {

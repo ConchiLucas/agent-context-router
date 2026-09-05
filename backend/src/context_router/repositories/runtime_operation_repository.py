@@ -46,6 +46,7 @@ class RuntimeStepResult:
     exit_code: int
     error_code: str | None = None
     error_message: str | None = None
+    readiness: dict[str, object] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,6 +84,7 @@ class RuntimeOperationStepRecord(RuntimeOperationStepDraft):
     error_message: str | None
     started_at: datetime | None
     finished_at: datetime | None
+    readiness: dict[str, object] | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,6 +170,7 @@ class InMemoryRuntimeOperationRepository:
                     error_message=None,
                     started_at=None,
                     finished_at=None,
+                    readiness=None,
                 )
                 for index, item in enumerate(draft.steps)
             ]
@@ -257,6 +260,7 @@ class InMemoryRuntimeOperationRepository:
                 error_code=result.error_code,
                 error_message=result.error_message,
                 finished_at=now,
+                readiness=result.readiness,
             )
             if not success:
                 for remaining in range(index + 1, len(steps)):
@@ -320,7 +324,8 @@ class PostgresRuntimeOperationRepository:
     _STEP_COLUMNS = """
         id, operation_id, sequence, owner_type, owner_id, mode, snapshot_id,
         snapshot_relative_path, changed_files, decision_reason, log_relative_path,
-        status, exit_code, error_code, error_message, started_at, finished_at
+        status, exit_code, error_code, error_message, started_at, finished_at,
+        readiness_result
     """
 
     def __init__(self, database_url: str) -> None:
@@ -517,13 +522,15 @@ class PostgresRuntimeOperationRepository:
                 connection.execute(
                     """UPDATE runtime_operation_steps
                        SET status = %s, exit_code = %s, error_code = %s,
-                           error_message = %s, finished_at = CURRENT_TIMESTAMP
+                           error_message = %s, readiness_result = %s,
+                           finished_at = CURRENT_TIMESTAMP
                        WHERE id = %s""",
                     (
                         "succeeded" if success else "failed",
                         result.exit_code,
                         result.error_code,
                         result.error_message,
+                        Jsonb(result.readiness) if result.readiness is not None else None,
                         step_id,
                     ),
                 )
@@ -647,6 +654,7 @@ class PostgresRuntimeOperationRepository:
             error_message=str(row[14]) if row[14] else None,
             started_at=row[15],  # type: ignore[arg-type]
             finished_at=row[16],  # type: ignore[arg-type]
+            readiness=dict(row[17]) if row[17] is not None else None,
         )
 
 

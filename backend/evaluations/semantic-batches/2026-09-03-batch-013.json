@@ -1,0 +1,2503 @@
+{
+  "schema_version": "context-router-interface-semantic-batch-v1",
+  "batch_id": "panzhihua-c12-portal-scts-order-013",
+  "workspace_id": "b9ce65eddc27437d9615177fbd07cb0a",
+  "family_groups": {
+    "供应商小程序采购订单": 5,
+    "客户小程序销售订单": 3,
+    "运营人员订单查询与草稿": 5,
+    "运营人员确认流转": 3,
+    "运营人员发货签收": 5
+  },
+  "generation_policy": "完整覆盖 c12-portal SctsOrderController 21 个小程序订单接口；门户仅 BFF 转发 c12-scts PortalMiniOrderService。按供应商采购订单、客户销售订单、运营人员草稿/确认/发货签收分组。区分门户确认与后台确认、初始化与保存草稿、库存查询与发货、按发货单号签收与按明细数量签收。未使用 copy_from_interface_id，未写入门户 PC 或 c12-scts 自身同名接口。",
+  "items": [
+    {
+      "interface_id": "f9171834-22c8-4c5a-a78f-7e257c59c372",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/order/supplierPage"
+      },
+      "semantic": {
+        "purpose": "供供应链小程序供应商分页查看采购订单：默认按登录门户用户解析供应商ID，请求已带 supplierId 时则按指定供应商筛选；过滤可执行及完结采购订单，关键词匹配采购订单号、采购方、采购合同号和商品名，并回填确认/发货按钮。",
+        "audiences": [
+          "供应链小程序供应商"
+        ],
+        "domains": [
+          "供应链贸易",
+          "采购订单"
+        ],
+        "scenarios": [
+          "供应商在小程序订单列表按待确认、执行中或已完结筛选采购订单；默认当前供应商，请求可显式指定 supplierId。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "采购订单"
+        ],
+        "aliases": [
+          "小程序供应商采购订单分页",
+          "供应商小程序订单列表",
+          "SctsOrderController.supplierPage"
+        ],
+        "resource": "purchase_order",
+        "lookup_keys": [
+          "status",
+          "keyword",
+          "supplierId",
+          "id",
+          "orderNo",
+          "contractNo",
+          "canConfirm",
+          "canShip"
+        ],
+        "cardinality": "many",
+        "ownership": "unknown",
+        "discriminators": [
+          "c12-portal BFF POST /api/mini/scts/order/supplierPage，转发 c12-scts PurchaseOrderService#pageSupplierMiniOrder；不是门户 PC SupplierPortalPurchaseOrderController，也不是客户销售订单分页。",
+          "SQL portal_mini_supplier_order_query_page 把 t.status 别名为 portal_order_status，筛选待确认却用 t.portal_order_status 列，返回字段与筛选列不是同一列。请求 supplierId 若已传则跳过会话回填。客户分页强制 canShip=false，本接口 SQL 在执行中且有待发量时可发货。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "supplier_id",
+            "display_name": "供应商ID",
+            "technical_names": [
+              "supplierId"
+            ],
+            "aliases": [
+              "供货方ID"
+            ],
+            "resource": "purchase_order",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "purchase_order_id",
+            "display_name": "采购订单ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "订单ID"
+            ],
+            "resource": "purchase_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "purchase_order_no",
+            "display_name": "采购订单号",
+            "technical_names": [
+              "orderNo",
+              "poNo"
+            ],
+            "aliases": [
+              "采购单号"
+            ],
+            "resource": "purchase_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "purchase_contract_no",
+            "display_name": "采购合同号",
+            "technical_names": [
+              "contractNo",
+              "purchaseContractNo"
+            ],
+            "aliases": [
+              "合同编号"
+            ],
+            "resource": "purchase_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.88,
+        "semantic_evidence": [
+          "SctsOrderController#supplierPage(@Valid PortalMiniSupplierOrderPageCondition) -> RemotePortalMiniOrderService#supplierPage",
+          "PurchaseOrderService#pageSupplierMiniOrder fillSupplierMiniOrderCondition：空 supplierId 才按 SessionUserInfo 查 Supplier，空则 supplierId=-1",
+          "PurchaseOrderDao#pageSupplierMiniOrder -> portal_mini_supplier_order_query_page.sql：t.supplier_id=:supplierId；select t.status as portal_order_status，待确认过滤 t.portal_order_status"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "aba9a572-001f-4967-bf69-8805c6eb1fb7",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/order/supplierGetById"
+      },
+      "semantic": {
+        "purpose": "供供应链小程序供应商按采购订单ID查看详情：加载商品明细和发货记录并回填确认/发货按钮；不校验订单是否属于当前供应商。",
+        "audiences": [
+          "供应链小程序供应商"
+        ],
+        "domains": [
+          "供应链贸易",
+          "采购订单"
+        ],
+        "scenarios": [
+          "供应商打开某一采购订单查看明细、发货记录和是否可确认发货。"
+        ],
+        "actions": [
+          "detail"
+        ],
+        "entities": [
+          "采购订单",
+          "采购发货记录"
+        ],
+        "aliases": [
+          "小程序供应商采购订单详情",
+          "按ID查看供应商订单",
+          "SctsOrderController.supplierGetById"
+        ],
+        "resource": "purchase_order",
+        "lookup_keys": [
+          "id",
+          "orderNo",
+          "contractNo",
+          "canConfirm",
+          "canShip"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "body IdCondition.id 是采购订单ID，不是销售订单ID。与分页不同，详情 SQL 不带 supplier_id。requireSupplierPortalOrder 只判断订单存在。",
+          "不同于运营人员销售订单详情 operationsStaffGetById，也不同于客户销售订单详情。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "采购订单ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "purchase_order_id",
+            "display_name": "采购订单ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "订单ID"
+            ],
+            "resource": "purchase_order",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "purchase_order_no",
+            "display_name": "采购订单号",
+            "technical_names": [
+              "orderNo"
+            ],
+            "aliases": [
+              "采购单号"
+            ],
+            "resource": "purchase_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "purchase_contract_no",
+            "display_name": "采购合同号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同编号"
+            ],
+            "resource": "purchase_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.9,
+        "semantic_evidence": [
+          "SctsOrderController#supplierGetById(@Valid IdCondition) IdCondition.id @NotNull",
+          "PurchaseOrderService#getSupplierPortalOrderById -> dao.getSupplierPortalOrder/listSupplierPortalOrderDetail/listShipmentByPurchaseOrderId",
+          "PurchaseOrderService#requireSupplierPortalOrder 仅 dao.getById 判空，不比对当前供应商"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "674fca1b-22a8-4f9d-9eb1-b043e68c15cd",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/order/supplierBatchConfirm"
+      },
+      "semantic": {
+        "purpose": "供供应链小程序供应商批量确认采购订单：将门户状态从待确认改为执行中并写确认时间和日志；不创建发货单。",
+        "audiences": [
+          "供应链小程序供应商"
+        ],
+        "domains": [
+          "供应链贸易",
+          "采购订单"
+        ],
+        "scenarios": [
+          "供应商对多笔待确认采购订单一次性确认，进入可发货执行。"
+        ],
+        "actions": [
+          "confirm"
+        ],
+        "entities": [
+          "采购订单"
+        ],
+        "aliases": [
+          "小程序供应商批量确认采购订单",
+          "供应商确认待执行订单",
+          "SctsOrderController.supplierBatchConfirm"
+        ],
+        "resource": "purchase_order",
+        "lookup_keys": [
+          "orderIds",
+          "id"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "改 portal_order_status pending_confirm→executing，不是运营端 confirm 的 pending_confirm→pending_execute，也不是客户确认销售订单。",
+          "不校验当前供应商归属。黑名单订单拒绝。remark 可选。"
+        ],
+        "required_inputs": [
+          {
+            "name": "orderIds",
+            "zh_name": "采购订单ID集合",
+            "location": "body",
+            "required": true,
+            "schema_type": "List<Long>"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "purchase_order_id",
+            "display_name": "采购订单ID",
+            "technical_names": [
+              "orderIds",
+              "id"
+            ],
+            "aliases": [
+              "订单ID集合"
+            ],
+            "resource": "purchase_order",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.9,
+        "semantic_evidence": [
+          "SctsOrderController#supplierBatchConfirm(@Valid PortalOrderConfirmItem) orderIds @NotEmpty",
+          "PurchaseOrderService#batchConfirmSupplierPortalOrder -> confirmSupplierPortalOrder：portal 待确认才允许；dao.saveOrUpdate portalOrderStatus=EXECUTING",
+          "requireSupplierPortalOrder 不校验当前供应商"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "015622c4-2466-4317-a7a0-6a382dde1b8b",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/order/supplierShipInfo"
+      },
+      "semantic": {
+        "purpose": "供供应链小程序供应商按采购订单ID查询发货弹窗：仅门户状态为执行中时返回待发明细和默认发货数量，不写库。",
+        "audiences": [
+          "供应链小程序供应商"
+        ],
+        "domains": [
+          "供应链贸易",
+          "采购发货"
+        ],
+        "scenarios": [
+          "供应商发货前打开弹窗查看剩余可发数量。"
+        ],
+        "actions": [
+          "query"
+        ],
+        "entities": [
+          "采购订单",
+          "待发货明细"
+        ],
+        "aliases": [
+          "小程序供应商发货弹窗",
+          "查询采购订单可发货明细",
+          "SctsOrderController.supplierShipInfo"
+        ],
+        "resource": "purchase_shipment",
+        "lookup_keys": [
+          "id",
+          "purchaseOrderId",
+          "purchaseOrderNo",
+          "purchaseOrderDetailId"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "只读弹窗，不是 supplierShip 写发货。后台 getPurchaseOrderShipInfo 校验后台状态 pending_execute/partial_execute，本接口校验门户 executing。",
+          "返回 purchaseOrderId/purchaseOrderNo 供发货接口使用。已发完明细不出现。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "采购订单ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "purchase_order_id",
+            "display_name": "采购订单ID",
+            "technical_names": [
+              "id",
+              "purchaseOrderId"
+            ],
+            "aliases": [
+              "采购订单主键"
+            ],
+            "resource": "purchase_shipment",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "purchase_order_no",
+            "display_name": "采购订单号",
+            "technical_names": [
+              "purchaseOrderNo"
+            ],
+            "aliases": [
+              "采购单号"
+            ],
+            "resource": "purchase_shipment",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "purchase_order_detail_id",
+            "display_name": "采购订单明细ID",
+            "technical_names": [
+              "purchaseOrderDetailId"
+            ],
+            "aliases": [
+              "明细ID"
+            ],
+            "resource": "purchase_shipment",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.9,
+        "semantic_evidence": [
+          "SctsOrderController#supplierShipInfo(@Valid IdCondition)",
+          "PurchaseOrderService#getSupplierPortalShipInfo：requireSupplierPortalOrder；portal_order_status 必须 EXECUTING；buildShipInfo",
+          "SupplierPortalShipInfoQuery.purchaseOrderId/purchaseOrderNo/detailList.purchaseOrderDetailId 被 supplierShip 作为输入"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "66563518-2277-4c68-b42e-92ff1385c900",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/order/supplierShip"
+      },
+      "semantic": {
+        "purpose": "供供应链小程序供应商对执行中采购订单发货：校验明细和凭证后写入采购发货单、回写已发数量和门户状态；以销定采则同步销售发货，否则生成入库单。",
+        "audiences": [
+          "供应链小程序供应商"
+        ],
+        "domains": [
+          "供应链贸易",
+          "采购发货"
+        ],
+        "scenarios": [
+          "供应商按弹窗明细提交本次发货数量、运单号和发货凭证。"
+        ],
+        "actions": [
+          "ship"
+        ],
+        "entities": [
+          "采购发货单",
+          "采购订单"
+        ],
+        "aliases": [
+          "小程序供应商采购发货",
+          "供应商提交发货单",
+          "SctsOrderController.ship"
+        ],
+        "resource": "purchase_shipment",
+        "lookup_keys": [
+          "purchaseOrderId",
+          "transportNo",
+          "purchaseOrderDetailId",
+          "shipmentNo",
+          "fileId"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "写采购发货并可能联动销售发货或入库，不是运营人员销售订单 ship，也不是仅查 shipInfo。发运单据号无条件必填；shipmentNo 空则系统生成。",
+          "门户状态必须 executing。明细数量全 0 失败。Controller Java 方法名 ship，路径 supplierShip。",
+          "发货后 PurchaseOrderService#refreshPortalStatus 用后台 status 覆盖 portal_order_status：pending_execute→pending_confirm、partial_execute→executing、completed/terminated→completed，其余为 null。可能改写此前供应商确认得到的 executing。"
+        ],
+        "required_inputs": [
+          {
+            "name": "purchaseOrderId",
+            "zh_name": "采购订单ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          },
+          {
+            "name": "transportNo",
+            "zh_name": "发运单据号",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          },
+          {
+            "name": "purchaseOrderDetailId",
+            "zh_name": "采购订单明细ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          },
+          {
+            "name": "shipmentQuantity",
+            "zh_name": "本次发货数量",
+            "location": "body",
+            "required": true,
+            "schema_type": "BigDecimal"
+          },
+          {
+            "name": "fileId",
+            "zh_name": "发货凭证文件ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "purchase_order_id",
+            "display_name": "采购订单ID",
+            "technical_names": [
+              "purchaseOrderId"
+            ],
+            "aliases": [
+              "采购订单主键"
+            ],
+            "resource": "purchase_shipment",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "purchase_order_detail_id",
+            "display_name": "采购订单明细ID",
+            "technical_names": [
+              "purchaseOrderDetailId"
+            ],
+            "aliases": [
+              "明细ID"
+            ],
+            "resource": "purchase_shipment",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "transport_no",
+            "display_name": "发运单据号",
+            "technical_names": [
+              "transportNo"
+            ],
+            "aliases": [
+              "运输单据号",
+              "物流运单号"
+            ],
+            "resource": "purchase_shipment",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "shipment_no",
+            "display_name": "发货单号",
+            "technical_names": [
+              "shipmentNo"
+            ],
+            "aliases": [
+              "发货批次号"
+            ],
+            "resource": "purchase_shipment",
+            "source": "request_contract",
+            "confidence": 0.9
+          },
+          {
+            "canonical": "file_id",
+            "display_name": "文件ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "发货凭证ID"
+            ],
+            "resource": "purchase_shipment",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.9,
+        "semantic_evidence": [
+          "SctsOrderController#ship(@Valid SupplierPortalShipItem)：purchaseOrderId/transportNo/detailList/attachmentList 及明细 purchaseOrderDetailId/shipmentQuantity、附件 fileId",
+          "PurchaseOrderService#shipSupplierPortalOrder -> processShip(portalOperation=true)：写 cs 发货主从表、refreshShippedAndStatus；以销定采 syncSalesBasedPurchaseShipment 否则 generateInboundOrderFromPurchaseShipment",
+          "relatedSalesOrderDetailId 仅同步销售发货时使用，当前请求可不填",
+          "processShip 在 refreshShippedAndStatus 之后调用 refreshPortalStatus，按后台采购订单 status 重写门户状态"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "47362a4c-35a2-4be8-912a-af2b41f03b4e",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/order/customerPage"
+      },
+      "semantic": {
+        "purpose": "供供应链小程序客户分页查看销售订单：默认按登录用户解析客户ID，请求已带 customerId 时则按指定客户筛选；过滤可执行及完结销售订单，服务层把 canShip 固定为 false。",
+        "audiences": [
+          "供应链小程序客户"
+        ],
+        "domains": [
+          "供应链贸易",
+          "销售订单"
+        ],
+        "scenarios": [
+          "采购方在小程序按待确认、执行中或已完结查看销售订单；默认当前客户，请求可显式指定 customerId。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "销售订单"
+        ],
+        "aliases": [
+          "小程序客户销售订单分页",
+          "采购方小程序订单列表",
+          "SctsOrderController.customerPage"
+        ],
+        "resource": "sales_order",
+        "lookup_keys": [
+          "status",
+          "keyword",
+          "customerId",
+          "id",
+          "orderNo",
+          "contractNo",
+          "canConfirm"
+        ],
+        "cardinality": "many",
+        "ownership": "unknown",
+        "discriminators": [
+          "销售订单不是采购订单。SQL 将 t.order_status 别名为 portal_order_status，待确认筛选用 t.portal_order_status 列，返回字段与筛选列不是同一列。canShip 被强制 false。分页 tradePartyId 来自 t.tenant_id（销售方，与 DTO 注释一致），详情接口同名字段来自 t.customer_id。",
+          "不同于供应商分页和运营人员含草稿的销售订单分页。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "customer_id",
+            "display_name": "客户ID",
+            "technical_names": [
+              "customerId"
+            ],
+            "aliases": [
+              "采购方ID"
+            ],
+            "resource": "sales_order",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sales_order_id",
+            "display_name": "销售订单ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "订单ID"
+            ],
+            "resource": "sales_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sales_order_no",
+            "display_name": "销售订单号",
+            "technical_names": [
+              "orderNo"
+            ],
+            "aliases": [
+              "销售单号"
+            ],
+            "resource": "sales_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sales_contract_no",
+            "display_name": "销售合同号",
+            "technical_names": [
+              "contractNo",
+              "salesContractNo"
+            ],
+            "aliases": [
+              "合同编号"
+            ],
+            "resource": "sales_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.88,
+        "semantic_evidence": [
+          "SctsOrderController#customerPage(@Valid PortalMiniCustomerOrderPageCondition)",
+          "SalesOrderService#pageCustomerMiniOrder fillCustomerMiniOrderCondition；rows.forEach canShip=false",
+          "SalesOrderDao#pageCustomerMiniOrder -> portal_mini_customer_order_query_page.sql：customer_id；select order_status as portal_order_status；contract_no=sales_contract_no"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "c8c659e1-e68f-420f-b95d-f94473152682",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/order/customerGetById"
+      },
+      "semantic": {
+        "purpose": "供供应链小程序客户按销售订单ID查看详情：加载明细、发货记录和客诉异常；不校验订单是否属于当前客户。",
+        "audiences": [
+          "供应链小程序客户"
+        ],
+        "domains": [
+          "供应链贸易",
+          "销售订单"
+        ],
+        "scenarios": [
+          "采购方打开某一销售订单查看履约和发货情况。"
+        ],
+        "actions": [
+          "detail"
+        ],
+        "entities": [
+          "销售订单",
+          "销售发货记录"
+        ],
+        "aliases": [
+          "小程序客户销售订单详情",
+          "按ID查看客户订单",
+          "SctsOrderController.customerGetById"
+        ],
+        "resource": "sales_order",
+        "lookup_keys": [
+          "id",
+          "orderNo",
+          "contractNo",
+          "shipmentNo"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "CustomerPortalOrderQuery 注释 tradePartyId=销售方ID，但 customerPortalOrder_query_getDetail.sql 把 t.customer_id 别名为 trade_party_id；小程序分页 SQL 则把 t.tenant_id 别名为 trade_party_id。同名字段在分页与详情不是同一业务对象。requireCustomerPortalOrder 只判存在。客户不能发货。不同于运营人员详情含账单和按钮权限。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "销售订单ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "sales_order_id",
+            "display_name": "销售订单ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "订单ID"
+            ],
+            "resource": "sales_order",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sales_order_no",
+            "display_name": "销售订单号",
+            "technical_names": [
+              "orderNo"
+            ],
+            "aliases": [
+              "销售单号"
+            ],
+            "resource": "sales_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sales_contract_no",
+            "display_name": "销售合同号",
+            "technical_names": [
+              "contractNo"
+            ],
+            "aliases": [
+              "合同编号"
+            ],
+            "resource": "sales_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "shipment_no",
+            "display_name": "发货单号",
+            "technical_names": [
+              "shipmentNo"
+            ],
+            "aliases": [
+              "发货批次号"
+            ],
+            "resource": "sales_shipment",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.9,
+        "semantic_evidence": [
+          "SctsOrderController#customerGetById(@Valid IdCondition)",
+          "SalesOrderService#getCustomerPortalOrderById -> dao.getCustomerPortalOrder/listCustomerPortalOrderDetail/listShipmentBySalesOrderId",
+          "requireCustomerPortalOrder 仅 getById 判空",
+          "customerPortalOrder_query_getDetail.sql：t.customer_id as trade_party_id，与 DTO“销售方ID”及分页 SQL t.tenant_id as trade_party_id 冲突"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "f0451b8d-6270-492d-ba0e-861d075bcec6",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/order/customerBatchConfirm"
+      },
+      "semantic": {
+        "purpose": "供供应链小程序客户批量确认销售订单：将门户状态从待确认改为执行中并写确认时间；不发货、不签收。",
+        "audiences": [
+          "供应链小程序客户"
+        ],
+        "domains": [
+          "供应链贸易",
+          "销售订单"
+        ],
+        "scenarios": [
+          "采购方对多笔待确认销售订单一次性确认。"
+        ],
+        "actions": [
+          "confirm"
+        ],
+        "entities": [
+          "销售订单"
+        ],
+        "aliases": [
+          "小程序客户批量确认销售订单",
+          "采购方确认待执行订单",
+          "SctsOrderController.customerBatchConfirm"
+        ],
+        "resource": "sales_order",
+        "lookup_keys": [
+          "orderIds",
+          "id"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "确认的是销售订单门户状态，不是供应商采购订单，也不是运营人员 confirm（后台 pending_execute）。不校验当前客户归属。"
+        ],
+        "required_inputs": [
+          {
+            "name": "orderIds",
+            "zh_name": "销售订单ID集合",
+            "location": "body",
+            "required": true,
+            "schema_type": "List<Long>"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "sales_order_id",
+            "display_name": "销售订单ID",
+            "technical_names": [
+              "orderIds",
+              "id"
+            ],
+            "aliases": [
+              "订单ID集合"
+            ],
+            "resource": "sales_order",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.9,
+        "semantic_evidence": [
+          "SctsOrderController#customerBatchConfirm(@Valid salesorder.PortalOrderConfirmItem) orderIds @NotEmpty",
+          "SalesOrderService#batchConfirmCustomerPortalOrder -> confirmCustomerPortalOrder：portal 待确认→EXECUTING"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "eac893f4-51fd-4a2c-b703-8cbce793f3f6",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/order/operationsStaffGetPage"
+      },
+      "semantic": {
+        "purpose": "供供应链小程序运营人员分页查询销售订单：可选状态、关键字、客户、销售方、部门、创建人和创建日期；SQL 无当前用户自动范围，并回填商品摘要、逾期文案和操作按钮。",
+        "audiences": [
+          "供应链小程序运营人员"
+        ],
+        "domains": [
+          "供应链贸易",
+          "销售订单"
+        ],
+        "scenarios": [
+          "运营人员在小程序工作台按草稿、待确认、执行中或异常筛选销售订单。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "销售订单"
+        ],
+        "aliases": [
+          "运营人员小程序销售订单分页",
+          "小程序运营订单列表",
+          "SctsOrderController.operationsStaffGetPage"
+        ],
+        "resource": "sales_order",
+        "lookup_keys": [
+          "status",
+          "keyword",
+          "customerId",
+          "sellerId",
+          "deptId",
+          "id",
+          "orderNo",
+          "salesContractNo",
+          "salesContractId"
+        ],
+        "cardinality": "many",
+        "ownership": "unknown",
+        "discriminators": [
+          "含草稿/待确认，不是供应商或客户门户仅可执行订单。portal_operations_staff_sales_order_query_page 无登录用户或组织自动过滤，范围 unknown。",
+          "关键字匹配订单号、销售合同号、商品名和物料编码。anomaly 用预计到货和发货逾期控制参数，不是独立库状态。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "sales_order_id",
+            "display_name": "销售订单ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "订单ID"
+            ],
+            "resource": "sales_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sales_order_no",
+            "display_name": "销售订单号",
+            "technical_names": [
+              "orderNo"
+            ],
+            "aliases": [
+              "销售单号"
+            ],
+            "resource": "sales_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sales_contract_id",
+            "display_name": "销售合同ID",
+            "technical_names": [
+              "salesContractId"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "sales_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sales_contract_no",
+            "display_name": "销售合同号",
+            "technical_names": [
+              "salesContractNo"
+            ],
+            "aliases": [
+              "合同编号"
+            ],
+            "resource": "sales_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "customer_id",
+            "display_name": "客户ID",
+            "technical_names": [
+              "customerId"
+            ],
+            "aliases": [
+              "采购方ID"
+            ],
+            "resource": "sales_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "seller_id",
+            "display_name": "销售方ID",
+            "technical_names": [
+              "sellerId",
+              "tenantId"
+            ],
+            "aliases": [
+              "组织ID"
+            ],
+            "resource": "sales_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "SctsOrderController#operationsStaffGetPage(@Valid PortalOperationsStaffSalesOrderPageCondition) 无字段必填",
+          "PortalOperationsStaffOrderService#getPage validatePageCondition 仅校验 status 枚举和起止日期；fillSalesOrderOverdueDays",
+          "PortalOperationsStaffOrderDao#pageSalesOrder -> portal_operations_staff_sales_order_query_page.sql 无当前用户条件"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "1c03c098-c70e-48e8-9f3a-33a1fccdf5f3",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/order/operationsStaffGetById"
+      },
+      "semantic": {
+        "purpose": "供供应链小程序运营人员按销售订单ID查看详情：复用运营端 SalesOrderService#getById，再附带应收账单、发货记录、关联采购订单和操作按钮。",
+        "audiences": [
+          "供应链小程序运营人员"
+        ],
+        "domains": [
+          "供应链贸易",
+          "销售订单"
+        ],
+        "scenarios": [
+          "运营人员打开销售订单详情准备编辑、确认、发货或签收。"
+        ],
+        "actions": [
+          "detail"
+        ],
+        "entities": [
+          "销售订单",
+          "销售发货记录",
+          "应收账单"
+        ],
+        "aliases": [
+          "运营人员小程序销售订单详情",
+          "按ID查看运营销售订单",
+          "SctsOrderController.operationsStaffGetById"
+        ],
+        "resource": "sales_order",
+        "lookup_keys": [
+          "id",
+          "orderNo",
+          "salesContractId",
+          "salesContractNo",
+          "warehouseId",
+          "shipmentNo",
+          "customerId",
+          "detailId"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "销售订单详情，含账单和关联采购订单，不是供应商/客户门户详情。请求 id 是销售订单ID。商品明细主键在 goodsList.id，签收接口参数名是 detailId，二者同值不同字段名。返回 shipmentNo、warehouseId 供发货签收使用。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "销售订单ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "sales_order_id",
+            "display_name": "销售订单ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "订单主键"
+            ],
+            "resource": "sales_order",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sales_order_no",
+            "display_name": "销售订单号",
+            "technical_names": [
+              "orderNo"
+            ],
+            "aliases": [
+              "销售单号"
+            ],
+            "resource": "sales_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sales_contract_id",
+            "display_name": "销售合同ID",
+            "technical_names": [
+              "salesContractId"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "sales_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sales_contract_no",
+            "display_name": "销售合同号",
+            "technical_names": [
+              "salesContractNo"
+            ],
+            "aliases": [
+              "合同编号"
+            ],
+            "resource": "sales_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_id",
+            "display_name": "仓库ID",
+            "technical_names": [
+              "warehouseId"
+            ],
+            "aliases": [
+              "发货仓库"
+            ],
+            "resource": "sales_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "shipment_no",
+            "display_name": "发货单号",
+            "technical_names": [
+              "shipmentNo"
+            ],
+            "aliases": [
+              "发货批次号"
+            ],
+            "resource": "sales_shipment",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sales_order_detail_id",
+            "display_name": "销售订单明细ID",
+            "technical_names": [
+              "detailId"
+            ],
+            "aliases": [
+              "商品明细ID",
+              "goodsList.id"
+            ],
+            "resource": "sales_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "SctsOrderController#operationsStaffGetById(@Valid PortalOperationsStaffSalesOrderDetailCondition) id @NotNull",
+          "PortalOperationsStaffOrderService#getById -> SalesOrderService#getById + listSalesOrderBill；copyDetail 映射 shipmentList/warehouseId/salesContractId",
+          "返回发货单号与仓库ID供 operationsStaffShip/confirmSignShipment 使用"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "1c7d6074-2476-425f-8f56-5d8bdc39edb7",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/order/operationsStaffSaveDraft"
+      },
+      "semantic": {
+        "purpose": "供供应链小程序运营人员保存销售订单草稿：新建则生成销售订单号并置草稿状态，更新仅允许已有草稿；返回销售订单ID，不提交确认。",
+        "audiences": [
+          "供应链小程序运营人员"
+        ],
+        "domains": [
+          "供应链贸易",
+          "销售订单"
+        ],
+        "scenarios": [
+          "运营人员按销售合同初始化后保存或修改草稿订单。"
+        ],
+        "actions": [
+          "save_draft"
+        ],
+        "entities": [
+          "销售订单"
+        ],
+        "aliases": [
+          "运营人员保存销售订单草稿",
+          "小程序保存销售订单",
+          "SctsOrderController.operationsStaffSaveDraft"
+        ],
+        "resource": "sales_order",
+        "lookup_keys": [
+          "id",
+          "salesContractId",
+          "salesContractNo",
+          "customerId",
+          "tenantId",
+          "deptId"
+        ],
+        "cardinality": "one",
+        "ownership": "unknown",
+        "discriminators": [
+          "真正落库草稿，不是 initBySalesContract 的内存回填，也不是 submitConfirm。id 空新增、非空只能改草稿。返回 ResponseData<Long> 为销售订单ID。",
+          "SalesOrderItem 的 warehouseId 可空由默认仓填充。forceConfirm 等确认字段本接口不读。",
+          "不校验销售合同剩余可下单量；该校验只在 submitConfirm 的 DRAFT→PENDING_CONFIRM 发生。SalesOrderItem.orderNo 新建时被序号覆盖，当前请求 orderNo 未作为业务键消费。"
+        ],
+        "required_inputs": [
+          {
+            "name": "salesContractId",
+            "zh_name": "销售合同ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          },
+          {
+            "name": "salesContractNo",
+            "zh_name": "销售合同号",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          },
+          {
+            "name": "customerId",
+            "zh_name": "客户ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          },
+          {
+            "name": "customerName",
+            "zh_name": "客户名称",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          },
+          {
+            "name": "deptId",
+            "zh_name": "所属部门ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          },
+          {
+            "name": "receiveAddressType",
+            "zh_name": "收货地址类型",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          },
+          {
+            "name": "tenantId",
+            "zh_name": "销售方ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          },
+          {
+            "name": "tenantName",
+            "zh_name": "销售方名称",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          },
+          {
+            "name": "specId",
+            "zh_name": "商品ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          },
+          {
+            "name": "specCode",
+            "zh_name": "物料编码",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          },
+          {
+            "name": "specName",
+            "zh_name": "商品名称",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          },
+          {
+            "name": "measurementUnit",
+            "zh_name": "单位",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          },
+          {
+            "name": "measurementUnitId",
+            "zh_name": "单位ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          },
+          {
+            "name": "orderQuantity",
+            "zh_name": "订单数量",
+            "location": "body",
+            "required": true,
+            "schema_type": "BigDecimal"
+          },
+          {
+            "name": "unitPrice",
+            "zh_name": "单价",
+            "location": "body",
+            "required": true,
+            "schema_type": "BigDecimal"
+          },
+          {
+            "name": "taxUnitPrice",
+            "zh_name": "含税单价",
+            "location": "body",
+            "required": true,
+            "schema_type": "BigDecimal"
+          },
+          {
+            "name": "taxAmount",
+            "zh_name": "含税金额",
+            "location": "body",
+            "required": true,
+            "schema_type": "BigDecimal"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "sales_order_id",
+            "display_name": "销售订单ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "草稿订单ID"
+            ],
+            "resource": "sales_order",
+            "source": "request_contract",
+            "confidence": 0.9
+          },
+          {
+            "canonical": "sales_contract_id",
+            "display_name": "销售合同ID",
+            "technical_names": [
+              "salesContractId"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "sales_order",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sales_contract_no",
+            "display_name": "销售合同号",
+            "technical_names": [
+              "salesContractNo"
+            ],
+            "aliases": [
+              "合同编号"
+            ],
+            "resource": "sales_order",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "customer_id",
+            "display_name": "客户ID",
+            "technical_names": [
+              "customerId"
+            ],
+            "aliases": [
+              "采购方ID"
+            ],
+            "resource": "sales_order",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "seller_id",
+            "display_name": "销售方ID",
+            "technical_names": [
+              "tenantId"
+            ],
+            "aliases": [
+              "所属组织ID"
+            ],
+            "resource": "sales_order",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sku_id",
+            "display_name": "商品SKU ID",
+            "technical_names": [
+              "specId"
+            ],
+            "aliases": [
+              "规格ID"
+            ],
+            "resource": "sales_order",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sku_code",
+            "display_name": "物料编码",
+            "technical_names": [
+              "specCode"
+            ],
+            "aliases": [
+              "规格编码"
+            ],
+            "resource": "sales_order",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "SctsOrderController#operationsStaffSaveDraft(@Valid SalesOrderItem) -> ResponseData<Long>",
+          "PortalOperationsStaffOrderService#saveDraft -> SalesOrderService#save：新建 Sequential 订单号+DRAFT；更新 assertStatus DRAFT；dao.saveOrUpdate+saveDetails",
+          "Bean Validation：salesContractId/No、customerId/Name、deptId、receiveAddressType、tenantId/Name、detailList 及明细 specId/specCode/specName/单位/数量/单价"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "7261f921-836a-482f-8a4f-2b5c47779f5c",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/order/operationsStaffInitBySalesContract"
+      },
+      "semantic": {
+        "purpose": "供供应链小程序运营人员按销售合同ID在内存组装销售订单编辑页草稿：带出客户、销售方和可下单商品，不插入订单。",
+        "audiences": [
+          "供应链小程序运营人员"
+        ],
+        "domains": [
+          "供应链贸易",
+          "销售订单",
+          "销售合同"
+        ],
+        "scenarios": [
+          "运营人员从销售合同新建订单时预填编辑页。"
+        ],
+        "actions": [
+          "init"
+        ],
+        "entities": [
+          "销售订单草稿",
+          "销售合同"
+        ],
+        "aliases": [
+          "按销售合同初始化订单编辑页",
+          "销售合同转订单预填",
+          "SctsOrderController.operationsStaffInitBySalesContract"
+        ],
+        "resource": "sales_order",
+        "lookup_keys": [
+          "id",
+          "salesContractId",
+          "salesContractNo",
+          "customerId",
+          "tenantId",
+          "specId"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "IdCondition.id 是销售合同ID，不是销售订单ID。不写库，与 saveDraft 创建订单不同。只保留可售且仍有可下单量的合同明细。",
+          "initBaseDraft 把 warehouseId 置为 -1，不是真实仓库；该字段不能当作发货仓库输入。请求 IdCondition.id 是销售合同ID。不写库。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "销售合同ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "sales_contract_id",
+            "display_name": "销售合同ID",
+            "technical_names": [
+              "id",
+              "salesContractId"
+            ],
+            "aliases": [
+              "合同主键"
+            ],
+            "resource": "sales_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sales_contract_no",
+            "display_name": "销售合同号",
+            "technical_names": [
+              "salesContractNo",
+              "contractNo"
+            ],
+            "aliases": [
+              "合同编号"
+            ],
+            "resource": "sales_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "customer_id",
+            "display_name": "客户ID",
+            "technical_names": [
+              "customerId"
+            ],
+            "aliases": [
+              "采购方ID"
+            ],
+            "resource": "sales_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "seller_id",
+            "display_name": "销售方ID",
+            "technical_names": [
+              "tenantId"
+            ],
+            "aliases": [
+              "所属组织ID"
+            ],
+            "resource": "sales_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sku_id",
+            "display_name": "商品SKU ID",
+            "technical_names": [
+              "specId"
+            ],
+            "aliases": [
+              "规格ID"
+            ],
+            "resource": "sales_order",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "SctsOrderController#operationsStaffInitBySalesContract(@Valid IdCondition)",
+          "PortalOperationsStaffOrderService#initBySalesContract -> SalesOrderService#initBySalesContract(contractId)：salesContractDao.getById，不 insert",
+          "返回 SalesOrderQuery.salesContractId/No、customerId、tenantId、detailList.specId 供 saveDraft 使用"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "fd3955a0-9791-41f5-93ff-d9af21a4af98",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/order/operationsStaffDelete"
+      },
+      "semantic": {
+        "purpose": "供供应链小程序运营人员按销售订单ID删除草稿订单及明细，并刷新销售合同已生成标记；非草稿拒绝删除。",
+        "audiences": [
+          "供应链小程序运营人员"
+        ],
+        "domains": [
+          "供应链贸易",
+          "销售订单"
+        ],
+        "scenarios": [
+          "运营人员删掉尚未提交确认的销售订单草稿。"
+        ],
+        "actions": [
+          "delete"
+        ],
+        "entities": [
+          "销售订单"
+        ],
+        "aliases": [
+          "运营人员删除销售订单草稿",
+          "小程序删除销售订单",
+          "SctsOrderController.operationsStaffDelete"
+        ],
+        "resource": "sales_order",
+        "lookup_keys": [
+          "id"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "只删草稿，不是取消确认或终止执行中订单。IdCondition.id 是销售订单ID。会发风险和看板 MQ。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "销售订单ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "sales_order_id",
+            "display_name": "销售订单ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "订单主键"
+            ],
+            "resource": "sales_order",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "SctsOrderController#operationsStaffDelete(@Valid IdCondition)",
+          "PortalOperationsStaffOrderService#delete -> SalesOrderService#deleteByIds：非 DRAFT 抛 SALES_ORDERS_ONLY_DRAFT_ALLOWED_DELETE；dao.delete+明细删除"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "2c47417a-b8c1-4edd-b898-3695a77450ad",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/order/operationsStaffSubmitConfirm"
+      },
+      "semantic": {
+        "purpose": "供供应链小程序运营人员把草稿销售订单提交确认：后台状态草稿→待确认，不进入执行、不发货。",
+        "audiences": [
+          "供应链小程序运营人员"
+        ],
+        "domains": [
+          "供应链贸易",
+          "销售订单"
+        ],
+        "scenarios": [
+          "运营人员把已保存草稿提交给后续确认环节。"
+        ],
+        "actions": [
+          "submit_confirm"
+        ],
+        "entities": [
+          "销售订单"
+        ],
+        "aliases": [
+          "运营人员提交销售订单确认",
+          "草稿提交待确认",
+          "SctsOrderController.operationsStaffSubmitConfirm"
+        ],
+        "resource": "sales_order",
+        "lookup_keys": [
+          "orderId"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "DRAFT→PENDING_CONFIRM，不是 confirm 的待确认→待执行，也不是客户/供应商门户确认。forceConfirm 本方法不读。",
+          "提交确认时 assertSalesContractOrderQuantity 校验合同剩余可下单量；saveDraft 不检查剩余量。forceConfirm 本方法不读。"
+        ],
+        "required_inputs": [
+          {
+            "name": "orderId",
+            "zh_name": "销售订单ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "sales_order_id",
+            "display_name": "销售订单ID",
+            "technical_names": [
+              "orderId"
+            ],
+            "aliases": [
+              "订单主键"
+            ],
+            "resource": "sales_order",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "SctsOrderController#operationsStaffSubmitConfirm(@Valid OrderActionItem) orderId @NotNull",
+          "PortalOperationsStaffOrderService#submitConfirm -> SalesOrderService#submitConfirm changeStatus DRAFT→PENDING_CONFIRM",
+          "OrderActionItem.forceConfirm 未使用"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "a0b13bd0-14c1-4309-ae36-695e43b7334d",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/order/operationsStaffConfirm"
+      },
+      "semantic": {
+        "purpose": "供供应链小程序运营人员确认待确认销售订单：后台状态待确认→待执行；授信超额时需 forceConfirm 才能通过。",
+        "audiences": [
+          "供应链小程序运营人员"
+        ],
+        "domains": [
+          "供应链贸易",
+          "销售订单"
+        ],
+        "scenarios": [
+          "运营人员审核待确认销售订单并放行执行。"
+        ],
+        "actions": [
+          "confirm"
+        ],
+        "entities": [
+          "销售订单"
+        ],
+        "aliases": [
+          "运营人员确认销售订单",
+          "销售订单确认待执行",
+          "SctsOrderController.operationsStaffConfirm"
+        ],
+        "resource": "sales_order",
+        "lookup_keys": [
+          "orderId",
+          "forceConfirm"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "后台 PENDING_CONFIRM→PENDING_EXECUTE，不是门户 portal_order_status 确认，也不是 submitConfirm。forceConfirm 仅授信超额时需要，非无条件必填。"
+        ],
+        "required_inputs": [
+          {
+            "name": "orderId",
+            "zh_name": "销售订单ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "sales_order_id",
+            "display_name": "销售订单ID",
+            "technical_names": [
+              "orderId"
+            ],
+            "aliases": [
+              "订单主键"
+            ],
+            "resource": "sales_order",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "SctsOrderController#operationsStaffConfirm(@Valid OrderActionItem)",
+          "SalesOrderService#confirm：assertCreditQuotaEnough(forceConfirm)；changeStatus PENDING_CONFIRM→PENDING_EXECUTE"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "343fb386-d365-43db-83ac-ee19c00ced57",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/order/operationsStaffCancelConfirm"
+      },
+      "semantic": {
+        "purpose": "供供应链小程序运营人员取消销售订单确认：待确认或待执行（且无以销定采直采量）均可退回草稿。",
+        "audiences": [
+          "供应链小程序运营人员"
+        ],
+        "domains": [
+          "供应链贸易",
+          "销售订单"
+        ],
+        "scenarios": [
+          "运营人员把已提交或已确认但未发货的销售订单退回草稿。"
+        ],
+        "actions": [
+          "cancel_confirm"
+        ],
+        "entities": [
+          "销售订单"
+        ],
+        "aliases": [
+          "运营人员取消销售订单确认",
+          "销售订单退回草稿",
+          "SctsOrderController.operationsStaffCancelConfirm"
+        ],
+        "resource": "sales_order",
+        "lookup_keys": [
+          "orderId"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "可从 PENDING_CONFIRM 或 PENDING_EXECUTE 回到 DRAFT，不是退回待确认，也不是删除。待执行且直采数量>0 拒绝。小程序列表 cancelConfirmBtn 只给待执行，服务仍允许待确认取消。forceConfirm 不读。"
+        ],
+        "required_inputs": [
+          {
+            "name": "orderId",
+            "zh_name": "销售订单ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "sales_order_id",
+            "display_name": "销售订单ID",
+            "technical_names": [
+              "orderId"
+            ],
+            "aliases": [
+              "订单主键"
+            ],
+            "resource": "sales_order",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "SctsOrderController#operationsStaffCancelConfirm(@Valid OrderActionItem)",
+          "SalesOrderService#cancelConfirm：PENDING_CONFIRM→DRAFT 或 PENDING_EXECUTE→DRAFT（assertNoDirectPurchaseQuantity）"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "7d5f4f17-8ab3-4785-80e7-a927e1d5502a",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/order/operationsStaffShipInventory"
+      },
+      "semantic": {
+        "purpose": "供供应链小程序运营人员按销售订单ID和发货仓库查询各商品明细可用库存，不写库、不创建发货单。",
+        "audiences": [
+          "供应链小程序运营人员"
+        ],
+        "domains": [
+          "供应链贸易",
+          "销售发货",
+          "库存"
+        ],
+        "scenarios": [
+          "运营人员发货前选择仓库查看可发库存。"
+        ],
+        "actions": [
+          "query"
+        ],
+        "entities": [
+          "可发货库存",
+          "销售订单明细"
+        ],
+        "aliases": [
+          "查询销售订单可发货库存",
+          "发货仓库库存",
+          "SctsOrderController.operationsStaffShipInventory"
+        ],
+        "resource": "sales_shipment",
+        "lookup_keys": [
+          "salesOrderId",
+          "warehouseId",
+          "salesOrderDetailId"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "只读库存，不是 ship。不校验订单是否待执行。warehouseId 有 Bean Validation @NotNull，本接口成功路径不能省略；传入后若库存 Feign 返回 success=false 或 data 为空则库存按 0，抛出的远程异常不会被吞掉。warehouseId=-1 仍会调用库存查询。返回 salesOrderDetailId+stockQuantity 供发货明细使用。"
+        ],
+        "required_inputs": [
+          {
+            "name": "salesOrderId",
+            "zh_name": "销售订单ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          },
+          {
+            "name": "warehouseId",
+            "zh_name": "发货仓库ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "sales_order_id",
+            "display_name": "销售订单ID",
+            "technical_names": [
+              "salesOrderId"
+            ],
+            "aliases": [
+              "订单主键"
+            ],
+            "resource": "sales_shipment",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_id",
+            "display_name": "仓库ID",
+            "technical_names": [
+              "warehouseId"
+            ],
+            "aliases": [
+              "发货仓库"
+            ],
+            "resource": "sales_shipment",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sales_order_detail_id",
+            "display_name": "销售订单明细ID",
+            "technical_names": [
+              "salesOrderDetailId"
+            ],
+            "aliases": [
+              "商品明细ID"
+            ],
+            "resource": "sales_shipment",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "SctsOrderController#operationsStaffShipInventory(@Valid SalesOrderShipInventoryCondition) salesOrderId/warehouseId @NotNull",
+          "SalesOrderService#listShipInventory requireOrder 后按明细查仓库库存；warehouseId 或 tenantId 为空才直接返回 0，本接口 BV 保证 warehouseId 非空",
+          "库存 Feign listByWarehouseOwnerSku 仅在 response 为空或 success≠true 时当 0；SalesOrderShipInventoryQuery.salesOrderDetailId 被 operationsStaffShip 明细使用"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "4e11acd5-047b-40f5-911a-27832e08c340",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/order/operationsStaffShip"
+      },
+      "semantic": {
+        "purpose": "供供应链小程序运营人员对销售订单发货：状态须待执行或部分执行，校验仓库库存后写销售发货单、回写已发数量，并生成出库单。",
+        "audiences": [
+          "供应链小程序运营人员"
+        ],
+        "domains": [
+          "供应链贸易",
+          "销售发货"
+        ],
+        "scenarios": [
+          "运营人员选择仓库和明细数量后提交销售发货。"
+        ],
+        "actions": [
+          "ship"
+        ],
+        "entities": [
+          "销售发货单",
+          "销售订单",
+          "出库单"
+        ],
+        "aliases": [
+          "运营人员销售订单发货",
+          "小程序提交销售发货",
+          "SctsOrderController.operationsStaffShip"
+        ],
+        "resource": "sales_shipment",
+        "lookup_keys": [
+          "salesOrderId",
+          "warehouseId",
+          "salesOrderDetailId",
+          "logisticsPlatform",
+          "transportNo",
+          "shipmentNo",
+          "fileId"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "销售仓发货并生成出库单，shipmentSource=WAREHOUSE，不是供应商采购发货。发运单据号仅物流平台=其他时必填；多式联运时运输类型必填。shipmentNo 空则系统生成。",
+          "状态仅 pending_execute/partial_execute。与 confirmSign 签收不同。"
+        ],
+        "required_inputs": [
+          {
+            "name": "salesOrderId",
+            "zh_name": "销售订单ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          },
+          {
+            "name": "priority",
+            "zh_name": "发货优先级",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          },
+          {
+            "name": "warehouseId",
+            "zh_name": "发货仓库ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          },
+          {
+            "name": "warehouseName",
+            "zh_name": "发货仓库名称",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          },
+          {
+            "name": "logisticsPlatform",
+            "zh_name": "物流平台",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          },
+          {
+            "name": "salesOrderDetailId",
+            "zh_name": "销售订单明细ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          },
+          {
+            "name": "shipmentQuantity",
+            "zh_name": "发货数量",
+            "location": "body",
+            "required": true,
+            "schema_type": "BigDecimal"
+          },
+          {
+            "name": "fileId",
+            "zh_name": "发货凭证文件ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          },
+          {
+            "name": "fileName",
+            "zh_name": "发货凭证文件名",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "sales_order_id",
+            "display_name": "销售订单ID",
+            "technical_names": [
+              "salesOrderId"
+            ],
+            "aliases": [
+              "订单主键"
+            ],
+            "resource": "sales_shipment",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_id",
+            "display_name": "仓库ID",
+            "technical_names": [
+              "warehouseId"
+            ],
+            "aliases": [
+              "发货仓库"
+            ],
+            "resource": "sales_shipment",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sales_order_detail_id",
+            "display_name": "销售订单明细ID",
+            "technical_names": [
+              "salesOrderDetailId"
+            ],
+            "aliases": [
+              "商品明细ID"
+            ],
+            "resource": "sales_shipment",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "transport_no",
+            "display_name": "发运单据号",
+            "technical_names": [
+              "transportNo"
+            ],
+            "aliases": [
+              "运输单据号",
+              "物流运单号"
+            ],
+            "resource": "sales_shipment",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "shipment_no",
+            "display_name": "发货单号",
+            "technical_names": [
+              "shipmentNo"
+            ],
+            "aliases": [
+              "发货批次号"
+            ],
+            "resource": "sales_shipment",
+            "source": "request_contract",
+            "confidence": 0.9
+          },
+          {
+            "canonical": "file_id",
+            "display_name": "文件ID",
+            "technical_names": [
+              "fileId"
+            ],
+            "aliases": [
+              "发货凭证ID"
+            ],
+            "resource": "sales_shipment",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "SctsOrderController#operationsStaffShip(@Valid SalesOrderShipItem)",
+          "SalesOrderService#ship(..., WAREHOUSE, false, false)：assertStatus PENDING_EXECUTE/PARTIAL_EXECUTE；validateShipInventory；写发货单并 generateBySalesOrder 出库单",
+          "AssertTrue：物流平台其他时 logisticsPlatformName/transportNo；多式联运时 transportationMethod。当前未消费供应商发货字段 relatedSalesOrderDetailId"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "633af50e-50b8-47e3-8747-291bb927e7df",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/order/operationsStaffShipmentList"
+      },
+      "semantic": {
+        "purpose": "供供应链小程序运营人员按销售订单ID查询发货记录列表，含明细、凭证、出库单号和物流信息按钮，不写库。",
+        "audiences": [
+          "供应链小程序运营人员"
+        ],
+        "domains": [
+          "供应链贸易",
+          "销售发货"
+        ],
+        "scenarios": [
+          "运营人员查看某销售订单已生成的发货批次以便签收或看物流。"
+        ],
+        "actions": [
+          "list",
+          "query"
+        ],
+        "entities": [
+          "销售发货单"
+        ],
+        "aliases": [
+          "查询销售订单发货记录",
+          "销售发货批次列表",
+          "SctsOrderController.operationsStaffShipmentList"
+        ],
+        "resource": "sales_shipment",
+        "lookup_keys": [
+          "id",
+          "shipmentNo",
+          "salesOrderId",
+          "salesOrderNo",
+          "warehouseId",
+          "outboundNo"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "只读发货记录，IdCondition.id 是销售订单ID不是发货单ID。返回 shipmentNo 供 confirmSignShipment 使用。不是供应商采购发货列表。"
+        ],
+        "required_inputs": [
+          {
+            "name": "id",
+            "zh_name": "销售订单ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "sales_order_id",
+            "display_name": "销售订单ID",
+            "technical_names": [
+              "id",
+              "salesOrderId"
+            ],
+            "aliases": [
+              "订单主键"
+            ],
+            "resource": "sales_shipment",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "shipment_no",
+            "display_name": "发货单号",
+            "technical_names": [
+              "shipmentNo"
+            ],
+            "aliases": [
+              "发货批次号"
+            ],
+            "resource": "sales_shipment",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sales_order_no",
+            "display_name": "销售订单号",
+            "technical_names": [
+              "salesOrderNo"
+            ],
+            "aliases": [
+              "销售单号"
+            ],
+            "resource": "sales_shipment",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "warehouse_id",
+            "display_name": "仓库ID",
+            "technical_names": [
+              "warehouseId"
+            ],
+            "aliases": [
+              "发货仓库"
+            ],
+            "resource": "sales_shipment",
+            "source": "source_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "outbound_no",
+            "display_name": "出库单号",
+            "technical_names": [
+              "outboundNo"
+            ],
+            "aliases": [
+              "仓储出库号"
+            ],
+            "resource": "sales_shipment",
+            "source": "source_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.9,
+        "semantic_evidence": [
+          "SctsOrderController#operationsStaffShipmentList(@Valid IdCondition) 请求 id=销售订单ID",
+          "SalesOrderService#listShipmentBySalesOrderId：发货主表+明细+附件+outboundNo",
+          "响应 SalesOrderShipmentQuery.id 是发货记录主键，与请求 id 同名不同对象，未并入业务标识；兄弟签收使用 shipmentNo 而非发货记录ID"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "9ccfd508-6f6b-4fd5-8292-f3ef76b1d3a1",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/order/operationsStaffConfirmSignShipment"
+      },
+      "semantic": {
+        "purpose": "供供应链小程序运营人员按销售订单ID加发货单号整单签收该批次：回写发货状态、明细签收量、订单状态，并可能生成应收账单。",
+        "audiences": [
+          "供应链小程序运营人员"
+        ],
+        "domains": [
+          "供应链贸易",
+          "销售签收"
+        ],
+        "scenarios": [
+          "运营人员按某一发货批次确认货物已送达签收。"
+        ],
+        "actions": [
+          "confirm_sign"
+        ],
+        "entities": [
+          "销售发货单",
+          "销售订单"
+        ],
+        "aliases": [
+          "按发货记录确认签收",
+          "发货批次签收",
+          "SctsOrderController.operationsStaffConfirmSignShipment"
+        ],
+        "resource": "sales_shipment",
+        "lookup_keys": [
+          "orderId",
+          "shipmentNo"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "按 shipmentNo 签收整批，不是 confirmSign 按商品明细数量签收，也不是供应商发货。定位键是发货单号不是发货记录ID。deliveryTime 可选。",
+          "不校验销售订单后台状态。Swagger“按发货记录”实际按 shipmentNo 定位，不是发货记录主键 id。"
+        ],
+        "required_inputs": [
+          {
+            "name": "orderId",
+            "zh_name": "销售订单ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          },
+          {
+            "name": "shipmentNo",
+            "zh_name": "发货单号",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "sales_order_id",
+            "display_name": "销售订单ID",
+            "technical_names": [
+              "orderId"
+            ],
+            "aliases": [
+              "订单主键"
+            ],
+            "resource": "sales_shipment",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "shipment_no",
+            "display_name": "发货单号",
+            "technical_names": [
+              "shipmentNo"
+            ],
+            "aliases": [
+              "发货批次号"
+            ],
+            "resource": "sales_shipment",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "SctsOrderController#operationsStaffConfirmSignShipment(@Valid OrderShipmentConfirmItem) orderId @NotNull shipmentNo @NotBlank",
+          "SalesOrderService#confirmSignShipment：listBySalesOrderIdAndShipmentNo；发货状态 SIGNED；回写 signedQuantity 并可能 generateReceivableBill"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "a36269da-14ee-4427-a4a4-c310fc0d2eec",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/scts/order/operationsStaffConfirmSign"
+      },
+      "semantic": {
+        "purpose": "供供应链小程序运营人员按销售订单明细签收：无发货行时用 quantity 累加签收量；已有发货明细时忽略 quantity，将该明细下发货行全部签满并可能生成应收账单。",
+        "audiences": [
+          "供应链小程序运营人员"
+        ],
+        "domains": [
+          "供应链贸易",
+          "销售签收"
+        ],
+        "scenarios": [
+          "运营人员对某一销售订单商品明细做签收；有发货批次时实际是签满该明细关联发货，而不是按录入数量部分签收。"
+        ],
+        "actions": [
+          "confirm_sign"
+        ],
+        "entities": [
+          "销售订单明细",
+          "销售订单"
+        ],
+        "aliases": [
+          "按商品明细确认签收",
+          "销售订单明细签收",
+          "SctsOrderController.operationsStaffConfirmSign"
+        ],
+        "resource": "sales_order",
+        "lookup_keys": [
+          "orderId",
+          "detailId",
+          "quantity"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "不是 confirmSignShipment 按发货单号整批签收。Bean Validation 仍要求 quantity>0，但 SalesOrderService#confirmSign 在该明细已有发货行时走 forceSalesShipmentSignedQuantity，忽略录入数量。无订单状态前置。Swagger“按商品明细确认签收”与有发货时的全量签收冲突。"
+        ],
+        "required_inputs": [
+          {
+            "name": "orderId",
+            "zh_name": "销售订单ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          },
+          {
+            "name": "detailId",
+            "zh_name": "销售订单明细ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          },
+          {
+            "name": "quantity",
+            "zh_name": "本次签收数量",
+            "location": "body",
+            "required": true,
+            "schema_type": "BigDecimal"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "sales_order_id",
+            "display_name": "销售订单ID",
+            "technical_names": [
+              "orderId"
+            ],
+            "aliases": [
+              "订单主键"
+            ],
+            "resource": "sales_order",
+            "source": "request_contract",
+            "confidence": 0.97
+          },
+          {
+            "canonical": "sales_order_detail_id",
+            "display_name": "销售订单明细ID",
+            "technical_names": [
+              "detailId"
+            ],
+            "aliases": [
+              "商品明细ID"
+            ],
+            "resource": "sales_order",
+            "source": "request_contract",
+            "confidence": 0.97
+          }
+        ],
+        "semantic_confidence": 0.9,
+        "semantic_evidence": [
+          "SctsOrderController#operationsStaffConfirmSign(@Valid OrderExecuteItem) orderId/detailId/quantity 无条件校验",
+          "SalesOrderService#confirmSign：有发货明细时 forceSalesShipmentSignedQuantity 忽略 item.quantity；无发货行才按 quantity 累加；无订单状态 assert",
+          "Operation summary“按商品明细确认签收”与已发货明细全量签收冲突"
+        ],
+        "semantic_model": "grok-4.6-source-contract-review-2026-09-03"
+      }
+    }
+  ]
+}

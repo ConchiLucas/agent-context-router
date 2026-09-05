@@ -1,0 +1,661 @@
+{
+  "schema_version": "context-router-interface-semantic-batch-v1",
+  "batch_id": "panzhihua-c12-sys-unscanned-006",
+  "workspace_id": "b9ce65eddc27437d9615177fbd07cb0a",
+  "generation_policy": "完整处理 c12-sys 的 ControlParamController、DictDataController、LeafRuleController；核对 Controller、请求与返回 DTO、Repository、Service、DAO 和 SQL；业务事实仅进入本批次，未使用 copy_from_interface_id。",
+  "family_groups": {
+    "控制参数主资源": 7,
+    "控制参数分组": 4,
+    "控制参数修改记录": 1,
+    "数据字典主资源": 10,
+    "数据字典版本": 3,
+    "数据字典变更记录": 1,
+    "流水号规则主资源": 7,
+    "流水号号段分配": 1,
+    "流水号生成记录": 1
+  },
+  "items": [
+    {
+      "interface_id": "ad75adee-7a25-4e61-903f-122c1aa6c044",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/controlParam/batchSave"},
+      "semantic": {
+        "purpose": "供系统管理端批量新增或修改当前系统编码下的控制参数，逐项校验分组存在和参数编码唯一性，并在成功后刷新缓存、记录变更。",
+        "audiences": ["系统管理端"], "domains": ["系统配置", "控制参数"],
+        "scenarios": ["系统管理端一次提交多项控制参数，按当前 systemCode 批量维护参数编码、参数值和所属分组。"],
+        "actions": ["create", "update"], "entities": ["控制参数"],
+        "aliases": ["批量维护控制参数", "控制参数批量保存", "ControlParamController.batchSave"],
+        "resource": "control_param", "lookup_keys": ["items", "id", "cpCode", "groupCode", "systemCode"], "cardinality": "many", "ownership": "all",
+        "discriminators": ["与单项 save 不同，本接口要求 items 非空并逐项处理；每项可用 id 更新或无 id 新增，cpCode 在当前 systemCode 内唯一，groupCode 非空时必须存在。"],
+        "required_inputs": [{"name": "items", "zh_name": "控制参数列表", "location": "body", "required": true, "schema_type": "array"}],
+        "business_identifiers": [
+          {"canonical": "control_param_id", "display_name": "控制参数ID", "technical_names": ["id"], "aliases": ["参数主键"], "resource": "control_param", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "control_param_code", "display_name": "控制参数编码", "technical_names": ["cpCode"], "aliases": ["参数编码"], "resource": "control_param", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "control_param_group_code", "display_name": "控制参数分组编码", "technical_names": ["groupCode"], "aliases": ["参数分组编码"], "resource": "control_param_group", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode"], "aliases": ["来源系统编码"], "resource": "system", "source": "runtime_context", "confidence": 0.98}
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": ["ControlParamController#batchSave(List<ControlParamItem>) -> ResponseData<Boolean>", "ControlParamItem", "ControlParamRepository#batchSave -> ControlParamRepository#save(ControlParamItem,boolean) -> ControlParamService#insert/update；显式校验 items 及元素非空、分组存在和 systemCode+cpCode 唯一"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "ca7b0c47-49f1-4347-8356-4e29d2bcf0b9",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/controlParam/deleteById/{id}"},
+      "semantic": {
+        "purpose": "供系统管理端按控制参数 ID 删除当前系统编码下的一项控制参数，并保存删除前快照、刷新参数缓存。",
+        "audiences": ["系统管理端"], "domains": ["系统配置", "控制参数"],
+        "scenarios": ["系统管理端已知控制参数 id 时删除该参数，并保留可审计的删除记录。"],
+        "actions": ["delete"], "entities": ["控制参数"],
+        "aliases": ["删除单个控制参数", "按ID移除控制参数", "ControlParamController.deleteById"],
+        "resource": "control_param", "lookup_keys": ["id", "systemCode"], "cardinality": "one", "ownership": "by_id",
+        "discriminators": ["仅接收路径 id 并删除一项；与批量删除入口不同，仍校验记录属于当前 systemCode。"],
+        "required_inputs": [{"name": "id", "zh_name": "控制参数ID", "location": "path", "required": true, "schema_type": "integer"}],
+        "business_identifiers": [{"canonical": "control_param_id", "display_name": "控制参数ID", "technical_names": ["id"], "aliases": ["参数主键"], "resource": "control_param", "source": "source_contract", "confidence": 0.99}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode"], "aliases": ["来源系统编码"], "resource": "system", "source": "runtime_context", "confidence": 0.98}],
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["ControlParamController#deleteById(Long) -> ResponseData<Boolean>", "ControlParamRepository#deleteById -> ControlParamRepository#deleteByIds -> ControlParamService#delete；显式校验 id 非空并按当前 systemCode 取实体"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "c29bfa35-625f-4771-9a35-cb5bdc4149ce",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/controlParam/deleteByIds"},
+      "semantic": {
+        "purpose": "供系统管理端按控制参数 ID 集合批量删除当前系统编码下的参数，并为每项保存删除快照后刷新缓存。",
+        "audiences": ["系统管理端"], "domains": ["系统配置", "控制参数"],
+        "scenarios": ["系统管理端勾选多个控制参数 ids 后批量清理，并保留每项删除前内容。"],
+        "actions": ["delete"], "entities": ["控制参数"],
+        "aliases": ["批量删除控制参数", "多选移除控制参数", "ControlParamController.deleteByIds"],
+        "resource": "control_param", "lookup_keys": ["ids", "systemCode"], "cardinality": "many", "ownership": "by_id",
+        "discriminators": ["接收 body 中非空 ids 并批量删除；与单项路径删除入口不同，全部记录都必须属于当前 systemCode。"],
+        "required_inputs": [{"name": "ids", "zh_name": "控制参数ID集合", "location": "body", "required": true, "schema_type": "array"}],
+        "business_identifiers": [{"canonical": "control_param_id", "display_name": "控制参数ID", "technical_names": ["ids"], "aliases": ["参数主键集合"], "resource": "control_param", "source": "source_contract", "confidence": 0.99}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode"], "aliases": ["来源系统编码"], "resource": "system", "source": "runtime_context", "confidence": 0.98}],
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["ControlParamController#deleteByIds(IdsCondition) -> ResponseData<Boolean>", "IdsCondition.ids @NotEmpty", "ControlParamRepository#deleteByIds -> ControlParamService#delete；显式校验 ids 非空并逐项按当前 systemCode 取实体"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "28d36f47-9223-4e7a-9460-0321c5c5964b",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/controlParam/getControlParam"},
+      "semantic": {
+        "purpose": "供内部业务系统按控制参数编码读取参数字符串值，可按 systemCodes 指定优先级或按 systemCode 与公共 sys 系统顺序回退；编码缺失或未命中时返回空值。",
+        "audiences": ["内部服务"], "domains": ["系统配置", "控制参数"],
+        "scenarios": ["业务服务运行时用 cpCode 获取配置值，并可用 systemCodes 控制跨系统编码的查找优先级。"],
+        "actions": ["query"], "entities": ["控制参数值"],
+        "aliases": ["读取控制参数值", "按编码取系统配置", "ControlParamController.getControlParam"],
+        "resource": "control_param", "lookup_keys": ["cpCode", "systemCode", "systemCodes"], "cardinality": "one", "ownership": "by_id",
+        "discriminators": ["本接口只返回 cpCode 对应的原始 String 参数值，不返回控制参数对象；systemCodes 有值时按其顺序查找，否则按 systemCode 和公共 sys 回退。"],
+        "required_inputs": [],
+        "business_identifiers": [{"canonical": "control_param_code", "display_name": "控制参数编码", "technical_names": ["cpCode"], "aliases": ["参数编码"], "resource": "control_param", "source": "source_contract", "confidence": 0.99}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode", "systemCodes"], "aliases": ["来源系统编码"], "resource": "system", "source": "source_contract", "confidence": 0.98}],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["ControlParamController#getControlParam(ControlParamCondition) -> ResponseData<String>", "ControlParamCondition", "ControlParamRepository#getControlParam -> resolvePrioritySystemCodes -> Redis 缓存/ControlParamService#list；cpCode 为空时直接返回 null"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "66929e97-12fc-4c57-a0b7-1a9ad02c2480",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/controlParam/getControlParamList"},
+      "semantic": {
+        "purpose": "供内部业务系统按系统编码、参数编码或编码集合、参数名称或名称集合、分组编码查询控制参数对象列表，并标记当前上下文是否可编辑。",
+        "audiences": ["内部服务"], "domains": ["系统配置", "控制参数"],
+        "scenarios": ["业务服务需要批量装载配置时，按 systemCode/systemCodes、cpCode/cpCodes、cpName/cpNames 或 groupCode 筛选参数对象。"],
+        "actions": ["query", "list"], "entities": ["控制参数"],
+        "aliases": ["查询控制参数对象列表", "批量读取系统配置项", "ControlParamController.getControlParamList"],
+        "resource": "control_param", "lookup_keys": ["systemCode", "systemCodes", "cpCode", "cpCodes", "cpName", "cpNames", "groupCode"], "cardinality": "many", "ownership": "all",
+        "discriminators": ["与 getControlParam 只返回单个字符串值不同，本接口返回含 id、cpCode、cpValue、groupCode、systemCode 和 editable 的多项对象；请求体可省略。"],
+        "required_inputs": [],
+        "business_identifiers": [
+          {"canonical": "control_param_id", "display_name": "控制参数ID", "technical_names": ["id"], "aliases": ["参数主键"], "resource": "control_param", "source": "response_contract", "confidence": 0.99},
+          {"canonical": "control_param_code", "display_name": "控制参数编码", "technical_names": ["cpCode", "cpCodes"], "aliases": ["参数编码"], "resource": "control_param", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "control_param_group_code", "display_name": "控制参数分组编码", "technical_names": ["groupCode"], "aliases": ["参数分组编码"], "resource": "control_param_group", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode", "systemCodes"], "aliases": ["来源系统编码"], "resource": "system", "source": "source_contract", "confidence": 0.98}
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["ControlParamController#getControlParamList(ControlParamCondition) -> ResponseData<List<ControlParamQuery>>", "ControlParamCondition; ControlParamQuery", "ControlParamRepository#list -> ControlParamService#list -> controlParam_query_getList.sql；Repository 在缓存结果上执行编码、名称、分组筛选并补 editable"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "21da2709-8ace-4a2b-bf90-158e1ac2e8fe",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/controlParam/page"},
+      "semantic": {
+        "purpose": "供系统管理端按系统编码或系统编码集合、参数编码、参数名称和分组编码分页查询控制参数，并返回参数值、分组名称及可编辑标记。",
+        "audiences": ["系统管理端"], "domains": ["系统配置", "控制参数"],
+        "scenarios": ["系统管理端在控制参数台账中按 systemCode/systemCodes、cpCode、cpName 或 groupCode 检索并分页查看配置。"],
+        "actions": ["query", "page"], "entities": ["控制参数"],
+        "aliases": ["控制参数分页台账", "分页检索系统配置项", "ControlParamController.page"],
+        "resource": "control_param", "lookup_keys": ["systemCode", "systemCodes", "cpCode", "cpName", "groupCode"], "cardinality": "many", "ownership": "all",
+        "discriminators": ["这是管理端分页结果；与 getControlParamList 的非分页缓存列表不同，SQL 对 cpCode/cpName 使用模糊匹配并可查询当前系统及公共 sys 配置。"],
+        "required_inputs": [],
+        "business_identifiers": [{"canonical": "control_param_id", "display_name": "控制参数ID", "technical_names": ["id"], "aliases": ["参数主键"], "resource": "control_param", "source": "response_contract", "confidence": 0.99}, {"canonical": "control_param_code", "display_name": "控制参数编码", "technical_names": ["cpCode"], "aliases": ["参数编码"], "resource": "control_param", "source": "source_contract", "confidence": 0.99}, {"canonical": "control_param_group_code", "display_name": "控制参数分组编码", "technical_names": ["groupCode"], "aliases": ["参数分组编码"], "resource": "control_param_group", "source": "source_contract", "confidence": 0.98}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode", "systemCodes"], "aliases": ["来源系统编码"], "resource": "system", "source": "source_contract", "confidence": 0.98}],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["ControlParamController#page(ControlParamPageCondition) -> ResponseData<PageResult<ControlParamQuery>>", "ControlParamPageCondition; ControlParamQuery", "ControlParamRepository#page -> ControlParamService#page -> controlParam_query_getPageList.sql；补 editable 并按 sys 优先排序"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "bd33076a-8c14-4409-a900-0451ac1373ca",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/controlParam/save"},
+      "semantic": {
+        "purpose": "供系统管理端新增或按 ID 修改当前系统编码下的单项控制参数，校验分组存在和参数编码唯一性，并记录变更、刷新缓存。",
+        "audiences": ["系统管理端"], "domains": ["系统配置", "控制参数"],
+        "scenarios": ["系统管理端维护一项 cpCode、cpValue 和 groupCode；传 id 时更新原参数，不传 id 时新增。"],
+        "actions": ["create", "update"], "entities": ["控制参数"],
+        "aliases": ["维护单个控制参数", "保存系统配置项", "ControlParamController.save"],
+        "resource": "control_param", "lookup_keys": ["id", "cpCode", "groupCode", "systemCode"], "cardinality": "one", "ownership": "all",
+        "discriminators": ["传 id 时只允许更新当前 systemCode 的记录，不传 id 时新增；cpCode 在当前 systemCode 内唯一，groupCode 非空时必须已存在；与 batchSave 的列表入口不同。"],
+        "required_inputs": [],
+        "business_identifiers": [{"canonical": "control_param_id", "display_name": "控制参数ID", "technical_names": ["id"], "aliases": ["参数主键"], "resource": "control_param", "source": "source_contract", "confidence": 0.98}, {"canonical": "control_param_code", "display_name": "控制参数编码", "technical_names": ["cpCode"], "aliases": ["参数编码"], "resource": "control_param", "source": "source_contract", "confidence": 0.99}, {"canonical": "control_param_group_code", "display_name": "控制参数分组编码", "technical_names": ["groupCode"], "aliases": ["参数分组编码"], "resource": "control_param_group", "source": "source_contract", "confidence": 0.98}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode"], "aliases": ["来源系统编码"], "resource": "system", "source": "runtime_context", "confidence": 0.98}],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": ["ControlParamController#save(ControlParamItem) -> ResponseData<Boolean>", "ControlParamItem", "ControlParamRepository#save -> ControlParamService#insert/update；校验当前 systemCode 可写、分组存在和 systemCode+cpCode 唯一，并写 ControlParamRecord"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "09d6711e-4c2a-4c27-847a-7ab5ec3fcc6f",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/controlParam/group/deleteByIds"},
+      "semantic": {
+        "purpose": "供系统管理端按分组 ID 集合批量删除当前系统编码下未被控制参数引用的分组。",
+        "audiences": ["系统管理端"], "domains": ["系统配置", "控制参数分组"],
+        "scenarios": ["系统管理端勾选多个控制参数分组 ids，批量删除其中尚无参数引用的分组。"],
+        "actions": ["delete"], "entities": ["控制参数分组"],
+        "aliases": ["批量删除参数分组", "清理控制参数分组", "ControlParamController.deleteGroupByIds"],
+        "resource": "control_param_group", "lookup_keys": ["ids", "systemCode", "groupCode"], "cardinality": "many", "ownership": "by_id",
+        "discriminators": ["按 body ids 删除分组而非控制参数；每个分组必须属于当前 systemCode，且其 groupCode 未被任何控制参数使用。"],
+        "required_inputs": [{"name": "ids", "zh_name": "控制参数分组ID集合", "location": "body", "required": true, "schema_type": "array"}],
+        "business_identifiers": [{"canonical": "control_param_group_id", "display_name": "控制参数分组ID", "technical_names": ["ids"], "aliases": ["参数分组主键集合"], "resource": "control_param_group", "source": "source_contract", "confidence": 0.99}, {"canonical": "control_param_group_code", "display_name": "控制参数分组编码", "technical_names": ["groupCode"], "aliases": ["参数分组编码"], "resource": "control_param_group", "source": "runtime_lookup", "confidence": 0.97}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode"], "aliases": ["来源系统编码"], "resource": "system", "source": "runtime_context", "confidence": 0.98}],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["ControlParamController#deleteGroupByIds(IdsCondition) -> ResponseData<Boolean>", "IdsCondition.ids @NotEmpty", "ControlParamRepository#deleteGroupByIds -> ControlParamGroupService#delete；按 systemCode 校验实体并按 groupCode 统计引用"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "42e601d6-88eb-4b33-bcaa-54cfc81d34b5",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/controlParam/group/list"},
+      "semantic": {
+        "purpose": "供系统管理端列出当前系统编码下全部控制参数分组，按排序值和 ID 排序并返回分组编码、名称及创建信息。",
+        "audiences": ["系统管理端"], "domains": ["系统配置", "控制参数分组"],
+        "scenarios": ["系统管理端加载当前 systemCode 的参数分组选择列表，展示 groupCode、groupName 和排序。"],
+        "actions": ["query", "list"], "entities": ["控制参数分组"],
+        "aliases": ["控制参数分组列表", "加载参数分组选择项", "ControlParamController.groupList"],
+        "resource": "control_param_group", "lookup_keys": ["systemCode"], "cardinality": "many", "ownership": "all",
+        "discriminators": ["本接口无请求体，只按当前 systemCode 返回最多一万条分组；与支持条件筛选并分页的 groupPage 不同。"],
+        "required_inputs": [],
+        "business_identifiers": [{"canonical": "control_param_group_id", "display_name": "控制参数分组ID", "technical_names": ["id"], "aliases": ["参数分组主键"], "resource": "control_param_group", "source": "response_contract", "confidence": 0.99}, {"canonical": "control_param_group_code", "display_name": "控制参数分组编码", "technical_names": ["groupCode"], "aliases": ["参数分组编码"], "resource": "control_param_group", "source": "response_contract", "confidence": 0.99}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode"], "aliases": ["来源系统编码"], "resource": "system", "source": "response_contract", "confidence": 0.98}],
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["ControlParamController#groupList() -> ResponseData<List<ControlParamGroupQuery>>", "ControlParamGroupQuery", "ControlParamRepository#groupList -> ControlParamGroupService#list -> controlParamGroup_query_getList.sql"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "201b09b8-5239-43fd-be38-591928d24fbc",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/controlParam/group/page"},
+      "semantic": {
+        "purpose": "供系统管理端在当前系统编码下按分组编码和分组名称分页查询控制参数分组。",
+        "audiences": ["系统管理端"], "domains": ["系统配置", "控制参数分组"],
+        "scenarios": ["系统管理端在分组台账中按 groupCode 或 groupName 检索当前 systemCode 的控制参数分组。"],
+        "actions": ["query", "page"], "entities": ["控制参数分组"],
+        "aliases": ["参数分组分页台账", "分页检索控制参数分组", "ControlParamController.groupPage"],
+        "resource": "control_param_group", "lookup_keys": ["systemCode", "groupCode", "groupName"], "cardinality": "many", "ownership": "all",
+        "discriminators": ["与 groupList 的无条件列表不同，本接口对 groupCode 和 groupName 做模糊筛选并返回分页结构。"],
+        "required_inputs": [],
+        "business_identifiers": [{"canonical": "control_param_group_id", "display_name": "控制参数分组ID", "technical_names": ["id"], "aliases": ["参数分组主键"], "resource": "control_param_group", "source": "response_contract", "confidence": 0.99}, {"canonical": "control_param_group_code", "display_name": "控制参数分组编码", "technical_names": ["groupCode"], "aliases": ["参数分组编码"], "resource": "control_param_group", "source": "source_contract", "confidence": 0.99}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode"], "aliases": ["来源系统编码"], "resource": "system", "source": "source_contract", "confidence": 0.98}],
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["ControlParamController#groupPage(ControlParamGroupPageCondition) -> ResponseData<PageResult<ControlParamGroupQuery>>", "ControlParamGroupPageCondition; ControlParamGroupQuery", "ControlParamRepository#groupPage -> ControlParamGroupService#page -> controlParamGroup_query_getPageList.sql"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "2d1bb7ec-0314-4cd8-b771-c4a20928e55e",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/controlParam/group/save"},
+      "semantic": {
+        "purpose": "供系统管理端新增或按 ID 修改当前系统编码下的控制参数分组，要求分组编码和名称非空并保证编码唯一；修改编码时同步更新组内参数。",
+        "audiences": ["系统管理端"], "domains": ["系统配置", "控制参数分组"],
+        "scenarios": ["系统管理端填写 groupCode 和 groupName 保存参数分组；传 id 时更新并同步已有参数的分组编码。"],
+        "actions": ["create", "update"], "entities": ["控制参数分组"],
+        "aliases": ["保存控制参数分组", "维护参数分组", "ControlParamController.saveGroup"],
+        "resource": "control_param_group", "lookup_keys": ["id", "groupCode", "groupName", "systemCode"], "cardinality": "one", "ownership": "all",
+        "discriminators": ["groupCode 和 groupName 由 @Valid 强制必填；传 id 更新时若 groupCode 改变，会同步当前 systemCode 下关联参数并记录变更。"],
+        "required_inputs": [{"name": "groupCode", "zh_name": "分组编码", "location": "body", "required": true, "schema_type": "string"}, {"name": "groupName", "zh_name": "分组名称", "location": "body", "required": true, "schema_type": "string"}],
+        "business_identifiers": [{"canonical": "control_param_group_id", "display_name": "控制参数分组ID", "technical_names": ["id"], "aliases": ["参数分组主键"], "resource": "control_param_group", "source": "source_contract", "confidence": 0.98}, {"canonical": "control_param_group_code", "display_name": "控制参数分组编码", "technical_names": ["groupCode"], "aliases": ["参数分组编码"], "resource": "control_param_group", "source": "source_contract", "confidence": 0.99}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode"], "aliases": ["来源系统编码"], "resource": "system", "source": "runtime_context", "confidence": 0.98}],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["ControlParamController#saveGroup(@Valid ControlParamGroupItem) -> ResponseData<Boolean>", "ControlParamGroupItem.groupCode/groupName @NotBlank", "ControlParamRepository#saveGroup -> ControlParamGroupService#insert/update；systemCode+groupCode 去重并在编码变化时同步参数"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "901f459a-336c-449a-a640-59559c25096e",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/controlParam/record/page"},
+      "semantic": {
+        "purpose": "供系统管理端按系统编码和控制参数编码分页查询参数新增、修改、删除记录，并返回变更前后快照的格式化内容。",
+        "audiences": ["系统管理端"], "domains": ["系统配置", "控制参数审计"],
+        "scenarios": ["系统管理端审计某个 systemCode 或 cpCode 的控制参数历史，查看变更类型及前后内容。"],
+        "actions": ["query", "page"], "entities": ["控制参数修改记录"],
+        "aliases": ["控制参数变更记录", "参数修改历史分页", "ControlParamController.recordPage"],
+        "resource": "control_param_record", "lookup_keys": ["systemCode", "cpCode"], "cardinality": "many", "ownership": "all",
+        "discriminators": ["本接口查询审计记录而非当前控制参数；systemCode 缺省为当前系统，cpCode 为精确筛选，并补充 beforeContent/afterContent。"],
+        "required_inputs": [],
+        "business_identifiers": [{"canonical": "control_param_record_id", "display_name": "控制参数修改记录ID", "technical_names": ["id"], "aliases": ["参数变更记录主键"], "resource": "control_param_record", "source": "response_contract", "confidence": 0.99}, {"canonical": "control_param_code", "display_name": "控制参数编码", "technical_names": ["cpCode"], "aliases": ["参数编码"], "resource": "control_param", "source": "source_contract", "confidence": 0.99}, {"canonical": "control_param_group_code", "display_name": "控制参数分组编码", "technical_names": ["groupCode"], "aliases": ["参数分组编码"], "resource": "control_param_group", "source": "response_contract", "confidence": 0.97}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode"], "aliases": ["来源系统编码"], "resource": "system", "source": "source_contract", "confidence": 0.98}],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["ControlParamController#recordPage(ControlParamRecordPageCondition) -> ResponseData<PageResult<ControlParamRecordQuery>>", "ControlParamRecordPageCondition; ControlParamRecordQuery", "ControlParamRepository#recordPage -> ControlParamRecordService#page -> controlParamRecord_query_getPageList.sql；Repository 格式化 beforeSnapshot/afterSnapshot"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+
+    {
+      "interface_id": "20fed53e-8f14-4547-aa86-4e135a2dccf6",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/dictData/change/page"},
+      "semantic": {
+        "purpose": "供系统管理端按系统编码、字典类型、字典编码和变更类型分页查询数据字典变更记录，并返回格式化的变更前后内容。",
+        "audiences": ["系统管理端"], "domains": ["数据字典", "字典审计"],
+        "scenarios": ["系统管理端按 systemCode、type、code 或 changeType 追溯字典项的新增、修改、启停、删除和回滚变化。"],
+        "actions": ["query", "page"], "entities": ["数据字典变更记录"],
+        "aliases": ["数据字典变更记录", "字典项修改历史分页", "DictDataController.changePage"],
+        "resource": "dict_data_change", "lookup_keys": ["systemCode", "type", "code", "changeType"], "cardinality": "many", "ownership": "all",
+        "discriminators": ["查询单项变更流水而非版本快照；code 为模糊筛选，结果含 dictDataId、versionNo 及 beforeContent/afterContent。"],
+        "required_inputs": [],
+        "business_identifiers": [{"canonical": "dict_data_change_id", "display_name": "字典变更记录ID", "technical_names": ["id"], "aliases": ["字典变更主键"], "resource": "dict_data_change", "source": "response_contract", "confidence": 0.99}, {"canonical": "dict_data_id", "display_name": "字典项ID", "technical_names": ["dictDataId"], "aliases": ["字典项主键"], "resource": "dict_data", "source": "response_contract", "confidence": 0.99}, {"canonical": "dict_data_code", "display_name": "字典项编码", "technical_names": ["code", "dictCode"], "aliases": ["字典编码"], "resource": "dict_data", "source": "source_contract", "confidence": 0.99}, {"canonical": "dict_type", "display_name": "字典类型编码", "technical_names": ["type", "dictType"], "aliases": ["字典类型"], "resource": "dict_data", "source": "source_contract", "confidence": 0.99}, {"canonical": "dict_version_no", "display_name": "字典版本号", "technical_names": ["versionNo"], "aliases": ["版本号"], "resource": "dict_data_version", "source": "response_contract", "confidence": 0.99}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode"], "aliases": ["来源系统编码"], "resource": "system", "source": "source_contract", "confidence": 0.98}],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["DictDataController#changePage(DictDataChangePageCondition) -> ResponseData<PageResult<DictDataChangeQuery>>", "DictDataChangePageCondition; DictDataChangeQuery", "DictDataRepository#changePage -> DictDataChangeService#page -> dictDataChange_query_getPageList.sql；补 beforeContent/afterContent"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "b8584617-78eb-4e9e-9079-51531d22c2a0",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/dictData/deleteById/{id}"},
+      "semantic": {
+        "purpose": "供系统管理端按字典项 ID 删除当前系统编码下的一项字典及其全部子级，并按字典类型记录版本和删除变更。",
+        "audiences": ["系统管理端"], "domains": ["数据字典", "字典维护"],
+        "scenarios": ["系统管理端已知字典项 id 时删除该节点及其子树，并产生对应类型的版本记录。"],
+        "actions": ["delete"], "entities": ["数据字典项"],
+        "aliases": ["删除单个字典节点", "按ID删除字典项及子级", "DictDataController.deleteById"],
+        "resource": "dict_data", "lookup_keys": ["id", "systemCode"], "cardinality": "many", "ownership": "by_id",
+        "discriminators": ["虽然入口只接收一个路径 id，Repository 会递归删除该节点及所有子级，因此实际影响基数为 many；记录必须属于当前 systemCode。"],
+        "required_inputs": [{"name": "id", "zh_name": "字典项ID", "location": "path", "required": true, "schema_type": "integer"}],
+        "business_identifiers": [{"canonical": "dict_data_id", "display_name": "字典项ID", "technical_names": ["id"], "aliases": ["字典项主键"], "resource": "dict_data", "source": "source_contract", "confidence": 0.99}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode"], "aliases": ["来源系统编码"], "resource": "system", "source": "runtime_context", "confidence": 0.98}],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["DictDataController#deleteById(Long) -> ResponseData<Boolean>", "DictDataRepository#deleteById -> DictDataRepository#deleteByIds；显式校验 id 非空，collectSubtreeIds 递归收集子级并由 DictDataService#delete 删除"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "043b5cb8-3ffd-496a-a609-a52b8ac4e074",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/dictData/deleteByIds"},
+      "semantic": {
+        "purpose": "供系统管理端按字典项 ID 集合批量删除当前系统编码下的多个字典节点及其全部子级，并按类型记录版本和删除变更。",
+        "audiences": ["系统管理端"], "domains": ["数据字典", "字典维护"],
+        "scenarios": ["系统管理端勾选多个字典项 ids 批量删除，并连同各自子树生成版本化删除审计。"],
+        "actions": ["delete"], "entities": ["数据字典项"],
+        "aliases": ["批量删除字典节点", "多选删除字典项及子级", "DictDataController.deleteByIds"],
+        "resource": "dict_data", "lookup_keys": ["ids", "systemCode"], "cardinality": "many", "ownership": "by_id",
+        "discriminators": ["接收 body 中非空 ids，递归扩展为各节点子树后删除；与单项路径删除入口不同。"],
+        "required_inputs": [{"name": "ids", "zh_name": "字典项ID集合", "location": "body", "required": true, "schema_type": "array"}],
+        "business_identifiers": [{"canonical": "dict_data_id", "display_name": "字典项ID", "technical_names": ["ids"], "aliases": ["字典项主键集合"], "resource": "dict_data", "source": "source_contract", "confidence": 0.99}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode"], "aliases": ["来源系统编码"], "resource": "system", "source": "runtime_context", "confidence": 0.98}],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["DictDataController#deleteByIds(IdsCondition) -> ResponseData<Boolean>", "IdsCondition.ids @NotEmpty", "DictDataRepository#deleteByIds -> DictDataService#delete；显式校验 ids 非空、当前 systemCode 归属并递归收集子级"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "ff74b77d-a45d-4aad-910c-9abd105ff34f",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/dictData/disableByIds"},
+      "semantic": {
+        "purpose": "供系统管理端按字典项 ID 数组批量停用当前系统编码下的字典节点及其全部子级，并按类型记录停用版本和变更。",
+        "audiences": ["系统管理端"], "domains": ["数据字典", "字典维护"],
+        "scenarios": ["系统管理端提交非空 ids 数组，将选中字典节点及其子树状态批量改为停用。"],
+        "actions": ["disable", "update"], "entities": ["数据字典项状态"],
+        "aliases": ["批量停用数据字典", "停用字典节点及子级", "DictDataController.disableByIds"],
+        "resource": "dict_data", "lookup_keys": ["ids", "systemCode", "status"], "cardinality": "many", "ownership": "by_id",
+        "discriminators": ["目标 status 为停用并递归覆盖子级；若全部已停用则报错。与 enableByIds 的启用目标相反。"],
+        "required_inputs": [{"name": "ids", "zh_name": "字典项ID数组", "location": "body", "required": true, "schema_type": "array"}],
+        "business_identifiers": [{"canonical": "dict_data_id", "display_name": "字典项ID", "technical_names": ["ids"], "aliases": ["字典项主键数组"], "resource": "dict_data", "source": "source_contract", "confidence": 0.99}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode"], "aliases": ["来源系统编码"], "resource": "system", "source": "runtime_context", "confidence": 0.98}],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["DictDataController#disableByIds(Long[]) -> ResponseData<Boolean>", "DictDataRepository#disableByIds -> updateStatus；ArrayUtil.isEmpty(ids) 显式非空校验，递归子级后 DictDataService#batchUpdate 并写版本/变更"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "b6704cef-d153-4cb8-9777-675c886bf308",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/dictData/enableByIds"},
+      "semantic": {
+        "purpose": "供系统管理端按字典项 ID 数组批量启用当前系统编码下的字典节点及其全部子级，并按类型记录启用版本和变更。",
+        "audiences": ["系统管理端"], "domains": ["数据字典", "字典维护"],
+        "scenarios": ["系统管理端提交非空 ids 数组，将选中字典节点及其子树状态批量改为启用。"],
+        "actions": ["enable", "update"], "entities": ["数据字典项状态"],
+        "aliases": ["批量启用数据字典", "启用字典节点及子级", "DictDataController.enableByIds"],
+        "resource": "dict_data", "lookup_keys": ["ids", "systemCode", "status"], "cardinality": "many", "ownership": "by_id",
+        "discriminators": ["目标 status 为启用并递归覆盖子级；若全部已启用则报错。与 disableByIds 的停用目标相反。"],
+        "required_inputs": [{"name": "ids", "zh_name": "字典项ID数组", "location": "body", "required": true, "schema_type": "array"}],
+        "business_identifiers": [{"canonical": "dict_data_id", "display_name": "字典项ID", "technical_names": ["ids"], "aliases": ["字典项主键数组"], "resource": "dict_data", "source": "source_contract", "confidence": 0.99}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode"], "aliases": ["来源系统编码"], "resource": "system", "source": "runtime_context", "confidence": 0.98}],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["DictDataController#enableByIds(Long[]) -> ResponseData<Boolean>", "DictDataRepository#enableByIds -> updateStatus；ArrayUtil.isEmpty(ids) 显式非空校验，递归子级后 DictDataService#batchUpdate 并写版本/变更"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "af671c49-34ec-4343-a3e7-dc1d0e8012f5",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/dictData/getDictData"},
+      "semantic": {
+        "purpose": "供内部业务系统按系统编码优先级、字典类型、字典项编码、值、父级 ID 或类型集合查询首个启用的字典项。",
+        "audiences": ["内部服务"], "domains": ["数据字典", "公共配置"],
+        "scenarios": ["业务服务按 systemCode/systemCodes、type/types、code、value 或 parentId 定位一个启用字典项。"],
+        "actions": ["query", "detail"], "entities": ["数据字典项"],
+        "aliases": ["查询单个启用字典项", "按字典条件取首项", "DictDataController.getDictData"],
+        "resource": "dict_data", "lookup_keys": ["systemCode", "systemCodes", "type", "types", "code", "value", "parentId", "status"], "cardinality": "one", "ownership": "by_id",
+        "discriminators": ["Repository 强制 status 为启用，并按 systemCodes 优先级逐系统查询后取首项；与 getDictDataList 返回全部匹配项不同。"],
+        "required_inputs": [],
+        "business_identifiers": [{"canonical": "dict_data_id", "display_name": "字典项ID", "technical_names": ["id"], "aliases": ["字典项主键"], "resource": "dict_data", "source": "response_contract", "confidence": 0.99}, {"canonical": "dict_data_code", "display_name": "字典项编码", "technical_names": ["code"], "aliases": ["字典编码"], "resource": "dict_data", "source": "source_contract", "confidence": 0.99}, {"canonical": "dict_type", "display_name": "字典类型编码", "technical_names": ["type", "types"], "aliases": ["字典类型"], "resource": "dict_data", "source": "source_contract", "confidence": 0.99}, {"canonical": "dict_parent_id", "display_name": "父级字典项ID", "technical_names": ["parentId"], "aliases": ["父字典项主键"], "resource": "dict_data", "source": "source_contract", "confidence": 0.97}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode", "systemCodes"], "aliases": ["来源系统编码"], "resource": "system", "source": "source_contract", "confidence": 0.98}],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["DictDataController#getDictData(DictDataCondition) -> ResponseData<DictDataQuery>", "DictDataCondition; DictDataQuery", "DictDataRepository#getDictData -> resolvePrioritySystemCodes -> DictDataService#list -> dictData_query_getList.sql；强制 status=YES 并取首项"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "4402c7ca-6ff8-4cb1-b1e1-765d32301e28",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/dictData/getDictDataAll"},
+      "semantic": {
+        "purpose": "供内部业务系统按系统编码、字典类型或类型集合及可选编码、值、父级 ID 获取启用字典项，并按字典类型分组为树形映射。",
+        "audiences": ["内部服务"], "domains": ["数据字典", "公共配置"],
+        "scenarios": ["业务服务按 systemCode/systemCodes、type/types、code、value 或 parentId 批量加载启用字典树映射。"],
+        "actions": ["query", "list"], "entities": ["数据字典树"],
+        "aliases": ["加载全部字典树映射", "按类型获取启用字典", "DictDataController.getDictDataAll"],
+        "resource": "dict_data", "lookup_keys": ["systemCode", "systemCodes", "type", "types", "code", "value", "parentId", "status"], "cardinality": "many", "ownership": "all",
+        "discriminators": ["返回 Map<字典类型,List<DictDataDTO>>，每项含 id、code、parentId 和 children；无 code/value/parentId 时可走缓存，区别于平铺的 getDictDataList。"],
+        "required_inputs": [],
+        "business_identifiers": [{"canonical": "dict_data_id", "display_name": "字典项ID", "technical_names": ["id"], "aliases": ["字典项主键"], "resource": "dict_data", "source": "response_contract", "confidence": 0.99}, {"canonical": "dict_data_code", "display_name": "字典项编码", "technical_names": ["code"], "aliases": ["字典编码"], "resource": "dict_data", "source": "source_contract", "confidence": 0.99}, {"canonical": "dict_type", "display_name": "字典类型编码", "technical_names": ["type", "types"], "aliases": ["字典类型"], "resource": "dict_data", "source": "source_contract", "confidence": 0.98}, {"canonical": "dict_parent_id", "display_name": "父级字典项ID", "technical_names": ["parentId"], "aliases": ["父字典项主键"], "resource": "dict_data", "source": "source_contract", "confidence": 0.97}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode", "systemCodes"], "aliases": ["来源系统编码"], "resource": "system", "source": "source_contract", "confidence": 0.98}],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": ["DictDataController#getDictDataAll(DictDataCondition) -> ResponseData<Map<String,List<DictDataDTO>>>", "DictDataCondition; DictDataDTO", "DictDataRepository#getDictMap -> mergeDictMaps/buildDictMap/buildTree；DictDataDTO.code/value/parentId/children 由 DictDataQuery 映射"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "dda5f5b6-1785-42fa-b71e-6a6082f9e28a",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/dictData/getDictDataAlls"},
+      "semantic": {
+        "purpose": "供内部业务系统加载当前系统编码下全部启用数据字典的下拉选择树，按字典类型返回 value、label 和 children。",
+        "audiences": ["内部服务"], "domains": ["数据字典", "公共选择项"],
+        "scenarios": ["业务界面初始化时加载当前 systemCode 的全部启用字典选择项，按类型组织为级联下拉树。"],
+        "actions": ["query", "list"], "entities": ["数据字典选择项"],
+        "aliases": ["加载全部字典选择项", "获取字典下拉树", "DictDataController.getDictDataAlls"],
+        "resource": "dict_data_select", "lookup_keys": ["systemCode", "status"], "cardinality": "many", "ownership": "all",
+        "discriminators": ["无请求体，只返回 Map<字典类型,List<SelectItem>>；SelectItem 仅含 value、label、children，不返回字典项 id、systemCode 或 parentId。"],
+        "required_inputs": [],
+        "business_identifiers": [{"canonical": "dict_data_code", "display_name": "字典项编码", "technical_names": ["value"], "aliases": ["选择项值编码"], "resource": "dict_data", "source": "runtime_projection", "confidence": 0.96}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode"], "aliases": ["来源系统编码"], "resource": "system", "source": "runtime_context", "confidence": 0.97}],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": ["DictDataController#getDictDataAlls() -> ResponseData<Map<String,List<SelectItem>>>", "SelectItem", "DictDataRepository#getDictDataSelectMap -> getDictMap -> toSelectItem；toSelectItem 将 DictDataDTO.value（由字典 code 写入）映射到 SelectItem.value"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "cb1938e2-fc00-4e0d-ace2-a73bfde9be51",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/dictData/getDictDataList"},
+      "semantic": {
+        "purpose": "供内部业务系统按系统编码优先级、字典类型或类型集合、字典项编码、值和父级 ID 查询全部启用字典项平铺列表。",
+        "audiences": ["内部服务"], "domains": ["数据字典", "公共配置"],
+        "scenarios": ["业务服务按 systemCode/systemCodes、type/types、code、value 或 parentId 批量检索启用字典项对象。"],
+        "actions": ["query", "list"], "entities": ["数据字典项"],
+        "aliases": ["查询启用字典项列表", "批量读取字典明细", "DictDataController.getDictDataList"],
+        "resource": "dict_data", "lookup_keys": ["systemCode", "systemCodes", "type", "types", "code", "value", "parentId", "status"], "cardinality": "many", "ownership": "all",
+        "discriminators": ["Repository 强制 status 为启用，按 systemCodes 顺序合并平铺结果；与 getDictData 取首项、getDictDataAll 返回树形映射不同。"],
+        "required_inputs": [],
+        "business_identifiers": [{"canonical": "dict_data_id", "display_name": "字典项ID", "technical_names": ["id"], "aliases": ["字典项主键"], "resource": "dict_data", "source": "response_contract", "confidence": 0.99}, {"canonical": "dict_data_code", "display_name": "字典项编码", "technical_names": ["code"], "aliases": ["字典编码"], "resource": "dict_data", "source": "source_contract", "confidence": 0.99}, {"canonical": "dict_type", "display_name": "字典类型编码", "technical_names": ["type", "types"], "aliases": ["字典类型"], "resource": "dict_data", "source": "source_contract", "confidence": 0.99}, {"canonical": "dict_parent_id", "display_name": "父级字典项ID", "technical_names": ["parentId"], "aliases": ["父字典项主键"], "resource": "dict_data", "source": "source_contract", "confidence": 0.97}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode", "systemCodes"], "aliases": ["来源系统编码"], "resource": "system", "source": "source_contract", "confidence": 0.98}],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["DictDataController#getDictDataList(DictDataCondition) -> ResponseData<List<DictDataQuery>>", "DictDataCondition; DictDataQuery", "DictDataRepository#list -> DictDataService#list -> dictData_query_getList.sql；强制 status=YES 并按 systemCode 合并"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "94f71c9c-fc46-4e13-8688-00f4508f9493",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/dictData/page"},
+      "semantic": {
+        "purpose": "供系统管理端按系统编码或系统编码集合、字典编码、类型、值、状态和父级 ID 分页查询数据字典项，并返回可编辑标记。",
+        "audiences": ["系统管理端"], "domains": ["数据字典", "字典维护"],
+        "scenarios": ["系统管理端在字典台账中按 systemCode/systemCodes、code、type、value、status 或 parentId 分页检索字典项。"],
+        "actions": ["query", "page"], "entities": ["数据字典项"],
+        "aliases": ["数据字典分页台账", "分页检索字典项", "DictDataController.page"],
+        "resource": "dict_data", "lookup_keys": ["systemCode", "systemCodes", "code", "type", "value", "status", "parentId"], "cardinality": "many", "ownership": "all",
+        "discriminators": ["管理端分页接口不强制 status=启用；code/type/value 使用模糊筛选，并可按 parentId 查询层级。"],
+        "required_inputs": [],
+        "business_identifiers": [{"canonical": "dict_data_id", "display_name": "字典项ID", "technical_names": ["id"], "aliases": ["字典项主键"], "resource": "dict_data", "source": "response_contract", "confidence": 0.99}, {"canonical": "dict_data_code", "display_name": "字典项编码", "technical_names": ["code"], "aliases": ["字典编码"], "resource": "dict_data", "source": "source_contract", "confidence": 0.99}, {"canonical": "dict_type", "display_name": "字典类型编码", "technical_names": ["type"], "aliases": ["字典类型"], "resource": "dict_data", "source": "source_contract", "confidence": 0.99}, {"canonical": "dict_parent_id", "display_name": "父级字典项ID", "technical_names": ["parentId"], "aliases": ["父字典项主键"], "resource": "dict_data", "source": "source_contract", "confidence": 0.97}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode", "systemCodes"], "aliases": ["来源系统编码"], "resource": "system", "source": "source_contract", "confidence": 0.98}],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["DictDataController#page(DictDataPageCondition) -> ResponseData<PageResult<DictDataQuery>>", "DictDataPageCondition; DictDataQuery", "DictDataRepository#page -> DictDataService#page -> dictData_query_getPageList.sql；fillPageSystemCodes 并补 editable"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "d54fb2cb-b8c1-49da-94c3-5b5087f22e24",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/dictData/save"},
+      "semantic": {
+        "purpose": "供系统管理端新增或按 ID 修改当前系统编码下的数据字典项，维护编码、类型、值、父级和排序，并记录字典版本及变更。",
+        "audiences": ["系统管理端"], "domains": ["数据字典", "字典维护"],
+        "scenarios": ["系统管理端维护 code、type、value 和 parentId；传 id 时更新原字典项，不传 id 时新增。"],
+        "actions": ["create", "update"], "entities": ["数据字典项"],
+        "aliases": ["保存数据字典项", "维护字典节点", "DictDataController.save"],
+        "resource": "dict_data", "lookup_keys": ["id", "code", "type", "parentId", "systemCode"], "cardinality": "one", "ownership": "all",
+        "discriminators": ["id 决定新增或更新；code 在当前 systemCode+type 内唯一，parentId 非根节点时必须属于同 systemCode 和同 type，保存成功后生成版本与变更记录。"],
+        "required_inputs": [],
+        "business_identifiers": [{"canonical": "dict_data_id", "display_name": "字典项ID", "technical_names": ["id"], "aliases": ["字典项主键"], "resource": "dict_data", "source": "source_contract", "confidence": 0.98}, {"canonical": "dict_data_code", "display_name": "字典项编码", "technical_names": ["code"], "aliases": ["字典编码"], "resource": "dict_data", "source": "source_contract", "confidence": 0.99}, {"canonical": "dict_type", "display_name": "字典类型编码", "technical_names": ["type"], "aliases": ["字典类型"], "resource": "dict_data", "source": "source_contract", "confidence": 0.99}, {"canonical": "dict_parent_id", "display_name": "父级字典项ID", "technical_names": ["parentId"], "aliases": ["父字典项主键"], "resource": "dict_data", "source": "source_contract", "confidence": 0.97}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode"], "aliases": ["来源系统编码"], "resource": "system", "source": "runtime_context", "confidence": 0.98}],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": ["DictDataController#save(DictDataItem) -> ResponseData<Boolean>", "DictDataItem", "DictDataRepository#save -> DictDataService#insert/update；校验排序、systemCode+code+type 唯一、父节点同系统同类型且非自身/后代，并记录版本与变更"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "1af4bf41-49cc-459b-bfbd-974e648a4596",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/dictData/version/detail"},
+      "semantic": {
+        "purpose": "供系统管理端按字典版本 ID 查询一条版本详情，返回字典类型、版本号、变更摘要、原始快照和格式化快照内容。",
+        "audiences": ["系统管理端"], "domains": ["数据字典", "字典版本"],
+        "scenarios": ["系统管理端用版本 id 打开数据字典版本详情，核对 versionNo、dictType 和快照内容。"],
+        "actions": ["query", "detail"], "entities": ["数据字典版本"],
+        "aliases": ["数据字典版本详情", "查看字典快照", "DictDataController.versionDetail"],
+        "resource": "dict_data_version", "lookup_keys": ["id"], "cardinality": "one", "ownership": "by_id",
+        "discriminators": ["仅按版本 id 定位并返回 snapshotJson/snapshotContent；执行链未按当前 systemCode 限定，而 versionRollback 会校验版本属于当前系统。"],
+        "required_inputs": [{"name": "id", "zh_name": "字典版本ID", "location": "body", "required": true, "schema_type": "integer"}],
+        "business_identifiers": [{"canonical": "dict_version_id", "display_name": "字典版本ID", "technical_names": ["id"], "aliases": ["版本主键"], "resource": "dict_data_version", "source": "source_contract", "confidence": 0.99}, {"canonical": "dict_version_no", "display_name": "字典版本号", "technical_names": ["versionNo"], "aliases": ["版本号"], "resource": "dict_data_version", "source": "response_contract", "confidence": 0.99}, {"canonical": "dict_type", "display_name": "字典类型编码", "technical_names": ["dictType"], "aliases": ["字典类型"], "resource": "dict_data", "source": "response_contract", "confidence": 0.99}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode"], "aliases": ["来源系统编码"], "resource": "system", "source": "response_contract", "confidence": 0.98}],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": ["DictDataController#versionDetail(@Valid IdCondition) -> ResponseData<DictDataVersionQuery>", "IdCondition.id @NotNull; DictDataVersionQuery", "DictDataRepository#versionDetail -> getVersionEntity -> DictDataVersionService#findById；格式化 snapshotContent，未执行 systemCode 归属校验"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "a867aac3-a1c6-4dd7-986c-1e81748e2973",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/dictData/version/page"},
+      "semantic": {
+        "purpose": "供系统管理端按系统编码、字典类型和变更类型分页查询数据字典版本，返回版本号、变更摘要和快照。",
+        "audiences": ["系统管理端"], "domains": ["数据字典", "字典版本"],
+        "scenarios": ["系统管理端按 systemCode、type 或 changeType 浏览数据字典版本时间线。"],
+        "actions": ["query", "page"], "entities": ["数据字典版本"],
+        "aliases": ["数据字典版本分页", "字典版本时间线", "DictDataController.versionPage"],
+        "resource": "dict_data_version", "lookup_keys": ["systemCode", "type", "changeType"], "cardinality": "many", "ownership": "all",
+        "discriminators": ["查询版本级快照而非单项变更；systemCode 缺省为当前系统，按 versionNo 倒序返回。"],
+        "required_inputs": [],
+        "business_identifiers": [{"canonical": "dict_version_id", "display_name": "字典版本ID", "technical_names": ["id"], "aliases": ["版本主键"], "resource": "dict_data_version", "source": "response_contract", "confidence": 0.99}, {"canonical": "dict_version_no", "display_name": "字典版本号", "technical_names": ["versionNo"], "aliases": ["版本号"], "resource": "dict_data_version", "source": "response_contract", "confidence": 0.99}, {"canonical": "dict_type", "display_name": "字典类型编码", "technical_names": ["type", "dictType"], "aliases": ["字典类型"], "resource": "dict_data", "source": "source_contract", "confidence": 0.99}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode"], "aliases": ["来源系统编码"], "resource": "system", "source": "source_contract", "confidence": 0.98}],
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["DictDataController#versionPage(DictDataVersionPageCondition) -> ResponseData<PageResult<DictDataVersionQuery>>", "DictDataVersionPageCondition; DictDataVersionQuery", "DictDataRepository#versionPage -> DictDataVersionService#page -> dictDataVersion_query_getPageList.sql"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "94b74147-f9a7-484a-9213-03909426b8ac",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/dictData/version/rollback"},
+      "semantic": {
+        "purpose": "供系统管理端按字典版本 ID 将当前系统编码下对应字典类型恢复到该版本快照，并生成新的回滚版本及逐项变更。",
+        "audiences": ["系统管理端"], "domains": ["数据字典", "字典版本"],
+        "scenarios": ["系统管理端选择版本 id，把当前 systemCode 的某一 dictType 恢复到历史快照。"],
+        "actions": ["execute", "update"], "entities": ["数据字典版本", "数据字典项"],
+        "aliases": ["回滚数据字典版本", "恢复字典历史快照", "DictDataController.versionRollback"],
+        "resource": "dict_data_version", "lookup_keys": ["id", "systemCode", "dictType"], "cardinality": "many", "ownership": "by_id",
+        "discriminators": ["按版本 id 定位，但只允许 targetVersion.systemCode 等于当前 systemCode；会按 dictType 插入、更新、删除多项并重建父子关系，而非只修改版本记录。"],
+        "required_inputs": [{"name": "id", "zh_name": "字典版本ID", "location": "body", "required": true, "schema_type": "integer"}],
+        "business_identifiers": [{"canonical": "dict_version_id", "display_name": "字典版本ID", "technical_names": ["id"], "aliases": ["版本主键"], "resource": "dict_data_version", "source": "source_contract", "confidence": 0.99}, {"canonical": "dict_type", "display_name": "字典类型编码", "technical_names": ["dictType"], "aliases": ["字典类型"], "resource": "dict_data", "source": "runtime_lookup", "confidence": 0.98}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode"], "aliases": ["来源系统编码"], "resource": "system", "source": "runtime_context", "confidence": 0.98}],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": ["DictDataController#versionRollback(@Valid IdCondition) -> ResponseData<Boolean>", "IdCondition.id @NotNull", "DictDataRepository#rollbackVersion -> DictDataVersionService#findById/DictDataService#batchInsert,batchUpdate,delete；校验当前 systemCode 并按 dictType 恢复快照、记录 ROLLBACK 版本"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+
+    {
+      "interface_id": "d1b7f80a-0dd4-4ac7-aecb-5742ac06ab86",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/leafRule/deleteById/{id}"},
+      "semantic": {
+        "purpose": "供系统管理端按流水号规则 ID 删除当前系统编码下的一条规则。",
+        "audiences": ["系统管理端"], "domains": ["流水号", "编码规则"],
+        "scenarios": ["系统管理端已知流水号规则 id 时删除当前 systemCode 下的单条规则。"],
+        "actions": ["delete"], "entities": ["流水号规则"],
+        "aliases": ["删除单条流水号规则", "按ID移除编码规则", "LeafRuleController.deleteById"],
+        "resource": "leaf_rule", "lookup_keys": ["id", "systemCode"], "cardinality": "one", "ownership": "by_id",
+        "discriminators": ["接收路径 id 并删除一条；与批量删除入口不同，执行前校验规则属于当前 systemCode。"],
+        "required_inputs": [{"name": "id", "zh_name": "流水号规则ID", "location": "path", "required": true, "schema_type": "integer"}],
+        "business_identifiers": [{"canonical": "leaf_rule_id", "display_name": "流水号规则ID", "technical_names": ["id"], "aliases": ["编码规则主键"], "resource": "leaf_rule", "source": "source_contract", "confidence": 0.99}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode"], "aliases": ["来源系统编码"], "resource": "system", "source": "runtime_context", "confidence": 0.98}],
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["LeafRuleController#deleteById(Long) -> ResponseData<Boolean>", "LeafRuleRepository#deleteById -> LeafRuleRepository#deleteByIds -> LeafRuleService#delete；显式校验 id 非空及当前 systemCode 归属"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "3f18b9f2-7c5c-4600-9d8e-e8c1afe33482",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/leafRule/deleteByIds"},
+      "semantic": {
+        "purpose": "供系统管理端按流水号规则 ID 集合批量删除当前系统编码下的多条规则。",
+        "audiences": ["系统管理端"], "domains": ["流水号", "编码规则"],
+        "scenarios": ["系统管理端勾选多个流水号规则 ids，批量删除当前 systemCode 下的编码规则。"],
+        "actions": ["delete"], "entities": ["流水号规则"],
+        "aliases": ["批量删除流水号规则", "多选移除编码规则", "LeafRuleController.deleteByIds"],
+        "resource": "leaf_rule", "lookup_keys": ["ids", "systemCode"], "cardinality": "many", "ownership": "by_id",
+        "discriminators": ["接收 body 中非空 ids 并逐项校验当前 systemCode 归属；与单项路径删除入口不同。"],
+        "required_inputs": [{"name": "ids", "zh_name": "流水号规则ID集合", "location": "body", "required": true, "schema_type": "array"}],
+        "business_identifiers": [{"canonical": "leaf_rule_id", "display_name": "流水号规则ID", "technical_names": ["ids"], "aliases": ["编码规则主键集合"], "resource": "leaf_rule", "source": "source_contract", "confidence": 0.99}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode"], "aliases": ["来源系统编码"], "resource": "system", "source": "runtime_context", "confidence": 0.98}],
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["LeafRuleController#deleteByIds(IdsCondition) -> ResponseData<Boolean>", "IdsCondition.ids @NotEmpty", "LeafRuleRepository#deleteByIds -> LeafRuleService#delete；显式校验 ids 非空并逐项校验当前 systemCode 归属"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "1e0c40df-0726-4a38-b399-f7483886ba1d",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/leafRule/generateRecord/page"},
+      "semantic": {
+        "purpose": "供系统管理端按流水号规则 ID 分页查询该规则的号段申请记录，查看申请数量、起止值、分配维度、动态参数、成功状态和耗时。",
+        "audiences": ["系统管理端"], "domains": ["流水号", "号段审计"],
+        "scenarios": ["系统管理端用 ruleId 追踪某条流水号规则的号段申请历史和失败信息。"],
+        "actions": ["query", "page"], "entities": ["流水号生成记录"],
+        "aliases": ["流水号生成记录分页", "号段申请历史", "LeafRuleController.pageGenerateRecord"],
+        "resource": "leaf_rule_generate_record", "lookup_keys": ["ruleId"], "cardinality": "many", "ownership": "by_id",
+        "discriminators": ["ruleId 由 @Valid 强制必填；查询生成审计记录而非规则配置，结果含 startValue、endValue、currentRedisKey、success 和 errorMsg。"],
+        "required_inputs": [{"name": "ruleId", "zh_name": "流水号规则ID", "location": "body", "required": true, "schema_type": "integer"}],
+        "business_identifiers": [{"canonical": "leaf_rule_generate_record_id", "display_name": "流水号生成记录ID", "technical_names": ["id"], "aliases": ["号段申请记录主键"], "resource": "leaf_rule_generate_record", "source": "response_contract", "confidence": 0.99}, {"canonical": "leaf_rule_id", "display_name": "流水号规则ID", "technical_names": ["ruleId"], "aliases": ["编码规则主键"], "resource": "leaf_rule", "source": "source_contract", "confidence": 0.99}, {"canonical": "leaf_rule_name", "display_name": "流水号规则名称", "technical_names": ["ruleName"], "aliases": ["编码规则名称"], "resource": "leaf_rule", "source": "response_contract", "confidence": 0.98}, {"canonical": "segment_dimension_key", "display_name": "号段分配维度键", "technical_names": ["currentRedisKey"], "aliases": ["号段计数维度"], "resource": "leaf_rule_generate_record", "source": "response_contract", "confidence": 0.97}],
+        "semantic_confidence": 0.99,
+        "semantic_evidence": ["LeafRuleController#pageGenerateRecord(@Valid LeafRuleGenerateRecordPageCondition) -> ResponseData<PageResult<LeafRuleGenerateRecordQuery>>", "LeafRuleGenerateRecordPageCondition.ruleId @NotNull; LeafRuleGenerateRecordQuery", "LeafRuleRepository#pageGenerateRecord -> LeafRuleGenerateRecordService#page -> leafRuleGenerateRecord_query_getPageList.sql"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "96a58fce-6ceb-40e9-8f38-6fc868fdc094",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/leafRule/getLeafRule"},
+      "semantic": {
+        "purpose": "供内部业务系统按系统编码优先级、规则名称或名称集合、前缀、类型、备注及排除 ID 查询首条流水号规则。",
+        "audiences": ["内部服务"], "domains": ["流水号", "编码规则"],
+        "scenarios": ["业务服务按 systemCode/systemCodes、name/ruleNameList、prefix、type、remark 或 existRuleList 定位一个流水号规则。"],
+        "actions": ["query", "detail"], "entities": ["流水号规则"],
+        "aliases": ["查询单个流水号规则", "按条件取首条编码规则", "LeafRuleController.getLeafRule"],
+        "resource": "leaf_rule", "lookup_keys": ["systemCode", "systemCodes", "name", "ruleNameList", "prefix", "type", "remark", "existRuleList"], "cardinality": "one", "ownership": "by_id",
+        "discriminators": ["按 systemCodes 优先级逐系统查询并取首项；existRuleList 用于排除规则 ID，区别于 getLeafRuleList 返回全部匹配项。"],
+        "required_inputs": [],
+        "business_identifiers": [{"canonical": "leaf_rule_id", "display_name": "流水号规则ID", "technical_names": ["id", "existRuleList"], "aliases": ["编码规则主键"], "resource": "leaf_rule", "source": "source_contract", "confidence": 0.99}, {"canonical": "leaf_rule_name", "display_name": "流水号规则名称", "technical_names": ["name", "ruleNameList"], "aliases": ["编码规则名称"], "resource": "leaf_rule", "source": "source_contract", "confidence": 0.99}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode", "systemCodes"], "aliases": ["来源系统编码"], "resource": "system", "source": "source_contract", "confidence": 0.98}],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["LeafRuleController#getLeafRule(LeafRuleCondition) -> ResponseData<LeafRuleQuery>", "LeafRuleCondition; LeafRuleQuery", "LeafRuleRepository#getLeafRule -> LeafRuleService#list -> leafRule_query_getList.sql；按 systemCode 优先级取首项并补 editable"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "3ceebc36-545d-4175-a9da-2e1f07cf07b6",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/leafRule/getLeafRuleById/{id}"},
+      "semantic": {
+        "purpose": "供系统管理端按流水号规则 ID 查询一条规则详情，返回规则名称、前缀、日期格式、补零位数、重置周期、类型和系统编码。",
+        "audiences": ["系统管理端"], "domains": ["流水号", "编码规则"],
+        "scenarios": ["系统管理端用路径 id 打开流水号规则详情并查看完整生成配置。"],
+        "actions": ["query", "detail"], "entities": ["流水号规则"],
+        "aliases": ["流水号规则详情", "按ID查看编码规则", "LeafRuleController.getLeafRuleById"],
+        "resource": "leaf_rule", "lookup_keys": ["id"], "cardinality": "one", "ownership": "by_id",
+        "discriminators": ["仅按路径 id 直接查询，不按当前 systemCode 校验归属；与 getLeafRule 的多条件及系统优先级查询不同。"],
+        "required_inputs": [{"name": "id", "zh_name": "流水号规则ID", "location": "path", "required": true, "schema_type": "integer"}],
+        "business_identifiers": [{"canonical": "leaf_rule_id", "display_name": "流水号规则ID", "technical_names": ["id"], "aliases": ["编码规则主键"], "resource": "leaf_rule", "source": "source_contract", "confidence": 0.99}, {"canonical": "leaf_rule_name", "display_name": "流水号规则名称", "technical_names": ["name"], "aliases": ["编码规则名称"], "resource": "leaf_rule", "source": "response_contract", "confidence": 0.99}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode"], "aliases": ["来源系统编码"], "resource": "system", "source": "response_contract", "confidence": 0.98}],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["LeafRuleController#getLeafRuleById(Long) -> ResponseData<LeafRuleQuery>", "LeafRuleQuery", "LeafRuleRepository#getLeafRuleById -> LeafRuleService#findById；显式校验 id 非空和记录存在，但未校验 systemCode 归属"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "6c760f55-dd27-4d17-a8ca-0b8df6b8dabc",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/leafRule/getLeafRuleList"},
+      "semantic": {
+        "purpose": "供内部业务系统按系统编码或编码集合、规则名称或名称集合、前缀、类型、备注及排除 ID 查询流水号规则列表。",
+        "audiences": ["内部服务"], "domains": ["流水号", "编码规则"],
+        "scenarios": ["业务服务按 systemCode/systemCodes、name/ruleNameList、prefix、type、remark 或 existRuleList 批量检索流水号规则。"],
+        "actions": ["query", "list"], "entities": ["流水号规则"],
+        "aliases": ["查询流水号规则列表", "批量读取编码规则", "LeafRuleController.getLeafRuleList"],
+        "resource": "leaf_rule", "lookup_keys": ["systemCode", "systemCodes", "name", "ruleNameList", "prefix", "type", "remark", "existRuleList"], "cardinality": "many", "ownership": "all",
+        "discriminators": ["请求体可省略并返回全部匹配项；existRuleList 排除规则 ID，ruleNameList 精确限定名称集合，区别于 getLeafRule 只取首项。"],
+        "required_inputs": [],
+        "business_identifiers": [{"canonical": "leaf_rule_id", "display_name": "流水号规则ID", "technical_names": ["id", "existRuleList"], "aliases": ["编码规则主键"], "resource": "leaf_rule", "source": "source_contract", "confidence": 0.99}, {"canonical": "leaf_rule_name", "display_name": "流水号规则名称", "technical_names": ["name", "ruleNameList"], "aliases": ["编码规则名称"], "resource": "leaf_rule", "source": "source_contract", "confidence": 0.99}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode", "systemCodes"], "aliases": ["来源系统编码"], "resource": "system", "source": "source_contract", "confidence": 0.98}],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["LeafRuleController#getLeafRuleList(LeafRuleCondition) -> ResponseData<List<LeafRuleQuery>>", "LeafRuleCondition; LeafRuleQuery", "LeafRuleRepository#getLeafRuleList -> LeafRuleService#list -> leafRule_query_getList.sql；按 systemCode 合并并补 editable"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "826a6fa4-eacc-471e-901d-8b3af2b5847a",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/leafRule/leaf-rule/segment"},
+      "semantic": {
+        "purpose": "供编码服务器按规则名称和可选系统编码申请指定大小的流水号号段，使用动态参数替换前缀占位符，原子递增计数并返回起止值和生成配置。",
+        "audiences": ["内部服务", "编码服务器"], "domains": ["流水号", "号段分配"],
+        "scenarios": ["编码服务器用 ruleName 申请 segmentSize 个连续号值；规则前缀含占位符时同时传 params，systemCode 可显式指定。"],
+        "actions": ["execute"], "entities": ["流水号号段"],
+        "aliases": ["申请流水号号段", "分配连续编码区间", "LeafRuleController.getSegment"],
+        "resource": "leaf_rule_segment", "lookup_keys": ["ruleName", "params", "segmentSize", "systemCode", "currentRedisKey"], "cardinality": "one", "ownership": "by_id",
+        "discriminators": ["ruleName 为必填查询参数；segmentSize 为空或不大于零时归一为 1；prefix 含占位符时 params 必须逐项提供对应键，重置规则会把周期拼入 currentRedisKey。"],
+        "required_inputs": [{"name": "ruleName", "zh_name": "流水号规则名称", "location": "query", "required": true, "schema_type": "string"}],
+        "business_identifiers": [{"canonical": "leaf_rule_name", "display_name": "流水号规则名称", "technical_names": ["ruleName", "name"], "aliases": ["编码规则名称"], "resource": "leaf_rule", "source": "source_contract", "confidence": 0.99}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode"], "aliases": ["来源系统编码"], "resource": "system", "source": "source_contract", "confidence": 0.98}, {"canonical": "segment_dimension_key", "display_name": "号段分配维度键", "technical_names": ["currentRedisKey"], "aliases": ["号段计数维度"], "resource": "leaf_rule_segment", "source": "runtime_lookup", "confidence": 0.96}],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": ["LeafRuleController#getSegment(String,Map<String,String>,Integer,String) -> ResponseData<SegmentResponse>", "SegmentResponse; SegmentAllocationResult", "LeafRuleRepository#getSegment -> LeafRuleService#getByName -> LeafRuleChildService#upsertAndIncrementByRule/querySegment -> leafRuleChild_update_atomicIncrement.sql/leafRuleChild_query_segment.sql；resolvePrefix 校验动态占位符参数并写生成记录"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "26287b2b-4fe0-463e-8f90-04e453dad89d",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/leafRule/page"},
+      "semantic": {
+        "purpose": "供系统管理端按系统编码或编码集合、规则名称或名称集合、前缀、类型、备注及排除 ID 分页查询流水号规则。",
+        "audiences": ["系统管理端"], "domains": ["流水号", "编码规则"],
+        "scenarios": ["系统管理端在规则台账中按 systemCode/systemCodes、name/ruleNameList、prefix、type、remark 或 existRuleList 分页检索编码规则。"],
+        "actions": ["query", "page"], "entities": ["流水号规则"],
+        "aliases": ["流水号规则分页台账", "分页检索编码规则", "LeafRuleController.page"],
+        "resource": "leaf_rule", "lookup_keys": ["systemCode", "systemCodes", "name", "ruleNameList", "prefix", "type", "remark", "existRuleList"], "cardinality": "many", "ownership": "all",
+        "discriminators": ["管理端分页结构；name/prefix/type/remark 为模糊筛选，ruleNameList 为名称集合，existRuleList 排除规则 ID，区别于 getLeafRuleList 的非分页列表。"],
+        "required_inputs": [],
+        "business_identifiers": [{"canonical": "leaf_rule_id", "display_name": "流水号规则ID", "technical_names": ["id", "existRuleList"], "aliases": ["编码规则主键"], "resource": "leaf_rule", "source": "source_contract", "confidence": 0.99}, {"canonical": "leaf_rule_name", "display_name": "流水号规则名称", "technical_names": ["name", "ruleNameList"], "aliases": ["编码规则名称"], "resource": "leaf_rule", "source": "source_contract", "confidence": 0.99}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode", "systemCodes"], "aliases": ["来源系统编码"], "resource": "system", "source": "source_contract", "confidence": 0.98}],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["LeafRuleController#page(LeafRulePageCondition) -> ResponseData<PageResult<LeafRuleQuery>>", "LeafRulePageCondition; LeafRuleQuery", "LeafRuleRepository#page -> LeafRuleService#page -> leafRule_query_getPageList.sql；fillPageSystemCodes 并补 editable"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "3e3ec275-a5f9-4d3c-b467-4e3327f82fd9",
+      "expected_identity": {"service": "c12-sys", "method": "POST", "path": "/api/leafRule/save"},
+      "semantic": {
+        "purpose": "供系统管理端新增或按 ID 修改当前系统编码下的流水号规则，配置规则名称、前缀、日期格式、最小补零位数和重置策略。",
+        "audiences": ["系统管理端"], "domains": ["流水号", "编码规则"],
+        "scenarios": ["系统管理端填写 name、prefix、dateFormat 和 length 保存编码规则；传 id 时更新，不传 id 时新增。"],
+        "actions": ["create", "update"], "entities": ["流水号规则"],
+        "aliases": ["保存流水号规则", "维护编码生成规则", "LeafRuleController.save"],
+        "resource": "leaf_rule", "lookup_keys": ["id", "name", "prefix", "dateFormat", "length", "systemCode"], "cardinality": "one", "ownership": "all",
+        "discriminators": ["DTO/OpenAPI 将 name、prefix、dateFormat、length 标为必填，但 Controller#save 未加 @Valid，运行时未启用这些 Bean Validation；且 Long length 错用 @NotBlank。Repository 仍校验当前 systemCode 内 name 唯一及 prefix+dateFormat+length 组合唯一。"],
+        "required_inputs": [{"name": "name", "zh_name": "规则名称", "location": "body", "required": true, "schema_type": "string"}, {"name": "prefix", "zh_name": "前缀", "location": "body", "required": true, "schema_type": "string"}, {"name": "dateFormat", "zh_name": "日期格式", "location": "body", "required": true, "schema_type": "string"}, {"name": "length", "zh_name": "最小补零位数", "location": "body", "required": true, "schema_type": "integer"}],
+        "business_identifiers": [{"canonical": "leaf_rule_id", "display_name": "流水号规则ID", "technical_names": ["id"], "aliases": ["编码规则主键"], "resource": "leaf_rule", "source": "source_contract", "confidence": 0.98}, {"canonical": "leaf_rule_name", "display_name": "流水号规则名称", "technical_names": ["name"], "aliases": ["编码规则名称"], "resource": "leaf_rule", "source": "source_contract", "confidence": 0.99}, {"canonical": "system_code", "display_name": "系统编码", "technical_names": ["systemCode"], "aliases": ["来源系统编码"], "resource": "system", "source": "runtime_context", "confidence": 0.98}],
+        "semantic_confidence": 0.88,
+        "semantic_evidence": ["LeafRuleController#save(LeafRuleItem) -> ResponseData<Boolean>；方法参数缺少 @Valid", "LeafRuleItem.name/prefix/dateFormat @NotBlank，length 为 Long 却标注 @NotBlank/@Min/@Max；OpenAPI 将四字段列为 required", "LeafRuleRepository#save -> LeafRuleService#insert/update；执行链校验 systemCode+name 和 systemCode+prefix+dateFormat+length 重复，但未显式校验四字段非空"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-03"
+      }
+    }
+  ]
+}

@@ -9,6 +9,7 @@ import threading
 from collections.abc import Callable, Iterator, Mapping
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from queue import Empty, Full, Queue
 from urllib.parse import quote, urlencode
@@ -23,6 +24,17 @@ MAX_CONTAINER_ACTION_WORKERS = 6
 CONTAINER_ID_PATTERN = re.compile(r"^[a-f0-9]{12,64}$")
 ANSI_ESCAPE_PATTERN = re.compile(r"\x1b(?:[@-_][0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))")
 TIMESTAMP_PATTERN = re.compile(r"^(?P<timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)\s?")
+
+
+def _docker_since_timestamp(value: str) -> str | None:
+    """Convert an RFC3339 UTC timestamp to the Unix seconds expected by Docker Engine."""
+    if not TIMESTAMP_PATTERN.match(value):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return str(int(parsed.timestamp()))
 
 
 class WorkspaceContainerError(RuntimeError):
@@ -168,8 +180,8 @@ class WorkspaceContainerService:
             "timestamps": "1",
             "tail": str(max(1, min(tail, 1000))),
         }
-        if since and TIMESTAMP_PATTERN.match(since):
-            query["since"] = since
+        if since and (docker_since := _docker_since_timestamp(since)) is not None:
+            query["since"] = docker_since
         connection = self._connection(streaming=True)
         try:
             connection.request(
@@ -212,8 +224,8 @@ class WorkspaceContainerService:
             "timestamps": "1",
             "tail": str(max(1, min(tail, 1000))),
         }
-        if since and TIMESTAMP_PATTERN.match(since):
-            query["since"] = since
+        if since and (docker_since := _docker_since_timestamp(since)) is not None:
+            query["since"] = docker_since
 
         connection = self._connection(timeout=10)
         try:
@@ -264,7 +276,6 @@ class WorkspaceContainerService:
             ],
             truncated=truncated,
         )
-
     def bulk_action(
         self,
         workspace_id: str,

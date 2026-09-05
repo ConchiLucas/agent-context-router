@@ -214,6 +214,11 @@ def complete_step(
                 exit_code=payload.exit_code,
                 error_code=payload.error_code,
                 error_message=payload.error_message,
+                readiness=(
+                    payload.readiness.model_dump(mode="json")
+                    if payload.readiness is not None
+                    else None
+                ),
             ),
         )
     except RuntimeOperationRepositoryError as exc:

@@ -40,6 +40,14 @@ class Settings(BaseSettings):
     runtime_runner_token_path: Path = Path("/runtime/runner.token")
     runtime_runner_heartbeat_ttl_seconds: int = Field(default=30, ge=5, le=300)
     runtime_runner_lease_seconds: int = Field(default=30, ge=10, le=300)
+    interface_search_embedding_provider: str = "local"
+    interface_search_embedding_dimensions: int = Field(default=1024, ge=128, le=4096)
+    interface_search_embedding_base_url: str = ""
+    interface_search_embedding_model: str = ""
+    interface_search_embedding_api_key: str = ""
+    interface_search_candidate_limit: int = Field(default=80, ge=10, le=500)
+    interface_search_session_ttl_days: int = Field(default=7, ge=1, le=90)
+    interface_search_session_cache_size: int = Field(default=1000, ge=10, le=10000)
     model_config = SettingsConfigDict(
         env_prefix="CONTEXT_ROUTER_",
         extra="ignore",

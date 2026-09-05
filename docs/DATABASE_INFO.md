@@ -23,7 +23,7 @@ docker compose exec backend uv run alembic upgrade head
 docker compose exec backend uv run alembic current
 ```
 
-当前 head 为 `20260827_0070`。`0070` 增加接口搜索质量事件，并把请求计划关联到产生最终选择的搜索；事件只保存有界候选排序、意图、质量、选择与执行日志引用，不复制身份请求头或响应正文。若要验证 downgrade/upgrade，使用一次性测试数据库，不要在保存真实数据的控制面库上直接 downgrade。
+当前 head 为 `20260905_0078`。`0076` 为 Workspace 文件副本增加版本集合、集合摘要与逐文件 SHA-256，并纳入根脚本和 Host Runtime 文件；`0077` 增加攀枝花工作空间的一键启动与检查动作；`0078` 在运行步骤中保存三级就绪状态、阶段耗时和失败摘要。若要验证 downgrade/upgrade，使用一次性测试数据库，不要在保存真实数据的控制面库上直接 downgrade。
 
 `system_guides` 保存 `guide_key`、JSONB 正文、菜单顺序和时间戳，没有 `enabled` 字段。历史 `include_in_prepare` 字段不再影响 MCP prepare；记录只进入系统文档菜单。
 
@@ -32,7 +32,8 @@ docker compose exec backend uv run alembic current
 | 表 | 用途 |
 | --- | --- |
 | `workspaces` | 保存顶层工作空间 ID、名称、类型、唯一绝对根目录和创建/更新时间；记录存在即参与 cwd 匹配 |
-| `workspace_shared_files` | 保存主映射目录 `docs/` 与各 `deploy/context-router/` 的 UTF-8 源文件副本；按 Workspace、类型和相对路径唯一，用于双向全量覆盖 |
+| `workspace_shared_file_sets` | 保存 Workspace 文件集合的 revision、集合 SHA-256、当前版本标记和创建时间；每个 Workspace 保留最近 5 个完整版本 |
+| `workspace_shared_files` | 按 revision 保存主目录 `docs/`、`script/`、各 `deploy/context-router/` 与 `deploy/host-runtime/` 的 UTF-8 文件、可执行位和逐文件 SHA-256，用于版本发布与原子恢复 |
 | `document_projects` | 保存稳定项目 ID、名称、`frontend/backend` 的 `project_kind`、所属 `workspace_id`、工作空间内分别唯一的源码 `relative_path` 与文档入口 `document_relative_path`、兼容 `project_type`/`agents_path` 和创建/更新时间；没有 Project enabled |
 | `data_sources` | 保存物理数据库连接、独立数据源分类、数据库类型和连接参数；密码不进入列表 API，仅可由本机页面通过独立 no-store 接口按需读取 |
 | `data_source_databases` | 保存每个物理连接下可供项目选择的实际库、schema 或 SQLite 文件清单 |

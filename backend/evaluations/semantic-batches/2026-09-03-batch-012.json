@@ -1,0 +1,2716 @@
+{
+  "schema_version": "context-router-interface-semantic-batch-v1",
+  "batch_id": "panzhihua-c12-portal-noauth-remote-authproxy-012",
+  "workspace_id": "b9ce65eddc27437d9615177fbd07cb0a",
+  "family_groups": {
+    "小程序免登录用户接口": 9,
+    "门户用户远程接口": 7,
+    "门户免登录用户接口": 7,
+    "Auth开放代理接口": 6,
+    "运营端用户认证审核": 2
+  },
+  "generation_policy": "按数据库当前31个有效接口全覆盖生成。覆盖UserInfoNoAuthMiniController(9)、RemoteUserInfoPortalController(7)、UserInfoNoAuthPortalController(7)、OpenAuthProxyController(6)、UserAuthInfoAdminController(2)。重点对比兄弟场景：小程序与门户noAuth、已登录与noAuth、普通Controller与remote/Feign、密码登录与微信登录、图形验证码与短信验证码、认证通过与驳回、角色菜单与按钮权限、secretKey用途等。追踪Bean Validation与Service显式非空校验，准确区分业务标识与凭据材料，未使用copy_from_interface_id。",
+  "items": [
+    {
+      "interface_id": "906f3ff5-8503-4db0-9ab2-97d875a539c3",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/userInfo/noAuth/getCheckCode"
+      },
+      "semantic": {
+        "purpose": "供小程序免登录端获取图形验证码：调用 c12-auth RemoteCaptchaService#getCheckCode 生成5位随机字符图形验证码并写入Redis缓存（TTL 60秒），返回包含缓存key与Base64图片字符串的CaptchaQuery，用于小程序端注册、找回密码或防刷校验。",
+        "audiences": [
+          "小程序端"
+        ],
+        "domains": [
+          "门户会员",
+          "安全认证"
+        ],
+        "scenarios": [
+          "小程序端用户在注册或找回密码时加载图形验证码，用于人机验证和获取短信验证码的前置凭证。"
+        ],
+        "actions": [
+          "generate_captcha"
+        ],
+        "entities": [
+          "图形验证码",
+          "安全凭据"
+        ],
+        "aliases": [
+          "小程序获取图形验证码",
+          "小程序验证码图片",
+          "UserInfoNoAuthMiniController.getCheckCode"
+        ],
+        "resource": "mini_captcha",
+        "lookup_keys": [
+          "key",
+          "base64",
+          "code",
+          "checkKey"
+        ],
+        "cardinality": "one",
+        "ownership": "unknown",
+        "discriminators": [
+          "小程序免登录路径 /api/mini/userInfo/noAuth/getCheckCode，无需请求体与登录态，转发 c12-auth 生成5位字符 Base64 验证码图片与缓存 key。",
+          "不同于 OpenAuthProxyController 的 /api/system/login/getCheckCode（供门户开放代理端调用）；不同于发送短信验证码 sendSmsCheckCode。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "UserInfoNoAuthMiniController#getCheckCode() -> RemoteCaptchaService#getCheckCode()",
+          "下游实现在 c12-auth LoginController#randomImage -> AuthApplicationService#buildCheckCode(false)，生成 Base64 图片并存入 Redis(TTL 60s)，返回 key 和 base64",
+          "返回 DTO 为 CaptchaQuery(key, base64, code)；无业务主键，key 为临时安全缓存凭据"
+        ],
+        "semantic_model": "gemini-3.8-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "df3b6334-ba75-4da8-b431-932f431d4eef",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/userInfo/noAuth/secretKey"
+      },
+      "semantic": {
+        "purpose": "供小程序免登录端获取密码传输加密密钥：调用 c12-auth RemoteCaptchaService#secretKey 获取服务端生成的32位动态加盐密钥和有效期，返回包含 key、secret、time 的键值映射，用于小程序端密码、新密码等敏感凭据加密传输。",
+        "audiences": [
+          "小程序端"
+        ],
+        "domains": [
+          "门户会员",
+          "安全认证"
+        ],
+        "scenarios": [
+          "小程序用户在输入密码登录、注册或重置密码前获取一次性动态加密密钥，保障传输安全。"
+        ],
+        "actions": [
+          "get_secret_key"
+        ],
+        "entities": [
+          "传输密钥",
+          "安全凭据"
+        ],
+        "aliases": [
+          "小程序获取加密密钥",
+          "小程序获取密码公钥",
+          "UserInfoNoAuthMiniController.secretKey"
+        ],
+        "resource": "mini_secret_key",
+        "lookup_keys": [
+          "key",
+          "secret",
+          "time"
+        ],
+        "cardinality": "one",
+        "ownership": "unknown",
+        "discriminators": [
+          "小程序免登录路径 /api/mini/userInfo/noAuth/secretKey，转发 c12-auth AuthApplicationService#buildSecretKey(false)，返回 Map<String, String>(key, secret, time=1800)。",
+          "不同于 OpenAuthProxyController 的 /api/system/login/secretKey；返回内容为安全加密材料，非业务实体标识。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "UserInfoNoAuthMiniController#secretKey() -> RemoteCaptchaService#secretKey()",
+          "下游实现在 c12-auth LoginController#secretKey -> AuthApplicationService#buildSecretKey(false)，Redis 缓存密钥盐值 1800 秒，返回 Map 包含 key, secret, time"
+        ],
+        "semantic_model": "gemini-3.8-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "7d4a93a8-c0b5-459a-b1e0-88e7bad632b7",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/userInfo/noAuth/sendSmsCheckCode"
+      },
+      "semantic": {
+        "purpose": "供小程序免登录端为指定手机号生成并缓存短信验证码：透传 SendSmsCheckCodeItem 至 c12-auth，当前实现只生成、缓存并记录验证码，实际短信下发代码未启用；Controller 返回空成功体。",
+        "audiences": [
+          "小程序端"
+        ],
+        "domains": [
+          "门户会员",
+          "安全认证"
+        ],
+        "scenarios": [
+          "小程序用户输入手机号及按开关要求提供图形验证码后，请求生成短信验证码缓存，用于后续注册、登录或找回密码校验。"
+        ],
+        "actions": [
+          "send_sms_code"
+        ],
+        "entities": [
+          "短信验证码",
+          "手机号"
+        ],
+        "aliases": [
+          "小程序发送短信验证码",
+          "小程序下发短信码",
+          "UserInfoNoAuthMiniController.sendSmsCheckCode"
+        ],
+        "resource": "mini_sms_check_code",
+        "lookup_keys": [
+          "mobile",
+          "checkKey",
+          "captcha"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "小程序免登录路径 /api/mini/userInfo/noAuth/sendSmsCheckCode。mobile 无条件必填；captcha 与 checkKey 仅在图形验证码开关启用时成对必填；DTO 的 type 字段当前未被下游执行代码读取。",
+          "当前 c12-auth 只生成并缓存验证码，Portal 侧短信 MQ 调用处于注释状态，验证码仅写入日志且不向客户端返回；不同于 /register/mobileCheck（消费验证码换取 mobileCheckKey）。"
+        ],
+        "required_inputs": [
+          {
+            "name": "mobile",
+            "zh_name": "手机号",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "接收手机号"
+            ],
+            "resource": "mini_sms_check_code",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.9,
+        "semantic_evidence": [
+          "UserInfoNoAuthMiniController#sendSmsCheckCode(@RequestBody SendSmsCheckCodeItem) -> UserInfoPortalService#sendSmsCheckCode -> MemberRemoteAuthService#sendSmsCheckCode",
+          "c12-auth AuthApplicationService#sendSmsCheckCode 显式校验 mobile 非空；captcha_switch=y 时才校验 checkKey 与 captcha；type 未被读取",
+          "AuthApplicationService 只生成并缓存验证码；Portal 侧 smsEventProducer.sendSms 调用被注释，Controller 返回 ResponseData.success()，原始验证码仅写日志且不暴露给客户端",
+          "接口名称与当前执行行为存在冲突：当前未执行实际短信下发"
+        ],
+        "semantic_model": "gemini-3.8-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "7f92c054-ebef-4e16-a7cd-6f719101cf35",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/userInfo/noAuth/register/mobileCheck"
+      },
+      "semantic": {
+        "purpose": "供小程序免登录端校验手机短信验证码：接收手机号与短信验证码，调用 c12-auth 校验后生成有效期30分钟的 mobileCheckKey，当前 Portal 包装层将该凭证用于后续会员注册。",
+        "audiences": [
+          "小程序端"
+        ],
+        "domains": [
+          "门户会员",
+          "用户注册"
+        ],
+        "scenarios": [
+          "小程序注册流程中，用户输入短信验证码进行合法性核验，换取当前 Portal 包装层后续注册所需的一次性手机验证凭据。"
+        ],
+        "actions": [
+          "validate_mobile"
+        ],
+        "entities": [
+          "手机号",
+          "验证凭据"
+        ],
+        "aliases": [
+          "小程序手机验证码核验",
+          "小程序注册短信校验",
+          "UserInfoNoAuthMiniController.mobileCheck"
+        ],
+        "resource": "mini_mobile_check",
+        "lookup_keys": [
+          "mobile",
+          "smsCaptcha",
+          "mobileCheckKey"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "小程序免登录路径 /api/mini/userInfo/noAuth/register/mobileCheck。输入 mobile 与 smsCaptcha，返回 String 类型的 mobileCheckKey 缓存凭证。",
+          "不同于 sendSmsCheckCode（生成并缓存待校验的验证码）；不同于 mobileRoleCodes（仅查询已注册角色与是否存在）。"
+        ],
+        "required_inputs": [
+          {
+            "name": "mobile",
+            "zh_name": "手机号",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          },
+          {
+            "name": "smsCaptcha",
+            "zh_name": "短信验证码",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "验证手机号"
+            ],
+            "resource": "mini_mobile_check",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "UserInfoNoAuthMiniController#mobileCheck(@RequestBody UserInfoMobileCheckPortalItem) -> UserInfoPortalService#mobileCheck -> RemotePortalRegisterService#mobileCheck",
+          "下游 c12-auth UserService#buildMobileCheckKey 校验短信后生成 UUID 并缓存到 REGISTER_MOBILE_CHECK_SUCCESS_KEY (TTL 1800s)，返回 UUID 字符串",
+          "DTO UserInfoMobileCheckPortalItem 包含 mobile, smsCaptcha"
+        ],
+        "semantic_model": "gemini-3.8-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "c7156b9b-380c-42e8-ba24-3122c0bd5a88",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/userInfo/noAuth/register/mobileRoleCodes"
+      },
+      "semantic": {
+        "purpose": "供小程序免登录端查询指定手机号已拥有的注册角色和账号存在状态：接收手机号，调用 c12-auth 检查账号是否存在，并查询本地会员认证信息表聚合已有角色编码列表，返回 UserInfoMobileRoleCodesPortalQuery(userExists, roleCodes)。",
+        "audiences": [
+          "小程序端"
+        ],
+        "domains": [
+          "门户会员",
+          "用户注册"
+        ],
+        "scenarios": [
+          "小程序端在用户输入手机号进行注册或角色申请时，前置查询该手机号是否已注册及已有角色（如货主、承运商、司机等），避免重复注册同角色。"
+        ],
+        "actions": [
+          "query"
+        ],
+        "entities": [
+          "手机号",
+          "会员角色"
+        ],
+        "aliases": [
+          "小程序查询手机号已注册角色",
+          "小程序手机号角色检测",
+          "UserInfoNoAuthMiniController.getMobileRoleCodes"
+        ],
+        "resource": "mini_mobile_roles",
+        "lookup_keys": [
+          "mobile",
+          "userExists",
+          "roleCodes"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "小程序免登录路径 /api/mini/userInfo/noAuth/register/mobileRoleCodes。返回已存在状态 userExists 和 roleCodes 字符串数组，用于注册引导和重复角色拦截。",
+          "只读查询，无副作用；不同于 mobileCheck（校验短信验证码生成 token）。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "查询手机号"
+            ],
+            "resource": "mini_mobile_roles",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "role_code",
+            "display_name": "角色编码",
+            "technical_names": [
+              "roleCodes"
+            ],
+            "aliases": [
+              "已注册角色编码列表"
+            ],
+            "resource": "mini_mobile_roles",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "UserInfoNoAuthMiniController#getMobileRoleCodes(@RequestBody UserInfoMobileCheckPortalItem) -> UserInfoPortalService#getMobileRoleCodes",
+          "调用 RemotePortalRegisterService#mobileExists 检查账号是否存在，再通过 UserAuthInfoPortalService 查询本地 user_auth_info 和 member_user_info 的 roleCode 聚合返回",
+          "返回 DTO UserInfoMobileRoleCodesPortalQuery(userExists, roleCodes)"
+        ],
+        "semantic_model": "gemini-3.8-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "9b4ca3a4-1d4d-4a38-b9ea-d6bf84677ed1",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/userInfo/noAuth/register"
+      },
+      "semantic": {
+        "purpose": "供小程序免登录端执行会员注册：校验手机号尚未拥有该角色，远程调用 c12-auth 创建/补齐主账号和门户角色，并在本地创建/更新 MemberUserInfo 档案、初始化 UserAuthInfo 认证记录（承运商自动补全公铁水子角色）及企业占位主体，最后生成短时自动登录凭证返回。",
+        "audiences": [
+          "小程序端"
+        ],
+        "domains": [
+          "门户会员",
+          "用户注册"
+        ],
+        "scenarios": [
+          "小程序新用户填写手机号、密码、短信凭证及选择的角色（如货主、承运商）完成会员账号注册与初始化。"
+        ],
+        "actions": [
+          "register",
+          "create"
+        ],
+        "entities": [
+          "会员账号",
+          "认证角色",
+          "企业主体"
+        ],
+        "aliases": [
+          "小程序会员注册",
+          "小程序用户注册",
+          "UserInfoNoAuthMiniController.register"
+        ],
+        "resource": "mini_user_register",
+        "lookup_keys": [
+          "portalRoleCode",
+          "mobile",
+          "password",
+          "mobileCheckKey",
+          "secretKey",
+          "companyName"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "小程序免登录路径 /api/mini/userInfo/noAuth/register。mobileCheckKey 无条件必填并由 c12-auth 消费；实际注册手机号来自该凭证，请求 mobile 仅参与注册前的已有角色排重。远程 auth 写入与本地事务不是分布式原子事务。返回60秒有效的自动登录 key。",
+          "若是承运商角色自动派生插入 CARRIER_HIGHWAY/RAILWAY/SHIPPING 未认证记录；若已有同角色抛异常；返回为自动登录 key 而非完整会话。"
+        ],
+        "required_inputs": [
+          {
+            "name": "mobileCheckKey",
+            "zh_name": "已验证手机号凭证",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "注册手机号"
+            ],
+            "resource": "mini_user_register",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "role_code",
+            "display_name": "角色编码",
+            "technical_names": [
+              "portalRoleCode"
+            ],
+            "aliases": [
+              "注册角色"
+            ],
+            "resource": "mini_user_register",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "UserInfoNoAuthMiniController#register(@RequestBody UserInfoRegisterPortalItem) -> UserInfoPortalService#register",
+          "执行流程：校验已有角色 -> MemberRemoteAuthService#portalRegister -> 本地 MemberUserInfo/UserAuthInfo 落库 -> 承运商补充三子角色 -> createPlaceholderOnRegister -> Redis 缓存 registerAutoLoginKey(TTL 60s) 并返回该 key 字符串",
+          "输入含 password, secretKey, mobileCheckKey 等安全凭据，不作为 business_identifiers"
+        ],
+        "semantic_model": "gemini-3.8-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "ccc9dfca-9d1f-4994-a836-1bb13e0f231d",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/userInfo/noAuth/portalLogin"
+      },
+      "semantic": {
+        "purpose": "供小程序免登录端执行会员账号密码或短信登录：传递 miniProgram=true 调用 c12-auth 进行鉴权，认证服务在会话中额外补充当前用户已启用的运营人员身份；本地校验禁止司机角色登录，建立本地 Sa-Token PC端会话并返回 SessionUserInfo。",
+        "audiences": [
+          "小程序端"
+        ],
+        "domains": [
+          "门户会员",
+          "用户登录"
+        ],
+        "scenarios": [
+          "小程序端用户使用账号/手机号与密码或短信验证码登录，支持货主、承运商等身份，并在小程序端支持带入运营人员身份。"
+        ],
+        "actions": [
+          "login"
+        ],
+        "entities": [
+          "登录会话",
+          "小程序用户"
+        ],
+        "aliases": [
+          "小程序会员登录",
+          "小程序账号密码登录",
+          "UserInfoNoAuthMiniController.portalLogin"
+        ],
+        "resource": "mini_user_session",
+        "lookup_keys": [
+          "username",
+          "mobile",
+          "password",
+          "smsCaptcha",
+          "captcha",
+          "checkKey",
+          "secretKey",
+          "authType",
+          "token"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "小程序免登录路径 /api/mini/userInfo/noAuth/portalLogin，调用 UserInfoPortalService#miniLogin(miniProgram=true)。",
+          "与网页端 portalLogin 的核心差异：小程序参数标记 miniProgram=true，c12-auth 据此在返回的 session 身份列表中包含运营人员(OPERATOR)身份；同样拦截司机角色；写入本地 Sa-Token PC 会话。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "登录手机号"
+            ],
+            "resource": "mini_user_session",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "user_name",
+            "display_name": "用户名称",
+            "technical_names": [
+              "username"
+            ],
+            "aliases": [
+              "登录账号"
+            ],
+            "resource": "mini_user_session",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "会员用户主键"
+            ],
+            "resource": "mini_user_session",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": [
+          "UserInfoNoAuthMiniController#portalLogin(@RequestBody UserInfoLoginPortalItem) -> UserInfoPortalService#miniLogin -> doLogin(..., miniProgram=true)",
+          "Service 显式校验：mobile 与 username 至少存在一个（LOGIN_CREDENTIAL_EMPTY）；登录后查询本地 MemberUserInfo，若包含 DRIVER 角色抛出“司机账号不可登录”异常",
+          "会话绑定：StpUtil.login(userId, DeviceType.PC.getDevice())，写入 token 并更新 SessionContext，返回 SessionUserInfo"
+        ],
+        "semantic_model": "gemini-3.8-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "85a9e05b-8c1f-4a76-a100-c9a06faae9ea",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/userInfo/noAuth/wxLogin"
+      },
+      "semantic": {
+        "purpose": "供小程序免登录端通过名为 wxLogin 的兼容入口登录：当前实现未处理微信 code、openid 或 OAuth 凭据，而是复用 c12-auth 通用账号登录并建立本地会话，再校验会员具备货主、司机或报关人员角色之一且账号未停用。",
+        "audiences": [
+          "小程序端"
+        ],
+        "domains": [
+          "门户会员",
+          "用户登录"
+        ],
+        "scenarios": [
+          "小程序端具有货主、司机或报关人员角色的会员，通过通用登录凭据进入 wxLogin 兼容入口。"
+        ],
+        "actions": [
+          "login"
+        ],
+        "entities": [
+          "会员登录会话",
+          "小程序用户"
+        ],
+        "aliases": [
+          "小程序微信登录",
+          "小程序角色准入登录",
+          "UserInfoNoAuthMiniController.wxLogin"
+        ],
+        "resource": "mini_wx_session",
+        "lookup_keys": [
+          "mobile",
+          "username",
+          "password",
+          "token",
+          "roleCode"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "路径为 /api/mini/userInfo/noAuth/wxLogin，但 UserInfoLoginPortalItem 没有微信专属凭据字段，Service 复用 executeRemoteLogin(..., miniProgram=false)；接口名称不能理解为已实现微信 OAuth。",
+          "与 portalLogin 的差异是角色准入：portalLogin 禁止司机，而该入口允许司机但要求具备 SHIPPER、DRIVER 或 CUSTOMS_DECLARANT 之一；与门户同名接口的执行逻辑相同，仅路径和端别不同。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "登录手机号"
+            ],
+            "resource": "mini_wx_session",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "会员用户主键"
+            ],
+            "resource": "mini_wx_session",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.9,
+        "semantic_evidence": [
+          "UserInfoNoAuthMiniController#wxLogin(@RequestBody UserInfoLoginPortalItem) -> UserInfoPortalService#wxLogin",
+          "UserInfoLoginPortalItem 只含 username、password、mobile、smsCaptcha 等通用登录字段，不含微信 code、openid 或 OAuth token；Service 调用 executeRemoteLogin(item, loginIp, false)",
+          "Service 登录成功后查询 user_auth_info，校验必须含有 SHIPPER、DRIVER、CUSTOMS_DECLARANT 之一，并通过 findUserInfoByUserId 拦截停用账号",
+          "接口名称/注释与执行链存在真实差异，因此不能宣称微信一键登录或授权登录已经实现",
+          "建立本地 Sa-Token 会话并返回 SessionUserInfo"
+        ],
+        "semantic_model": "gemini-3.8-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "a0613bb0-a341-427a-948d-5173756601ca",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/mini/userInfo/noAuth/forgetUserPassword"
+      },
+      "semantic": {
+        "purpose": "供小程序免登录端找回/重置用户密码：接收手机号、新密码、确认密码、短信验证码及可选图形验证码/密钥参数，调用 c12-auth RemoteUserService#forgetPortalUserPassword 校验短信并更新 auth 用户密码，返回空成功体。",
+        "audiences": [
+          "小程序端"
+        ],
+        "domains": [
+          "门户会员",
+          "密码重置"
+        ],
+        "scenarios": [
+          "小程序用户忘记登录密码时，在免登录页面通过手机号和短信验证码设置新密码。"
+        ],
+        "actions": [
+          "reset_password",
+          "update"
+        ],
+        "entities": [
+          "用户密码",
+          "手机号"
+        ],
+        "aliases": [
+          "小程序忘记密码",
+          "小程序找回密码",
+          "UserInfoNoAuthMiniController.forgetUserPassword"
+        ],
+        "resource": "mini_password_reset",
+        "lookup_keys": [
+          "mobile",
+          "newPassword",
+          "confirmPassword",
+          "smsCaptcha",
+          "secretKey",
+          "checkKey",
+          "captcha"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "小程序免登录路径 /api/mini/userInfo/noAuth/forgetUserPassword。注意：本 Controller 方法签名未标注 @Valid 注解，依赖下游 c12-auth UserService 强校验手机号与验证码；返回 ResponseData（空成功体）。",
+          "不同于已登录修改密码 updatePortalUserPassword（需要原密码 oldPassword 和已登录会话）。"
+        ],
+        "required_inputs": [
+          {
+            "name": "mobile",
+            "zh_name": "手机号",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          },
+          {
+            "name": "newPassword",
+            "zh_name": "新密码",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          },
+          {
+            "name": "confirmPassword",
+            "zh_name": "确认密码",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          },
+          {
+            "name": "smsCaptcha",
+            "zh_name": "短信验证码",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "找回密码手机号"
+            ],
+            "resource": "mini_password_reset",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.96,
+        "semantic_evidence": [
+          "UserInfoNoAuthMiniController#forgetUserPassword(@RequestBody UserInfoforgetUserPasswordItem) -> UserInfoPortalService#forgetUserPassword -> RemoteUserService#forgetPortalUserPassword",
+          "DTO UserInfoforgetUserPasswordItem 有 @NotBlank 注解，但该 Controller 未声明 @Valid，运行时校验在下游 c12-auth 执行",
+          "下游 c12-auth UserService#forgetPortalUserPassword 消费短信验证码并执行 resetPasswordByMobile；Controller 返回 ResponseData.success()"
+        ],
+        "semantic_model": "gemini-3.8-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "d096872e-0c31-49c6-b0b1-ae3e62aec849",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/userInfo/noAuth/register"
+      },
+      "semantic": {
+        "purpose": "供门户网页免登录端执行会员注册：校验手机号未拥有该角色，远程调用 c12-auth 创建主账号与门户角色，在本地创建 MemberUserInfo 档案、初始化 UserAuthInfo（承运商自动补全公铁水子角色）及企业占位主体，返回短时自动登录凭据。",
+        "audiences": [
+          "门户端"
+        ],
+        "domains": [
+          "门户会员",
+          "用户注册"
+        ],
+        "scenarios": [
+          "门户网页新用户通过手机号、密码、短信验证凭据完成货主、承运商等角色的注册。"
+        ],
+        "actions": [
+          "register",
+          "create"
+        ],
+        "entities": [
+          "会员账号",
+          "认证角色",
+          "企业主体"
+        ],
+        "aliases": [
+          "门户会员注册",
+          "网页端用户注册",
+          "UserInfoNoAuthPortalController.register"
+        ],
+        "resource": "portal_user_register",
+        "lookup_keys": [
+          "portalRoleCode",
+          "mobile",
+          "password",
+          "mobileCheckKey",
+          "secretKey",
+          "companyName"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "门户网页免登录路径 /member-api/portal/userInfo/noAuth/register。mobileCheckKey 无条件必填并由 c12-auth 消费；真实注册手机号来自该凭证，请求 mobile 仅参与已有角色排重。auth 远程写入与 Portal 本地事务不是分布式原子事务。",
+          "不同于小程序端 register（端别前缀与调用来源不同）；不同于运营端新增用户。"
+        ],
+        "required_inputs": [
+          {
+            "name": "mobileCheckKey",
+            "zh_name": "已验证手机号凭证",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "注册手机号"
+            ],
+            "resource": "portal_user_register",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "role_code",
+            "display_name": "角色编码",
+            "technical_names": [
+              "portalRoleCode"
+            ],
+            "aliases": [
+              "注册角色"
+            ],
+            "resource": "portal_user_register",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "UserInfoNoAuthPortalController#register(@RequestBody UserInfoRegisterPortalItem) -> UserInfoPortalService#register",
+          "执行逻辑同 MiniController，但挂载于门户路径 /member-api/portal/userInfo/noAuth/register，返回 ResponseData<String>(registerAutoLoginKey)"
+        ],
+        "semantic_model": "gemini-3.8-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "bd2b24ad-6448-432c-a0a9-f6bf7d447169",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/userInfo/noAuth/portalLogin"
+      },
+      "semantic": {
+        "purpose": "供门户网页免登录端执行会员登录：传递 miniProgram=false 调用 c12-auth 进行账号密码或短信认证，仅保留门户会员身份（不补充运营人员身份）；校验禁止司机角色登录，建立本地 Sa-Token PC端会话并返回 SessionUserInfo。",
+        "audiences": [
+          "门户端"
+        ],
+        "domains": [
+          "门户会员",
+          "用户登录"
+        ],
+        "scenarios": [
+          "门户网页用户使用账号/手机号与密码或短信验证码登录，支持货主、承运商身份登录。"
+        ],
+        "actions": [
+          "login"
+        ],
+        "entities": [
+          "登录会话",
+          "门户用户"
+        ],
+        "aliases": [
+          "门户会员登录",
+          "网页端账号密码登录",
+          "UserInfoNoAuthPortalController.portalLogin"
+        ],
+        "resource": "portal_user_session",
+        "lookup_keys": [
+          "username",
+          "mobile",
+          "password",
+          "smsCaptcha",
+          "captcha",
+          "checkKey",
+          "secretKey",
+          "authType",
+          "token"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "门户网页路径 /member-api/portal/userInfo/noAuth/portalLogin。miniProgram 显式传 false，c12-auth 仅返回门户既有会员身份，不补充运营人员身份；禁止司机角色登录；建立本地 Sa-Token PC 会话。",
+          "不同于小程序端 portalLogin（miniProgram=true 会带入运营人员身份）。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "登录手机号"
+            ],
+            "resource": "portal_user_session",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "user_name",
+            "display_name": "用户名称",
+            "technical_names": [
+              "username"
+            ],
+            "aliases": [
+              "登录账号"
+            ],
+            "resource": "portal_user_session",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "会员用户主键"
+            ],
+            "resource": "portal_user_session",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "UserInfoNoAuthPortalController#portalLogin(@RequestBody UserInfoLoginPortalItem) -> UserInfoPortalService#login -> doLogin(..., miniProgram=false)",
+          "Service 显式校验：mobile 与 username 至少存在一个；禁止司机角色（DRIVER）；调用 StpUtil.login(userId, DeviceType.PC.getDevice()) 建立会话"
+        ],
+        "semantic_model": "gemini-3.8-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "c71584f9-81b6-4731-90af-57bca6caf720",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/userInfo/noAuth/wxLogin"
+      },
+      "semantic": {
+        "purpose": "供门户网页免登录端通过名为 wxLogin 的兼容入口登录：当前实现未处理微信扫码、code、openid 或 OAuth 凭据，而是复用 c12-auth 通用账号登录并建立本地会话，再校验会员具备货主、司机或报关人员角色之一且状态启用。",
+        "audiences": [
+          "门户端"
+        ],
+        "domains": [
+          "门户会员",
+          "用户登录"
+        ],
+        "scenarios": [
+          "门户网页端具有货主、司机或报关人员角色的会员，通过通用登录凭据进入 wxLogin 兼容入口。"
+        ],
+        "actions": [
+          "login"
+        ],
+        "entities": [
+          "会员登录会话",
+          "门户用户"
+        ],
+        "aliases": [
+          "门户微信登录",
+          "门户角色准入登录",
+          "UserInfoNoAuthPortalController.wxLogin"
+        ],
+        "resource": "portal_wx_session",
+        "lookup_keys": [
+          "mobile",
+          "username",
+          "password",
+          "token",
+          "roleCode"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "路径为 /member-api/portal/userInfo/noAuth/wxLogin，但请求 DTO 与 Service 没有微信专属凭据处理，实际复用 executeRemoteLogin(..., miniProgram=false)，不能理解为已经实现微信 OAuth 或扫码登录。",
+          "不同于小程序端 wxLogin（路径前缀与客户端形态不同）。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "登录手机号"
+            ],
+            "resource": "portal_wx_session",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "会员用户主键"
+            ],
+            "resource": "portal_wx_session",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.9,
+        "semantic_evidence": [
+          "UserInfoNoAuthPortalController#wxLogin(@RequestBody UserInfoLoginPortalItem) -> UserInfoPortalService#wxLogin",
+          "UserInfoLoginPortalItem 只有 username、password、mobile、smsCaptcha 等通用字段；UserInfoPortalService#wxLogin 调用 executeRemoteLogin(item, loginIp, false)",
+          "Service 校验当前用户必须含有 SHIPPER、DRIVER 或 CUSTOMS_DECLARANT 角色，并通过 findUserInfoByUserId 拦截停用账号",
+          "接口名称/注释与执行链存在真实差异，因此不能宣称微信扫码或授权登录已经实现"
+        ],
+        "semantic_model": "gemini-3.8-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "3d19b0dd-589d-413c-9a7e-53be0b476a77",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/userInfo/noAuth/sendSmsCheckCode"
+      },
+      "semantic": {
+        "purpose": "供门户网页免登录端为指定手机号生成并缓存短信验证码：透传 SendSmsCheckCodeItem 至 c12-auth，当前实现只生成、缓存并记录验证码，实际短信下发代码未启用；Controller 返回空成功体。",
+        "audiences": [
+          "门户端"
+        ],
+        "domains": [
+          "门户会员",
+          "安全认证"
+        ],
+        "scenarios": [
+          "门户网页端用户输入手机号及按开关要求提供图形验证码后，请求生成短信验证码缓存。"
+        ],
+        "actions": [
+          "send_sms_code"
+        ],
+        "entities": [
+          "短信验证码",
+          "手机号"
+        ],
+        "aliases": [
+          "门户发送短信验证码",
+          "网页端下发短信码",
+          "UserInfoNoAuthPortalController.sendSmsCheckCode"
+        ],
+        "resource": "portal_sms_check_code",
+        "lookup_keys": [
+          "mobile",
+          "checkKey",
+          "captcha"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "门户网页免登录路径 /member-api/portal/userInfo/noAuth/sendSmsCheckCode。mobile 无条件必填；captcha 与 checkKey 仅在图形验证码开关启用时成对必填；DTO 的 type 当前未被下游执行代码读取。",
+          "当前 c12-auth 只生成并缓存验证码，Portal 侧短信 MQ 调用处于注释状态，验证码仅写入日志且不向客户端返回。",
+          "不同于小程序端发送短信验证码（路径为 /api/mini/...）。"
+        ],
+        "required_inputs": [
+          {
+            "name": "mobile",
+            "zh_name": "手机号",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "接收手机号"
+            ],
+            "resource": "portal_sms_check_code",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.9,
+        "semantic_evidence": [
+          "UserInfoNoAuthPortalController#sendSmsCheckCode(@RequestBody SendSmsCheckCodeItem) -> UserInfoPortalService#sendSmsCheckCode -> MemberRemoteAuthService#sendSmsCheckCode",
+          "c12-auth AuthApplicationService#sendSmsCheckCode 显式校验 mobile 非空；captcha_switch=y 时才校验 checkKey 与 captcha；type 未被读取",
+          "AuthApplicationService 只生成并缓存验证码；Portal 侧 smsEventProducer.sendSms 调用被注释，Controller 返回空成功体",
+          "接口名称与当前执行行为存在冲突：当前未执行实际短信下发"
+        ],
+        "semantic_model": "gemini-3.8-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "7a4553f7-689c-4be5-98e8-38ffe0175654",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/userInfo/noAuth/register/mobileCheck"
+      },
+      "semantic": {
+        "purpose": "供门户网页免登录端校验手机短信验证码：接收手机号与短信验证码，调用 c12-auth 校验后生成有效期30分钟的 mobileCheckKey，当前 Portal 包装层将该凭证用于后续会员注册。",
+        "audiences": [
+          "门户端"
+        ],
+        "domains": [
+          "门户会员",
+          "用户注册"
+        ],
+        "scenarios": [
+          "门户网页用户在注册流程中核验收到的短信验证码，获取当前 Portal 包装层后续注册所需的 mobileCheckKey。"
+        ],
+        "actions": [
+          "validate_mobile"
+        ],
+        "entities": [
+          "手机号",
+          "验证凭据"
+        ],
+        "aliases": [
+          "门户手机验证码核验",
+          "网页端注册短信校验",
+          "UserInfoNoAuthPortalController.mobileCheck"
+        ],
+        "resource": "portal_mobile_check",
+        "lookup_keys": [
+          "mobile",
+          "smsCaptcha",
+          "mobileCheckKey"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "门户网页免登录路径 /member-api/portal/userInfo/noAuth/register/mobileCheck。输入 mobile 与 smsCaptcha，返回 String 类型的 mobileCheckKey 缓存凭据。",
+          "不同于小程序端 mobileCheck；不同于只读的 mobileRoleCodes。"
+        ],
+        "required_inputs": [
+          {
+            "name": "mobile",
+            "zh_name": "手机号",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          },
+          {
+            "name": "smsCaptcha",
+            "zh_name": "短信验证码",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "验证手机号"
+            ],
+            "resource": "portal_mobile_check",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "UserInfoNoAuthPortalController#mobileCheck(@RequestBody UserInfoMobileCheckPortalItem) -> UserInfoPortalService#mobileCheck -> RemotePortalRegisterService#mobileCheck",
+          "下游 c12-auth 生成 30 分钟有效的 REGISTER_MOBILE_CHECK_SUCCESS_KEY，返回凭据字符串"
+        ],
+        "semantic_model": "gemini-3.8-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "1816f952-2324-4857-972f-1728c6bbb442",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/userInfo/noAuth/register/mobileRoleCodes"
+      },
+      "semantic": {
+        "purpose": "供门户网页免登录端查询手机号已拥有的注册角色和账号存在状态：接收手机号，调用 c12-auth 检查账号是否存在，并查询本地会员认证信息表聚合已有角色编码列表，返回 UserInfoMobileRoleCodesPortalQuery(userExists, roleCodes)。",
+        "audiences": [
+          "门户端"
+        ],
+        "domains": [
+          "门户会员",
+          "用户注册"
+        ],
+        "scenarios": [
+          "门户网页端用户输入手机号进行注册或新增角色时，前置查询该手机号是否已存在及已有角色，防止重复注册相同角色。"
+        ],
+        "actions": [
+          "query"
+        ],
+        "entities": [
+          "手机号",
+          "会员角色"
+        ],
+        "aliases": [
+          "门户查询手机号已注册角色",
+          "网页端手机号角色检测",
+          "UserInfoNoAuthPortalController.getMobileRoleCodes"
+        ],
+        "resource": "portal_mobile_roles",
+        "lookup_keys": [
+          "mobile",
+          "userExists",
+          "roleCodes"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "门户网页免登录路径 /member-api/portal/userInfo/noAuth/register/mobileRoleCodes。只读返回 userExists 和 roleCodes，用于注册表单动态校验与角色排重。",
+          "不同于小程序端同名接口（端别和路径不同）；不同于 mobileCheck。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "查询手机号"
+            ],
+            "resource": "portal_mobile_roles",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "role_code",
+            "display_name": "角色编码",
+            "technical_names": [
+              "roleCodes"
+            ],
+            "aliases": [
+              "已注册角色编码列表"
+            ],
+            "resource": "portal_mobile_roles",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "UserInfoNoAuthPortalController#getMobileRoleCodes(@RequestBody UserInfoMobileCheckPortalItem) -> UserInfoPortalService#getMobileRoleCodes",
+          "聚合 c12-auth mobileExists 与本地 user_auth_info 认证角色，返回 UserInfoMobileRoleCodesPortalQuery"
+        ],
+        "semantic_model": "gemini-3.8-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "5d7a683f-4d78-4bd3-8207-dfcbf805c02c",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/userInfo/noAuth/forgetUserPassword"
+      },
+      "semantic": {
+        "purpose": "供门户网页免登录端找回/重置用户密码：通过 @Valid 严格校验手机号、新密码、确认密码与短信验证码非空，透传至 c12-auth RemoteUserService#forgetPortalUserPassword 消费短信验证码并更新 auth 密码，返回空成功体。",
+        "audiences": [
+          "门户端"
+        ],
+        "domains": [
+          "门户会员",
+          "密码重置"
+        ],
+        "scenarios": [
+          "门户网页用户忘记密码时，在免登录页面通过手机号和短信验证码重置登录密码。"
+        ],
+        "actions": [
+          "reset_password",
+          "update"
+        ],
+        "entities": [
+          "用户密码",
+          "手机号"
+        ],
+        "aliases": [
+          "门户忘记密码",
+          "网页端找回密码",
+          "UserInfoNoAuthPortalController.forgetUserPassword"
+        ],
+        "resource": "portal_password_reset",
+        "lookup_keys": [
+          "mobile",
+          "newPassword",
+          "confirmPassword",
+          "smsCaptcha",
+          "secretKey",
+          "checkKey",
+          "captcha"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "门户网页路径 /member-api/portal/userInfo/noAuth/forgetUserPassword。与小程序端差异：本 Controller 方法声明了 @Valid 注解，直接在入口处强制校验 mobile、newPassword、confirmPassword、smsCaptcha 必须非空；返回 ResponseData（空成功体）。",
+          "不同于已登录修改密码 updatePortalUserPassword（需要当前会话与原密码）。"
+        ],
+        "required_inputs": [
+          {
+            "name": "mobile",
+            "zh_name": "手机号",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          },
+          {
+            "name": "newPassword",
+            "zh_name": "新密码",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          },
+          {
+            "name": "confirmPassword",
+            "zh_name": "确认密码",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          },
+          {
+            "name": "smsCaptcha",
+            "zh_name": "短信验证码",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "找回密码手机号"
+            ],
+            "resource": "portal_password_reset",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "UserInfoNoAuthPortalController#forgetUserPassword(@RequestBody @Valid UserInfoforgetUserPasswordItem) -> UserInfoPortalService#forgetUserPassword -> RemoteUserService#forgetPortalUserPassword",
+          "DTO UserInfoforgetUserPasswordItem 明确对 mobile, newPassword, confirmPassword, smsCaptcha 标记 @NotBlank，Controller 启用了 @Valid 强制校验",
+          "调用成功后返回 ResponseData.success()"
+        ],
+        "semantic_model": "gemini-3.8-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "d8c4b61c-7cf5-4d33-a14b-4c4c78b3beef",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/system/login/getCheckCode"
+      },
+      "semantic": {
+        "purpose": "供门户开放代理端获取图形验证码：代理调用 c12-auth RemoteCaptchaService#getCheckCode，生成5位防混淆字符图形验证码并写入Redis缓存（TTL 60秒），返回包含缓存key与Base64图片字符串的 CaptchaQuery，收口前端原本直连auth的验证码请求。",
+        "audiences": [
+          "门户端",
+          "开放接口"
+        ],
+        "domains": [
+          "系统开放代理",
+          "安全认证"
+        ],
+        "scenarios": [
+          "门户前端在登录页面加载图形验证码图片与缓存key，统一通过 portal 代理网关收口直连 auth。"
+        ],
+        "actions": [
+          "generate_captcha"
+        ],
+        "entities": [
+          "图形验证码",
+          "安全凭据"
+        ],
+        "aliases": [
+          "开放代理获取图形验证码",
+          "门户登录验证码图片",
+          "OpenAuthProxyController.getCheckCode"
+        ],
+        "resource": "auth_proxy_captcha",
+        "lookup_keys": [
+          "key",
+          "base64",
+          "code",
+          "checkKey"
+        ],
+        "cardinality": "one",
+        "ownership": "unknown",
+        "discriminators": [
+          "统一收口代理路径 /api/system/login/getCheckCode，无需入参。转发 c12-auth 生成5位字符 Base64 验证码图片与缓存 key。",
+          "不同于小程序端的 /api/mini/userInfo/noAuth/getCheckCode；非业务数据实体。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "OpenAuthProxyController#getCheckCode() -> RemoteCaptchaService#getCheckCode() -> c12-auth LoginController#randomImage",
+          "c12-auth 生成 5 位随机字符图形验证码，存入 Redis(TTL 60s)，返回 CaptchaQuery(key, base64, code)"
+        ],
+        "semantic_model": "gemini-3.8-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "dbba0ad8-48bc-403e-a0fe-59cdd3e775d9",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/system/login/secretKey"
+      },
+      "semantic": {
+        "purpose": "供门户开放代理端获取密码加密密钥：代理调用 c12-auth RemoteCaptchaService#secretKey 获取服务端生成的32位动态加盐密钥和有效期，返回包含 key、secret、time 的 Map，统一收口前端密码前端加密前置请求。",
+        "audiences": [
+          "门户端",
+          "开放接口"
+        ],
+        "domains": [
+          "系统开放代理",
+          "安全认证"
+        ],
+        "scenarios": [
+          "门户前端在用户提交登录、密码修改或重置前，通过代理接口获取动态公钥材料完成敏感凭据加密。"
+        ],
+        "actions": [
+          "get_secret_key"
+        ],
+        "entities": [
+          "传输密钥",
+          "安全凭据"
+        ],
+        "aliases": [
+          "开放代理获取密码密钥",
+          "门户登录公钥获取",
+          "OpenAuthProxyController.secretKey"
+        ],
+        "resource": "auth_proxy_secret_key",
+        "lookup_keys": [
+          "key",
+          "secret",
+          "time"
+        ],
+        "cardinality": "one",
+        "ownership": "unknown",
+        "discriminators": [
+          "统一收口代理路径 /api/system/login/secretKey，无需入参。返回 Map<String, String>(key, secret, time=1800)。",
+          "不同于小程序端的 secretKey 路径；返回内容为安全加密材料，无业务实体标识。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "OpenAuthProxyController#secretKey() -> RemoteCaptchaService#secretKey() -> c12-auth LoginController#secretKey",
+          "c12-auth 生成 32 位 salt 存入 Redis(TTL 1800s)，返回 Map 包含 key, secret, time"
+        ],
+        "semantic_model": "gemini-3.8-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "0a7c235c-185a-4910-9b0d-6cf58cc633fa",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/system/login/logout"
+      },
+      "semantic": {
+        "purpose": "供门户开放代理端执行退出登录：代理调用 c12-auth RemoteCaptchaService#logout，触发 c12-auth 销毁当前 Sa-Token 会话，返回空成功体，收口前端原本直连 auth 的登出操作。",
+        "audiences": [
+          "门户端",
+          "开放接口"
+        ],
+        "domains": [
+          "系统开放代理",
+          "用户登录"
+        ],
+        "scenarios": [
+          "门户已登录用户点击退出登录，通过代理网关清除服务端登录态与 Token 缓存。"
+        ],
+        "actions": [
+          "logout"
+        ],
+        "entities": [
+          "登录会话",
+          "认证Token"
+        ],
+        "aliases": [
+          "开放代理退出登录",
+          "门户注销登录",
+          "OpenAuthProxyController.logout"
+        ],
+        "resource": "auth_proxy_session",
+        "lookup_keys": [
+          "token"
+        ],
+        "cardinality": "one",
+        "ownership": "self",
+        "discriminators": [
+          "统一收口代理路径 /api/system/login/logout。会话销毁接口，仅注销当前客户端 Token 会话，不强制下线该用户其他设备；返回空成功体 ResponseData<Void>。",
+          "改变会话持久化状态；无需显式业务入参，依靠请求上下文中的 Token 识别当前用户。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "OpenAuthProxyController#logout() -> RemoteCaptchaService#logout() -> c12-auth LoginController#logout -> AuthApplicationService#logout -> TokenService#logout",
+          "执行 StpUtil.logoutByTokenValue(StpUtil.getTokenValue()) 注销当前 Token，返回 ResponseData<Void>"
+        ],
+        "semantic_model": "gemini-3.8-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "9e7de7f5-536e-49a6-8e65-fecd53a8e498",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/system/rolePermission/flushedRoleBtn"
+      },
+      "semantic": {
+        "purpose": "供门户开放代理端强制刷新并获取当前用户的角色按钮权限列表：代理调用 c12-auth RemoteRolePermissionService#flushedRoleBtn，强制清空权限缓存后重新加载当前 PC 用户的最新按钮权限编码列表，重设会话权限后返回字符串列表。",
+        "audiences": [
+          "门户端",
+          "开放接口"
+        ],
+        "domains": [
+          "系统开放代理",
+          "权限管理"
+        ],
+        "scenarios": [
+          "门户端在用户角色或授权变更后，主动调用该接口强制穿透缓存刷新按钮权限并同步更新会话上下文。"
+        ],
+        "actions": [
+          "refresh_permission",
+          "query"
+        ],
+        "entities": [
+          "按钮权限",
+          "权限编码"
+        ],
+        "aliases": [
+          "开放代理刷新角色按钮权限",
+          "门户刷新按钮权限列表",
+          "OpenAuthProxyController.flushedRoleBtn"
+        ],
+        "resource": "auth_proxy_button_permission",
+        "lookup_keys": [
+          "btnCode"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "统一收口代理路径 /api/system/rolePermission/flushedRoleBtn。与 getMenuBtnItemList 核心差异：强制设置 forceRefreshCache=true 穿透并刷新 Redis 缓存，且显式调用 permissionAuthService.setPermissionList 更新当前会话权限；不受认证中状态置空控制。",
+          "返回为按钮权限编码字符串数组 List<String>。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "OpenAuthProxyController#flushedRoleBtn() -> RemoteRolePermissionService#flushedRoleBtn() -> c12-auth RolePermissionController#flushedRoleBtn -> RolePermissionFacadeService#flushedRoleBtn",
+          "设置 RbacPermissionContext.pcOnly(userId) 并启用 forceRefreshCache=true，重载后调用 permissionAuthService.setPermissionList(btnCodes)，返回 List<String>"
+        ],
+        "semantic_model": "gemini-3.8-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "975bca89-ab5e-4702-876b-241652088723",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/system/rolePermission/getMenuBtnItemList"
+      },
+      "semantic": {
+        "purpose": "供门户开放代理端获取当前登录用户的菜单按钮权限列表：Controller 优先检查本地当前身份是否处于认证中（isCurrentIdentityCertifying），若处于认证中直接阻断并返回空列表；否则代理调用 c12-auth RemoteRolePermissionService#getMenuBtnItemList 查询并返回按钮编码字符串列表。",
+        "audiences": [
+          "门户端",
+          "开放接口"
+        ],
+        "domains": [
+          "系统开放代理",
+          "权限管理"
+        ],
+        "scenarios": [
+          "门户前端页面加载时获取当前登录用户在该身份下可操作的按钮权限列表；如果当前身份正在认证审核中，则隐藏所有操作按钮。"
+        ],
+        "actions": [
+          "query"
+        ],
+        "entities": [
+          "按钮权限",
+          "权限编码"
+        ],
+        "aliases": [
+          "开放代理获取菜单按钮列表",
+          "门户当前用户按钮权限",
+          "OpenAuthProxyController.getMenuBtnItemList"
+        ],
+        "resource": "auth_proxy_button_permission",
+        "lookup_keys": [
+          "btnCode"
+        ],
+        "cardinality": "many",
+        "ownership": "self",
+        "discriminators": [
+          "统一收口代理路径 /api/system/rolePermission/getMenuBtnItemList。核心控制：Portal 本地增加了业务切面判定，若 userInfoPortalService.isCurrentIdentityCertifying() 为 true，直接返回空列表 List.of()，防止未认证通过用户越权操作；未认证中时走 c12-auth 正常查询。",
+          "不同于 flushedRoleBtn（不检查认证中状态且会显式写回会话缓存）。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "OpenAuthProxyController#getMenuBtnItemList() -> 显式检查 userInfoPortalService.isCurrentIdentityCertifying()，若为 true 返回 List.of()，否则调用 RemoteRolePermissionService#getMenuBtnItemList",
+          "c12-auth 端执行 loadAndRefreshCurrentUserPermission() 获取当前 PC 用户的按钮编码列表并返回 List<String>"
+        ],
+        "semantic_model": "gemini-3.8-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "babfcb29-abc1-4a25-aa00-fd7a90189bbd",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/api/system/rolePermission/getMenuTreeByCondition"
+      },
+      "semantic": {
+        "purpose": "供门户开放代理端按条件查询菜单树：接收 MenuCondition 参数，代理调用 c12-auth RemoteRolePermissionService#getMenuTreeByCondition 查询匹配的系统菜单结构，返回层级树形列表 List<MenuTreeItem>，收口前端菜单树查询。",
+        "audiences": [
+          "门户端",
+          "开放接口"
+        ],
+        "domains": [
+          "系统开放代理",
+          "菜单管理"
+        ],
+        "scenarios": [
+          "门户前端按用户ID、角色ID或系统模块条件动态加载侧边栏导航菜单树或权限菜单树。"
+        ],
+        "actions": [
+          "query"
+        ],
+        "entities": [
+          "菜单树",
+          "系统菜单"
+        ],
+        "aliases": [
+          "开放代理按条件获取菜单树",
+          "门户查询系统菜单树",
+          "OpenAuthProxyController.getMenuTreeByCondition"
+        ],
+        "resource": "auth_proxy_menu_tree",
+        "lookup_keys": [
+          "userId",
+          "roleId",
+          "moduleId",
+          "component",
+          "keywords",
+          "status"
+        ],
+        "cardinality": "many",
+        "ownership": "unknown",
+        "discriminators": [
+          "统一收口代理路径 /api/system/rolePermission/getMenuTreeByCondition。接收 MenuCondition 条件对象，返回树形层级结构 List<MenuTreeItem>。",
+          "不同于 getMenuBtnItemList（只返回一维按钮编码字符串列表）；不同于按角色切换门户权限的 UserInfoPortalController#getMenuTreeByRoleCode。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "菜单归属用户ID"
+            ],
+            "resource": "auth_proxy_menu_tree",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "role_id",
+            "display_name": "角色ID",
+            "technical_names": [
+              "roleId"
+            ],
+            "aliases": [
+              "菜单归属角色ID"
+            ],
+            "resource": "auth_proxy_menu_tree",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "OpenAuthProxyController#getMenuTreeByCondition(@RequestBody MenuCondition) -> RemoteRolePermissionService#getMenuTreeByCondition -> c12-auth RolePermissionController#getMenuTreeByCondition -> RoleMenuService#getMenuTreeByCondition",
+          "根据条件组装层级树返回 List<MenuTreeItem>"
+        ],
+        "semantic_model": "gemini-3.8-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "a0dc7c33-09c9-418a-b30e-ed85ed155da6",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/userInfo/remote/getUserInfoById"
+      },
+      "semantic": {
+        "purpose": "供微服务间远程 Feign 调用按用户ID查询单条会员信息：接收 UserInfoPortalCondition，按 userId 查询本地 MemberUserInfo 及角色认证信息，并远程补充 c12-auth 主账号资料，返回单条 UserInfoPortalQuery。",
+        "audiences": [
+          "服务间调用"
+        ],
+        "domains": [
+          "门户会员",
+          "远程服务"
+        ],
+        "scenarios": [
+          "其他微服务（如订单、调度、风控等）通过 Feign 客户端按 userId 获取指定会员的完整档案及认证快照。"
+        ],
+        "actions": [
+          "get",
+          "query"
+        ],
+        "entities": [
+          "会员档案",
+          "用户信息"
+        ],
+        "aliases": [
+          "远程按用户ID查询会员信息",
+          "Feign根据用户ID获取用户信息",
+          "RemoteUserInfoPortalController.getUserInfoById"
+        ],
+        "resource": "remote_portal_user",
+        "lookup_keys": [
+          "userId",
+          "id",
+          "userName",
+          "mobile",
+          "roleCode",
+          "authStatus",
+          "companyName",
+          "companyUsci"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "远程 Feign 接口路径 /member-api/portal/userInfo/remote/getUserInfoById，实现 RemoteUserInfoPortalService 接口。以 condition.userId 定位，返回单个 UserInfoPortalQuery 对象。",
+          "不同于普通门户端 getUserInfoById（挂在 /member-api/portal/userInfo/getUserInfoById，用于门户前端已登录用户自查或前端传参）；不同于批量接口 getUserInfoByList。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "会员平台用户ID"
+            ],
+            "resource": "remote_portal_user",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "本地会员主键"
+            ],
+            "resource": "remote_portal_user",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "用户手机"
+            ],
+            "resource": "remote_portal_user",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "remote_portal_user",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "id_card",
+            "display_name": "身份证号",
+            "technical_names": [
+              "idCard"
+            ],
+            "aliases": [
+              "证件号码"
+            ],
+            "resource": "remote_portal_user",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "role_code",
+            "display_name": "角色编码",
+            "technical_names": [
+              "roleCode"
+            ],
+            "aliases": [
+              "会员角色"
+            ],
+            "resource": "remote_portal_user",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "RemoteUserInfoPortalController#getUserInfoById(@RequestBody UserInfoPortalCondition) -> UserInfoPortalService#getByUserId",
+          "查询本地 MemberUserInfo 实体，合并 UserAuthInfo 与 c12-auth 主账号资料，返回 UserInfoPortalQuery"
+        ],
+        "semantic_model": "gemini-3.8-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "66500dc6-5068-418f-8cd2-2a38f2eac0bd",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/userInfo/remote/getUserInfoByList"
+      },
+      "semantic": {
+        "purpose": "供微服务间远程 Feign 调用批量查询会员信息列表：接收用户ID列表 List<Long>（注意为 auth userId 集合），批量查询本地 MemberUserInfo 并补充 c12-auth 账号主数据，返回 List<UserInfoPortalQuery>。",
+        "audiences": [
+          "服务间调用"
+        ],
+        "domains": [
+          "门户会员",
+          "远程服务"
+        ],
+        "scenarios": [
+          "其他微服务批量展示单据列表、业务参与方时，根据一批 userId 批量回填会员姓名、手机号及认证信息。"
+        ],
+        "actions": [
+          "list",
+          "query"
+        ],
+        "entities": [
+          "会员档案",
+          "用户信息"
+        ],
+        "aliases": [
+          "远程批量查询会员信息",
+          "Feign根据用户ID列表获取用户信息",
+          "RemoteUserInfoPortalController.getUserInfoByList"
+        ],
+        "resource": "remote_portal_user_list",
+        "lookup_keys": [
+          "userId",
+          "id",
+          "userName",
+          "mobile",
+          "roleCode",
+          "companyName",
+          "companyUsci"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "远程 Feign 接口路径 /member-api/portal/userInfo/remote/getUserInfoByList。入参为 List<Long> ids，源码实现明确为 ConditionRule.andIn(MemberUserInfo::getUserId, ids)，即参数实为 userId 列表；返回列表 List<UserInfoPortalQuery>。",
+          "不同于单条查询 getUserInfoById；不同于普通门户端已登录接口。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "会员平台用户ID"
+            ],
+            "resource": "remote_portal_user_list",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "本地会员主键"
+            ],
+            "resource": "remote_portal_user_list",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "用户手机"
+            ],
+            "resource": "remote_portal_user_list",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "remote_portal_user_list",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "role_code",
+            "display_name": "角色编码",
+            "technical_names": [
+              "roleCode"
+            ],
+            "aliases": [
+              "会员角色"
+            ],
+            "resource": "remote_portal_user_list",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "RemoteUserInfoPortalController#getUserInfoByList(@RequestBody List<Long> ids) -> UserInfoPortalService#getUserInfoByList",
+          "源码证据：dao.find(UserInfoPortalQuery.class, new ConditionRule().andIn(MemberUserInfo::getUserId, ids)) 证实入参实为 userId 集合，遍历调用 applyAuthMasterInfo 后返回 List<UserInfoPortalQuery>"
+        ],
+        "semantic_model": "gemini-3.8-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "a3b89859-2636-4357-a76c-0e6c2e0ed15b",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/userInfo/remote/shipper/page"
+      },
+      "semantic": {
+        "purpose": "供微服务间远程 Feign 分页查询货主会员：Controller 强制设置 shipperRoleCode=SHIPPER，若传手机号则先调用 c12-auth 转换为 userIds 并清空前端入参 userIds，执行 UserInfoDao#page(userInfo_query_getPageList)，返回 PageResult<UserInfoPortalQuery>。",
+        "audiences": [
+          "服务间调用"
+        ],
+        "domains": [
+          "门户会员",
+          "货主管理",
+          "远程服务"
+        ],
+        "scenarios": [
+          "其他微服务（如调度、运单）通过 Feign 远程分页查询货主会员列表，支持按手机号、姓名、企业名称模糊检索。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "货主会员",
+          "会员资料"
+        ],
+        "aliases": [
+          "远程货主分页查询",
+          "Feign货主列表分页",
+          "RemoteUserInfoPortalController.shipperPage"
+        ],
+        "resource": "remote_shipper_page",
+        "lookup_keys": [
+          "shipperRoleCode",
+          "mobile",
+          "userName",
+          "companyName",
+          "idCard",
+          "status",
+          "userId",
+          "companyUsci"
+        ],
+        "cardinality": "many",
+        "ownership": "unknown",
+        "discriminators": [
+          "远程 Feign 分页路径 /member-api/portal/userInfo/remote/shipper/page。Controller 设置 shipperRoleCode=SHIPPER；Service 中 condition.setUserIds(null) 拦截外部直接传入 userIds，若有 mobile 则经 c12-auth 转换为内部 userIds 过滤；走 userInfo_query_getPageList.sql 并回填承运商企业统一社会信用代码。",
+          "不同于运营端后台货主分页（走 UserInfoAdminController，强制设置 roleCode=SHIPPER）；不同于普通门户端同名接口。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "货主平台用户ID"
+            ],
+            "resource": "remote_shipper_page",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "会员主键"
+            ],
+            "resource": "remote_shipper_page",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "货主手机"
+            ],
+            "resource": "remote_shipper_page",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "remote_shipper_page",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "id_card",
+            "display_name": "身份证号",
+            "technical_names": [
+              "idCard"
+            ],
+            "aliases": [
+              "证件号码"
+            ],
+            "resource": "remote_shipper_page",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "role_code",
+            "display_name": "角色编码",
+            "technical_names": [
+              "roleCode"
+            ],
+            "aliases": [
+              "货主角色"
+            ],
+            "resource": "remote_shipper_page",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "RemoteUserInfoPortalController#shipperPage(@RequestBody UserInfoPortalPageCondition) -> UserInfoPortalService#page",
+          "Controller 显式设置 condition.setShipperRoleCode(UserRoleCodeEnum.SHIPPER.getCode())",
+          "Service 逻辑：强制清空入参 userIds，若手机号非空先调用 c12-auth findAuthUsersByMobile 解析 userIds；SQL 执行 userInfo_query_getPageList 并调用 fillCarrierCompanyUsci"
+        ],
+        "semantic_model": "gemini-3.8-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "ab9861f1-f2cb-43be-a029-0ac3b3f8aa83",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/userInfo/remote/carrierAll/page"
+      },
+      "semantic": {
+        "purpose": "供微服务间远程 Feign 分页查询全部承运商会员：若未传 roleCode 则默认注入公路、铁路、水路承运商角色（CARRIER_HIGHWAY/RAILWAY/SHIPPING），执行分页查询并调用 auth 关系服务回填企业信用代码，返回 PageResult<UserInfoPortalQuery>。",
+        "audiences": [
+          "服务间调用"
+        ],
+        "domains": [
+          "门户会员",
+          "承运商管理",
+          "远程服务"
+        ],
+        "scenarios": [
+          "其他微服务（如调度中心、运费结算）远程分页查询承运商会员，支持公铁水多式联运承运商综合筛选及企业信用代码关联。"
+        ],
+        "actions": [
+          "page",
+          "query"
+        ],
+        "entities": [
+          "承运商会员",
+          "会员资料"
+        ],
+        "aliases": [
+          "远程承运商分页查询",
+          "Feign承运商列表分页",
+          "RemoteUserInfoPortalController.carrierAllPage"
+        ],
+        "resource": "remote_carrier_page",
+        "lookup_keys": [
+          "highwayRoleCode",
+          "railwayRoleCode",
+          "shippingRoleCode",
+          "roleCode",
+          "mobile",
+          "userName",
+          "companyName",
+          "idCard",
+          "status",
+          "userId",
+          "companyUsci"
+        ],
+        "cardinality": "many",
+        "ownership": "unknown",
+        "discriminators": [
+          "远程 Feign 分页路径 /member-api/portal/userInfo/remote/carrierAll/page。当 condition.roleCode 为空时自动注入三种承运商子角色进行 OR 匹配；通过 fillCarrierCompanyUsci 补充企业身份统一社会信用代码。",
+          "不同于货主分页 shipper/page（限定货主角色）；不同于普通门户端已登录接口。"
+        ],
+        "required_inputs": [],
+        "business_identifiers": [
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "承运商平台用户ID"
+            ],
+            "resource": "remote_carrier_page",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "id"
+            ],
+            "aliases": [
+              "会员主键"
+            ],
+            "resource": "remote_carrier_page",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "承运商手机"
+            ],
+            "resource": "remote_carrier_page",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "remote_carrier_page",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "id_card",
+            "display_name": "身份证号",
+            "technical_names": [
+              "idCard"
+            ],
+            "aliases": [
+              "证件号码"
+            ],
+            "resource": "remote_carrier_page",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "role_code",
+            "display_name": "角色编码",
+            "technical_names": [
+              "roleCode"
+            ],
+            "aliases": [
+              "承运商角色"
+            ],
+            "resource": "remote_carrier_page",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "RemoteUserInfoPortalController#carrierAllPage(@RequestBody UserInfoPortalPageCondition) -> UserInfoPortalService#page",
+          "Controller 显式判断：若 roleCode 为空，设置 highwayRoleCode, railwayRoleCode, shippingRoleCode",
+          "Service 逻辑执行 userInfo_query_getPageList 并调用 fillCarrierCompanyUsci 远程补充信用代码"
+        ],
+        "semantic_model": "gemini-3.8-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "c8e70c64-1ae3-40ee-b813-04b3f7e32a88",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/userInfo/remote/getAuthStatusByUserId"
+      },
+      "semantic": {
+        "purpose": "供微服务间远程 Feign 调用查询指定用户的认证状态：接收 UserInfoPortalCondition(userId)，查询本地 MemberUserInfo 及其全部角色认证记录，判断是否存在任意一个状态为已认证(CERTIFIED=1)的角色，返回 Boolean 结果。",
+        "audiences": [
+          "服务间调用"
+        ],
+        "domains": [
+          "门户会员",
+          "会员认证",
+          "远程服务"
+        ],
+        "scenarios": [
+          "其他微服务在业务流转（如派单、竞价、合同签订）前，校验该用户是否在门户完成过企业或个人认证。"
+        ],
+        "actions": [
+          "query"
+        ],
+        "entities": [
+          "认证状态",
+          "会员资质"
+        ],
+        "aliases": [
+          "远程查询用户认证状态",
+          "Feign获取用户是否已认证",
+          "RemoteUserInfoPortalController.getAuthStatusByUserId"
+        ],
+        "resource": "remote_user_auth_status",
+        "lookup_keys": [
+          "userId",
+          "authStatus"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "远程 Feign 路径 /member-api/portal/userInfo/remote/getAuthStatusByUserId。输入 userId，返回原始布尔值包装类型 ResponseData<Boolean>。只要任一角色为已认证即返回 true；若用户不存在抛出 BusinessException(\"用户认证信息不存在\")。",
+          "不同于按 ID 查询完整信息 getUserInfoById；不同于普通门户端已登录接口。"
+        ],
+        "required_inputs": [
+          {
+            "name": "userId",
+            "zh_name": "平台用户ID",
+            "location": "body",
+            "required": true,
+            "schema_type": "Long"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "待检查平台用户ID"
+            ],
+            "resource": "remote_user_auth_status",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "RemoteUserInfoPortalController#getAuthStatusByUserId(@RequestBody UserInfoPortalCondition) -> UserInfoPortalService#getAuthStatusByUserId",
+          "Service 逻辑：根据 userId 查询 MemberUserInfo，若为空抛出“用户认证信息不存在”；根据 infoId 查询 user_auth_info，判断是否存在 authStatus=='1'，返回 Boolean"
+        ],
+        "semantic_model": "gemini-3.8-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "71fbe42c-20d1-49b4-b0c9-398689be0e02",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/userInfo/remote/saveDriver"
+      },
+      "semantic": {
+        "purpose": "供微服务间远程 Feign 调用按手机号补建司机会员与认证：若本地不存在该手机号会员，则从 c12-auth 查询账号并在本地创建 DRIVER 会员档案和已认证司机资质；已存在时不更新并返回 false。",
+        "audiences": [
+          "服务间调用"
+        ],
+        "domains": [
+          "门户会员",
+          "司机管理",
+          "远程服务"
+        ],
+        "scenarios": [
+          "运力中心或承运商端添加外部司机成功后，通过 Feign 接口在门户端同步建立司机本地会员档案并直接标记为已认证。"
+        ],
+        "actions": [
+          "create"
+        ],
+        "entities": [
+          "司机档案",
+          "司机认证"
+        ],
+        "aliases": [
+          "远程保存司机用户",
+          "Feign同步新建司机",
+          "RemoteUserInfoPortalController.saveDriver"
+        ],
+        "resource": "remote_driver_user",
+        "lookup_keys": [
+          "mobile",
+          "userName",
+          "userId",
+          "roleCode",
+          "authStatus"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "远程 Feign 接口路径 /member-api/portal/userInfo/remote/saveDriver。核心差异：Controller 显式返回 ResponseData(Boolean)，将 Service 的 Boolean 结果包装返回（普通门户端同名接口丢弃了返回值只返回 ResponseData.success()）。",
+          "mobile 是成功执行的必要定位字段。只有本地不存在该手机号时才创建并直接置 authStatus=1；已存在返回 false，不执行更新。c12-auth 查询结果只验证账号存在，未验证该账号原先已具备司机角色。"
+        ],
+        "required_inputs": [
+          {
+            "name": "mobile",
+            "zh_name": "司机手机号",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "司机手机号"
+            ],
+            "resource": "remote_driver_user",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "user_name",
+            "display_name": "用户名称",
+            "technical_names": [
+              "userName"
+            ],
+            "aliases": [
+              "司机姓名"
+            ],
+            "resource": "remote_driver_user",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "RemoteUserInfoPortalController#saveDriver(@RequestBody UserInfoPortalItem) -> UserInfoPortalService#saveDriver",
+          "源码对比：RemoteUserInfoPortalController 行 116 返回 ResponseData.success(userInfoPortalService.saveDriver(...))，真实暴露 Boolean；UserInfoPortalController 行 283 丢弃返回值返回 ResponseData.success()",
+          "Service 逻辑：通过 mobile 检查本地，若已存在返回 false；不存在则从 auth 获取账号 userId，保存 MemberUserInfo(roleCode=DRIVER) 并插入 UserAuthInfo(authStatus=1)；请求 DTO 中的 userId 未被该方法读取"
+        ],
+        "semantic_model": "gemini-3.8-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "e3081bda-17bd-4417-8440-55a089b3eadb",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/portal/userInfo/remote/syncEnterpriseUser"
+      },
+      "semantic": {
+        "purpose": "供外部业务系统同步货主/承运商企业门户用户：强校验 roleCodes 必须属于有效企业认证角色，同步更新 c12-auth 账号与邮箱，在本地创建或更新 MemberUserInfo 档案、同步企业认证角色与认证明细快照，返回已同步的平台用户ID(auth userId)。",
+        "audiences": [
+          "服务间调用",
+          "外部系统"
+        ],
+        "domains": [
+          "门户会员",
+          "企业同步",
+          "远程服务"
+        ],
+        "scenarios": [
+          "外部业务系统（如物流供应链系统、供应商管理系统）批量或实时同步货主、承运商企业员工账号及企业资质档案到门户。"
+        ],
+        "actions": [
+          "create",
+          "update"
+        ],
+        "entities": [
+          "企业用户",
+          "会员档案",
+          "认证角色"
+        ],
+        "aliases": [
+          "远程同步企业用户",
+          "外部同步货主承运商用户",
+          "RemoteUserInfoPortalController.syncEnterpriseUser"
+        ],
+        "resource": "remote_enterprise_user_sync",
+        "lookup_keys": [
+          "roleCodes",
+          "mobile",
+          "oldMobile",
+          "userName",
+          "loginAccount",
+          "userId",
+          "companyName",
+          "companyUsci"
+        ],
+        "cardinality": "one",
+        "ownership": "by_id",
+        "discriminators": [
+          "远程 Feign 接口路径 /member-api/portal/userInfo/remote/syncEnterpriseUser。Service 强校验：roleCodes 不能为空且必须全为企业认证角色；支持按 oldMobile 变更手机号；返回 Long 类型的 auth userId。",
+          "不同于普通注册或司机保存；会深度同步本地 member_user_identity_auth_detail 企业资质表。"
+        ],
+        "required_inputs": [
+          {
+            "name": "roleCodes",
+            "zh_name": "角色编码集合",
+            "location": "body",
+            "required": true,
+            "schema_type": "List<String>"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "user_id",
+            "display_name": "用户ID",
+            "technical_names": [
+              "userId"
+            ],
+            "aliases": [
+              "同步生成的auth用户ID"
+            ],
+            "resource": "remote_enterprise_user_sync",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "mobile",
+            "display_name": "手机号",
+            "technical_names": [
+              "mobile"
+            ],
+            "aliases": [
+              "当前手机号"
+            ],
+            "resource": "remote_enterprise_user_sync",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "company_usci",
+            "display_name": "统一社会信用代码",
+            "technical_names": [
+              "companyUsci"
+            ],
+            "aliases": [
+              "企业信用代码"
+            ],
+            "resource": "remote_enterprise_user_sync",
+            "source": "source_contract",
+            "confidence": 0.98
+          },
+          {
+            "canonical": "role_code",
+            "display_name": "角色编码",
+            "technical_names": [
+              "roleCodes"
+            ],
+            "aliases": [
+              "企业角色列表"
+            ],
+            "resource": "remote_enterprise_user_sync",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "RemoteUserInfoPortalController#syncEnterpriseUser(@RequestBody EnterpriseUserSyncPortalItem) -> UserInfoPortalService#syncEnterpriseUser",
+          "Service 显式校验：validateEnterpriseSyncItem(item) 检查 roleCodes 必须非空且全在 isEnterpriseAuthRole 范围内（否则抛 ENTERPRISE_SYNC_ROLE_EMPTY/INVALID）",
+          "返回 authUser.getId()，类型为 ResponseData<Long>"
+        ],
+        "semantic_model": "gemini-3.8-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "cf1cb029-d0ff-4f09-a8db-b22773e6e427",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/userInfo/changeUserStatus"
+      },
+      "semantic": {
+        "purpose": "供运营端执行货主/承运商企业认证审核通过：接收会员信息主表ID列表 List<Long> ids（注意是 MemberUserInfo.id，非 auth userId），强校验入参及认证中记录存在，将处于“认证中(3)”的认证记录更新为“已认证(1)”，回填角色到会员主表并远程同步至 c12-auth，同步更新 auth 企业认证状态为已认证，并通过 SSE 事务事件将状态变更推送给用户的登录端，返回空成功体。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "门户会员",
+          "会员认证",
+          "认证审核"
+        ],
+        "scenarios": [
+          "运营管理人员在后台会员认证审核列表中审核通过货主或承运商的认证申请，支持单条或批量通过。"
+        ],
+        "actions": [
+          "approve_auth",
+          "update"
+        ],
+        "entities": [
+          "会员认证",
+          "会员档案",
+          "企业主体"
+        ],
+        "aliases": [
+          "运营端认证审核通过",
+          "后台通过会员认证",
+          "UserAuthInfoAdminController.changeUserStatus"
+        ],
+        "resource": "admin_user_auth_audit",
+        "lookup_keys": [
+          "ids",
+          "authStatus",
+          "roleCode",
+          "userId"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "运营端审核通过专用接口 /member-api/admin/userInfo/changeUserStatus。固定传入 authStatus='1'(已认证)；关键边界：入参 ids 为会员主表主键 MemberUserInfo.id 列表，仅处理当前处于 authStatus='3'(认证中) 的记录；若不存在认证中记录抛异常；同步调用 remoteUserService#portalUserPassAuth 将角色赋给 auth 主账号，并同步更新 auth 企业状态及触发 SSE 事件。",
+          "不同于认证驳回 rejectAuth（接收完整对象包含 rejectReason 和目标状态，走动态 updateStatusReasonByIds SQL）。"
+        ],
+        "required_inputs": [
+          {
+            "name": "ids",
+            "zh_name": "会员资料ID列表",
+            "location": "body",
+            "required": true,
+            "schema_type": "List<Long>"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "ids"
+            ],
+            "aliases": [
+              "会员身份主表主键列表"
+            ],
+            "resource": "admin_user_auth_audit",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": [
+          "UserAuthInfoAdminController#changeUserStatus(@RequestBody List<Long> ids) -> UserAuthInfoAdminService#changeUserStatus(ids, '1')",
+          "Service 显式校验：validateAuthStatusChange 检查 ids 非空，findCertifyingAuthInfos 查不到'3'状态记录则抛 CERTIFYING_USER_AUTH_INFO_NOT_EXIST",
+          "副作用：更新 user_auth_info 状态为 1，回填 MemberUserInfo.roleCode，调用 remoteUserService.portalUserPassAuth 同步角色，调用 portalEnterpriseSyncService.syncCertificationStatus 同步企业，发布 MemberAuthStatusChangedEvent(userIds, '1')"
+        ],
+        "semantic_model": "gemini-3.8-source-contract-review-2026-09-03"
+      }
+    },
+    {
+      "interface_id": "0f0e4cb8-7268-4a8d-b709-4baabcb611e7",
+      "expected_identity": {
+        "service": "c12-portal",
+        "method": "POST",
+        "path": "/member-api/admin/userInfo/rejectAuth"
+      },
+      "semantic": {
+        "purpose": "供运营端通过名为 rejectAuth 的入口更新认证中记录的目标状态与原因：接口通常用于审核驳回，但执行代码只校验 authStatus 属于合法枚举，并未强制为认证不通过(2)；返回更新记录数并在成功更新后推送状态事件。",
+        "audiences": [
+          "运营端"
+        ],
+        "domains": [
+          "门户会员",
+          "会员认证",
+          "认证审核"
+        ],
+        "scenarios": [
+          "运营人员通常在认证资料不符合要求时填写原因并传入认证不通过状态；调用方必须自行传入正确的目标状态。"
+        ],
+        "actions": [
+          "update_auth_status",
+          "update"
+        ],
+        "entities": [
+          "会员认证",
+          "驳回原因"
+        ],
+        "aliases": [
+          "运营端认证审核驳回",
+          "后台驳回会员认证",
+          "UserAuthInfoAdminController.rejectAuth"
+        ],
+        "resource": "admin_user_auth_audit",
+        "lookup_keys": [
+          "ids",
+          "authStatus",
+          "rejectReason"
+        ],
+        "cardinality": "many",
+        "ownership": "by_id",
+        "discriminators": [
+          "路径和方法名为 rejectAuth，但 Service 仅验证 authStatus 非空且属于 UserAuthInfoEnum，未限制为认证不通过(2)；SQL 会把认证中记录更新为调用方提供的任意合法状态，并写入 rejectReason。",
+          "不同于审核通过 changeUserStatus（固定认证通过状态并同步 auth 角色和企业状态）。"
+        ],
+        "required_inputs": [
+          {
+            "name": "ids",
+            "zh_name": "会员身份主表ID列表",
+            "location": "body",
+            "required": true,
+            "schema_type": "List<Long>"
+          },
+          {
+            "name": "authStatus",
+            "zh_name": "目标认证状态",
+            "location": "body",
+            "required": true,
+            "schema_type": "String"
+          }
+        ],
+        "business_identifiers": [
+          {
+            "canonical": "member_info_id",
+            "display_name": "会员资料ID",
+            "technical_names": [
+              "ids"
+            ],
+            "aliases": [
+              "被驳回会员身份主表主键"
+            ],
+            "resource": "admin_user_auth_audit",
+            "source": "source_contract",
+            "confidence": 0.98
+          }
+        ],
+        "semantic_confidence": 0.9,
+        "semantic_evidence": [
+          "UserAuthInfoAdminController#rejectAuth(@RequestBody UserAuthInfoAdminItem item) -> UserAuthInfoAdminService#updateUserInfo",
+          "Service 显式校验：validateAuthStatusChange(item.getIds(), item.getAuthStatus()) 只拦截空 ID、空状态或非法枚举，不强制 authStatus=2",
+          "SQL userInfo_update_statusReasonByIds: update cs_portal_member_user_auth_info set auth_status = :authStatus, reject_reason = :rejectReason where user_info_id in (:ids) and auth_status = '3'",
+          "返回 int 类型的更新受影响行数 ResponseData<Integer>",
+          "接口名称/业务意图与可执行状态边界存在冲突，因此语义置信度不高于0.90"
+        ],
+        "semantic_model": "gemini-3.8-source-contract-review-2026-09-03"
+      }
+    }
+  ]
+}

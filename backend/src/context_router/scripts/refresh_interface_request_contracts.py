@@ -291,14 +291,34 @@ def main() -> None:
     )
     parser.add_argument("--workspace-id", required=True)
     parser.add_argument("--backend-root", type=Path, required=True)
+    parser.add_argument(
+        "--service-root",
+        action="append",
+        default=[],
+        metavar="SERVICE=PATH",
+        help=(
+            "Optional explicit service root. Repeat for multiple services; "
+            "otherwise every direct child directory of --backend-root is discovered."
+        ),
+    )
     args = parser.parse_args()
     database_url = Settings().database_url
     if not database_url:
         raise SystemExit("CONTEXT_ROUTER_DATABASE_URL is required")
-    roots = {
-        service: args.backend_root / service
-        for service in ("c12-mtp", "c12-portal", "c12-data", "c12-sys")
-    }
+    roots: dict[str, Path] = {}
+    for value in args.service_root:
+        service, separator, raw_path = value.partition("=")
+        if not separator or not service.strip() or not raw_path.strip():
+            raise SystemExit("--service-root must use SERVICE=PATH")
+        roots[service.strip()] = Path(raw_path).expanduser().resolve()
+    if not roots:
+        roots = {
+            path.name: path
+            for path in sorted(args.backend_root.iterdir())
+            if path.is_dir() and not path.name.startswith(".")
+        }
+    if not roots:
+        raise SystemExit("no service roots were discovered")
     missing = [str(path) for path in roots.values() if not path.is_dir()]
     if missing:
         raise SystemExit(f"service roots do not exist: {', '.join(missing)}")

@@ -9,9 +9,12 @@ import {
 } from "@/lib/api";
 import {
   executeProjectRuntimeConfig,
+  getWorkspaceHostRuntimeStatus,
   getWorkspaceRuntimeOperation,
   getWorkspaceRuntimeRunnerStatus,
+  startAndCheckWorkspace,
   type RuntimeMode,
+  type RuntimeOperationSummary,
   type RuntimeOperationStatus,
 } from "@/lib/runtime-api";
 import type {
@@ -48,6 +51,28 @@ interface ProjectUpdateState {
   message: string;
 }
 
+type ReadinessStatus = "pending" | "ready" | "failed";
+
+interface WorkspaceReadiness {
+  infrastructure: WorkspaceReadinessLevel;
+  services: WorkspaceReadinessLevel;
+  business: WorkspaceReadinessLevel;
+  revision: string | null;
+}
+
+interface WorkspaceReadinessLevel {
+  status: ReadinessStatus;
+  durationMs: number | null;
+  errorMessage: string | null;
+}
+
+interface WorkspaceStartState {
+  status: RuntimeOperationStatus | "submitting";
+  operationId: string | null;
+  message: string;
+  readiness: WorkspaceReadiness;
+}
+
 const MAX_LOG_LINES = 2000;
 const ACTIVE_UPDATE_STATUSES = new Set<ProjectUpdateState["status"]>([
   "submitting",
@@ -58,6 +83,21 @@ const ACTIVE_UPDATE_STATUSES = new Set<ProjectUpdateState["status"]>([
 const CONTAINER_TABS: Array<{ key: ContainerTab; label: string }> = [
   { key: "backend", label: "后端" },
   { key: "frontend", label: "前端" },
+];
+const EMPTY_READINESS: WorkspaceReadiness = {
+  infrastructure: { status: "pending", durationMs: null, errorMessage: null },
+  services: { status: "pending", durationMs: null, errorMessage: null },
+  business: { status: "pending", durationMs: null, errorMessage: null },
+  revision: null,
+};
+const READINESS_ITEMS: Array<{
+  key: keyof Pick<WorkspaceReadiness, "infrastructure" | "services" | "business">;
+  label: string;
+  description: string;
+}> = [
+  { key: "infrastructure", label: "基础设施", description: "网络、中间件、数据库代理与网关" },
+  { key: "services", label: "项目服务", description: "已注册的后端与前端容器" },
+  { key: "business", label: "业务入口", description: "登录页与登录密钥接口" },
 ];
 
 const STATE_LABELS: Record<string, string> = {
@@ -136,6 +176,92 @@ function operationMessage(
   return status === "queued" ? "更新任务正在排队" : "更新任务执行中";
 }
 
+function parseReadiness(operation: RuntimeOperationSummary): WorkspaceReadiness {
+  const structured = operation.steps
+    .map((step) => step.readiness)
+    .find((item) => item !== null);
+  if (structured) {
+    return {
+      infrastructure: {
+        status: structured.infrastructure.status,
+        durationMs: structured.infrastructure.duration_ms,
+        errorMessage: structured.infrastructure.error_message,
+      },
+      services: {
+        status: structured.services.status,
+        durationMs: structured.services.duration_ms,
+        errorMessage: structured.services.error_message,
+      },
+      business: {
+        status: structured.business.status,
+        durationMs: structured.business.duration_ms,
+        errorMessage: structured.business.error_message,
+      },
+      revision: structured.revision?.toString() ?? null,
+    };
+  }
+  const log = operation.steps.map((step) => step.log).join("\n");
+  const matches = [...log.matchAll(
+    /\[READINESS\]\s+infrastructure=(pending|ready|failed)\s+services=(pending|ready|failed)\s+business=(pending|ready|failed)(?:\s+revision=([^\s]+))?/g,
+  )];
+  const latest = matches.at(-1);
+  if (latest) {
+    return {
+      infrastructure: {
+        status: latest[1] as ReadinessStatus,
+        durationMs: null,
+        errorMessage: null,
+      },
+      services: {
+        status: latest[2] as ReadinessStatus,
+        durationMs: null,
+        errorMessage: null,
+      },
+      business: {
+        status: latest[3] as ReadinessStatus,
+        durationMs: null,
+        errorMessage: null,
+      },
+      revision: latest[4] && latest[4] !== "unknown" ? latest[4] : null,
+    };
+  }
+  if (operation.status === "succeeded") {
+    return {
+      infrastructure: { status: "ready", durationMs: null, errorMessage: null },
+      services: { status: "ready", durationMs: null, errorMessage: null },
+      business: { status: "ready", durationMs: null, errorMessage: null },
+      revision: null,
+    };
+  }
+  if (["failed", "cancelled", "interrupted"].includes(operation.status)) {
+    return {
+      infrastructure: { status: "failed", durationMs: null, errorMessage: null },
+      services: { status: "failed", durationMs: null, errorMessage: null },
+      business: { status: "failed", durationMs: null, errorMessage: null },
+      revision: null,
+    };
+  }
+  return EMPTY_READINESS;
+}
+
+function workspaceStartMessage(operation: RuntimeOperationSummary): string {
+  const step = operation.steps[0];
+  if (operation.status === "succeeded") return "工作空间已启动，三级验收全部通过";
+  if (operation.status === "failed") {
+    return operationMessage(
+      operation.status,
+      operation.error_message,
+      step?.error_message ?? null,
+      step?.log ?? "",
+    );
+  }
+  if (operation.status === "cancelled") return "启动与检查已取消";
+  if (operation.status === "interrupted") return "启动与检查被中断";
+  return operation.status === "queued"
+    ? "启动与检查任务正在排队"
+    : "正在保障基础设施、恢复项目服务并执行验收";
+}
+
 export function WorkspaceContainersModal({
   workspace,
 }: WorkspaceContainersModalProps) {
@@ -161,12 +287,18 @@ export function WorkspaceContainersModal({
   >({});
   const [runnerAvailable, setRunnerAvailable] = useState<boolean | null>(null);
   const [runnerStatusError, setRunnerStatusError] = useState("");
+  const [workspaceStart, setWorkspaceStart] = useState<WorkspaceStartState | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
   const logKeyRef = useRef(0);
   const seenLogIdsRef = useRef(new Set<string>());
   const titleId = useId();
+
+  const workspaceStartBusy = workspaceStart
+    ? workspaceStart.status === "submitting" ||
+      ACTIVE_UPDATE_STATUSES.has(workspaceStart.status)
+    : false;
 
   const loadContainers = useCallback(async () => {
     setLoading(true);
@@ -190,6 +322,24 @@ export function WorkspaceContainersModal({
       setRunnerStatusError(
         caught instanceof Error ? caught.message : "Host Runtime Runner 状态读取失败",
       );
+    }
+  }, [workspace.id]);
+
+  const loadLatestWorkspaceStart = useCallback(async () => {
+    try {
+      const result = await getWorkspaceHostRuntimeStatus(workspace.id);
+      setRunnerAvailable(result.runner_available);
+      const latest = result.latest_operation;
+      if (latest?.action !== "pzh.start-and-check") return;
+      const operation = await getWorkspaceRuntimeOperation(workspace.id, latest.id);
+      setWorkspaceStart({
+        status: operation.status,
+        operationId: operation.id,
+        message: workspaceStartMessage(operation),
+        readiness: parseReadiness(operation),
+      });
+    } catch {
+      // Runner availability already has its own visible error handling.
     }
   }, [workspace.id]);
 
@@ -257,6 +407,7 @@ export function WorkspaceContainersModal({
     if (
       !projectId ||
       runnerAvailable !== true ||
+      workspaceStartBusy ||
       (currentUpdate && ACTIVE_UPDATE_STATUSES.has(currentUpdate.status))
     ) {
       return;
@@ -298,7 +449,7 @@ export function WorkspaceContainersModal({
   }
 
   async function runBulkAction() {
-    if (!pendingBulkAction || bulkActionBusy) return;
+    if (!pendingBulkAction || bulkActionBusy || workspaceStartBusy) return;
     const action = pendingBulkAction;
     setBulkActionBusy(true);
     setBulkActionError("");
@@ -322,13 +473,83 @@ export function WorkspaceContainersModal({
     }
   }
 
+  async function runWorkspaceStartAndCheck() {
+    if (workspaceStartBusy || runnerAvailable !== true) return;
+    setActiveContainer(null);
+    setPendingBulkAction(null);
+    setBulkActionResult(null);
+    setBulkActionError("");
+    setWorkspaceStart({
+      status: "submitting",
+      operationId: null,
+      message: "正在提交启动与检查任务",
+      readiness: EMPTY_READINESS,
+    });
+    try {
+      const operation = await startAndCheckWorkspace(workspace.id);
+      setWorkspaceStart({
+        status: operation.status,
+        operationId: operation.id,
+        message: workspaceStartMessage(operation),
+        readiness: parseReadiness(operation),
+      });
+    } catch (caught) {
+      setWorkspaceStart({
+        status: "failed",
+        operationId: null,
+        message: caught instanceof Error ? caught.message : "启动与检查任务提交失败",
+        readiness: {
+          infrastructure: { status: "failed", durationMs: null, errorMessage: null },
+          services: { status: "failed", durationMs: null, errorMessage: null },
+          business: { status: "failed", durationMs: null, errorMessage: null },
+          revision: null,
+        },
+      });
+    }
+  }
+
   useEffect(() => {
     if (!open) return;
     void loadContainers();
     void loadRunnerStatus();
+    void loadLatestWorkspaceStart();
     const timer = window.setInterval(() => void loadRunnerStatus(), 10000);
     return () => window.clearInterval(timer);
-  }, [open, loadContainers, loadRunnerStatus]);
+  }, [open, loadContainers, loadLatestWorkspaceStart, loadRunnerStatus]);
+
+  useEffect(() => {
+    const operationId = workspaceStart?.operationId;
+    if (!open || !operationId || !workspaceStartBusy) return;
+    const activeOperationId = operationId;
+    let cancelled = false;
+
+    async function pollWorkspaceStart() {
+      try {
+        const operation = await getWorkspaceRuntimeOperation(workspace.id, activeOperationId);
+        if (cancelled) return;
+        setWorkspaceStart({
+          status: operation.status,
+          operationId: operation.id,
+          message: workspaceStartMessage(operation),
+          readiness: parseReadiness(operation),
+        });
+        if (operation.status === "succeeded") void loadContainers();
+      } catch (caught) {
+        if (cancelled) return;
+        setWorkspaceStart((current) => current ? {
+          ...current,
+          message: caught instanceof Error ? caught.message : "启动状态读取失败",
+        } : current);
+      }
+    }
+
+    void pollWorkspaceStart();
+    const timer = window.setInterval(() => void pollWorkspaceStart(), 1500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [loadContainers, open, workspace.id, workspaceStart?.operationId, workspaceStartBusy]);
 
   useEffect(() => {
     if (!open || !activeUpdateOperationKey) return;
@@ -497,6 +718,7 @@ export function WorkspaceContainersModal({
           setProjectUpdates({});
           setRunnerAvailable(null);
           setRunnerStatusError("");
+          setWorkspaceStart(null);
           setOpen(true);
         }}
       >
@@ -569,6 +791,79 @@ export function WorkspaceContainersModal({
               </div>
             ) : null}
 
+            <section className="workspace-readiness-panel" aria-label="工作空间运行状态">
+              <div className="workspace-readiness-heading">
+                <div>
+                  <strong>工作空间运行状态</strong>
+                  <span>
+                    一次完成基础设施保障、缺失项目 Fast 部署和业务验收
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="primary-button"
+                  disabled={
+                    runnerAvailable !== true ||
+                    workspaceStartBusy ||
+                    bulkActionBusy ||
+                    Object.values(projectUpdates).some((state) =>
+                      ACTIVE_UPDATE_STATUSES.has(state.status),
+                    )
+                  }
+                  onClick={() => void runWorkspaceStartAndCheck()}
+                >
+                  {workspaceStartBusy ? "启动并检查中…" : "启动并检查"}
+                </button>
+              </div>
+              <div className="workspace-readiness-levels">
+                {READINESS_ITEMS.map((item) => {
+                  const level = workspaceStart?.readiness[item.key] ??
+                    EMPTY_READINESS[item.key];
+                  const status = level.status;
+                  return (
+                    <div key={item.key} data-status={status}>
+                      <span aria-hidden="true" />
+                      <div>
+                        <strong>{item.label}</strong>
+                        <small>
+                          {level.errorMessage ?? item.description}
+                          {level.durationMs !== null
+                            ? ` · ${(level.durationMs / 1000).toFixed(1)} 秒`
+                            : ""}
+                        </small>
+                      </div>
+                      <b>
+                        {status === "ready"
+                          ? "就绪"
+                          : status === "failed"
+                            ? "异常"
+                            : "待检查"}
+                      </b>
+                    </div>
+                  );
+                })}
+              </div>
+              {workspaceStart ? (
+                <p
+                  className="workspace-readiness-message"
+                  data-status={workspaceStart.status}
+                  role={workspaceStart.status === "failed" ? "alert" : "status"}
+                >
+                  {workspaceStart.message}
+                  {workspaceStart.readiness.revision
+                    ? ` · 脚本版本 r${workspaceStart.readiness.revision}`
+                    : ""}
+                  {workspaceStart.operationId
+                    ? ` · 运行 ${workspaceStart.operationId.slice(0, 8)}`
+                    : ""}
+                </p>
+              ) : (
+                <p className="workspace-readiness-message" role="status">
+                  尚未执行本次会话的运行验收
+                </p>
+              )}
+            </section>
+
             <div className="workspace-containers-content">
               {loading ? (
                 <p className="workspace-containers-message" role="status">
@@ -625,6 +920,14 @@ export function WorkspaceContainersModal({
                               container.project_id ??
                               "未关联项目"}
                           </span>
+                          <small>
+                            {container.mode
+                              ? `${container.mode === "fast" ? "Fast" : "Full"} 模式`
+                              : "部署模式未知"}
+                            {container.operation_id
+                              ? ` · 运行 ${container.operation_id.slice(0, 8)}`
+                              : ""}
+                          </small>
                         </div>
                         <code className="workspace-container-image">
                           {container.image}
@@ -674,6 +977,7 @@ export function WorkspaceContainersModal({
                                 }
                                 disabled={
                                   bulkActionBusy ||
+                                  workspaceStartBusy ||
                                   updateBusy ||
                                   !container.project_id ||
                                   runnerAvailable !== true
@@ -852,7 +1156,9 @@ export function WorkspaceContainersModal({
                 <button
                   type="button"
                   className="secondary-button"
-                  disabled={bulkActionBusy || visibleContainers.length === 0}
+                  disabled={
+                    bulkActionBusy || workspaceStartBusy || visibleContainers.length === 0
+                  }
                   onClick={() => {
                     setPendingBulkAction("restart");
                     setBulkActionResult(null);
@@ -864,7 +1170,9 @@ export function WorkspaceContainersModal({
                 <button
                   type="button"
                   className="danger-button"
-                  disabled={bulkActionBusy || visibleContainers.length === 0}
+                  disabled={
+                    bulkActionBusy || workspaceStartBusy || visibleContainers.length === 0
+                  }
                   onClick={() => {
                     setPendingBulkAction("stop");
                     setBulkActionResult(null);

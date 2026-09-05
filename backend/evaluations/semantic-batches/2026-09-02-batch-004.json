@@ -1,0 +1,569 @@
+{
+  "schema_version": "context-router-interface-semantic-batch-v1",
+  "batch_id": "panzhihua-c12-portal-unscanned-004",
+  "workspace_id": "b9ce65eddc27437d9615177fbd07cb0a",
+  "generation_policy": "按 c12-portal 班列运输完整 Controller 家族进行门户 Controller、请求/响应 DTO、PortalService、Feign 合同及 c12-mtp 下游 Controller/Service/DAO 源码复核；业务语义仅进入本批次 JSON；未使用 copy_from_interface_id。",
+  "family_groups": {
+    "班列日发运计划": 9,
+    "班列费用": 9,
+    "固定班列线路": 5,
+    "班列运单": 4
+  },
+  "items": [
+    {
+      "interface_id": "8d65f90f-8456-4b8b-9877-191f03409244",
+      "expected_identity": {"service": "c12-portal", "method": "POST", "path": "/mtp/btDailyPlan/page"},
+      "semantic": {
+        "purpose": "供门户端在当前登录货主范围内按需求单、日计划号、开行计划号、状态和计划发运日期分页查看班列日发运计划及箱型明细。",
+        "audiences": ["门户端"], "domains": ["班列运输", "日发运计划"],
+        "scenarios": ["门户货主查看本方班列日发运计划进度并核对计划箱型与剩余可发箱量。"],
+        "actions": ["page", "query"], "entities": ["班列日发运计划", "计划箱型明细"],
+        "aliases": ["门户班列日计划分页", "货主日发运计划查询", "BtDailyPlanPortalController.page"],
+        "resource": "bt_daily_plan", "lookup_keys": ["demandNo", "dailyPlanNo", "departurePlanNo", "status", "shipStatus", "shipDateStart", "shipDateEnd"],
+        "cardinality": "many", "ownership": "self",
+        "discriminators": ["门户服务强制写入当前会话用户和货主范围；不同于 c12-mtp 运营入口的全量分页，也不同于两个按 ID 返回单条计划的详情入口。"],
+        "required_inputs": [],
+        "business_identifiers": [
+          {"canonical": "daily_plan_no", "display_name": "日发运计划编号", "technical_names": ["dailyPlanNo"], "aliases": ["日计划号"], "resource": "bt_daily_plan", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "demand_no", "display_name": "需求单号", "technical_names": ["demandNo"], "aliases": ["班列需求编号"], "resource": "bt_daily_plan", "source": "source_contract", "confidence": 0.97}
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["BtDailyPlanPortalController#page(BtDailyPlanPageCondition) -> ResponseData<PageResult<BtDailyPlanQuery>>", "BtDailyPlanPortalService#page/fillCurrentShipperScope 强制 sessionShipperScope=Y 并写入当前会话用户信息", "RemoteBtDailyPlanService#page -> BtDailyPlanController#page -> BtDailyPlanService#page -> BtDailyPlanDao#page；返回行补充 BtDailyPlanBoxQuery 列表"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "cb6c8c9b-565c-4711-b57f-b7c62f2a1d70",
+      "expected_identity": {"service": "c12-portal", "method": "POST", "path": "/mtp/btDailyPlan/getById/{id}"},
+      "semantic": {
+        "purpose": "供门户端按路径中的日发运计划 ID 读取一条班列日计划详情、发运进度和箱型明细。",
+        "audiences": ["门户端"], "domains": ["班列运输", "日发运计划"],
+        "scenarios": ["门户页面以路径主键打开某条班列日计划详情并展示箱型、计划箱数和已发运箱数。"],
+        "actions": ["query", "detail"], "entities": ["班列日发运计划", "计划箱型明细"],
+        "aliases": ["路径ID查班列日计划", "日发运计划详情", "BtDailyPlanPortalController.getById"],
+        "resource": "bt_daily_plan", "lookup_keys": ["id"], "cardinality": "one", "ownership": "by_id",
+        "discriminators": ["ID 位于路径；返回单条计划及 boxList。与 findById 业务结果相同，但后者从请求体 IdObject 取 ID。"],
+        "required_inputs": [{"name": "id", "zh_name": "日发运计划ID", "location": "path", "required": true, "schema_type": "integer"}],
+        "business_identifiers": [{"canonical": "daily_plan_id", "display_name": "日发运计划ID", "technical_names": ["id"], "aliases": ["日计划主键"], "resource": "bt_daily_plan", "source": "source_contract", "confidence": 0.99}],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["BtDailyPlanPortalController#getById(@PathVariable Long id) -> ResponseData<BtDailyPlanQuery>", "BtDailyPlanPortalService#getById -> RemoteBtDailyPlanService#getById", "BtDailyPlanController#getById -> BtDailyPlanService#getById -> BtDailyPlanDao#getByIdQuery，并由 BtDailyPlanBoxDao#findByDailyPlanIdAndNo 填充 boxList"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "7d16ec86-7cd9-46b0-a426-84dfbbb75c38",
+      "expected_identity": {"service": "c12-portal", "method": "POST", "path": "/mtp/btDailyPlan/findById"},
+      "semantic": {
+        "purpose": "供门户端按请求体中的日发运计划 ID 读取一条班列日计划详情、发运进度和箱型明细。",
+        "audiences": ["门户端"], "domains": ["班列运输", "日发运计划"],
+        "scenarios": ["门户统一 ID 请求组件回显指定班列日计划及其箱型明细。"],
+        "actions": ["query", "detail"], "entities": ["班列日发运计划", "计划箱型明细"],
+        "aliases": ["请求体ID查班列日计划", "班列日计划回显", "BtDailyPlanPortalController.findById"],
+        "resource": "bt_daily_plan", "lookup_keys": ["id"], "cardinality": "one", "ownership": "by_id",
+        "discriminators": ["ID 位于 IdObject 请求体；返回内容与路径 getById 相同，不是分页或箱型列表接口。"],
+        "required_inputs": [{"name": "id", "zh_name": "日发运计划ID", "location": "body", "required": true, "schema_type": "integer"}],
+        "business_identifiers": [{"canonical": "daily_plan_id", "display_name": "日发运计划ID", "technical_names": ["id"], "aliases": ["日计划主键"], "resource": "bt_daily_plan", "source": "source_contract", "confidence": 0.99}],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["BtDailyPlanPortalController#findById(IdObject) -> ResponseData<BtDailyPlanQuery>", "BtDailyPlanPortalService#findById -> RemoteBtDailyPlanService#findById", "BtDailyPlanController#findById 读取 IdObject.id 后调用 BtDailyPlanService#getById；返回 DTO 为 BtDailyPlanQuery"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "e663ce29-ebc3-4d5f-8a1e-442b70688ef6",
+      "expected_identity": {"service": "c12-portal", "method": "POST", "path": "/mtp/btDailyPlan/listBoxes"},
+      "semantic": {
+        "purpose": "供门户端按日发运计划 ID 查询该计划的集装箱箱型、尺寸、需求箱数、重量和计划发运日期明细列表。",
+        "audiences": ["门户端"], "domains": ["班列运输", "日发运计划"],
+        "scenarios": ["门户在发运前单独加载某条日计划的箱型明细，用于核对或维护计划箱量。"],
+        "actions": ["list", "query"], "entities": ["日计划箱型明细"],
+        "aliases": ["日计划箱型列表", "查询计划集装箱明细", "BtDailyPlanPortalController.listBoxes"],
+        "resource": "bt_daily_plan_box", "lookup_keys": ["id"], "cardinality": "many", "ownership": "by_id",
+        "discriminators": ["只返回指定日计划的 BtDailyPlanBoxQuery 数组；不同于日计划详情返回计划主体及 boxList，也不同于 saveBoxes 替换保存箱型。"],
+        "required_inputs": [{"name": "id", "zh_name": "日发运计划ID", "location": "body", "required": true, "schema_type": "integer"}],
+        "business_identifiers": [{"canonical": "daily_plan_id", "display_name": "日发运计划ID", "technical_names": ["id", "dailyPlanId"], "aliases": ["日计划主键"], "resource": "bt_daily_plan_box", "source": "source_contract", "confidence": 0.99}],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["BtDailyPlanPortalController#listBoxes(IdObject) -> ResponseData<List<BtDailyPlanBoxQuery>>", "BtDailyPlanPortalService#listBoxes -> RemoteBtDailyPlanService#listBoxes", "BtDailyPlanController#listBoxes -> BtDailyPlanService#listBoxes；空 ID 运行时抛错，BtDailyPlanBoxDao#findByDailyPlanId 返回列表"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "2183c4f6-ec9c-4c32-8c44-5b3ef0db29e3",
+      "expected_identity": {"service": "c12-portal", "method": "POST", "path": "/mtp/btDailyPlan/saveBoxes"},
+      "semantic": {
+        "purpose": "供门户端按日发运计划 ID 替换保存该计划的集装箱箱型、尺寸、需求箱数、重量和计划发运日期明细。",
+        "audiences": ["门户端"], "domains": ["班列运输", "日发运计划"],
+        "scenarios": ["门户维护班列日计划时整批重设该计划的箱型与计划箱量。"],
+        "actions": ["create", "update"], "entities": ["日计划箱型明细"],
+        "aliases": ["保存日计划箱型", "维护计划集装箱明细", "BtDailyPlanPortalController.saveBoxes"],
+        "resource": "bt_daily_plan_box", "lookup_keys": ["dailyPlanId", "dailyPlanNo"], "cardinality": "many", "ownership": "by_id",
+        "discriminators": ["按 dailyPlanId 先删除旧箱型再保存 boxList；空列表会清空明细。不同于 listBoxes 的只读多条返回。"],
+        "required_inputs": [{"name": "dailyPlanId", "zh_name": "日发运计划ID", "location": "body", "required": true, "schema_type": "integer"}],
+        "business_identifiers": [
+          {"canonical": "daily_plan_id", "display_name": "日发运计划ID", "technical_names": ["dailyPlanId"], "aliases": ["日计划主键"], "resource": "bt_daily_plan_box", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "daily_plan_no", "display_name": "日发运计划编号", "technical_names": ["dailyPlanNo"], "aliases": ["日计划号"], "resource": "bt_daily_plan_box", "source": "source_contract", "confidence": 0.97}
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": ["BtDailyPlanPortalController#saveBoxes(BtDailyPlanBoxSaveItem) -> ResponseData<Void>", "BtDailyPlanBoxSaveItem 含 dailyPlanId/dailyPlanNo/boxList；BtDailyPlanService#saveBoxes 运行时要求 dailyPlanId", "RemoteBtDailyPlanService#saveBoxes -> BtDailyPlanController#saveBoxes -> BtDailyPlanService#saveBoxes -> BtDailyPlanBoxDao#delete/saveOrUpdate"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "a7374374-2770-4e2e-b7d9-2632087e3c21",
+      "expected_identity": {"service": "c12-portal", "method": "POST", "path": "/mtp/btDailyPlan/cancel"},
+      "semantic": {
+        "purpose": "供门户端按日发运计划 ID 或计划编号作废尚处于订舱中或已生成且未关联开行计划的一条班列日计划。",
+        "audiences": ["门户端"], "domains": ["班列运输", "日发运计划"],
+        "scenarios": ["门户撤销尚可作废的班列日发运计划，使计划状态转为已作废。"],
+        "actions": ["cancel"], "entities": ["班列日发运计划"],
+        "aliases": ["作废班列日计划", "取消日发运计划", "BtDailyPlanPortalController.cancel"],
+        "resource": "bt_daily_plan", "lookup_keys": ["id", "dailyPlanNo"], "cardinality": "one", "ownership": "by_id",
+        "discriminators": ["id 或 dailyPlanNo 至少提供一项；只允许 BOOKING 或 GENERATED 状态且不得已关联开行计划，结果为 VOIDED；不同于 complete 的完结和 confirmBooking 的订舱确认。"],
+        "required_inputs": [],
+        "business_identifiers": [
+          {"canonical": "daily_plan_id", "display_name": "日发运计划ID", "technical_names": ["id"], "aliases": ["日计划主键"], "resource": "bt_daily_plan", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "daily_plan_no", "display_name": "日发运计划编号", "technical_names": ["dailyPlanNo"], "aliases": ["日计划号"], "resource": "bt_daily_plan", "source": "source_contract", "confidence": 0.98}
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["BtDailyPlanPortalController#cancel(BtDailyPlanActionItem) -> ResponseData<Void>", "BtDailyPlanActionItem 允许 id 或 dailyPlanNo 定位；BtDailyPlanService#findPlan 要求二者至少一个", "RemoteBtDailyPlanService#cancel -> BtDailyPlanController#cancel -> BtDailyPlanService#cancel，校验状态及开行计划关联后写为 VOIDED"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "092f0eef-cdf1-465e-9162-6a7b20a39b19",
+      "expected_identity": {"service": "c12-portal", "method": "POST", "path": "/mtp/btDailyPlan/confirmBooking"},
+      "semantic": {
+        "purpose": "供门户端按日发运计划 ID 或计划编号确认一条订舱中班列日计划已完成订舱，并将状态转为已生成。",
+        "audiences": ["门户端"], "domains": ["班列运输", "日发运计划"],
+        "scenarios": ["门户完成班列订舱后推进对应日发运计划进入可发运状态。"],
+        "actions": ["confirm", "update"], "entities": ["班列日发运计划"],
+        "aliases": ["确认班列订舱", "日计划订舱完成", "BtDailyPlanPortalController.confirmBooking"],
+        "resource": "bt_daily_plan", "lookup_keys": ["id", "dailyPlanNo"], "cardinality": "one", "ownership": "by_id",
+        "discriminators": ["id 或 dailyPlanNo 至少提供一项；仅接受 BOOKING 状态并写为 GENERATED；不同于 dispatch 实际发运、cancel 作废及 complete 完结。Controller 文档仍写成进入 BOOKING，与实际 Service 状态流转不一致。"],
+        "required_inputs": [],
+        "business_identifiers": [
+          {"canonical": "daily_plan_id", "display_name": "日发运计划ID", "technical_names": ["id"], "aliases": ["日计划主键"], "resource": "bt_daily_plan", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "daily_plan_no", "display_name": "日发运计划编号", "technical_names": ["dailyPlanNo"], "aliases": ["日计划号"], "resource": "bt_daily_plan", "source": "source_contract", "confidence": 0.98}
+        ],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": ["BtDailyPlanPortalController#confirmBooking(BtDailyPlanActionItem) -> ResponseData<Void>；Javadoc 仍描述为进入 BOOKING", "BtDailyPlanActionItem 以 id 或 dailyPlanNo 定位，BtDailyPlanService#findPlan 要求二者至少一个", "RemoteBtDailyPlanService#confirmBooking -> BtDailyPlanController#confirmBooking -> BtDailyPlanService#confirmBooking；可执行代码校验原状态为 BOOKING 后更新为 GENERATED，故以 Service 行为为准并降低置信度"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "16dd7727-9206-45ff-8508-518c473dcc54",
+      "expected_identity": {"service": "c12-portal", "method": "POST", "path": "/mtp/btDailyPlan/dispatch"},
+      "semantic": {
+        "purpose": "供门户端按日计划 ID 或编号提交发运箱数、班列车次、发运日期和凭证，执行部分或全部发运并生成或关联班列运单。",
+        "audiences": ["门户端"], "domains": ["班列运输", "日发运计划"],
+        "scenarios": ["门户登记某条班列日计划的实际发运箱量和车次，并形成后续运单执行记录。"],
+        "actions": ["execute", "dispatch"], "entities": ["日发运计划发运", "班列运单", "发运凭证"],
+        "aliases": ["执行班列日计划发运", "登记日计划发运箱量", "BtDailyPlanPortalController.dispatch"],
+        "resource": "bt_daily_plan_dispatch", "lookup_keys": ["id", "dailyPlanNo", "trainNo"], "cardinality": "one", "ownership": "by_id",
+        "discriminators": ["id 或 dailyPlanNo 至少提供一项；要求正数 dispatchBoxes 和非空 trainNo，校验剩余箱量后创建或关联运单；不是仅改变订舱、作废或完结状态。"],
+        "required_inputs": [
+          {"name": "dispatchBoxes", "zh_name": "发运箱数", "location": "body", "required": true, "schema_type": "integer"},
+          {"name": "trainNo", "zh_name": "班列车次号", "location": "body", "required": true, "schema_type": "string"}
+        ],
+        "business_identifiers": [
+          {"canonical": "daily_plan_id", "display_name": "日发运计划ID", "technical_names": ["id"], "aliases": ["日计划主键"], "resource": "bt_daily_plan_dispatch", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "daily_plan_no", "display_name": "日发运计划编号", "technical_names": ["dailyPlanNo"], "aliases": ["日计划号"], "resource": "bt_daily_plan_dispatch", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "train_no", "display_name": "班列车次号", "technical_names": ["trainNo"], "aliases": ["车次号"], "resource": "bt_daily_plan_dispatch", "source": "source_contract", "confidence": 0.98}
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": ["BtDailyPlanPortalController#dispatch(BtDailyPlanDispatchItem) -> ResponseData<Void>", "BtDailyPlanDispatchItem 继承 BtDailyPlanActionItem；BtDailyPlanService#dispatch 运行时校验 dispatchBoxes>0、trainNo 非空及剩余箱量", "RemoteBtDailyPlanService#dispatch -> BtDailyPlanController#dispatch -> BtDailyPlanService#dispatch，并调用 BtWaybillService#createByDailyPlanDispatch"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "e948da8a-14d8-4132-b083-b514f2ce2056",
+      "expected_identity": {"service": "c12-portal", "method": "POST", "path": "/mtp/btDailyPlan/complete"},
+      "semantic": {
+        "purpose": "供门户端按日发运计划 ID 或计划编号将一条部分发运的班列日计划标记为已完结。",
+        "audiences": ["门户端"], "domains": ["班列运输", "日发运计划"],
+        "scenarios": ["门户确认班列日计划无需继续发运时结束部分发运计划的业务生命周期。"],
+        "actions": ["complete", "update"], "entities": ["班列日发运计划"],
+        "aliases": ["完结班列日计划", "结束日发运计划", "BtDailyPlanPortalController.complete"],
+        "resource": "bt_daily_plan", "lookup_keys": ["id", "dailyPlanNo"], "cardinality": "one", "ownership": "by_id",
+        "discriminators": ["id 或 dailyPlanNo 至少提供一项；仅允许 PARTIAL_DISPATCH 状态并写为 COMPLETED；不是 dispatch 执行发运，也不是 cancel 作废计划。"],
+        "required_inputs": [],
+        "business_identifiers": [
+          {"canonical": "daily_plan_id", "display_name": "日发运计划ID", "technical_names": ["id"], "aliases": ["日计划主键"], "resource": "bt_daily_plan", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "daily_plan_no", "display_name": "日发运计划编号", "technical_names": ["dailyPlanNo"], "aliases": ["日计划号"], "resource": "bt_daily_plan", "source": "source_contract", "confidence": 0.98}
+        ],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["BtDailyPlanPortalController#complete(BtDailyPlanActionItem) -> ResponseData<Void>", "BtDailyPlanActionItem 允许 id 或 dailyPlanNo 定位", "RemoteBtDailyPlanService#complete -> BtDailyPlanController#complete -> BtDailyPlanService#complete，校验 PARTIAL_DISPATCH 后更新为 COMPLETED"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "e8c8e66f-6a88-43f8-959c-5498b6f7575e",
+      "expected_identity": {"service": "c12-portal", "method": "POST", "path": "/mtp/settlement/btExpense/page"},
+      "semantic": {
+        "purpose": "供门户端按费用号、收付类型、日计划、运单、车次、线路、结算对象和开单状态分页查询班列应收应付费用。",
+        "audiences": ["门户端"], "domains": ["班列运输", "运输结算"],
+        "scenarios": ["门户结算页面汇总筛选班列应收应付费用，核对费用金额及其账单关联状态。"],
+        "actions": ["page", "query"], "entities": ["班列费用"],
+        "aliases": ["门户班列费用分页", "查询班列应收应付费用", "BtExpensePortalController.page"],
+        "resource": "bt_expense", "lookup_keys": ["expenseNo", "expenseType", "dailyPlanNo", "waybillNo", "trainNo", "routeName", "settlementObjectId", "billNo", "billStatus", "isCreateBill"],
+        "cardinality": "many", "ownership": "all",
+        "discriminators": ["返回费用主体分页，可按收付类型和账单关联筛选；不同于 modifyLogPage 返回修改轨迹，也不同于 getById 返回单条费用。"],
+        "required_inputs": [],
+        "business_identifiers": [
+          {"canonical": "expense_no", "display_name": "班列费用编号", "technical_names": ["expenseNo"], "aliases": ["费用号"], "resource": "bt_expense", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "waybill_no", "display_name": "班列运单编号", "technical_names": ["waybillNo"], "aliases": ["运单号"], "resource": "bt_expense", "source": "source_contract", "confidence": 0.97},
+          {"canonical": "bill_no", "display_name": "账单编号", "technical_names": ["billNo"], "aliases": ["结算单号"], "resource": "bt_expense", "source": "source_contract", "confidence": 0.97}
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": ["BtExpensePortalController#page(BtExpensePageCondition) -> ResponseData<PageResult<BtExpenseQuery>>", "BtExpensePortalService#page -> RemoteBtExpenseAdminService#page", "BtExpenseAdminController#page -> BtExpenseService#page -> BtExpenseDao#page；BtExpensePageCondition 与 BtExpenseQuery 定义筛选和返回合同"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "4a56c88d-af95-413f-9eb0-2b96ac6f8b51",
+      "expected_identity": {"service": "c12-portal", "method": "POST", "path": "/mtp/settlement/btExpense/getById"},
+      "semantic": {
+        "purpose": "供门户端按费用 ID 读取一条班列应收或应付费用的计费、日计划、运单、线路、结算对象和账单关联详情。",
+        "audiences": ["门户端"], "domains": ["班列运输", "运输结算"],
+        "scenarios": ["门户查看或编辑班列费用前，按主键回显该费用的计费依据、金额和开单信息。"],
+        "actions": ["detail", "query"], "entities": ["班列费用"],
+        "aliases": ["班列费用详情", "按ID查班列费用", "BtExpensePortalController.getById"],
+        "resource": "bt_expense", "lookup_keys": ["id"], "cardinality": "one", "ownership": "by_id",
+        "discriminators": ["按单个费用 ID 返回 BtExpenseQuery；不同于 page 的多条费用和 modifyLogPage 的修改记录。"],
+        "required_inputs": [{"name": "id", "zh_name": "班列费用ID", "location": "body", "required": true, "schema_type": "integer"}],
+        "business_identifiers": [{"canonical": "expense_id", "display_name": "班列费用ID", "technical_names": ["id"], "aliases": ["费用主键"], "resource": "bt_expense", "source": "source_contract", "confidence": 0.99}],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["BtExpensePortalController#getById(IdObject) -> ResponseData<BtExpenseQuery>", "BtExpensePortalService#getById -> RemoteBtExpenseAdminService#getById", "BtExpenseAdminController#getById 读取 IdObject.id -> BtExpenseService#getById；返回 DTO 为 BtExpenseQuery"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "4c62a427-937b-46cc-a1a2-f8a2c3e3a8b8",
+      "expected_identity": {"service": "c12-portal", "method": "POST", "path": "/mtp/settlement/btExpense/modifyLogPage"},
+      "semantic": {
+        "purpose": "供门户端按班列费用编号分页读取该费用每次修改的字段说明、修改前后内容、操作人和时间。",
+        "audiences": ["门户端"], "domains": ["班列运输", "运输结算"],
+        "scenarios": ["门户追溯指定班列费用的历次调整，核对修改前后值及操作记录。"],
+        "actions": ["page", "query"], "entities": ["班列费用修改日志"],
+        "aliases": ["班列费用修改记录", "费用变更日志分页", "BtExpensePortalController.modifyLogPage"],
+        "resource": "bt_expense_modify_log", "lookup_keys": ["expenseNo"], "cardinality": "many", "ownership": "all",
+        "discriminators": ["返回 BtExpenseModifyLogQuery 分页并以 expenseNo 关联费用；不是费用主体 page 或单条费用详情。"],
+        "required_inputs": [],
+        "business_identifiers": [{"canonical": "expense_no", "display_name": "班列费用编号", "technical_names": ["expenseNo"], "aliases": ["费用号"], "resource": "bt_expense_modify_log", "source": "source_contract", "confidence": 0.98}],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": ["BtExpensePortalController#modifyLogPage(BtExpenseModifyLogPageCondition) -> ResponseData<PageResult<BtExpenseModifyLogQuery>>", "BtExpensePortalService#modifyLogPage -> RemoteBtExpenseAdminService#modifyLogPage", "BtExpenseAdminController#modifyLogPage -> BtExpenseService#pageModifyLog -> BtExpenseModifyLogService#page"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "c2da2be7-3e44-4ce0-8ce6-9032df3ec3b6",
+      "expected_identity": {"service": "c12-portal", "method": "POST", "path": "/mtp/settlement/btExpense/saveOrUpdate"},
+      "semantic": {
+        "purpose": "供门户端新增或更新一条班列应收/应付费用，计算金额、补充默认费用号与日期、记录修改日志，并返回费用 ID。",
+        "audiences": ["门户端"], "domains": ["班列运输", "运输结算"],
+        "scenarios": ["门户录入新的班列费用或调整既有费用的结算数量、单价、结算对象和关联运输信息。"],
+        "actions": ["create", "update"], "entities": ["班列费用"],
+        "aliases": ["保存班列费用", "新增或修改班列费用", "BtExpensePortalController.saveOrUpdate"],
+        "resource": "bt_expense", "lookup_keys": ["id", "expenseNo", "dailyPlanNo", "waybillNo", "settlementObjectId"],
+        "cardinality": "one", "ownership": "by_id",
+        "discriminators": ["id 为空时新增并生成 expenseNo，id 有值时更新并记录修改日志；返回费用主键。不同于批量删除或账单关联处理。"],
+        "required_inputs": [
+          {"name": "expenseType", "zh_name": "费用类型", "location": "body", "required": true, "schema_type": "integer"},
+          {"name": "expenseName", "zh_name": "费用名称", "location": "body", "required": true, "schema_type": "string"},
+          {"name": "settlementQuantity", "zh_name": "结算数量", "location": "body", "required": true, "schema_type": "number"},
+          {"name": "unitPrice", "zh_name": "单价", "location": "body", "required": true, "schema_type": "number"}
+        ],
+        "business_identifiers": [
+          {"canonical": "expense_id", "display_name": "班列费用ID", "technical_names": ["id"], "aliases": ["费用主键"], "resource": "bt_expense", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "expense_no", "display_name": "班列费用编号", "technical_names": ["expenseNo"], "aliases": ["费用号"], "resource": "bt_expense", "source": "source_contract", "confidence": 0.98}
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": ["BtExpensePortalController#saveOrUpdate(BtExpenseItem) -> ResponseData<Long>", "BtExpensePortalService#saveOrUpdate -> RemoteBtExpenseAdminService#saveOrUpdate -> BtExpenseAdminController#saveOrUpdate(@Valid)", "BtExpenseService#save/validateSaveItem 明确要求 expenseType、expenseName、settlementQuantity、unitPrice，并执行新增默认值、金额计算和修改日志"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "669b285c-9ff2-496f-8b37-a56e33928adb",
+      "expected_identity": {"service": "c12-portal", "method": "POST", "path": "/mtp/settlement/btExpense/deleteByIds"},
+      "semantic": {
+        "purpose": "供门户端按费用 ID 集合批量删除尚未生成账单的班列应收或应付费用。",
+        "audiences": ["门户端"], "domains": ["班列运输", "运输结算"],
+        "scenarios": ["门户清理误录且尚未开单的多条班列费用，避免删除已进入账单的费用。"],
+        "actions": ["delete"], "entities": ["班列费用"],
+        "aliases": ["批量删除班列费用", "清理未开单班列费用", "BtExpensePortalController.deleteByIds"],
+        "resource": "bt_expense", "lookup_keys": ["ids"], "cardinality": "many", "ownership": "by_id",
+        "discriminators": ["按多个费用 ID 删除且拒绝已生成账单的费用；不同于 process*BillId 只增删账单关联。门户返回 Object，而下游成功响应无数据体。"],
+        "required_inputs": [{"name": "ids", "zh_name": "班列费用ID集合", "location": "body", "required": true, "schema_type": "array"}],
+        "business_identifiers": [{"canonical": "expense_ids", "display_name": "班列费用ID集合", "technical_names": ["ids"], "aliases": ["费用主键集合"], "resource": "bt_expense", "source": "source_contract", "confidence": 0.98}],
+        "semantic_confidence": 0.88,
+        "semantic_evidence": ["BtExpensePortalController#deleteByIds(SettlementIdsObject) 声明 ResponseData<Object>", "BtExpensePortalService#deleteByIds -> RemoteBtExpenseAdminService#deleteByIds", "BtExpenseAdminController#deleteByIds 返回原始 ResponseData 且成功 data 为空；BtExpenseService#deleteByIds 校验已开单费用不可删除。门户与下游返回泛型不一致，故降低置信度"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "6c31b9de-6b2a-4357-bb24-f5875371d866",
+      "expected_identity": {"service": "c12-portal", "method": "POST", "path": "/mtp/settlement/btExpense/createPayableBillByExpense"},
+      "semantic": {
+        "purpose": "供门户端选择多条同结算对象的未开单班列应付费用，汇总生成一张班列应付账单并返回账单 ID。",
+        "audiences": ["门户端"], "domains": ["班列运输", "运输结算"],
+        "scenarios": ["门户将同一供应结算对象的班列应付费用汇总开成应付账单。"],
+        "actions": ["create"], "entities": ["班列应付账单", "班列应付费用"],
+        "aliases": ["班列应付费用生成账单", "汇总创建班列应付单", "BtExpensePortalController.createPayableBillByExpense"],
+        "resource": "bt_payable_bill", "lookup_keys": ["ids"], "cardinality": "one", "ownership": "by_id",
+        "discriminators": ["只接受应付类型费用并生成 PayableBill；与 createReceivableBillByExpense 的应收费用及 ReceivableBill 返回方向相反。"],
+        "required_inputs": [{"name": "ids", "zh_name": "班列应付费用ID集合", "location": "body", "required": true, "schema_type": "array"}],
+        "business_identifiers": [{"canonical": "expense_ids", "display_name": "班列费用ID集合", "technical_names": ["ids"], "aliases": ["应付费用主键集合"], "resource": "bt_payable_bill", "source": "source_contract", "confidence": 0.98}],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["BtExpensePortalController#createPayableBillByExpense(SettlementIdsObject) -> ResponseData<Long>", "BtExpensePortalService#createPayableBillByExpense -> RemoteBtExpenseAdminService#createPayableBillByExpense", "BtExpenseAdminController#createPayableBillByExpense -> BtExpenseService#createPayableBillByExpense；校验应付类型和结算对象后写 PayableBill 并回填费用账单字段"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "608fb123-b8d8-4110-a595-67b305cad3a3",
+      "expected_identity": {"service": "c12-portal", "method": "POST", "path": "/mtp/settlement/btExpense/createReceivableBillByExpense"},
+      "semantic": {
+        "purpose": "供门户端选择多条同结算对象的未开单班列应收费用，汇总生成一张班列应收账单并返回账单 ID。",
+        "audiences": ["门户端"], "domains": ["班列运输", "运输结算"],
+        "scenarios": ["门户将同一客户结算对象的班列应收费用汇总开成应收账单。"],
+        "actions": ["create"], "entities": ["班列应收账单", "班列应收费用"],
+        "aliases": ["班列应收费用生成账单", "汇总创建班列应收单", "BtExpensePortalController.createReceivableBillByExpense"],
+        "resource": "bt_receivable_bill", "lookup_keys": ["ids"], "cardinality": "one", "ownership": "by_id",
+        "discriminators": ["只接受应收类型费用并生成 ReceivableBill；与 createPayableBillByExpense 的应付费用及 PayableBill 返回方向相反。"],
+        "required_inputs": [{"name": "ids", "zh_name": "班列应收费用ID集合", "location": "body", "required": true, "schema_type": "array"}],
+        "business_identifiers": [{"canonical": "expense_ids", "display_name": "班列费用ID集合", "technical_names": ["ids"], "aliases": ["应收费用主键集合"], "resource": "bt_receivable_bill", "source": "source_contract", "confidence": 0.98}],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["BtExpensePortalController#createReceivableBillByExpense(SettlementIdsObject) -> ResponseData<Long>", "BtExpensePortalService#createReceivableBillByExpense -> RemoteBtExpenseAdminService#createReceivableBillByExpense", "BtExpenseAdminController#createReceivableBillByExpense -> BtExpenseService#createReceivableBillByExpense；校验应收类型和结算对象后写 ReceivableBill 并回填费用账单字段"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "4364499b-682d-4996-a1c6-c46a079baead",
+      "expected_identity": {"service": "c12-portal", "method": "POST", "path": "/mtp/settlement/btExpense/processExpenseBillId"},
+      "semantic": {
+        "purpose": "供门户端将多条班列应付费用加入指定班列应付账单或从中移除，并重新统计账单应付、已付和未付金额。",
+        "audiences": ["门户端"], "domains": ["班列运输", "运输结算"],
+        "scenarios": ["门户调整班列应付账单包含的费用明细并同步重算应付账单金额。"],
+        "actions": ["update"], "entities": ["班列应付费用账单关联"],
+        "aliases": ["调整班列应付账单费用", "加入或移除应付费用", "BtExpensePortalController.processExpenseBillId"],
+        "resource": "bt_payable_expense_bill_relation", "lookup_keys": ["ids", "billId", "processStatus"], "cardinality": "many", "ownership": "by_id",
+        "discriminators": ["作用于班列应付账单，并由 processStatus 决定加入或移除；不同于应收关联接口，也不同于直接生成新账单。门户返回 Object、下游成功无数据体。"],
+        "required_inputs": [
+          {"name": "ids", "zh_name": "班列费用ID集合", "location": "body", "required": true, "schema_type": "array"},
+          {"name": "billId", "zh_name": "班列应付账单ID", "location": "body", "required": true, "schema_type": "integer"},
+          {"name": "processStatus", "zh_name": "关联处理状态", "location": "body", "required": true, "schema_type": "string"}
+        ],
+        "business_identifiers": [
+          {"canonical": "expense_ids", "display_name": "班列费用ID集合", "technical_names": ["ids"], "aliases": ["费用主键集合"], "resource": "bt_payable_expense_bill_relation", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "bill_id", "display_name": "班列应付账单ID", "technical_names": ["billId"], "aliases": ["应付单主键"], "resource": "bt_payable_expense_bill_relation", "source": "source_contract", "confidence": 0.98}
+        ],
+        "semantic_confidence": 0.88,
+        "semantic_evidence": ["BtExpensePortalController#processExpenseBillId(BillProcessExpenseItem) 声明 ResponseData<Object>", "BtExpensePortalService#processExpenseBillId -> RemoteBtExpenseAdminService#processExpenseBillId", "BtExpenseAdminController#processExpenseBillId(@Valid) -> BtExpenseService#processExpenseBillId；运行时要求 ids/billId/processStatus 并重算 PayableBill。门户与下游返回泛型不一致，故降低置信度"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "99520726-2018-41a3-bd75-3caf1cd52a24",
+      "expected_identity": {"service": "c12-portal", "method": "POST", "path": "/mtp/settlement/btExpense/processReceivableExpenseBillId"},
+      "semantic": {
+        "purpose": "供门户端将多条班列应收费用加入指定班列应收账单或从中移除，并重新统计账单应收、已收和未收金额。",
+        "audiences": ["门户端"], "domains": ["班列运输", "运输结算"],
+        "scenarios": ["门户调整班列应收账单包含的费用明细并同步重算应收账单金额。"],
+        "actions": ["update"], "entities": ["班列应收费用账单关联"],
+        "aliases": ["调整班列应收账单费用", "加入或移除应收费用", "BtExpensePortalController.processReceivableExpenseBillId"],
+        "resource": "bt_receivable_expense_bill_relation", "lookup_keys": ["ids", "billId", "processStatus"], "cardinality": "many", "ownership": "by_id",
+        "discriminators": ["作用于班列应收账单，并由 processStatus 决定加入或移除；不同于应付关联接口，也不同于直接生成新账单。门户返回 Object、下游成功无数据体。"],
+        "required_inputs": [
+          {"name": "ids", "zh_name": "班列费用ID集合", "location": "body", "required": true, "schema_type": "array"},
+          {"name": "billId", "zh_name": "班列应收账单ID", "location": "body", "required": true, "schema_type": "integer"},
+          {"name": "processStatus", "zh_name": "关联处理状态", "location": "body", "required": true, "schema_type": "string"}
+        ],
+        "business_identifiers": [
+          {"canonical": "expense_ids", "display_name": "班列费用ID集合", "technical_names": ["ids"], "aliases": ["费用主键集合"], "resource": "bt_receivable_expense_bill_relation", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "bill_id", "display_name": "班列应收账单ID", "technical_names": ["billId"], "aliases": ["应收单主键"], "resource": "bt_receivable_expense_bill_relation", "source": "source_contract", "confidence": 0.98}
+        ],
+        "semantic_confidence": 0.88,
+        "semantic_evidence": ["BtExpensePortalController#processReceivableExpenseBillId(BillProcessExpenseItem) 声明 ResponseData<Object>", "BtExpensePortalService#processReceivableExpenseBillId -> RemoteBtExpenseAdminService#processReceivableExpenseBillId", "BtExpenseAdminController#processReceivableExpenseBillId(@Valid) -> BtExpenseService#processReceivableExpenseBillId；运行时要求 ids/billId/processStatus 并重算 ReceivableBill。门户与下游返回泛型不一致，故降低置信度"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "b379e68b-cef5-4933-93d3-794340d99654",
+      "expected_identity": {"service": "c12-portal", "method": "POST", "path": "/mtp/btRoute/page"},
+      "semantic": {
+        "purpose": "供门户端按线路编码、名称、起终站、结算对象和启停状态分页查询固定班列线路及报价信息。",
+        "audiences": ["门户端"], "domains": ["班列运输", "固定班列线路"],
+        "scenarios": ["门户选择或维护固定班列线路时分页核对途经站点、结算对象和运输报价。"],
+        "actions": ["page", "query"], "entities": ["固定班列线路", "线路站点", "线路报价"],
+        "aliases": ["门户固定班列线路分页", "查询班列线路报价", "BtRoutePortalController.page"],
+        "resource": "bt_route", "lookup_keys": ["routeCode", "routeName", "startStation", "endStation", "settlementObjectId", "status"],
+        "cardinality": "many", "ownership": "all",
+        "discriminators": ["返回固定班列线路分页及计算后的预估价；不同于两个详情入口的单条站点明细，也不同于保存和删除操作。"],
+        "required_inputs": [],
+        "business_identifiers": [{"canonical": "route_code", "display_name": "固定班列线路编号", "technical_names": ["routeCode"], "aliases": ["班列线路编码"], "resource": "bt_route", "source": "source_contract", "confidence": 0.98}],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": ["BtRoutePortalController#page(BtRoutePageCondition) -> ResponseData<PageResult<BtRouteQuery>>", "BtRoutePortalService#page -> RemoteBtRouteService#page", "BtRouteController#page -> BtRouteService#page -> BtRouteDao#page；BtRouteService 为每行计算 estPrice"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "0b77f325-4252-4c2f-9c8d-7f23a839c0d1",
+      "expected_identity": {"service": "c12-portal", "method": "POST", "path": "/mtp/btRoute/getById/{id}"},
+      "semantic": {
+        "purpose": "供门户端按路径中的线路 ID 读取一条固定班列线路、结算对象、计价信息和有序途经站点详情。",
+        "audiences": ["门户端"], "domains": ["班列运输", "固定班列线路"],
+        "scenarios": ["门户以路径主键打开固定班列线路详情，核对起终站、途经站点和报价。"],
+        "actions": ["query", "detail"], "entities": ["固定班列线路", "线路站点", "线路报价"],
+        "aliases": ["路径ID查固定班列线路", "班列线路详情", "BtRoutePortalController.getById"],
+        "resource": "bt_route", "lookup_keys": ["id"], "cardinality": "one", "ownership": "by_id",
+        "discriminators": ["线路 ID 位于路径；返回单条 BtRouteQuery 及 stationList。与 findById 内容相同，但后者使用请求体 IdObject。"],
+        "required_inputs": [{"name": "id", "zh_name": "固定班列线路ID", "location": "path", "required": true, "schema_type": "integer"}],
+        "business_identifiers": [{"canonical": "route_id", "display_name": "固定班列线路ID", "technical_names": ["id"], "aliases": ["班列线路主键"], "resource": "bt_route", "source": "source_contract", "confidence": 0.99}],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["BtRoutePortalController#getById(@PathVariable Long id) -> ResponseData<BtRouteQuery>", "BtRoutePortalService#getById -> RemoteBtRouteService#getById", "BtRouteController#getById -> BtRouteService#getById -> BtRouteDao#findById，并由 BtRouteStationDao#findByRouteId 填充 stationList"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "1a3d80b0-eb5f-4d6c-8f1f-5bd831dfb1e0",
+      "expected_identity": {"service": "c12-portal", "method": "POST", "path": "/mtp/btRoute/findById"},
+      "semantic": {
+        "purpose": "供门户端按请求体中的线路 ID 读取一条固定班列线路、结算对象、计价信息和有序途经站点详情。",
+        "audiences": ["门户端"], "domains": ["班列运输", "固定班列线路"],
+        "scenarios": ["门户统一 ID 请求组件回显固定班列线路的价格与站点路径。"],
+        "actions": ["query", "detail"], "entities": ["固定班列线路", "线路站点", "线路报价"],
+        "aliases": ["请求体ID查固定班列线路", "班列线路编辑回显", "BtRoutePortalController.findById"],
+        "resource": "bt_route", "lookup_keys": ["id"], "cardinality": "one", "ownership": "by_id",
+        "discriminators": ["线路 ID 位于 IdObject 请求体；返回内容与路径 getById 相同，不是线路分页接口。"],
+        "required_inputs": [{"name": "id", "zh_name": "固定班列线路ID", "location": "body", "required": true, "schema_type": "integer"}],
+        "business_identifiers": [{"canonical": "route_id", "display_name": "固定班列线路ID", "technical_names": ["id"], "aliases": ["班列线路主键"], "resource": "bt_route", "source": "source_contract", "confidence": 0.99}],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["BtRoutePortalController#findById(IdObject) -> ResponseData<BtRouteQuery>", "BtRoutePortalService#findById -> RemoteBtRouteService#findById", "BtRouteController#findById 读取 IdObject.id 后调用 BtRouteService#getById；返回 DTO 为 BtRouteQuery"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "4630bf5d-6022-4c05-bf9d-77552aa5bcb4",
+      "expected_identity": {"service": "c12-portal", "method": "POST", "path": "/mtp/btRoute/save"},
+      "semantic": {
+        "purpose": "供门户端新增或更新一条固定班列线路，保存结算对象、运输价格和有序途经站点；无线路号时自动生成。",
+        "audiences": ["门户端"], "domains": ["班列运输", "固定班列线路"],
+        "scenarios": ["门户维护固定班列线路基础资料、结算对象、计价参数和完整站点顺序。"],
+        "actions": ["create", "update"], "entities": ["固定班列线路", "线路站点", "线路报价"],
+        "aliases": ["保存固定班列线路", "新增或修改班列线路", "BtRoutePortalController.save"],
+        "resource": "bt_route", "lookup_keys": ["id", "routeCode", "routeName", "settlementObjectId"],
+        "cardinality": "one", "ownership": "all",
+        "discriminators": ["id 为空时新增、存在时更新，并同步替换 stationList；DTO 要求结算对象 ID 和名称，Service 另外要求线路名称、始发站和目的站。不同于 page/detail 的只读接口。"],
+        "required_inputs": [
+          {"name": "settlementObjectId", "zh_name": "结算对象ID", "location": "body", "required": true, "schema_type": "integer"},
+          {"name": "settlementObjectName", "zh_name": "结算对象名称", "location": "body", "required": true, "schema_type": "string"},
+          {"name": "routeName", "zh_name": "线路名称", "location": "body", "required": true, "schema_type": "string"},
+          {"name": "startStation", "zh_name": "始发站", "location": "body", "required": true, "schema_type": "string"},
+          {"name": "endStation", "zh_name": "目的站", "location": "body", "required": true, "schema_type": "string"}
+        ],
+        "business_identifiers": [
+          {"canonical": "route_id", "display_name": "固定班列线路ID", "technical_names": ["id"], "aliases": ["班列线路主键"], "resource": "bt_route", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "route_code", "display_name": "固定班列线路编号", "technical_names": ["routeCode"], "aliases": ["班列线路编码"], "resource": "bt_route", "source": "source_contract", "confidence": 0.98}
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": ["BtRoutePortalController#save(@RequestBody @Valid BtRouteItem) -> ResponseData<Void>", "BtRouteItem 对 settlementObjectId 使用 @NotNull、settlementObjectName 使用 @NotBlank，并级联校验 stationList", "BtRoutePortalService#save -> RemoteBtRouteService#save -> BtRouteController#save -> BtRouteService#saveBtRoute；BtRouteService#validateRoute 运行时要求 routeName、startStation、endStation，随后保存 BtRoute 并同步 BtRouteStationDao"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "d3d74ede-44f5-4502-98b9-e66f68579984",
+      "expected_identity": {"service": "c12-portal", "method": "POST", "path": "/mtp/btRoute/deleteByIds/{ids}"},
+      "semantic": {
+        "purpose": "供门户端按路径中的一个或多个线路 ID 删除未被运输业务使用的固定班列线路及其站点关系。",
+        "audiences": ["门户端"], "domains": ["班列运输", "固定班列线路"],
+        "scenarios": ["门户清理不再使用的固定班列线路，同时删除该线路的途经站点配置。"],
+        "actions": ["delete"], "entities": ["固定班列线路", "线路站点"],
+        "aliases": ["批量删除固定班列线路", "删除未使用班列线路", "BtRoutePortalController.deleteById"],
+        "resource": "bt_route", "lookup_keys": ["ids"], "cardinality": "many", "ownership": "by_id",
+        "discriminators": ["多个线路 ID 位于路径，删除前校验线路未被日计划、运单等运输业务引用，并同时删除站点关系；Swagger 标题误写为新增线路。"],
+        "required_inputs": [{"name": "ids", "zh_name": "固定班列线路ID集合", "location": "path", "required": true, "schema_type": "array"}],
+        "business_identifiers": [{"canonical": "route_ids", "display_name": "固定班列线路ID集合", "technical_names": ["ids"], "aliases": ["班列线路主键集合"], "resource": "bt_route", "source": "source_contract", "confidence": 0.99}],
+        "semantic_confidence": 0.94,
+        "semantic_evidence": ["BtRoutePortalController#deleteById(@PathVariable Long... ids) -> ResponseData<Void>；接口注释/扫描标题存在“新增线路”误标", "BtRoutePortalService#deleteById -> RemoteBtRouteService#deleteById", "BtRouteController#deleteById -> BtRouteService#delete；normalizeIds/findRouteList/validateRoutesNotUsed 后删除 BtRouteStationDao 关系和线路"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "7613d620-b504-40cc-b40b-afb66da5e493",
+      "expected_identity": {"service": "c12-portal", "method": "POST", "path": "/mtp/btWaybill/page"},
+      "semantic": {
+        "purpose": "供门户端按运单号、日计划、开行计划、状态、线路类型、运行日期、车次和发运日期分页查询班列运单；下游按当前用户角色施加货主或承运商范围。",
+        "audiences": ["门户端"], "domains": ["班列运输", "班列运单"],
+        "scenarios": ["门户货主或承运商查看其角色范围内的班列运单执行进度和发运到达信息。"],
+        "actions": ["page", "query"], "entities": ["班列运单", "运单箱型", "运单凭证"],
+        "aliases": ["门户班列运单分页", "查询班列运单进度", "BtWaybillPortalController.page"],
+        "resource": "bt_waybill", "lookup_keys": ["waybillNo", "dailyPlanNo", "departurePlanNo", "status", "lineType", "runTimeStart", "runTimeEnd", "trainNo", "shipDate"],
+        "cardinality": "many", "ownership": "unknown",
+        "discriminators": ["下游 BtWaybillController 清除客户端范围字段，并在角色为货主或承运商时写入当前 sessionUserId 及对应范围；无匹配角色时不加该过滤，因此 ownership 不标为无条件 self。不同于两个详情入口的单条返回。"],
+        "required_inputs": [],
+        "business_identifiers": [
+          {"canonical": "waybill_no", "display_name": "班列运单编号", "technical_names": ["waybillNo"], "aliases": ["运单号"], "resource": "bt_waybill", "source": "source_contract", "confidence": 0.98},
+          {"canonical": "daily_plan_no", "display_name": "日发运计划编号", "technical_names": ["dailyPlanNo"], "aliases": ["日计划号"], "resource": "bt_waybill", "source": "source_contract", "confidence": 0.97}
+        ],
+        "semantic_confidence": 0.90,
+        "semantic_evidence": ["BtWaybillPortalController#page(BtWaybillPageCondition) -> ResponseData<PageResult<BtWaybillQuery>>", "BtWaybillPortalService#page -> RemoteBtWaybillService#page", "BtWaybillController#page/fillPortalDataScope 清空请求范围字段，并按 SHIPPER 或 CARRIER* 角色填充会话范围；BtWaybillService#page -> BtWaybillDao#page。无匹配角色分支不填范围，故降低置信度"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "e6bd8db4-72bd-455d-a5bb-cd94564844cd",
+      "expected_identity": {"service": "c12-portal", "method": "POST", "path": "/mtp/btWaybill/getById/{id}"},
+      "semantic": {
+        "purpose": "供门户端按路径中的运单 ID 读取一条班列运单、箱型明细以及发运和到达凭证详情。",
+        "audiences": ["门户端"], "domains": ["班列运输", "班列运单"],
+        "scenarios": ["门户以路径主键打开班列运单详情，核对车次、箱量、发运到达时间和凭证。"],
+        "actions": ["query", "detail"], "entities": ["班列运单", "运单箱型", "运单凭证"],
+        "aliases": ["路径ID查班列运单", "班列运单详情", "BtWaybillPortalController.getById"],
+        "resource": "bt_waybill", "lookup_keys": ["id"], "cardinality": "one", "ownership": "by_id",
+        "discriminators": ["运单 ID 位于路径；返回单条运单并拆分全部、发运、到达三类凭证。与 findById 内容相同，但后者从请求体取 ID。"],
+        "required_inputs": [{"name": "id", "zh_name": "班列运单ID", "location": "path", "required": true, "schema_type": "integer"}],
+        "business_identifiers": [{"canonical": "waybill_id", "display_name": "班列运单ID", "technical_names": ["id"], "aliases": ["运单主键"], "resource": "bt_waybill", "source": "source_contract", "confidence": 0.99}],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["BtWaybillPortalController#getById(@PathVariable Long id) -> ResponseData<BtWaybillQuery>", "BtWaybillPortalService#getById -> RemoteBtWaybillService#getById", "BtWaybillController#getById -> BtWaybillService#getById -> BtWaybillDao#getByIdQuery；BtWaybillVoucherDao#findByWaybillId 后拆分 shipVoucherList/arrivalVoucherList 并填充 boxList"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "19c76958-f3e3-4a9e-9293-94ddd46a753c",
+      "expected_identity": {"service": "c12-portal", "method": "POST", "path": "/mtp/btWaybill/findById"},
+      "semantic": {
+        "purpose": "供门户端按请求体中的运单 ID 读取一条班列运单、箱型明细以及发运和到达凭证详情。",
+        "audiences": ["门户端"], "domains": ["班列运输", "班列运单"],
+        "scenarios": ["门户统一 ID 请求组件回显指定班列运单的运输节点、箱型和凭证信息。"],
+        "actions": ["query", "detail"], "entities": ["班列运单", "运单箱型", "运单凭证"],
+        "aliases": ["请求体ID查班列运单", "班列运单编辑回显", "BtWaybillPortalController.findById"],
+        "resource": "bt_waybill", "lookup_keys": ["id"], "cardinality": "one", "ownership": "by_id",
+        "discriminators": ["运单 ID 位于 IdObject 请求体；返回内容与路径 getById 相同，不是运单分页接口。"],
+        "required_inputs": [{"name": "id", "zh_name": "班列运单ID", "location": "body", "required": true, "schema_type": "integer"}],
+        "business_identifiers": [{"canonical": "waybill_id", "display_name": "班列运单ID", "technical_names": ["id"], "aliases": ["运单主键"], "resource": "bt_waybill", "source": "source_contract", "confidence": 0.99}],
+        "semantic_confidence": 0.98,
+        "semantic_evidence": ["BtWaybillPortalController#findById(IdObject) -> ResponseData<BtWaybillQuery>", "BtWaybillPortalService#findById -> RemoteBtWaybillService#findById", "BtWaybillController#findById 读取 IdObject.id 后调用 BtWaybillService#getById；返回 DTO 为 BtWaybillQuery"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    },
+    {
+      "interface_id": "a95c6a83-1f32-45e3-a436-4d1f314a5eca",
+      "expected_identity": {"service": "c12-portal", "method": "POST", "path": "/mtp/btWaybill/arrival"},
+      "semantic": {
+        "purpose": "供门户端按运单 ID 或运单号提交到达日期、备注和到达凭证，确认已发运班列运单到达并生成到达节点应收应付费用。",
+        "audiences": ["门户端"], "domains": ["班列运输", "班列运单"],
+        "scenarios": ["门户登记班列运单实际到达时间和凭证，推进运单至已到达并触发到达费用。"],
+        "actions": ["execute", "arrival"], "entities": ["班列运单到达", "到达凭证", "班列费用"],
+        "aliases": ["确认班列运单到达", "登记运单到达凭证", "BtWaybillPortalController.arrival"],
+        "resource": "bt_waybill_arrival", "lookup_keys": ["id", "waybillNo"], "cardinality": "one", "ownership": "by_id",
+        "discriminators": ["id 或 waybillNo 至少提供一项；仅允许 DISPATCHED 运单并要求 arrivalDate，写为 ARRIVED、保存 ARRIVAL 凭证并创建到达费用；不是运单详情或分页查询。"],
+        "required_inputs": [{"name": "arrivalDate", "zh_name": "到达日期", "location": "body", "required": true, "schema_type": "string"}],
+        "business_identifiers": [
+          {"canonical": "waybill_id", "display_name": "班列运单ID", "technical_names": ["id"], "aliases": ["运单主键"], "resource": "bt_waybill_arrival", "source": "source_contract", "confidence": 0.99},
+          {"canonical": "waybill_no", "display_name": "班列运单编号", "technical_names": ["waybillNo"], "aliases": ["运单号"], "resource": "bt_waybill_arrival", "source": "source_contract", "confidence": 0.98}
+        ],
+        "semantic_confidence": 0.97,
+        "semantic_evidence": ["BtWaybillPortalController#arrival(BtWaybillArrivalItem) -> ResponseData<Void>", "BtWaybillArrivalItem 继承 BtWaybillActionItem(id/waybillNo)；BtWaybillService#findWaybill 要求二者至少一个，arriveWaybill 运行时要求 arrivalDate", "RemoteBtWaybillService#arrival -> BtWaybillController#arrival -> BtWaybillService#arrival/arriveWaybill；写 ARRIVED、保存到达凭证并调用到达应收应付费用创建逻辑"],
+        "semantic_model": "codex-gpt5-source-contract-review-2026-09-02"
+      }
+    }
+  ]
+}

@@ -258,7 +258,7 @@ def test_stream_logs_validates_workspace_and_emits_sse(tmp_path: Path) -> None:
     query = parse_qs(urlparse(log_connection.path).query)
     assert query["follow"] == ["1"]
     assert query["tail"] == ["20"]
-    assert query["since"] == ["2026-08-09T10:00:00Z"]
+    assert query["since"] == ["1786269600"]
     assert log_connection.headers == {"Accept": "application/octet-stream"}
     assert log_connection.closed is True
     assert "event: ready" in events[0]
@@ -315,6 +315,7 @@ def test_read_log_snapshot_is_bounded_and_does_not_follow(tmp_path: Path) -> Non
     query = parse_qs(urlparse(log_connection.path).query)
     assert query["follow"] == ["0"]
     assert query["tail"] == ["50"]
+    assert query["since"] == ["1786269600"]
     assert result.truncated is False
     assert result.records[0].stream == "stderr"
     assert result.records[0].content == "ERROR request failed"

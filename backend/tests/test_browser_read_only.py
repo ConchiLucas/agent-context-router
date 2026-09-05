@@ -45,6 +45,10 @@ def _app() -> FastAPI:
     def control_containers() -> dict[str, bool]:
         return {"controlled": True}
 
+    @app.post("/api/workspaces/workspace-1/host-runtime/actions")
+    def run_host_runtime_action() -> dict[str, bool]:
+        return {"queued": True}
+
     @app.post("/api/workspaces/workspace-1/relation-records/search")
     def search_relation_records() -> dict[str, bool]:
         return {"read": True}
@@ -128,6 +132,13 @@ def test_browser_origin_can_read_and_run_allowlisted_actions() -> None:
         assert (
             client.post(
                 "/api/workspaces/workspace-1/containers/bulk-action",
+                headers=headers,
+            ).status_code
+            == 200
+        )
+        assert (
+            client.post(
+                "/api/workspaces/workspace-1/host-runtime/actions",
                 headers=headers,
             ).status_code
             == 200

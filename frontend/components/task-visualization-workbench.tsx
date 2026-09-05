@@ -56,6 +56,7 @@ const chainStatusLabels: Record<AiTaskChainHealthStatus, string> = {
 };
 
 const intentLabels: Record<AiTaskIntentType, string> = {
+  interface_search: "查找接口",
   interface_execute: "执行接口",
   data_query: "查询数据",
   task_execute: "执行任务",
