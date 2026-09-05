@@ -5,6 +5,8 @@ import type {
   ProjectListResponse,
   TraceDetail,
   TraceListResponse,
+  WorkspaceScriptDetail,
+  WorkspaceScriptListResponse,
 } from "@/lib/types";
 
 const PUBLIC_API_BASE_URL =
@@ -53,6 +55,18 @@ export async function getDocuments(filters: Record<string, string | undefined> =
   }
   const query = params.toString();
   return fetchJson<DocumentListResponse>(`/api/documents${query ? `?${query}` : ""}`);
+}
+
+export async function getProjectScripts(slug: string) {
+  return fetchJson<WorkspaceScriptListResponse>(
+    `/api/projects/${encodeURIComponent(slug)}/scripts`,
+  );
+}
+
+export async function getProjectScript(slug: string, scriptSlug: string) {
+  return fetchJson<WorkspaceScriptDetail>(
+    `/api/projects/${encodeURIComponent(slug)}/scripts/${encodeURIComponent(scriptSlug)}`,
+  );
 }
 
 export async function getDocument(documentId: string) {

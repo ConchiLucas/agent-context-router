@@ -19,6 +19,7 @@
 | 文档映射、同步和读取策略 | [前后端链路速查](./FRONTEND_BACKEND_FLOW.md) | `backend/src/context_router/services/document_mapping.py`, `document_graph.py` |
 | Tasks 列表与调用链详情 | [前后端链路速查](./FRONTEND_BACKEND_FLOW.md) | `frontend/app/tasks/`, `frontend/components/task-*` |
 | 项目和文档网页管理 | [业务功能说明](./BUSINESS_FEATURES.md) | `frontend/app/projects/`, `backend/src/context_router/api/projects.py` |
+| 工作空间脚本只读查看 | [业务功能说明](./BUSINESS_FEATURES.md) | `frontend/components/project-scripts-view.tsx`, `backend/src/context_router/api/scripts.py` |
 
 ## 当前架构约束
 

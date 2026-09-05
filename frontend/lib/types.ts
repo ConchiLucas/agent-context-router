@@ -12,6 +12,8 @@ export type ProjectSummary = {
   sync_summary: SyncSummary;
   document_count: number;
   active_document_count: number;
+  script_count: number;
+  autostart_script_count: number;
   trace_count: number;
   child_project_count: number;
 };
@@ -22,6 +24,29 @@ export type SyncSummary = {
   orphan: number;
   broken_links: number;
   pruned: number;
+};
+
+export type WorkspaceScriptKind = "workspace_ai" | "workspace_autostart";
+
+export type WorkspaceScriptSummary = {
+  id: string;
+  project_slug: string;
+  slug: string;
+  name: string;
+  description: string;
+  kind: WorkspaceScriptKind | string;
+  relative_path: string;
+  imported_at: string;
+  updated_at: string;
+};
+
+export type WorkspaceScriptDetail = WorkspaceScriptSummary & {
+  content: string;
+};
+
+export type WorkspaceScriptListResponse = {
+  project_slug: string;
+  scripts: WorkspaceScriptSummary[];
 };
 
 export type DocumentMappingCandidate = {

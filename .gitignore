@@ -24,5 +24,9 @@ coverage/
 document-sources/*
 !document-sources/.gitkeep
 
+# Optional one-time workspace script snapshots
+script-sources/*
+!script-sources/.gitkeep
+
 # IDEs
 .idea/

@@ -11,6 +11,13 @@
 
 ## 记录
 
+### 2026-09-05
+
+- 新增 `workspace_scripts` 表和 migration `20260905_0009`：按工作空间保存脚本 slug、kind、相对路径和正文。
+- Projects 卡片和详情增加脚本数量，Scripts 抽屉只读列出并查看入库脚本；不提供网页增删改或执行。
+- 攀枝花工作空间项目在 migration 中确保存在；若能读到该空间 `script/` 目录则做一次入库，之后不以目录覆盖数据库。
+- 项目列表和详情增加 `script_count`、`autostart_script_count`。
+
 ### 2026-07-19
 
 - 产品层改为 MCP-only，保留 FastAPI HTTP API 作为 MCP 与 Web 的内部实现；删除旧命令行入口、依赖、脚本和测试。

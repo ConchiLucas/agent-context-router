@@ -6,8 +6,10 @@ import { ModalCloseButton } from "@/components/modal-close-button";
 import { ProjectDocumentControls } from "@/components/project-document-controls";
 import { ProjectDocumentPreviewShell } from "@/components/project-document-preview-shell";
 import { ProjectCreateForm } from "@/components/project-create-form";
+import { ProjectScriptsView } from "@/components/project-scripts-view";
 import { getProjects } from "@/lib/api";
 import { mappingStatusLabel } from "@/lib/document-health";
+import { scriptCountText } from "@/lib/script-health";
 
 type ProjectsPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -18,6 +20,7 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
   const activePanel = singleValue(params.panel);
   const activeProject = singleValue(params.project) || undefined;
   const activeDocument = singleValue(params.document);
+  const activeScript = singleValue(params.script);
   const area = singleValue(params.area);
   const docType = singleValue(params.doc_type);
   const tag = singleValue(params.tag);
@@ -86,6 +89,13 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
                       label="Last synced"
                       value={formatLastSynced(project.last_synced_at)}
                     />
+                    <ProjectFact
+                      label="Scripts"
+                      value={scriptCountText(
+                        project.script_count,
+                        project.autostart_script_count,
+                      )}
+                    />
                   </div>
                 </div>
 
@@ -95,6 +105,12 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
                     href={`/projects?panel=documents&project=${encodedSlug}`}
                   >
                     Documents
+                  </Link>
+                  <Link
+                    className="button"
+                    href={`/projects?panel=scripts&project=${encodedSlug}`}
+                  >
+                    Scripts
                   </Link>
                   <Link
                     className="button"
@@ -109,6 +125,22 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
           })
         )}
       </section>
+      {activePanel === "scripts" && activeProject ? (
+        <ProjectPanel backHref="/projects">
+          <ProjectScriptsView
+            projectSlug={activeProject}
+            scriptHref={(scriptSlug) =>
+              projectPanelHref({
+                panel: "scripts",
+                project: activeProject,
+                script: scriptSlug,
+              })
+            }
+            selectedScriptSlug={activeScript}
+            subtitle={`Read-only scripts stored for ${activeProject}.`}
+          />
+        </ProjectPanel>
+      ) : null}
       {activePanel === "documents" ? (
         <ProjectPanel backHref="/projects">
           <ProjectDocumentPreviewShell
@@ -184,7 +216,7 @@ function singleValue(value: string | string[] | undefined) {
 }
 
 function projectPanelHref(params: {
-  panel: "documents";
+  panel: "documents" | "scripts";
   project?: string;
   area?: string;
   doc_type?: string;
@@ -192,6 +224,7 @@ function projectPanelHref(params: {
   status?: string;
   view?: string;
   document?: string;
+  script?: string;
 }) {
   const searchParams = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {

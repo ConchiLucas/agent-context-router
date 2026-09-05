@@ -59,7 +59,7 @@ postgresql+psycopg://context_router:context_router@postgres:5432/context_router
 已知当前 migration 版本：
 
 ```text
-20260719_0008
+20260905_0009
 ```
 
 核心表：
@@ -67,6 +67,7 @@ postgresql+psycopg://context_router:context_router@postgres:5432/context_router
 ```text
 projects
 documents
+workspace_scripts
 traces
 trace_events
 retrieval_hits
@@ -114,6 +115,24 @@ updated_at
 `documents.status="removed"` 是保留历史 Task 引用的 tombstone：普通 Documents 列表默认排除，但旧 `retrieval_hits` 和事件仍能展示标题。tombstone 的 `is_reachable=false`、`graph_depth=null`。
 
 `document_links` 保存同步解析出的 Markdown 链接；无法解析的目标保留 `target_document_id=null`，用于 Web 展示 broken link。
+
+`workspace_scripts` 保存工作空间脚本的数据库编辑源。网页只读；后续由 AI 改这些行，再同步到对应工作空间的 `script/` 目录。
+
+```text
+id
+project_id
+slug
+name
+description
+kind
+relative_path
+content
+imported_at
+created_at
+updated_at
+```
+
+`kind` 当前为 `workspace_ai` 或 `workspace_autostart`。`relative_path` 是相对于该工作空间 `script/` 的路径。migration `20260905_0009` 会确保攀枝花工作空间项目存在；若能读到该空间 `script/` 或快照目录，则做一次入库，已有行不会再从目录覆盖。
 
 当前受管文档来自映射根的 `AGENTS.md` 和 `docs/**/*.md`。入口强制为 `agent_index`，其余类型来自 front matter。
 
