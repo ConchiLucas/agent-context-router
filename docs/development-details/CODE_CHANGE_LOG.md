@@ -13,6 +13,7 @@
 
 ### 2026-09-05
 
+- 启动规范改为宿主机直接启动：后端 `uv run uvicorn`（49173），前端 `npm run dev`（49174）；README、AGENTS、STARTUP_GUIDE 和数据库常用命令不再把 Docker Compose 当作启动方式。
 - 新增 `workspace_scripts` 表和 migration `20260905_0009`：按工作空间保存脚本 slug、kind、相对路径和正文。
 - Projects 卡片和详情增加脚本数量，Scripts 抽屉只读列出并查看入库脚本；不提供网页增删改或执行。
 - 攀枝花工作空间项目在 migration 中确保存在；若能读到该空间 `script/` 目录则做一次入库，之后不以目录覆盖数据库。

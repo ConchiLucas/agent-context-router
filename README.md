@@ -68,42 +68,45 @@ AI cwd
 
 所有被索引的 Markdown 都需要稳定的 front matter `doc_id`。文件正文修改后，下一次 read 会直接读到最新内容；新增、删除、重命名、front matter 或链接变化后，在 Projects 页面点击 **Sync Documents** 更新索引和文档图。
 
-本地默认把仓库的 `document-sources/` 只读挂载为容器 `/documents`。服务器在 `.env` 中设置 `CONTEXT_ROUTER_DOCUMENTS_HOST_ROOT=/srv/ai-docs` 即可映射统一文档目录，不需要修改代码。
+本地默认把仓库的 `document-sources/` 作为文档根。在 `backend/.env` 设置 `CONTEXT_ROUTER_DOCUMENTS_CONTAINER_ROOT` 指向该目录或服务器上的统一文档目录，例如 `/srv/ai-docs`。
 
 ## MCP 配置示例
 
-先用 Docker Compose 启动服务，再让 MCP 客户端通过容器执行 stdio server：
+先按下面的方式启动后端 API，再让 MCP 客户端在宿主机执行 stdio server：
 
 ```toml
 [mcp_servers.context-router]
-command = "docker"
+command = "uv"
 args = [
-  "compose",
-  "-f",
-  "/absolute/path/agent-context-router/docker-compose.yml",
-  "exec",
-  "-T",
-  "backend",
-  "uv",
   "run",
   "context-router-mcp"
 ]
+cwd = "/absolute/path/agent-context-router/backend"
+env = { CONTEXT_ROUTER_API_URL = "http://127.0.0.1:49173" }
 ```
 
 将示例中的绝对路径替换为本仓库路径。Codex、Antigravity 或其他支持 stdio MCP 的工具都应连接同一个 server。
 
 ## 启动与访问
 
-服务统一由本仓库的 Docker Compose 管理：
+不要用 Docker Compose 启动。开两个终端：
 
 ```bash
-docker compose up -d
-docker compose exec backend uv run alembic upgrade head
+cd backend
+uv run alembic upgrade head
+uv run uvicorn context_router.main:create_app --factory --host 0.0.0.0 --port 49173
+```
+
+```bash
+cd frontend
+CONTEXT_ROUTER_INTERNAL_API_URL=http://127.0.0.1:49173 \
+NEXT_PUBLIC_CONTEXT_ROUTER_API_URL=http://127.0.0.1:49173 \
+npm run dev -- --hostname 0.0.0.0 --port 49174
 ```
 
 - Web：`http://127.0.0.1:49174`
 - Internal API：`http://127.0.0.1:49173`
-- PostgreSQL：`127.0.0.1:54329`
+- PostgreSQL：`127.0.0.1:5432`
 
 开发、测试、重启和 migration 规则见 [启动与开发规范](./docs/STARTUP_GUIDE.md)。
 

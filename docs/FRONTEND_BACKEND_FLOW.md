@@ -82,7 +82,7 @@ mcp_server.py:_read_context_document
 ### Tasks 没有记录
 
 1. 确认 AI 实际调用了 `prepare_task_context`。
-2. 检查 MCP server 使用的 `CONTEXT_ROUTER_API_URL` 或 Docker 容器连接。
+2. 检查 MCP server 使用的 `CONTEXT_ROUTER_API_URL`，默认 `http://127.0.0.1:49173`。
 3. 检查 `traces.source` 是否为 `mcp`。
 4. 查看 `mcp_server.py` 到 `/api/context/prepare` 的错误。
 

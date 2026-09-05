@@ -17,8 +17,8 @@
 - 文档映射与同步由 Projects 页面管理；不要把代码 `root_path` 当作文档目录，也不要向同步接口提交任意路径。
 - 如果 MCP 不可用或没有合适候选，继续使用本索引和仓库检索，不要阻塞任务。
 - 修改代码前先阅读相关文件和开发规范。
-- 本项目只使用当前目录下的 Docker Compose 管理服务；不要用宿主机直接启动前端或后端。
-- 修改后端代码后，按开发规范使用 `docker compose restart backend` 重启后端。
-- 用户要求启动前后端时，按开发规范使用 Docker Compose 启动；如果已启动则重启。
-- 后续自测、测试、lint、build、migration 都按开发规范走 Docker Compose。
+- 本项目在宿主机启动前后端：后端 `uv run uvicorn`，前端 `npm run dev`；不要用 Docker Compose 启动。
+- 修改后端代码后，按开发规范停掉并重新启动 `uvicorn`。
+- 用户要求启动前后端时，按 [启动与开发规范](./docs/STARTUP_GUIDE.md) 在宿主机启动；如果已启动则重启。
+- 后续自测、测试、lint、build、migration 都在宿主机执行。
 - 只记录代码层面的开发内容，不记录普通聊天。

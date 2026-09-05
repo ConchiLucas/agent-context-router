@@ -4,7 +4,7 @@
 
 ## 必读顺序
 
-1. [启动与开发规范](./STARTUP_GUIDE.md)：所有启动、测试、lint、build、migration 都走 Docker Compose。
+1. [启动与开发规范](./STARTUP_GUIDE.md)：启动、测试、lint、build、migration 都在宿主机执行，不要用 Docker Compose 启动。
 2. 按任务选择下表中的一份或两份文档。
 3. 涉及历史取舍时再读 `development-details/`。
 
