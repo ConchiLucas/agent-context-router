@@ -64,9 +64,19 @@ def upgrade() -> None:
             unique=False,
         )
     if not _has_index("workspace_scripts", op.f("ix_workspace_scripts_slug")):
-        op.create_index(op.f("ix_workspace_scripts_slug"), "workspace_scripts", ["slug"], unique=False)
+        op.create_index(
+            op.f("ix_workspace_scripts_slug"),
+            "workspace_scripts",
+            ["slug"],
+            unique=False,
+        )
     if not _has_index("workspace_scripts", op.f("ix_workspace_scripts_kind")):
-        op.create_index(op.f("ix_workspace_scripts_kind"), "workspace_scripts", ["kind"], unique=False)
+        op.create_index(
+            op.f("ix_workspace_scripts_kind"),
+            "workspace_scripts",
+            ["kind"],
+            unique=False,
+        )
 
     _ensure_panzhihua_project()
 

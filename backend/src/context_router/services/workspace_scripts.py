@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-import re
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -214,7 +214,8 @@ def _iter_script_files(script_dir: Path):
     for path in sorted(script_dir.rglob("*")):
         if not path.is_file() or path.is_symlink():
             continue
-        if any(part in SKIP_DIR_NAMES or part.startswith(".") for part in path.relative_to(script_dir).parts[:-1]):
+        relative_parts = path.relative_to(script_dir).parts[:-1]
+        if any(part in SKIP_DIR_NAMES or part.startswith(".") for part in relative_parts):
             continue
         if path.name.startswith("."):
             continue
