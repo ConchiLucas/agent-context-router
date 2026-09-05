@@ -51,8 +51,9 @@ mcp_server.py:_read_context_document
 | 页面 | 前端代码 | 后端 API | 用途 |
 | --- | --- | --- | --- |
 | Dashboard | `frontend/app/page.tsx` | projects/documents/traces GET | 汇总 MCP 任务和文档指标 |
-| Projects | `frontend/app/projects/page.tsx` | `GET/POST /api/projects` | 网页新增项目、查看项目卡片 |
+| Projects | `frontend/app/projects/page.tsx` | `GET/POST /api/projects` | 网页新增项目、查看项目卡片和脚本数量 |
 | Project detail | `frontend/app/projects/[slug]/page.tsx` | `GET /api/projects/{slug}` | 映射、同步和文档健康状态 |
+| Scripts | `project-scripts-view.tsx` | `GET /api/projects/{slug}/scripts`、`GET /api/projects/{slug}/scripts/{script_slug}` | 只读查看入库脚本和正文 |
 | Map Documents | `project-document-controls.tsx` | `GET /api/document-mappings/candidates`、`PUT /api/projects/{slug}/document-mapping` | 选择 `/documents` 直接子目录 |
 | Sync Documents | `project-link-reload-button.tsx` | `POST /api/projects/{slug}/documents/sync-local` | 扫描映射下的 AGENTS.md、docs/**/*.md 和链接 |
 | Documents | `frontend/app/documents/` | `GET /api/documents` | 可达层级、孤立文档、断链和正文 |
@@ -71,22 +72,24 @@ mcp_server.py:_read_context_document
 | `GET /api/document-mappings/candidates` | `api/document_mappings.py` | 可用文档目录及占用状态 |
 | `PUT /api/projects/{slug}/document-mapping` | `api/projects.py` | 保存唯一相对 docs_path |
 | `POST /api/projects/{slug}/documents/sync-local` | `api/documents.py` | 同步 Markdown 索引 |
+| `GET /api/projects/{slug}/scripts` | `api/scripts.py` | 只读列出该工作空间入库脚本 |
+| `GET /api/projects/{slug}/scripts/{script_slug}` | `api/scripts.py` | 只读查看脚本文本 |
 
-不存在 Usage、feedback 或 CLI runtime API。
+不存在 Usage、feedback、CLI runtime 或脚本增删改 API。
 
 ## 5. 常见排查
 
 ### Tasks 没有记录
 
 1. 确认 AI 实际调用了 `prepare_task_context`。
-2. 检查 MCP server 使用的 `CONTEXT_ROUTER_API_URL` 或 Docker 容器连接。
+2. 检查 MCP server 使用的 `CONTEXT_ROUTER_API_URL`，默认 `http://127.0.0.1:49173`。
 3. 检查 `traces.source` 是否为 `mcp`。
 4. 查看 `mcp_server.py` 到 `/api/context/prepare` 的错误。
 
 ### cwd 无法识别项目
 
 1. 检查 Projects 页中的 root path。
-2. 检查 host/container workspace 路径映射。
+2. 检查 `CONTEXT_ROUTER_WORKSPACE_HOST_ROOT` 与 `CONTEXT_ROUTER_WORKSPACE_CONTAINER_ROOT` 路径映射。
 3. 确认 cwd 位于 root path 下。
 4. 多项目匹配时检查最长路径是否是目标项目。
 

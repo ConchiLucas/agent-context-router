@@ -72,6 +72,26 @@ class Project(TimestampMixin, Base):
         back_populates="project",
         cascade="all, delete-orphan",
     )
+    workspace_scripts: Mapped[list[WorkspaceScript]] = relationship(
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
+
+
+class WorkspaceScript(TimestampMixin, Base):
+    __tablename__ = "workspace_scripts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
+    slug: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(240), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="")
+    kind: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    relative_path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    project: Mapped[Project] = relationship(back_populates="workspace_scripts")
 
 
 class Document(TimestampMixin, Base):

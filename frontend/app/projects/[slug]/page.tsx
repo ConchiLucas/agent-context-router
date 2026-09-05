@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ProjectDocumentControls } from "@/components/project-document-controls";
 import { getProject } from "@/lib/api";
 import { mappingStatusLabel, syncSummaryText } from "@/lib/document-health";
+import { scriptCountText } from "@/lib/script-health";
 
 type ProjectPageProps = {
   params: Promise<{
@@ -48,6 +49,13 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
           <span className="metric-label">MCP Tasks</span>
           <strong className="metric-value">{project.trace_count}</strong>
         </Link>
+        <Link
+          className="panel metric"
+          href={`/projects?panel=scripts&project=${encodeURIComponent(project.slug)}`}
+        >
+          <span className="metric-label">Scripts</span>
+          <strong className="metric-value">{project.script_count}</strong>
+        </Link>
       </section>
 
       <section className="section panel project-detail-mapping">
@@ -69,6 +77,10 @@ export default async function ProjectDetailPage({ params }: ProjectPageProps) {
           <ProjectFact label="Documents" value={syncSummaryText(project.sync_summary)} />
           <ProjectFact label="Broken links" value={String(project.sync_summary.broken_links)} />
           <ProjectFact label="Last synced" value={formatLastSynced(project.last_synced_at)} />
+          <ProjectFact
+            label="Scripts"
+            value={scriptCountText(project.script_count, project.autostart_script_count)}
+          />
         </div>
         <ProjectDocumentControls project={project} />
       </section>

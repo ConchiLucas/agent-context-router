@@ -63,6 +63,8 @@ class ProjectResponse(BaseModel):
 class ProjectSummary(ProjectResponse):
     document_count: int
     active_document_count: int
+    script_count: int
+    autostart_script_count: int
     trace_count: int
     child_project_count: int
 

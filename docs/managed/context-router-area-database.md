@@ -11,6 +11,6 @@
 | document_id | 用途 |
 | --- | --- |
 | `context-router-database-info` | 数据库连接、表和 migration 信息 |
-| `context-router-area-startup` | Docker Compose 和 migration 执行方式 |
+| `context-router-area-startup` | 宿主机启动和 migration 执行方式 |
 
 历史 usage_cards 表保留兼容，但当前没有 Usage API 或页面。

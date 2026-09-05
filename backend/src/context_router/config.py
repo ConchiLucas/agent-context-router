@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     workspace_container_root: str | None = None
     documents_host_root: str | None = None
     documents_container_root: str = "/documents"
+    scripts_snapshot_root: str | None = None
 
 
 settings = Settings()

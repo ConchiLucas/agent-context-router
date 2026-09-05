@@ -9,9 +9,14 @@ def test_ensure_sqlite_schema_creates_tables_for_local_first_database(tmp_path) 
     ensure_sqlite_schema(engine)
 
     table_names = set(inspect(engine).get_table_names())
-    assert {"projects", "documents", "traces", "trace_events", "retrieval_hits"}.issubset(
-        table_names
-    )
+    assert {
+        "projects",
+        "documents",
+        "traces",
+        "trace_events",
+        "retrieval_hits",
+        "workspace_scripts",
+    }.issubset(table_names)
     project_columns = {column["name"] for column in inspect(engine).get_columns("projects")}
     document_columns = {column["name"] for column in inspect(engine).get_columns("documents")}
     assert {

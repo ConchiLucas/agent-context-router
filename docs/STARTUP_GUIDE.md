@@ -2,96 +2,109 @@
 
 ## 强制规则
 
-- 本项目只允许使用当前目录下的 `docker-compose.yml` 管理服务。
-- 不要直接在宿主机运行 `uvicorn`、`next dev`、`npm run dev`、`uv run ...` 等服务启动命令。
-- 后续自测、启动、重启、测试、lint、build、migration 都优先通过 Docker Compose 执行。
-- 如果为了排查必须临时运行宿主机命令，需要在回复中说明原因，并且不能把它作为项目启动方式。
+- 本项目在宿主机直接启动前后端，不要用 Docker Compose 启动服务。
+- 后端用 `uv` + `uvicorn`，前端用 `npm run dev`。
+- 后续自测、重启、测试、lint、build、migration 都在宿主机执行。
+- `docker-compose.yml` 只是历史文件，不是当前启动方式。
 
-## 开机自启
+## 依赖
 
-`docker-compose.yml` 中的 `postgres`、`backend`、`frontend` 都配置了：
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/)
+- Node.js 22+
+- 本机 PostgreSQL，默认连接见 [数据库信息](./DATABASE_INFO.md)
 
-```yaml
-restart: unless-stopped
-```
+## 首次准备
 
-这表示容器创建并启动过一次后，只要 Docker Desktop 或 Docker daemon 随系统启动，容器会自动恢复运行。首次启用或修改 compose 配置后，在项目根目录执行：
+在仓库根目录：
 
 ```bash
-docker compose up -d
+cp backend/.env.example backend/.env
 ```
 
-Mac 上还需要确认 Docker Desktop 已开启开机启动；否则系统启动时 Docker 没有运行，容器也不会被自动拉起。
-
-## 文档目录挂载
-
-本地默认使用仓库内 `document-sources/`，Compose 以只读方式挂载到 backend 的 `/documents`。每个子目录必须包含根 `AGENTS.md` 和 `docs/`。
-
-服务器把所有项目文档放在一个宿主机目录，例如 `/srv/ai-docs`，然后创建 `.env`：
+`backend/.env` 默认使用本机 PostgreSQL：
 
 ```text
-CONTEXT_ROUTER_DOCUMENTS_HOST_ROOT=/srv/ai-docs
-CONTEXT_ROUTER_DOCUMENTS_CONTAINER_ROOT=/documents
+CONTEXT_ROUTER_DATABASE_URL=postgresql+psycopg://conchi:conchi123456@127.0.0.1:5432/context_router
 ```
 
-首次配置或修改 host root 后必须重建服务，使 bind mount 生效：
+文档目录是本机路径，不是容器挂载。后端从 `backend/` 启动时，可在 `backend/.env` 增加：
+
+```text
+CONTEXT_ROUTER_DOCUMENTS_CONTAINER_ROOT=../document-sources
+CONTEXT_ROUTER_SCRIPTS_SNAPSHOT_ROOT=../script-sources
+```
+
+`document-sources/` 下每个子目录必须包含根 `AGENTS.md` 和 `docs/`。Projects 页面只选择该文档根的直接子目录名。
+
+安装依赖并执行 migration：
 
 ```bash
-docker compose up -d --force-recreate backend frontend
-docker compose exec backend uv run alembic upgrade head
+cd backend && uv sync --extra dev
+cd backend && uv run alembic upgrade head
+cd frontend && npm install
 ```
 
-Projects 页面只选择 `/documents` 的直接子目录名，不接受宿主机路径或容器绝对路径。
+## 启动
 
-## 服务管理
+开两个终端，都在仓库根目录操作。
 
-- 本地服务生命周期统一使用 Docker Compose 管理，并且命令都在项目根目录执行。
-- 如果修改了后端代码，在验证前需要用 Docker Compose 重启后端：
+后端：
 
 ```bash
-docker compose restart backend
+cd backend
+uv run uvicorn context_router.main:create_app --factory --host 0.0.0.0 --port 49173
 ```
 
-- 如果用户要求启动前后端，使用 Docker Compose 启动：
+前端：
 
 ```bash
-docker compose up -d backend frontend
+cd frontend
+CONTEXT_ROUTER_INTERNAL_API_URL=http://127.0.0.1:49173 \
+NEXT_PUBLIC_CONTEXT_ROUTER_API_URL=http://127.0.0.1:49173 \
+npm run dev -- --hostname 0.0.0.0 --port 49174
 ```
 
-- 如果前后端已经在运行，而用户仍要求启动前后端，则改为重启：
+- Web：`http://127.0.0.1:49174`
+- API：`http://127.0.0.1:49173`
+- PostgreSQL：`127.0.0.1:5432`
 
-```bash
-docker compose restart backend frontend
-```
+## 重启
+
+- 修改后端后，停掉后端终端里的 `uvicorn`，再按上面的后端命令重新启动。
+- 用户要求启动前后端时：没有在跑就按上面启动；已经在跑就先停再启。
+- 不要用 `docker compose restart`。
 
 ## 验证
 
-- 修改后端后，通过 Docker Compose 的后端环境运行检查：
+修改后端后，在 `backend/` 执行：
 
 ```bash
-docker compose exec backend uv run --extra dev pytest -q
-docker compose exec backend uv run --extra dev ruff check .
-docker compose exec backend uv run --extra dev ruff format --check .
+uv run --extra dev pytest -q
+uv run --extra dev ruff check .
+uv run --extra dev ruff format --check .
 ```
 
-- 修改前端后，通过 Docker Compose 的前端环境运行检查：
+修改前端后，在 `frontend/` 执行：
 
 ```bash
-docker compose exec frontend npm run lint
-docker compose exec frontend npm test
-docker compose exec frontend npm run build
+npm run lint
+npm test
+npm run build
 ```
 
 `npm run build` 在一次性临时副本中构建，不会覆盖正在运行的开发服务 `.next` 缓存或改写源码配置。
 
+根目录 `make test`、`make lint`、`make build` 也是同一套宿主机命令。
+
 ## 数据库
 
-- 本地开发优先使用项目已配置的 PostgreSQL 数据库连接。
+- 本地开发使用本机 PostgreSQL。
 - 表结构变更必须通过 Alembic migration 表达。
-- 通过后端服务环境执行数据库迁移：
+- 在 `backend/` 执行迁移：
 
 ```bash
-docker compose exec backend uv run alembic upgrade head
+uv run alembic upgrade head
 ```
 
 ## 修改原则

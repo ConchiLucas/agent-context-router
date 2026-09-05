@@ -5,6 +5,7 @@ from context_router.api.document_mappings import router as document_mappings_rou
 from context_router.api.documents import read_router as document_read_router
 from context_router.api.documents import router as documents_router
 from context_router.api.projects import router as projects_router
+from context_router.api.scripts import router as scripts_router
 from context_router.api.traces import router as traces_router
 from context_router.db.session import ensure_sqlite_schema
 
@@ -21,6 +22,7 @@ def create_app() -> FastAPI:
         }
 
     app.include_router(projects_router)
+    app.include_router(scripts_router)
     app.include_router(document_mappings_router)
     app.include_router(context_router)
     app.include_router(documents_router)

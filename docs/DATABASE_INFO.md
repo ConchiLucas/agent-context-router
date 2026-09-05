@@ -26,31 +26,7 @@ postgresql+psycopg://conchi:conchi123456@127.0.0.1:5432/context_router
 - `backend/.env.example`
 - `backend/alembic.ini`
 
-## Docker Compose 数据库
-
-`docker-compose.yml` 中也包含一个项目专用 PostgreSQL 服务：
-
-```text
-service: postgres
-image: postgres:16
-host port: 54329
-container port: 5432
-database: context_router
-user: context_router
-password: context_router
-```
-
-宿主机访问连接串：
-
-```bash
-postgresql+psycopg://context_router:context_router@127.0.0.1:54329/context_router
-```
-
-Docker Compose 后端容器内访问连接串：
-
-```bash
-postgresql+psycopg://context_router:context_router@postgres:5432/context_router
-```
+当前启动方式连接上面这套本机 PostgreSQL，不要改用 Docker Compose 里的数据库。
 
 ## 表结构状态
 
@@ -59,7 +35,7 @@ postgresql+psycopg://context_router:context_router@postgres:5432/context_router
 已知当前 migration 版本：
 
 ```text
-20260719_0008
+20260905_0009
 ```
 
 核心表：
@@ -67,6 +43,7 @@ postgresql+psycopg://context_router:context_router@postgres:5432/context_router
 ```text
 projects
 documents
+workspace_scripts
 traces
 trace_events
 retrieval_hits
@@ -114,6 +91,24 @@ updated_at
 `documents.status="removed"` 是保留历史 Task 引用的 tombstone：普通 Documents 列表默认排除，但旧 `retrieval_hits` 和事件仍能展示标题。tombstone 的 `is_reachable=false`、`graph_depth=null`。
 
 `document_links` 保存同步解析出的 Markdown 链接；无法解析的目标保留 `target_document_id=null`，用于 Web 展示 broken link。
+
+`workspace_scripts` 保存工作空间脚本的数据库编辑源。网页只读；后续由 AI 改这些行，再同步到对应工作空间的 `script/` 目录。
+
+```text
+id
+project_id
+slug
+name
+description
+kind
+relative_path
+content
+imported_at
+created_at
+updated_at
+```
+
+`kind` 当前为 `workspace_ai` 或 `workspace_autostart`。`relative_path` 是相对于该工作空间 `script/` 的路径。migration `20260905_0009` 会确保攀枝花工作空间项目存在；若能读到该空间 `script/` 或快照目录，则做一次入库，已有行不会再从目录覆盖。
 
 当前受管文档来自映射根的 `AGENTS.md` 和 `docs/**/*.md`。入口强制为 `agent_index`，其余类型来自 front matter。
 
@@ -165,27 +160,26 @@ updated_at
 
 ## 常用命令
 
-通过 Docker Compose 后端环境执行 migration：
+在 `backend/` 执行 migration：
 
 ```bash
-docker compose run --rm backend uv run alembic upgrade head
+uv run alembic upgrade head
 ```
 
-查看 compose 数据库 migration 版本：
+查看本机数据库 migration 版本：
 
 ```bash
-docker compose exec -T postgres psql -U context_router -d context_router -c "SELECT version_num FROM alembic_version;"
+psql -h 127.0.0.1 -U conchi -d context_router -c "SELECT version_num FROM alembic_version;"
 ```
 
-查看 compose 数据库表：
+查看本机数据库表：
 
 ```bash
-docker compose exec -T postgres psql -U context_router -d context_router -c "\dt"
+psql -h 127.0.0.1 -U conchi -d context_router -c "\dt"
 ```
 
 ## 使用原则
 
-- 检查 bug 或运行脚本前，先确认要连接的是本机默认数据库还是 Docker Compose 数据库。
-- 后端容器内脚本优先使用 compose 内部连接串。
-- 不要把宿主机脚本作为项目的启动或验证方式。
+- 检查 bug 或运行脚本前，先确认连接的是本机默认 PostgreSQL。
+- 启动、重启和 migration 都在宿主机执行，不要用 Docker Compose。
 - 表结构变更必须通过 Alembic migration 管理。

@@ -22,6 +22,7 @@ from context_router.services.document_mapping import (
     assign_document_mapping,
     resolve_document_root,
 )
+from context_router.services.workspace_scripts import import_panzhihua_scripts_once
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -38,6 +39,8 @@ def list_projects(
     if not include_children:
         query = query.where(Project.parent_project_id.is_(None))
 
+    import_panzhihua_scripts_once(session)
+    session.commit()
     projects = session.scalars(query).all()
     return ProjectListResponse(projects=[_project_summary(project) for project in projects])
 
@@ -116,6 +119,13 @@ def get_project(
     if project is None:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_slug}")
 
+    import_panzhihua_scripts_once(session)
+    session.commit()
+    project = session.scalar(
+        select(Project).where(Project.slug == project_slug).options(*_project_load_options())
+    )
+    if project is None:
+        raise HTTPException(status_code=404, detail=f"Project not found: {project_slug}")
     summary = _project_summary(project)
     return ProjectDetailResponse(
         **summary.model_dump(),
@@ -132,8 +142,10 @@ def _project_load_options():
         selectinload(Project.parent),
         selectinload(Project.documents),
         selectinload(Project.traces),
+        selectinload(Project.workspace_scripts),
         selectinload(Project.children).selectinload(Project.documents),
         selectinload(Project.children).selectinload(Project.traces),
+        selectinload(Project.children).selectinload(Project.workspace_scripts),
         selectinload(Project.children).selectinload(Project.children),
     )
 
@@ -158,6 +170,9 @@ def _project_response(project: Project) -> ProjectResponse:
 def _project_summary(project: Project) -> ProjectSummary:
     project_tree = list(_iter_project_tree(project))
     documents = [document for tree_project in project_tree for document in tree_project.documents]
+    scripts = [
+        script for tree_project in project_tree for script in tree_project.workspace_scripts
+    ]
     traces = [
         trace
         for tree_project in project_tree
@@ -178,6 +193,8 @@ def _project_summary(project: Project) -> ProjectSummary:
         sync_summary=SyncSummary.model_validate(project.last_sync_summary or {}),
         document_count=len(documents),
         active_document_count=sum(1 for document in documents if document.status == "active"),
+        script_count=len(scripts),
+        autostart_script_count=sum(1 for script in scripts if script.kind == "workspace_autostart"),
         trace_count=len(traces),
         child_project_count=len(project.children),
     )
