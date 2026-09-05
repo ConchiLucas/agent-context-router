@@ -89,7 +89,7 @@ mcp_server.py:_read_context_document
 ### cwd 无法识别项目
 
 1. 检查 Projects 页中的 root path。
-2. 检查 host/container workspace 路径映射。
+2. 检查 `CONTEXT_ROUTER_WORKSPACE_HOST_ROOT` 与 `CONTEXT_ROUTER_WORKSPACE_CONTAINER_ROOT` 路径映射。
 3. 确认 cwd 位于 root path 下。
 4. 多项目匹配时检查最长路径是否是目标项目。
 
