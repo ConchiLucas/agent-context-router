@@ -11,11 +11,13 @@
 
 ## 启动
 
+用户要求启动或重启本仓库时，AI 必须执行这些脚本，不要手写进程命令或 Docker Compose，也不要启动 `49174`。未运行用 `./scripts/start-native-stack.sh`；已运行用 `./scripts/restart-native-stack.sh`。正式前端是 `http://127.0.0.1:49175`。
+
 首次准备：
 
 ```bash
 cp .env.native.example .env.native.local
-# 填写真实数据库、工作空间、配置中心和 Docker Socket 地址
+# 填写真实数据库、工作空间和 Docker Socket 地址
 ./scripts/bootstrap-native.sh
 ```
 
@@ -52,10 +54,11 @@ Native 脚本将前端和后端显式绑定 `127.0.0.1`，不会监听局域网�
 
 Context Router 前后端不再由 Docker Compose 管理。Docker Desktop 只为已注册 Workspace、容器状态/日志和 ClickHouse 集成测试提供运行环境。Host Runner 不负责启动 Context Router 本身；它只执行已登记 Workspace 的不可变运行快照、白名单宿主机动作和接口转发计划。
 
-`scripts/start-native-stack.sh` 会等待 Docker Desktop 和 `http://127.0.0.1:49173/health` 就绪后启动 Runner。不要再单独运行旧的外部 Runner 启动脚本，否则两个 Runner 会争用任务。Runner 注册后可以提交攀枝花白名单动作
-`pzh.ensure-host-runtime`，默认 `environment=local`。该动作调用固定脚本
+`scripts/start-native-stack.sh` 会先按启动开关保障共享配置中心和 Personal Utils Hub，再等待 Docker Desktop 和 `http://127.0.0.1:49173/health` 就绪后启动 Runner。不要再单独运行旧的外部 Runner 启动脚本，否则两个 Runner 会争用任务。Runner 注册后可以提交攀枝花白名单动作
+`pzh.ensure-host-runtime`，默认 `environment=local`。打开“跟随 Context Router 启动”后，
+Native Stack 每次启动或重复执行启动脚本都会提交该动作并等待结果。该动作调用固定脚本
 `/Users/conchi/workforce/company_workforce/panzhihua_dev_workforce/deploy/host-runtime/ensure.sh`，只幂等保障已有容器、共享
-Docker 网络、数据库 TCP 转发/代理和宿主机 Nginx 网关；不会构建镜像、创建业务
+Docker 网络、数据库 TCP 转发/代理和本地网关容器（18880）；不会构建镜像、创建业务
 容器、拉取代码或执行 Fast/Full。
 
 攀枝花工作空间容器页提供 `pzh.start-and-check` 一键动作。它调用固定的
@@ -63,7 +66,7 @@ Docker 网络、数据库 TCP 转发/代理和宿主机 Nginx 网关；不会构
 缺失的项目执行 Fast 部署，再按“基础设施 / 项目服务 / 业务入口”输出结构化验收结果。
 旧 `ensure/status` 与单项目 Fast/Full 入口保持不变；一键动作执行期间不要并行提交其他部署。
 
-当前不安装持久化的 macOS LaunchAgent。以后设置登录后自动启动时，LaunchAgent 只需执行 `scripts/start-native-stack.sh`；Docker Desktop 的自动启动和业务容器恢复仍由 Docker Desktop 自身配置负责。旧的 `scripts/start-local-stack.sh` 仅保留为迁移期容器回退入口，不作为默认入口。
+Context Router Native Stack 默认仍用当前登录会话的 `launchd` 托管，不在安装时写入登录自启。配置管理里的“脚本管理”不再安装登录启动项；攀枝花 Host Runtime 只在打开“跟随 Context Router 启动”后，由 `start-native-stack.sh` 触发 `pzh.ensure-host-runtime`，启动攀枝花工作空间本身不再隐式触发 Host Runtime 动作。列出目录时会卸载遗留的 `~/Library/LaunchAgents/com.conchi.context-router.script.*.plist`。Docker Desktop 的自动启动仍由 Docker Desktop 自身配置负责。旧的 `scripts/start-local-stack.sh` 已停用：执行它只会转到 `start-native-stack.sh`，不再拉起 Docker 前端，也不再使用 `49174`。
 
 Runner 会把后端重启期间的连接拒绝、连接重置和请求超时视为可重试错误，控制面恢复
 后继续心跳和领取任务。Runner 是“所有项目都在 Docker Compose 内运行”规则的唯一
@@ -179,13 +182,23 @@ UV_PROJECT_ENVIRONMENT=.venv-native uv run --directory backend \
 持久化通用语义 JSON。工作空间差异只能进入数据库词汇和接口语义数据，不得写成
 Python 路径、Controller 或业务名称映射。
 
-当前 migration head 为 `20260905_0078`：`0073` 引入 pgvector、全文检索、工作空间
+当前 migration head 为 `20260920_0094`：`0073` 引入 pgvector、全文检索、工作空间
 词汇、搜索会话和反馈；`0074` 将旧意图表改名归档，并从活动接口表移除
 `crud_type` 与 `controller_description`；`0075` 增加只读 `interface_search` 任务意图，
 把接口定位与接口执行分开；`0076` 为 Workspace 文件副本增加版本、集合摘要和逐文件
 SHA-256，并把 `script/` 与 `deploy/host-runtime/` 纳入同步范围；`0077` 增加攀枝花
 工作空间的一键“启动并检查”白名单动作；`0078` 将三级就绪状态、各阶段耗时和失败
-摘要持久化到运行步骤，页面只对 `0078` 之前的历史记录回退解析日志。历史代码保存在
+摘要持久化到运行步骤，页面只对 `0078` 之前的历史记录回退解析日志；`0079` 增加项目启动/
+全局脚本管理表；`0080` 把全局脚本拆成 `script/`、`deploy/`、`docs/` 三类同步；`0081`
+增加控制面规则表，由 `prepare_task_context.workspace_rules` 下发；`0082`
+允许项目启动脚本使用 `shared_config_ensure` 拉起共享配置中心；`0083`
+允许项目启动脚本使用 `personal_utils_ensure` 拉起 Personal Utils Hub；`0084`
+增加提示词与接口匹配记录表；`0085` 为对照表增加正确接口字段；`0086`
+增加易混点说明；`0087` 增加浏览器采集防重 ID；`0088` 增加独立原始采集表，
+支持逐条确认、版本补全及延后匹配；`0089` 增加多客户端接口盲测结果；`0090`
+为 MCP 调用增加通用关联上下文；`0091` 删除已下线的本机 AI 默认项表；`0092` 增加
+Grok Heavy 接口盲测结果；`0093` 增加浏览器查询接口的每日成功优先样本归并；`0094`
+使同一采集 ID 的重试与响应补全计数幂等。历史代码保存在
 `backend/legacy/interface_semantics/`，不属于运行包。
 
 表关联页面的关联数据目前没有自动生成流水线，示例数据由可重复执行的种子脚本写入：
@@ -257,9 +270,9 @@ workspaces:
       - company_workforce/example-other-branch
 ```
 
-编辑后在工作空间页点击“重载本机映射”。`visible: false` 的卡片不显示；reader 目录只共享主目录文档，不能使用数据库或部署工具。复制数据库不会覆盖这份本机文件。
+编辑后由本机 AI/运维调用 `POST /api/workspaces/reload-local-mapping`，页面不提供重载按钮。`visible: false` 的卡片不显示；reader 目录只共享主目录文档，不能使用数据库或部署工具。复制数据库不会覆盖这份本机文件。
 
-Context Router 的通用使用规则不写入目标工作空间。统一 JSON 文档和 MCP `tools/list` 菜单的展示方式见[系统文档维护说明](./SYSTEM_GUIDES.md)；prepare 不返回这些系统文档。
+Context Router 的通用使用规则不写入目标工作空间。统一 JSON 文档和 MCP `tools/list` 菜单的展示方式见[系统文档维护说明](./SYSTEM_GUIDES.md)；prepare 不返回这些系统文档。所有项目必须遵守的控制面规则在配置管理的“规则管理”中只读查看，由 `prepare_task_context.workspace_rules` 下发。
 
 ## 目标 Workspace 文件同步
 
@@ -276,7 +289,7 @@ deploy/context-router/workspace/start/deploy.sh
 
 每个入口都应能脱离 Context Router 直接运行；`WORKSPACE_HOST_ROOT` 和 `PROJECT_HOST_ROOT` 只能作为 Runtime Runner 的可选覆盖值。`.env.local`、Token、私钥等本机配置不得进入这些目录。
 
-Workspace 详情的“工作空间文件”提供两种操作：从数据库当前版本恢复到主目录，或将主目录发布为数据库新版本。数据库保留最近 5 个完整版本；恢复 API 可指定 revision，页面默认恢复当前版本。写入前会校验集合摘要、逐文件 SHA-256、大小、路径和脚本 shebang。文档、部署配置和普通脚本通过同目录暂存、目录交换及失败回滚完成替换；`deploy/host-runtime/` 使用带备份回滚的原位同步，保留已有目录和文件 inode，避免破坏运行中容器的 bind mount。物化状态记录在 `deploy/runtime/context-router-shared-files.json`，不进入同步集合。
+工作空间卡片上的“脚本”只读取数据库当前版本中的 `script/` 文件，不提供同步或回写。Workspace 详情的“工作空间文件”仍提供两种操作：从数据库当前版本恢复到主目录，或将主目录发布为数据库新版本。数据库保留最近 5 个完整版本；恢复 API 可指定 revision，页面默认恢复当前版本。写入前会校验集合摘要、逐文件 SHA-256、大小、路径和脚本 shebang。文档、部署配置和普通脚本通过同目录暂存、目录交换及失败回滚完成替换；`deploy/host-runtime/` 使用带备份回滚的原位同步，保留已有目录和文件 inode，避免破坏运行中容器的 bind mount。物化状态记录在 `deploy/runtime/context-router-shared-files.json`，不进入同步集合。
 
 历史 Workspace 若已有完整数据库版本、但本地主目录暂时缺少某些 Project 的 fast/full 配置，可由可信本机 AI/运维调用 `POST /api/workspaces/{id}/shared-files/publish-runtime-files`，只发布根 `script/` 与 `deploy/host-runtime/`，并沿用数据库当前版本的文档和 deploy 文件。该入口不能创建首个版本，也不对浏览器开放；不要用空 deploy 脚本绕过全量发布校验。
 
@@ -285,6 +298,29 @@ Host Action 执行前会比较数据库当前版本与本地物化状态；版�
 Context Router 不可用时，其他 AI 应先阅读目标根 `AGENTS.md` 和 `deploy/context-router/README.md`，然后直接运行 Workspace 或 Project 的 `deploy.sh`。
 
 ## 服务管理
+
+浏览器请求日志通过同一份 HAR 导入脚本按环境保存。脚本不会导入请求头、Cookie 或
+Authorization；`test` 和 `uat` 会分别使用已登记的环境入口来源校验并自动选择同源转发地址：
+
+```bash
+uv run --directory backend python scripts/import_browser_har.py /path/to/test.har \
+  --workspace-id <workspace-id> --environment test
+uv run --directory backend python scripts/import_browser_har.py /path/to/uat.har \
+  --workspace-id <workspace-id> --environment uat
+```
+
+默认入口分别为 `http://192.168.0.222:18080/op/login` 和
+`http://192.168.0.222:28080/op/login`。临时地址变化时使用 `--environment-url` 覆盖；原有
+`--environment-id` 精确指定转发地址的用法继续保留。HAR 文件本身可能包含敏感请求数据，
+不应提交 Git，导入完成后按本机安全策略处理。
+
+需要网页操作后自动保存时，加载仓库
+`browser-extension/interface-log-capture/` 下的 Chrome 扩展。扩展监听 3000/3001
+(LOCAL)、18080(TEST) 与 28080(UAT) 的 Fetch/XHR；webRequest 保存请求条目，Debugger/DevTools
+补充响应内容。浏览器本地队列先持久化再上传，断线每30秒重试，逐条确认；未确认记录不自动删除，
+100 MiB 满额会明确报错。后端先保存脱敏原始记录，再关联接口；未匹配可在扩展弹窗查看、重新匹配。
+启用前停用旧用户录制脚本并刷新已有页面。安装步骤和采集边界见扩展目录 `README.md`。
+首次启用前必须执行 migration 并重启 Native Stack。
 
 ```bash
 ./scripts/restart-native-stack.sh

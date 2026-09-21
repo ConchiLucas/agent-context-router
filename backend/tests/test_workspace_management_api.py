@@ -10,8 +10,10 @@ from context_router.repositories.data_source_repository import (
 from context_router.repositories.document_search_repository import (
     InMemoryDocumentSearchRepository,
 )
+from context_router.repositories.managed_rule_repository import InMemoryManagedRuleRepository
 from context_router.repositories.project_repository import InMemoryProjectRepository
 from context_router.repositories.workspace_repository import InMemoryWorkspaceRepository
+from context_router.services.managed_rules import SEED_RULES
 
 
 class _TaskRepository:
@@ -41,6 +43,7 @@ def _app(tmp_path: Path, *, with_tasks: bool = False):
         project_repository=project_repository,
         data_source_repository=InMemoryDataSourceRepository(project_repository),
         document_search_repository=InMemoryDocumentSearchRepository(),
+        managed_rule_repository=InMemoryManagedRuleRepository(),
     )
 
 
@@ -194,9 +197,13 @@ def test_workspace_projects_and_data_source_summary(tmp_path: Path) -> None:
         "task_id",
         "environment",
         "documents",
+        "workspace_rules",
         "execution_contract",
         "access",
     }
+    assert [
+        {"title": item["title"], "body": item["body"]} for item in preview.json()["workspace_rules"]
+    ] == [{"title": spec.title, "body": spec.body} for spec in SEED_RULES]
     assert preview.json()["execution_contract"]["intent_source"] == "system_default"
     assert set(preview.json()["documents"]) == {"document_id", "summary", "children"}
     assert removed_project_preview.status_code == 404

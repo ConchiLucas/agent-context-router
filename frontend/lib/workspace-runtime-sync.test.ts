@@ -18,4 +18,11 @@ test("workspace shared file overwrite actions are explicitly allowed", () => {
     ),
     true,
   );
+  assert.equal(
+    isBrowserApiRequestAllowed(
+      "/api/workspaces/workspace-1/scripts/sync",
+      "POST",
+    ),
+    true,
+  );
 });

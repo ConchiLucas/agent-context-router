@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 
 from context_router.schemas.interface_forwarding import (
+    InterfaceForwardingBrowserCaptureImport,
     InterfaceForwardingEnvironmentWrite,
     InterfaceForwardingExecute,
     InterfaceForwardingIdentityWrite,
@@ -14,6 +15,7 @@ from context_router.schemas.interface_forwarding import (
     InterfaceForwardingRewriteResult,
     InterfaceSemanticsWrite,
 )
+from context_router.services.browser_auth import BrowserAuthSync, sync_browser_auth
 from context_router.services.interface_forwarding import (
     InterfaceForwardingError,
     InterfaceForwardingService,
@@ -37,9 +39,22 @@ def _error(exc: InterfaceForwardingError) -> HTTPException:
 
 
 @router.get("/overview", response_model=InterfaceForwardingOverview)
-def overview(request: Request, workspace_id: str, keyword: str = ""):
+def overview(
+    request: Request,
+    workspace_id: str,
+    keyword: str = "",
+    service_id: str | None = None,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+):
     try:
-        return _service(request).overview(workspace_id, keyword)
+        return _service(request).overview(
+            workspace_id,
+            keyword,
+            service_id=service_id,
+            page=page,
+            page_size=page_size,
+        )
     except InterfaceForwardingError as exc:
         raise _error(exc) from exc
 
@@ -112,6 +127,47 @@ def record_external_log(interface_id: str, payload: InterfaceForwardingLogWrite,
         return _service(request).record_external_log(interface_id, payload)
     except InterfaceForwardingError as exc:
         raise _error(exc) from exc
+
+
+@router.post("/browser-captures", status_code=status.HTTP_201_CREATED)
+def import_browser_captures(
+    payload: InterfaceForwardingBrowserCaptureImport,
+    request: Request,
+):
+    """Import bounded browser observations from a trusted local AI/operations client."""
+    try:
+        return _service(request).import_browser_captures(payload)
+    except InterfaceForwardingError as exc:
+        raise _error(exc) from exc
+
+
+@router.post("/browser-captures/auth")
+def browser_auth(payload: BrowserAuthSync, request: Request, response: Response):
+    origin = request.headers.get("origin", "")
+    if origin and not origin.startswith("chrome-extension://"):
+        raise HTTPException(status_code=403, detail="extension_origin_required")
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return sync_browser_auth(_service(request), payload)
+    except InterfaceForwardingError as exc:
+        raise _error(exc) from exc
+
+
+@router.get("/browser-captures")
+def browser_captures(
+    request: Request,
+    workspace_id: str,
+    limit: int = Query(default=50, ge=1, le=200),
+    capture_id: str | None = None,
+):
+    return _service(request).browser_captures(workspace_id, limit=limit, capture_id=capture_id)
+
+
+@router.post("/browser-captures/reconcile")
+def reconcile_browser_captures(
+    request: Request, workspace_id: str, limit: int = Query(default=50, ge=1, le=200)
+):
+    return _service(request).reconcile_browser_captures(workspace_id, limit)
 
 
 @router.post(

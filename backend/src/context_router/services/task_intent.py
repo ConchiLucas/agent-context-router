@@ -103,6 +103,10 @@ def build_task_execution_contract(
         visualization_targets = ["task"]
         instructions = ["根据任务选择最短的授权链路执行并验证，不为填充页面调用无关工具。"]
 
+    instructions.append(
+        "遵守本次 prepare 返回的 workspace_rules；各项目 AGENTS.md 只作指针，不以文档里的副本为准。"
+    )
+
     return TaskExecutionContract(
         intent_type=intent_type,
         error_signal=error_signal,

@@ -8,6 +8,7 @@ from context_router.repositories.database_environment_repository import (
     DatabaseEnvironmentConfigRecord,
     WorkspaceEnvironmentRecord,
 )
+from context_router.repositories.managed_rule_repository import InMemoryManagedRuleRepository
 from context_router.repositories.mcp_environment_default_repository import (
     InMemoryMcpEnvironmentDefaultRepository,
 )
@@ -16,6 +17,7 @@ from context_router.services.context_preparation import (
     ContextPreparationError,
     ContextPreparationService,
 )
+from context_router.services.managed_rules import SEED_RULES, ManagedRulesService
 from context_router.services.project_registry import ProjectRegistry
 
 
@@ -225,10 +227,12 @@ def test_prepare_returns_only_compact_tree_and_task_capabilities(tmp_path: Path)
     assert set(payload) == {
         "task_id",
         "documents",
+        "workspace_rules",
         "execution_contract",
         "access",
         "warnings",
     }
+    assert payload["workspace_rules"] == []
     assert payload["access"] == [
         "documents",
         "database",
@@ -255,6 +259,27 @@ def test_prepare_returns_only_compact_tree_and_task_capabilities(tmp_path: Path)
     assert "未声明 intent_type" in payload["warnings"][0]
     workspace_id = str(repository.created[0]["workspace_id"])
     assert repository.created[0]["workspace_key"] == registry.get_workspace_key(workspace_id)
+
+
+def test_prepare_includes_control_plane_workspace_rules(tmp_path: Path) -> None:
+    registry, _ = build_registry(tmp_path)
+    repository = FakeTaskRepository()
+    service = ContextPreparationService(
+        registry,
+        repository,
+        managed_rules_service=ManagedRulesService(InMemoryManagedRuleRepository()),
+    )
+
+    result = service.prepare(
+        task="修复登录问题",
+        cwd=str(tmp_path / "project" / "src"),
+        agent_name="codex",
+        intent_type="task_execute",
+    )
+
+    assert [item.title for item in result.workspace_rules] == [spec.title for spec in SEED_RULES]
+    assert [item.body for item in result.workspace_rules] == [spec.body for spec in SEED_RULES]
+    assert "遵守本次 prepare 返回的 workspace_rules" in result.execution_contract.instructions[-1]
 
 
 def test_prepare_persists_declared_bug_investigation_contract(tmp_path: Path) -> None:

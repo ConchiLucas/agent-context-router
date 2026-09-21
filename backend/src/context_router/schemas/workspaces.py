@@ -71,6 +71,7 @@ class WorkspaceSummary(BaseModel):
     database_count: int = 0
     database_authorization_count: int = 0
     document_reader_count: int = 0
+    script_count: int = 0
     created_at: datetime
     updated_at: datetime
 

@@ -208,6 +208,7 @@ class ScoreBreakdown(BaseModel):
     negative_penalty: float = 0
     identifier_match: float = 0
     service_match: float = 0
+    route_identity_match: float = 0
     features: dict[str, float] = Field(default_factory=dict)
     total: float
 
@@ -220,8 +221,8 @@ class SearchCandidateTrace(BaseModel):
 
 
 class SearchTrace(BaseModel):
-    query_understanding_version: str = "query-v7"
-    ranking_strategy_version: str = "support-aware-rrf-v2"
+    query_understanding_version: str = "query-v8"
+    ranking_strategy_version: str = "support-aware-rrf-v8"
     candidate_pool_ids: list[str] = Field(default_factory=list)
     candidates: list[SearchCandidateTrace] = Field(default_factory=list)
 

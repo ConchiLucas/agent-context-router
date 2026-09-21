@@ -16,6 +16,7 @@ from context_router.services.project_registry import ProjectRegistryError
 from context_router.services.workspace_shared_files import (
     WorkspaceSharedFilesError,
     WorkspaceSharedFilesService,
+    describe_shared_script,
 )
 
 
@@ -207,3 +208,102 @@ def test_publish_runtime_files_retains_database_documents_and_deploy(tmp_path: P
     assert contents["script/deploy.sh"] == "#!/bin/sh\necho updated\n"
     assert "script/.DS_Store" not in contents
     assert "script/tool/dist/tool-bin" not in contents
+
+
+def test_list_and_sync_scripts_write_database_to_target_directory(tmp_path: Path) -> None:
+    _write_fixture(tmp_path)
+    files = _SharedFilesRepository()
+    service, registry = _build_service(tmp_path, files=files)
+    published = service.publish("workspace-1")
+
+    listing = service.list_scripts("workspace-1")
+    assert listing.revision == published.revision
+    assert listing.target_directory == str(tmp_path / "script")
+    assert [item.relative_path for item in listing.scripts] == ["script/deploy.sh"]
+    assert listing.scripts[0].description == ""
+    detail = service.get_script("workspace-1", "script/deploy.sh")
+    assert detail.content == "#!/bin/sh\necho workspace\n"
+
+    (tmp_path / "script/deploy.sh").write_text("#!/bin/sh\necho local-only\n", encoding="utf-8")
+    (tmp_path / "script/extra.sh").write_text("#!/bin/sh\necho extra\n", encoding="utf-8")
+    synced = service.sync_scripts("workspace-1")
+
+    assert synced.script_count == 1
+    assert synced.revision == published.revision
+    assert (tmp_path / "script/deploy.sh").read_text(encoding="utf-8") == (
+        "#!/bin/sh\necho workspace\n"
+    )
+    assert not (tmp_path / "script/extra.sh").exists()
+    current = files.get_file_set("workspace-1")
+    assert current is not None
+    assert current.revision == published.revision
+    contents = {item.relative_path: item.content for item in current.files}
+    assert contents["script/deploy.sh"] == "#!/bin/sh\necho workspace\n"
+    assert registry.refreshed == []
+
+
+def test_sync_documents_and_deploy_do_not_touch_other_trees(tmp_path: Path) -> None:
+    _write_fixture(tmp_path)
+    files = _SharedFilesRepository()
+    service, registry = _build_service(tmp_path, files=files)
+    published = service.publish("workspace-1")
+
+    (tmp_path / "docs/AGENTS.md").write_text("# local-docs", encoding="utf-8")
+    (tmp_path / "docs/extra.md").write_text("remove me", encoding="utf-8")
+    (tmp_path / "script/deploy.sh").write_text("#!/bin/sh\necho local-script\n", encoding="utf-8")
+    (tmp_path / "deploy/context-router/fast/deploy.sh").write_text("local-deploy", encoding="utf-8")
+    (tmp_path / "deploy/host-runtime/ensure.sh").write_text("#!/bin/sh\nfalse\n", encoding="utf-8")
+    host_runtime_inode = (tmp_path / "deploy/host-runtime").stat().st_ino
+
+    docs = service.sync_documents("workspace-1")
+    assert docs.file_count == 1
+    assert docs.revision == published.revision
+    assert (tmp_path / "docs/AGENTS.md").read_text(encoding="utf-8") == "# canonical"
+    assert not (tmp_path / "docs/extra.md").exists()
+    assert (tmp_path / "script/deploy.sh").read_text(encoding="utf-8") == (
+        "#!/bin/sh\necho local-script\n"
+    )
+    assert (tmp_path / "deploy/context-router/fast/deploy.sh").read_text(
+        encoding="utf-8"
+    ) == "local-deploy"
+    assert registry.refreshed == ["workspace-1"]
+
+    deploy = service.sync_deploy("workspace-1")
+    assert deploy.file_count == 5
+    assert (tmp_path / "deploy/context-router/fast/deploy.sh").read_text(encoding="utf-8") == (
+        "#!/bin/sh\necho fast\n"
+    )
+    assert (tmp_path / "deploy/host-runtime/ensure.sh").read_text(encoding="utf-8") == (
+        "#!/bin/sh\ntrue\n"
+    )
+    assert (tmp_path / "deploy/host-runtime").stat().st_ino == host_runtime_inode
+    assert (tmp_path / "script/deploy.sh").read_text(encoding="utf-8") == (
+        "#!/bin/sh\necho local-script\n"
+    )
+    current = files.get_file_set("workspace-1")
+    assert current is not None
+    assert current.revision == published.revision
+
+
+def test_describe_shared_script_uses_leading_comments() -> None:
+    bash_panel = "#!/usr/bin/env bash\n\n# Start the panel.\nset -euo pipefail\n"
+    bash_gateway = (
+        "#!/usr/bin/env bash\n# Render the gateway\n# for IDEA and Docker.\n\nset -euo pipefail\n"
+    )
+    go_seed = "package main\n\n// Seed local track data.\nfunc main() {}\n"
+    assert describe_shared_script(bash_panel) == "Start the panel."
+    assert describe_shared_script(bash_gateway) == ("Render the gateway for IDEA and Docker.")
+    assert describe_shared_script(go_seed) == "Seed local track data."
+    assert describe_shared_script("#!/bin/sh\necho workspace\n") == ""
+    assert describe_shared_script(
+        "#!/usr/bin/env bash\nset -euo pipefail\n",
+        "script/test_host_runtime.sh",
+    ) == ("检查宿主机运行脚本语法，并执行 TCP 转发器回归测试和数据库代理 Compose 配置校验。")
+
+
+def test_sync_scripts_requires_database_scripts(tmp_path: Path) -> None:
+    _write_fixture(tmp_path)
+    files = _SharedFilesRepository()
+    service, _ = _build_service(tmp_path, files=files)
+    with pytest.raises(WorkspaceSharedFilesError, match="还没有可同步的脚本"):
+        service.sync_scripts("workspace-1")

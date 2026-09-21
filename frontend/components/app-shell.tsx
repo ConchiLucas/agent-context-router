@@ -16,8 +16,10 @@ import { RelationRecordExplorer } from "@/components/relation-record-explorer";
 import { WorkspaceDashboard } from "@/components/workspace-dashboard";
 import { InterfaceForwardingManager } from "@/components/interface-forwarding-manager";
 import { ValueMappingManager } from "@/components/value-mapping-manager";
-import { SharedAiConfigManager } from "@/components/shared-ai-config-manager";
+import { ManagedScriptsManager } from "@/components/managed-scripts-manager";
+import { ManagedRulesManager } from "@/components/managed-rules-manager";
 import { DataVisualizationWorkbench } from "@/components/data-visualization-workbench";
+import { InterfacePromptLab } from "@/components/interface-prompt-lab";
 import { InterfaceVisualizationWorkbench } from "@/components/interface-visualization-workbench";
 import { LogVisualizationWorkbench } from "@/components/log-visualization-workbench";
 import { TaskVisualizationWorkbench } from "@/components/task-visualization-workbench";
@@ -28,8 +30,10 @@ type Section =
   | "table-relations"
   | "relation-records"
   | "interface-forwarding"
+  | "interface-prompt-test"
   | "value-mappings"
-  | "shared-ai-config"
+  | "managed-scripts"
+  | "managed-rules"
   | "task-visualization"
   | "interface-visualization"
   | "data-visualization"
@@ -48,6 +52,7 @@ type NavKind =
   | Section
   | "data-management"
   | "interface-management"
+  | "interface-test"
   | "configuration-management"
   | "ai-visualization"
   | "system-center";
@@ -68,8 +73,13 @@ const interfaceManagementItems: NavMenuItem[] = [
   { section: "value-mappings", label: "映射管理" },
 ];
 
+const interfaceTestItems: NavMenuItem[] = [
+  { section: "interface-prompt-test", label: "接口测试" },
+];
+
 const configurationManagementItems: NavMenuItem[] = [
-  { section: "shared-ai-config", label: "AI 配置" },
+  { section: "managed-scripts", label: "脚本管理" },
+  { section: "managed-rules", label: "规则管理" },
 ];
 
 const visualizationItems: NavMenuItem[] = [
@@ -133,6 +143,15 @@ function NavIcon({ kind }: { kind: NavKind }) {
       </svg>
     );
   }
+  if (kind === "interface-prompt-test" || kind === "interface-test") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M5 6.5h10a2 2 0 0 1 2 2V17H7a2 2 0 0 1-2-2z" />
+        <path d="M17 10.5h2.5L21 13v4h-4" />
+        <path d="M8.5 10h6M8.5 13.5h4" />
+      </svg>
+    );
+  }
   if (kind === "interface-forwarding" || kind === "interface-management") {
     return (
       <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -164,7 +183,11 @@ function NavIcon({ kind }: { kind: NavKind }) {
       </svg>
     );
   }
-  if (kind === "configuration-management" || kind === "shared-ai-config") {
+  if (
+    kind === "configuration-management" ||
+    kind === "managed-scripts" ||
+    kind === "managed-rules"
+  ) {
     return (
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <rect x="4" y="4" width="16" height="16" rx="3" />
@@ -387,6 +410,14 @@ export function AppShell() {
             section={section}
             onSelect={selectSection}
           />
+          <NavDropdown
+            kind="interface-test"
+            label="接口测试"
+            menuId="interface-test-menu"
+            items={interfaceTestItems}
+            section={section}
+            onSelect={selectSection}
+          />
         </nav>
       </header>
       <main
@@ -397,8 +428,10 @@ export function AppShell() {
           section === "table-relations" ||
           section === "relation-records" ||
           section === "interface-forwarding" ||
+          section === "interface-prompt-test" ||
           section === "value-mappings" ||
-          section === "shared-ai-config" ||
+          section === "managed-scripts" ||
+          section === "managed-rules" ||
           visualizationActive
             ? "app-content app-content--traces"
             : "app-content"
@@ -409,8 +442,10 @@ export function AppShell() {
         {section === "table-relations" ? <TableRelationExplorer /> : null}
         {section === "relation-records" ? <RelationRecordExplorer /> : null}
         {section === "interface-forwarding" ? <InterfaceForwardingManager /> : null}
+        {section === "interface-prompt-test" ? <InterfacePromptLab /> : null}
         {section === "value-mappings" ? <ValueMappingManager /> : null}
-        {section === "shared-ai-config" ? <SharedAiConfigManager /> : null}
+        {section === "managed-scripts" ? <ManagedScriptsManager /> : null}
+        {section === "managed-rules" ? <ManagedRulesManager /> : null}
         {section === "task-visualization" ? (
           <TaskVisualizationWorkbench
             taskId={visualizationTaskId}

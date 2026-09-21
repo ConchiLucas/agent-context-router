@@ -6,7 +6,7 @@
     "node": ">=22 <23"
   },
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --hostname 127.0.0.1 --port 49175",
     "start": "next start",
     "lint": "eslint . --max-warnings=0",
     "build": "sh scripts/build-isolated.sh",

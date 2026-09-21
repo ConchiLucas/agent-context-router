@@ -23,15 +23,25 @@ docker compose exec backend uv run alembic upgrade head
 docker compose exec backend uv run alembic current
 ```
 
-当前 head 为 `20260905_0078`。`0076` 为 Workspace 文件副本增加版本集合、集合摘要与逐文件 SHA-256，并纳入根脚本和 Host Runtime 文件；`0077` 增加攀枝花工作空间的一键启动与检查动作；`0078` 在运行步骤中保存三级就绪状态、阶段耗时和失败摘要。若要验证 downgrade/upgrade，使用一次性测试数据库，不要在保存真实数据的控制面库上直接 downgrade。
+当前 head 为 `20260920_0094`。`0076` 为 Workspace 文件副本增加版本集合、集合摘要与逐文件 SHA-256，并纳入根脚本和 Host Runtime 文件；`0077` 增加攀枝花工作空间的一键启动与检查动作；`0078` 在运行步骤中保存三级就绪状态、阶段耗时和失败摘要；`0079` 增加项目启动/全局脚本管理表；`0080` 把全局脚本拆成 `script/`、`deploy/`、`docs/` 三类同步动作；`0081` 增加控制面规则表，由 prepare 返回给 AI；`0082` 允许项目启动脚本使用 `shared_config_ensure`；`0083` 允许项目启动脚本使用 `personal_utils_ensure`；`0084` 增加提示词与接口匹配记录表；`0085` 为对照表增加正确接口字段；`0086` 增加易混点说明；`0087` 为浏览器实时采集日志增加可空 `browser_capture_id` 和 Workspace 内唯一索引，使离线重试保持幂等；`0088` 增加独立原始采集表，支持逐条确认、版本补全及延后匹配；`0089` 增加多客户端接口盲测结果；`0090` 为 MCP 调用增加通用关联上下文；`0091` 删除已下线的本机 AI 默认项表 `shared_ai_defaults`；`0092` 扩展客户端约束以独立保存 Grok Heavy 接口盲测结果；`0093` 为浏览器查询接口增加按北京时间自然日归并的样本日期、观察计数、成功计数、首末观察时间和数据库唯一约束；`0094` 使同一采集 ID 的重试与响应补全计数幂等。若要验证 downgrade/upgrade，使用一次性测试数据库，不要在保存真实数据的控制面库上直接 downgrade。
 
 `system_guides` 保存 `guide_key`、JSONB 正文、菜单顺序和时间戳，没有 `enabled` 字段。历史 `include_in_prepare` 字段不再影响 MCP prepare；记录只进入系统文档菜单。
 
 ## 当前表
 
+浏览器可靠录制 migration head 更新为 `20260909_0088`：新增
+`browser_interface_captures`，按 `(workspace_id,capture_id)` 保存脱敏、有界原始观察与
+单调 revision、匹配状态和关联 log_id。匹配失败仅保留 pending，不丢弃原始记录；
+逐条入库 ACK 在事务提交后返回。`interface_forwarding_logs.request_url` 扩宽为 text，
+避免长 URL 导致整批写入失败。旧日志保留，接口关联可通过接收 API 重新处理。
+
 | 表 | 用途 |
 | --- | --- |
 | `workspaces` | 保存顶层工作空间 ID、名称、类型、唯一绝对根目录和创建/更新时间；记录存在即参与 cwd 匹配 |
+| `managed_scripts` | 保存配置管理中的项目启动/全局脚本目录、绑定工作空间、动作键和是否跟随项目启动；正文不存库，只引用白名单命令 |
+| `managed_rules` | 保存配置管理中的控制面规则标题和 Markdown 正文；空表首次读取时写入默认种子，之后以本机 AI/运维接口维护为准，prepare 原样返回 |
+| `interface_prompt_matches` | 保存接口测试对照行：工作空间、环境、提示词、检索门闩、候选快照、已标注的正确接口和易混点 |
+| `interface_prompt_client_results` | 保存经审核的盲测结果；以 `prompt_match_id + client` 唯一，保留原始 `task_id`、批次、模型、来源文件和选择/澄清证据。支持 `codex`、`codex-root`、`codex-astra`、`cursor`、`antigravity`、`grok-heavy`；导入结果优先于旧 MCP 轨迹推断 |
 | `workspace_shared_file_sets` | 保存 Workspace 文件集合的 revision、集合 SHA-256、当前版本标记和创建时间；每个 Workspace 保留最近 5 个完整版本 |
 | `workspace_shared_files` | 按 revision 保存主目录 `docs/`、`script/`、各 `deploy/context-router/` 与 `deploy/host-runtime/` 的 UTF-8 文件、可执行位和逐文件 SHA-256，用于版本发布与原子恢复 |
 | `document_projects` | 保存稳定项目 ID、名称、`frontend/backend` 的 `project_kind`、所属 `workspace_id`、工作空间内分别唯一的源码 `relative_path` 与文档入口 `document_relative_path`、兼容 `project_type`/`agents_path` 和创建/更新时间；没有 Project enabled |
@@ -53,7 +63,6 @@ docker compose exec backend uv run alembic current
 | `mcp_database_contexts` | 保存短期、不可跨 task 复用的数据库上下文，绑定环境 revision、数据库授权链接和物理库快照；不保存凭据 |
 | `interface_value_mapping_aliases` | 保存映射的业务关键词别名；同一 Workspace 内大小写无关唯一，供未来按关键词定位取值方式 |
 | `interface_value_mapping_bindings` | 把一个业务值绑定到接口的 path/query/body 参数路径；同一接口参数只能绑定一个业务值 |
-| `shared_ai_defaults` | 单行保存本机选定的默认 AI Provider ID、乐观锁 revision 和时间戳；不复制配置中心的 Provider、模型、地址或密钥 |
 | `workspace_table_relation_tables` | 保存该版本覆盖到的表和四类基数计数（`one_to_one_count`、`one_to_many_count`、`many_to_one_count`、`many_to_many_count`），CHECK 约束要求 `relation_count` 等于四者之和；另有 `folded_*_count` 四列记录其中有几行是已并入多对多的中间表腿，供前端按折叠开关做减法，CHECK 约束要求每个 `folded_*` 落在 0 到对应计数之间。计数单位是渲染出的行（一条边在两端各算一次），与 `generations` 的边数口径不同；`relation_count` 为 0 的表被左栏默认过滤 |
 | `workspace_table_relation_edges` | 保存关联边，一条关系一行。两端按 C 排序规则规范化为左右对并有 CHECK 约束，`pair_fingerprint` 保证同一关系不重复；`orientation` 记录哪端持有键，`cardinality` 统一按父到子存储，另存是否跨库。`cardinality = 'unknown'` 的边会被存下来但查询层不返回给页面 |
 | `workspace_table_relation_code_sites` | 保存关系代码点位，挂在边上，说明父键如何被赋值；`kind` 命名决定基数的情形而不是持久化调用 |
@@ -66,7 +75,7 @@ docker compose exec backend uv run alembic current
 | `mcp_document_read_calls` | 保存每次 read 的自增 read_call_id、task_id 和创建时间 |
 | `mcp_document_read_items` | 保存单次 read 内的 position、文档 ID、相对路径、章节、状态和错误码 |
 | `mcp_database_calls` | 保存对象搜索或只读查询的 task_id、数据库 alias、Engine、SQL SHA-256、状态、耗时、返回规模、截断和错误码；不保存 SQL 正文和结果集 |
-| `mcp_tool_calls` | 保存任务下每次 Context Router MCP 工具调用的 Server、工具名、服务端顺序依据、来源、状态、时间、耗时和脱敏摘要；文档/数据库明细通过 tool_call_id 关联 |
+| `mcp_tool_calls` | 保存任务下每次 Context Router MCP 工具调用的 Server、工具名、服务端顺序依据、来源、状态、时间、耗时和脱敏摘要；可选 `trace_context` 只保存通用 `run_id/item_id/step_id/attempt` 与有界标量属性；文档/数据库明细通过 tool_call_id 关联 |
 | `mcp_database_tool_payloads` | 按 tool_call_id 一对一保存两个数据库 MCP 工具的有界请求、最终 MCP 响应、字节数、截断、采集状态和到期时间；普通 Trace 查询不加载 payload |
 | `document_search_index_states` | 保存每个项目当前搜索索引的文档版本、索引格式版本、文档/分块数量和完成时间 |
 | `document_search_chunks` | 保存从 Markdown 派生的规范化章节分块、路径/标题/概要、`simple` tsvector 和 trigram 检索文本；可由磁盘原文完整重建 |

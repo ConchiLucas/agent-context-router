@@ -35,7 +35,11 @@ test("allows reads and the explicit safe browser POST allowlist", () => {
       "/api/workspaces/workspace-1/refresh",
       "POST",
     ),
-    true,
+    false,
+  );
+  assert.equal(
+    isBrowserApiRequestAllowed("/api/workspaces/reload-local-mapping", "POST"),
+    false,
   );
   assert.equal(
     isBrowserApiRequestAllowed(
@@ -69,6 +73,10 @@ test("allows reads and the explicit safe browser POST allowlist", () => {
   }
   assert.equal(isBrowserApiRequestAllowed("/api/system-guides", "POST"), false);
   assert.equal(isBrowserApiRequestAllowed("/api/interface-forwarding/import", "POST"), true);
+  assert.equal(
+    isBrowserApiRequestAllowed("/api/interface-forwarding/browser-captures", "POST"),
+    true,
+  );
   assert.equal(isBrowserApiRequestAllowed("/api/interface-forwarding/environments", "POST"), true);
   assert.equal(isBrowserApiRequestAllowed("/api/interface-forwarding/environments/local", "PUT"), true);
   assert.equal(isBrowserApiRequestAllowed("/api/interface-forwarding/environments/address-1", "DELETE"), true);
@@ -80,8 +88,26 @@ test("allows reads and the explicit safe browser POST allowlist", () => {
   assert.equal(isBrowserApiRequestAllowed("/api/value-mappings/mapping-1", "PUT"), true);
   assert.equal(isBrowserApiRequestAllowed("/api/value-mappings/mapping-1", "DELETE"), true);
   assert.equal(isBrowserApiRequestAllowed("/api/value-mappings/mapping-1/preview", "POST"), true);
-  assert.equal(isBrowserApiRequestAllowed("/api/shared-config/ai/refresh", "POST"), true);
-  assert.equal(isBrowserApiRequestAllowed("/api/shared-config/ai/default", "PUT"), true);
+  assert.equal(isBrowserApiRequestAllowed("/api/shared-config/ai/refresh", "POST"), false);
+  assert.equal(isBrowserApiRequestAllowed("/api/shared-config/ai/default", "PUT"), false);
+  assert.equal(
+    isBrowserApiRequestAllowed("/api/managed-scripts/script-1/autostart", "POST"),
+    true,
+  );
+  assert.equal(
+    isBrowserApiRequestAllowed("/api/interface-prompt-matches", "POST"),
+    false,
+  );
+  assert.equal(
+    isBrowserApiRequestAllowed("/api/managed-scripts/script-1/run", "POST"),
+    false,
+  );
+  assert.equal(isBrowserApiRequestAllowed("/api/managed-rules", "POST"), false);
+  assert.equal(isBrowserApiRequestAllowed("/api/managed-rules/rule-1", "PUT"), false);
+  assert.equal(
+    isBrowserApiRequestAllowed("/api/managed-rules/rule-1", "DELETE"),
+    false,
+  );
   assert.equal(isBrowserApiRequestAllowed("/api/value-mappings/mapping-1/extra", "POST"), false);
   assert.equal(
     isBrowserApiRequestAllowed("/api/system-guides/guide-1/content", "PUT"),

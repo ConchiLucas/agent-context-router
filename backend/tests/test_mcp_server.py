@@ -322,6 +322,7 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
     assert "bug_investigate" in str(prepare_schema["properties"]["intent_type"])
     assert "interface_search" in str(prepare_schema["properties"]["intent_type"])
     assert "execution_contract" in PREPARE_TOOL_DESCRIPTION
+    assert "workspace_rules" in PREPARE_TOOL_DESCRIPTION
     assert "read_task_context" in PREPARE_TOOL_DESCRIPTION
     assert "sensitive" in READ_TASK_CONTEXT_TOOL_DESCRIPTION
     assert "not the authoritative or live source" in READ_TASK_CONTEXT_TOOL_DESCRIPTION
@@ -449,6 +450,19 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
     }
     assert mapping_resolve_schema["properties"]["limit"]["maximum"] == 10
     assert mapping_resolve_schema["properties"]["selection"]["default"] == "default"
+    forwarding_search_schema = tool_by_name["search_forwarding_interfaces"].inputSchema
+    forwarding_compare_schema = tool_by_name["compare_forwarding_interfaces"].inputSchema
+    forwarding_detail_schema = tool_by_name["read_forwarding_interface_detail"].inputSchema
+    for forwarding_schema in (
+        forwarding_search_schema,
+        forwarding_compare_schema,
+        forwarding_detail_schema,
+    ):
+        assert "trace_context" in forwarding_schema["properties"]
+        trace_schema = forwarding_schema["$defs"]["McpCallTraceContext"]
+        assert trace_schema["additionalProperties"] is False
+        assert trace_schema["required"] == ["run_id"]
+        assert trace_schema["properties"]["attributes"]["maxProperties"] == 16
     forwarding_history_schema = tool_by_name["read_forwarding_request_history"].inputSchema
     assert forwarding_history_schema["required"] == ["task_id", "interface_id"]
     assert set(forwarding_history_schema["properties"]) == {

@@ -50,8 +50,8 @@
 
 左侧主菜单进入“系统文档”：
 
-1. 左侧按当前 FastMCP `tools/list` 固定展示每个工具的独立菜单项；选择后只显示该工具的名称、中文介绍、输入/输出 Schema 和 annotations。工具项只读且不保存到 `system_guides`；中文介绍仅用于页面，AI 客户端收到的原始英文 `description` 不变。
-2. 其余列表按菜单顺序展示已有文档，可同时按工具名称、描述、文档标题、摘要或 key 搜索。
+1. 左侧按当前 FastMCP `tools/list` 固定展示 26 个工具，并按任务与上下文、文档、数据库、表关联、取值映射、接口转发、可视化、工作空间运行分组；选择后只显示该工具的名称、中文介绍、输入/输出 Schema 和 annotations。工具项只读且不保存到 `system_guides`；中文介绍仅用于页面，AI 客户端收到的原始英文 `description` 不变。历史别名 `apply_project_changes`、`get_project_operation`、`prepare_table_relation_context` 只出现在调用链路，不进入 `tools/list`。
+2. 其余列表按菜单顺序展示已有文档，可同时按工具名称、类型、描述、文档标题、摘要或 key 搜索。
 3. 右侧可在“源码”和“树形”间切换；`tools/list` 两种视图均只读，系统文档源码可编辑，树形用于格式化检查。
 4. 选中持久化系统文档时页面只提供“保存内容”，不能新建、删除或修改 key 和菜单顺序。
 5. 保存前同时执行浏览器 JSON 解析和后端 Schema/大小校验。

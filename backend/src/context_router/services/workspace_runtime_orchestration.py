@@ -93,6 +93,8 @@ class WorkspaceRuntimeOrchestrationService:
         runner_available: Callable[[], bool] | None = None,
         local_mapping: LocalWorkspaceMappingService | None = None,
         shared_files_service: WorkspaceSharedFilesService | None = None,
+        shared_config_ensure: Callable[[], None] | None = None,
+        personal_utils_ensure: Callable[[], None] | None = None,
     ) -> None:
         self._task_repository = task_repository
         self._registry = registry
@@ -103,6 +105,8 @@ class WorkspaceRuntimeOrchestrationService:
         self._runner_available = runner_available
         self._local_mapping = local_mapping
         self._shared_files = shared_files_service
+        self._shared_config_ensure = shared_config_ensure
+        self._personal_utils_ensure = personal_utils_ensure
 
     def apply_changes(
         self,
@@ -209,6 +213,7 @@ class WorkspaceRuntimeOrchestrationService:
     ) -> RuntimeOperationView:
         self._require_task_mutation_allowed(task_id)
         workspace = self._workspace_for_task(task_id)
+        self._ensure_companions()
         snapshot = self._materialize_workspace(workspace.id)
         return self._create_view(
             RuntimeOperationDraft(
@@ -294,6 +299,7 @@ class WorkspaceRuntimeOrchestrationService:
         action: str = "pzh.ensure-host-runtime",
         environment: str = "local",
         trigger: str = "api",
+        task_id: int | None = None,
     ) -> RuntimeOperationView:
         if action not in HOST_RUNTIME_ACTIONS:
             raise WorkspaceRuntimeOrchestrationError(
@@ -333,7 +339,7 @@ class WorkspaceRuntimeOrchestrationService:
         run_id = uuid4().hex
         return self._create_view(
             RuntimeOperationDraft(
-                task_id=None,
+                task_id=task_id,
                 workspace_id=workspace_id,
                 kind="host_action",
                 trigger=trigger,
@@ -417,6 +423,32 @@ class WorkspaceRuntimeOrchestrationService:
             )
         except (TaskRepositoryError, ProjectRegistryError) as exc:
             raise WorkspaceRuntimeOrchestrationError("invalid_task", str(exc)) from exc
+
+    def _ensure_companions(self) -> None:
+        self._run_companion_ensure(
+            self._shared_config_ensure,
+            code="shared_config_unavailable",
+            fallback="共享配置中心未能启动",
+        )
+        self._run_companion_ensure(
+            self._personal_utils_ensure,
+            code="personal_utils_unavailable",
+            fallback="Personal Utils Hub 未能启动",
+        )
+
+    def _run_companion_ensure(
+        self,
+        callback: Callable[[], None] | None,
+        *,
+        code: str,
+        fallback: str,
+    ) -> None:
+        if callback is None:
+            return
+        try:
+            callback()
+        except Exception as exc:
+            raise WorkspaceRuntimeOrchestrationError(code, str(exc) or fallback) from exc
 
     def _require_task_mutation_allowed(self, task_id: int) -> None:
         try:

@@ -2,16 +2,15 @@
 
 ## 适用任务
 
-- 启动或重启前后端。
+- 启动或重启本仓库前后端和 Host Runner。
 - 运行测试、lint、build 或 migration。
-- 排查 Docker Compose 服务状态。
 - 运行固定版本 ClickHouse integration profile。
 
 ## 下一层文档
 
 | document_id | 用途 |
 | --- | --- |
-| `context-router-startup-guide` | 本仓库 Docker Compose 启动与验证规则 |
+| `context-router-startup-guide` | 本仓库 Native Stack 启动与验证规则 |
 | `context-router-area-database` | migration 和数据库初始化 |
 
-本项目只使用当前仓库 Docker Compose 管理服务，不直接在宿主机启动前后端。前后端宿主机端口只绑定回环地址；真实 ClickHouse 用例通过 `docker compose --profile integration` 启动 `clickhouse-test`，不使用宿主机 Testcontainers。
+本项目前后端和 Host Runner 只走仓库 Native Stack 脚本，不要用 Docker Compose，也不要调用 MCP `start_workspace`。用户要求启动本仓库时执行 `./scripts/start-native-stack.sh`；已运行则执行 `./scripts/restart-native-stack.sh`。Docker 只用于已注册业务 Workspace 和 ClickHouse 集成测试。

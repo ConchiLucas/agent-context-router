@@ -24,6 +24,7 @@ from context_router.repositories.mcp_tool_call_repository import (
     McpTraceTaskRecord,
 )
 from context_router.repositories.task_repository import TaskRecord
+from context_router.schemas.mcp_traces import McpCallTraceContext
 from context_router.services.context_preparation import ContextPreparationError
 from context_router.services.mcp_trace import McpTraceService, _trace_completeness
 from context_router.services.project_registry import ProjectRegistry
@@ -301,6 +302,40 @@ class RecordingWorkspaceRuntime:
         )
 
 
+class RecordingForwardingContext:
+    def search(self, **arguments: object) -> dict[str, object]:
+        return {
+            "status": "ok",
+            "environment": "local",
+            "search_id": "11111111-1111-1111-1111-111111111111",
+            "query": arguments["query"],
+            "candidate_count": 3,
+            "returned_count": 1,
+            "results": [
+                {
+                    "rank": 1,
+                    "retrieval_rank": 2,
+                    "interface_id": "22222222-2222-2222-2222-222222222222",
+                    "confidence": 0.91,
+                    "score": {
+                        "exact": 0.8,
+                        "lexical": 0.7,
+                        "features": {"ignored_nested_value": 1.0},
+                        "total": 0.91,
+                    },
+                    "matched_slots": ["audience", "action"],
+                    "conflicting_slots": ["service"],
+                }
+            ],
+        }
+
+    def compare(self, **_: object) -> dict[str, object]:
+        return {"interfaces": []}
+
+    def detail(self, **_: object) -> dict[str, object]:
+        return {"interface_id": "22222222-2222-2222-2222-222222222222"}
+
+
 class UnusedStore:
     def get_task(self, task_id: int) -> TaskRecord:
         raise AssertionError(task_id)
@@ -460,6 +495,82 @@ def test_all_seven_context_and_database_tools_are_traced_without_sensitive_paylo
         "database_context_id": "1" * 36,
         "sql_sha256": "70295e581aff4b4ae56d4cfae234338844965793adc6f178c5e5f44abf05c838",
     }
+
+
+def test_forwarding_tools_persist_generic_trace_context_and_ranked_search_evidence() -> None:
+    repository = InMemoryMcpToolCallRepository()
+    forwarding = RecordingForwardingContext()
+    server = create_context_router_mcp(
+        RecordingPreparation(),  # type: ignore[arg-type]
+        RecordingRead(),  # type: ignore[arg-type]
+        trace_service=_tracking_service(repository),
+        interface_forwarding_context_service=forwarding,  # type: ignore[arg-type]
+    )
+    trace_context = {
+        "run_id": "run-2026-09-15",
+        "item_id": "item-42",
+        "step_id": "search-1",
+        "attempt": 1,
+        "attributes": {"group": "partition-a", "executor": "model-a"},
+    }
+
+    async def invoke_tools() -> None:
+        await server.call_tool(
+            "search_forwarding_interfaces",
+            {"task_id": 77, "query": "门户端查询订单", "trace_context": trace_context},
+        )
+        await server.call_tool(
+            "compare_forwarding_interfaces",
+            {
+                "task_id": 77,
+                "interface_ids": ["a", "b"],
+                "trace_context": {**trace_context, "step_id": "compare-1"},
+            },
+        )
+        await server.call_tool(
+            "read_forwarding_interface_detail",
+            {
+                "task_id": 77,
+                "interface_id": "22222222-2222-2222-2222-222222222222",
+                "trace_context": {**trace_context, "step_id": "detail-1"},
+            },
+        )
+
+    asyncio.run(invoke_tools())
+
+    calls = repository.list_calls(77, run_id="run-2026-09-15", item_id="item-42")
+    assert [call.tool_name for call in calls] == [
+        "search_forwarding_interfaces",
+        "compare_forwarding_interfaces",
+        "read_forwarding_interface_detail",
+    ]
+    assert [call.trace_context["step_id"] for call in calls if call.trace_context] == [
+        "search-1",
+        "compare-1",
+        "detail-1",
+    ]
+    assert calls[0].result_summary == {
+        "search_id": "11111111-1111-1111-1111-111111111111",
+        "query": "门户端查询订单",
+        "returned_count": 1,
+        "candidate_count": 3,
+        "environment": "local",
+        "match_confidence": None,
+        "goal_completed": False,
+        "next_action": None,
+        "ranked_candidates": [
+            {
+                "interface_id": "22222222-2222-2222-2222-222222222222",
+                "rank": 1,
+                "retrieval_rank": 2,
+                "confidence": 0.91,
+                "score": {"exact": 0.8, "lexical": 0.7, "total": 0.91},
+                "matched_slots": ["audience", "action"],
+                "conflicting_slots": ["service"],
+            }
+        ],
+    }
+    assert repository.list_calls(77, run_id="another-run") == []
 
 
 def test_failed_mcp_tool_finishes_error_without_hiding_original_tool_error() -> None:
@@ -1018,6 +1129,13 @@ def test_trace_list_and_detail_api_return_stable_sequence_and_read_artifact(
             started_at=created_at,
             finished_at=created_at,
             duration_ms=3,
+            trace_context={
+                "run_id": "run-api-filter",
+                "item_id": "item-api-filter",
+                "step_id": "read-1",
+                "attempt": 1,
+                "attributes": {},
+            },
         )
     )
     service = McpTraceService(
@@ -1034,6 +1152,10 @@ def test_trace_list_and_detail_api_return_stable_sequence_and_read_artifact(
     with TestClient(app) as client:
         trace_list = client.get("/api/mcp-traces")
         detail = client.get("/api/mcp-traces/77")
+        filtered_detail = client.get(
+            "/api/mcp-traces/77",
+            params={"run_id": "run-api-filter", "item_id": "item-api-filter"},
+        )
 
     assert trace_list.status_code == 200
     assert trace_list.json()[0]["project_id"] == project.id
@@ -1058,6 +1180,28 @@ def test_trace_list_and_detail_api_return_stable_sequence_and_read_artifact(
             ],
         }
     ]
+    assert filtered_detail.status_code == 200
+    assert filtered_detail.json()["call_count"] == 1
+    assert filtered_detail.json()["trace_status"] == "complete"
+    assert filtered_detail.json()["warnings"] == []
+    assert filtered_detail.json()["calls"][0]["trace_context"] == {
+        "run_id": "run-api-filter",
+        "item_id": "item-api-filter",
+        "step_id": "read-1",
+        "attempt": 1,
+        "attributes": {},
+    }
+
+
+def test_trace_context_rejects_blank_identifiers_and_unbounded_shape() -> None:
+    with pytest.raises(ValueError, match="must not be blank"):
+        McpCallTraceContext(run_id="   ")
+    with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+        McpCallTraceContext(run_id="run-1", workspace_specific_field="not-allowed")  # type: ignore[call-arg]
+    with pytest.raises(ValueError, match="Input should be a valid string"):
+        McpCallTraceContext(run_id="run-1", attributes={"nested": {"value": 1}})  # type: ignore[dict-item]
+    with pytest.raises(ValueError, match="remain unique"):
+        McpCallTraceContext(run_id="run-1", attributes={"group": "a", " group ": "b"})
 
 
 def test_trace_list_and_detail_are_partial_when_prepare_call_is_missing(

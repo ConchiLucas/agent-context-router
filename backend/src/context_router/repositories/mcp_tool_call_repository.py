@@ -36,6 +36,7 @@ class McpToolCallWrite:
     request_summary: dict[str, object] | None = None
     result_summary: dict[str, object] | None = None
     error_code: str | None = None
+    trace_context: dict[str, object] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +54,7 @@ class McpToolCallRecord:
     request_summary: dict[str, object] | None
     result_summary: dict[str, object] | None
     error_code: str | None
+    trace_context: dict[str, object] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,7 +93,13 @@ class McpToolCallStore(Protocol):
         error_code: str | None = None,
     ) -> None: ...
 
-    def list_calls(self, task_id: int) -> list[McpToolCallRecord]: ...
+    def list_calls(
+        self,
+        task_id: int,
+        *,
+        run_id: str | None = None,
+        item_id: str | None = None,
+    ) -> list[McpToolCallRecord]: ...
 
     def fail_running_calls(self, *, finished_at: datetime) -> int: ...
 
@@ -141,6 +149,7 @@ class InMemoryMcpToolCallRepository:
                     request_summary=call.request_summary,
                     result_summary=call.result_summary,
                     error_code=call.error_code,
+                    trace_context=call.trace_context,
                 )
             )
             return tool_call_id
@@ -176,11 +185,22 @@ class InMemoryMcpToolCallRepository:
                 return
         raise McpToolCallRepositoryError("MCP 工具调用不存在")
 
-    def list_calls(self, task_id: int) -> list[McpToolCallRecord]:
+    def list_calls(
+        self,
+        task_id: int,
+        *,
+        run_id: str | None = None,
+        item_id: str | None = None,
+    ) -> list[McpToolCallRecord]:
         if task_id < 1:
             raise McpToolCallRepositoryError("任务号必须大于 0")
         with self._lock:
-            return [call for call in self._calls if call.task_id == task_id]
+            return [
+                call
+                for call in self._calls
+                if call.task_id == task_id
+                and _trace_context_matches(call.trace_context, run_id=run_id, item_id=item_id)
+            ]
 
     def fail_running_calls(self, *, finished_at: datetime) -> int:
         updated = 0
@@ -240,11 +260,12 @@ class PostgresMcpToolCallRepository:
                         duration_ms,
                         request_summary,
                         result_summary,
-                        error_code
+                        error_code,
+                        trace_context
                     )
                     VALUES (
                         %s, %s, %s, %s, %s, %s, COALESCE(%s, CURRENT_TIMESTAMP),
-                        %s, %s, %s, %s, %s
+                        %s, %s, %s, %s, %s, %s
                     )
                     RETURNING id
                     """,
@@ -261,6 +282,7 @@ class PostgresMcpToolCallRepository:
                         Jsonb(call.request_summary) if call.request_summary is not None else None,
                         Jsonb(call.result_summary) if call.result_summary is not None else None,
                         call.error_code,
+                        Jsonb(call.trace_context) if call.trace_context is not None else None,
                     ),
                 ).fetchone()
         except psycopg.errors.ForeignKeyViolation as exc:
@@ -317,7 +339,13 @@ class PostgresMcpToolCallRepository:
         if row is None:
             raise McpToolCallRepositoryError("MCP 工具调用不存在")
 
-    def list_calls(self, task_id: int) -> list[McpToolCallRecord]:
+    def list_calls(
+        self,
+        task_id: int,
+        *,
+        run_id: str | None = None,
+        item_id: str | None = None,
+    ) -> list[McpToolCallRecord]:
         if task_id < 1:
             raise McpToolCallRepositoryError("任务号必须大于 0")
         database_url = self._require_database_url()
@@ -338,15 +366,25 @@ class PostgresMcpToolCallRepository:
                         duration_ms,
                         request_summary,
                         result_summary,
-                        error_code
+                        error_code,
+                        trace_context
                     FROM mcp_tool_calls
                     WHERE task_id = %s
                       AND server_name = 'context-router'
                       AND tool_name = ANY(%s)
                       AND source IN ('server', 'legacy')
+                      AND (%s::text IS NULL OR trace_context->>'run_id' = %s)
+                      AND (%s::text IS NULL OR trace_context->>'item_id' = %s)
                     ORDER BY id
                     """,
-                    (task_id, list(CONTEXT_ROUTER_TRACE_TOOL_NAMES)),
+                    (
+                        task_id,
+                        list(CONTEXT_ROUTER_TRACE_TOOL_NAMES),
+                        run_id,
+                        run_id,
+                        item_id,
+                        item_id,
+                    ),
                 ).fetchall()
         except psycopg.Error as exc:
             raise McpToolCallRepositoryError("MCP 工具调用读取失败") from exc
@@ -606,6 +644,7 @@ def _validate_call(call: McpToolCallWrite) -> None:
     if call.duration_ms is not None and call.duration_ms < 0:
         raise McpToolCallRepositoryError("调用耗时不能小于 0")
     _validate_text(call.error_code, "错误码", 64)
+    _validate_trace_context(call.trace_context)
 
 
 def _validate_completion(
@@ -652,7 +691,67 @@ def _call_from_row(row: tuple[object, ...]) -> McpToolCallRecord:
         request_summary=cast(dict[str, object] | None, row[10]),
         result_summary=cast(dict[str, object] | None, row[11]),
         error_code=str(row[12]) if row[12] is not None else None,
+        trace_context=cast(dict[str, object] | None, row[13]),
     )
+
+
+def _validate_trace_context(value: dict[str, object] | None) -> None:
+    if value is None:
+        return
+    if not isinstance(value, dict):
+        raise McpToolCallRepositoryError("trace_context 必须是对象")
+    allowed = {"run_id", "item_id", "step_id", "attempt", "attributes"}
+    if set(value) - allowed:
+        raise McpToolCallRepositoryError("trace_context 包含不支持的字段")
+    _validate_trace_identifier(value, "run_id", required=True)
+    _validate_trace_identifier(value, "item_id")
+    _validate_trace_identifier(value, "step_id")
+    attempt = value.get("attempt", 1)
+    if isinstance(attempt, bool) or not isinstance(attempt, int) or not 1 <= attempt <= 1000:
+        raise McpToolCallRepositoryError("trace_context.attempt 必须在 1 到 1000 之间")
+    attributes = value.get("attributes", {})
+    if not isinstance(attributes, dict) or len(attributes) > 16:
+        raise McpToolCallRepositoryError("trace_context.attributes 必须是不超过 16 项的对象")
+    for key, item in attributes.items():
+        if not isinstance(key, str) or not key.strip() or len(key.strip()) > 64:
+            raise McpToolCallRepositoryError("trace_context.attributes 键长度必须为 1 到 64")
+        if not isinstance(item, str | int | float | bool | type(None)):
+            raise McpToolCallRepositoryError("trace_context.attributes 只允许标量值")
+        if isinstance(item, str) and len(item) > 256:
+            raise McpToolCallRepositoryError("trace_context.attributes 字符串不能超过 256 字符")
+
+
+def _validate_trace_identifier(
+    value: dict[str, object],
+    key: str,
+    *,
+    required: bool = False,
+) -> None:
+    item = value.get(key)
+    if item is None:
+        if required:
+            raise McpToolCallRepositoryError(f"trace_context.{key}不能为空")
+        return
+    if not isinstance(item, str):
+        raise McpToolCallRepositoryError(f"trace_context.{key}必须是字符串")
+    normalized = item.strip()
+    if not normalized:
+        raise McpToolCallRepositoryError(f"trace_context.{key}不能为空")
+    if len(normalized) > 128:
+        raise McpToolCallRepositoryError(f"trace_context.{key}长度不能超过 128")
+
+
+def _trace_context_matches(
+    value: dict[str, object] | None,
+    *,
+    run_id: str | None,
+    item_id: str | None,
+) -> bool:
+    if run_id is not None and (value or {}).get("run_id") != run_id:
+        return False
+    if item_id is not None and (value or {}).get("item_id") != item_id:
+        return False
+    return True
 
 
 def _trace_from_row(row: tuple[object, ...]) -> McpTraceTaskRecord:

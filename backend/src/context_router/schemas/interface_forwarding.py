@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from context_router.interface_search.domain import EndpointSemanticUpdate
+
+HttpMethod = Literal["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
 
 
 class InterfaceForwardingImport(BaseModel):
@@ -61,10 +63,53 @@ class InterfaceForwardingLogWrite(BaseModel):
     duration_ms: int = Field(ge=0)
 
 
+class BrowserInterfaceCapture(BaseModel):
+    """One sanitized browser network observation supplied by a trusted local client."""
+
+    capture_id: str | None = Field(default=None, min_length=1, max_length=128)
+    url: str = Field(min_length=1, max_length=16384)
+    method: HttpMethod
+    request_body: Any = None
+    response_body: Any = None
+    status_code: int | None = Field(default=None, ge=100, le=599)
+    duration_ms: int = Field(default=0, ge=0, le=2_147_483_647)
+    revision: int = Field(default=1, ge=1, le=2_147_483_647)
+    capture_state: Literal["started", "complete", "incomplete"] = "complete"
+    response_body_missing: bool = False
+
+    @field_validator("method", mode="before")
+    @classmethod
+    def normalize_method(cls, value: object) -> object:
+        return value.upper() if isinstance(value, str) else value
+
+
+class InterfaceForwardingBrowserCaptureImport(BaseModel):
+    workspace_id: str = Field(min_length=1, max_length=36)
+    environment_id: str | None = Field(default=None, min_length=1, max_length=36)
+    environment_key: str | None = Field(default=None, min_length=1, max_length=32)
+    identity_id: str | None = Field(default=None, min_length=1, max_length=36)
+    allow_origin_mismatch: bool = False
+    captures: list[BrowserInterfaceCapture] = Field(min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def validate_environment_selector(self):
+        if bool(self.environment_id) == bool(self.environment_key):
+            raise ValueError("environment_id 与 environment_key 必须且只能提供一个")
+        if self.identity_id and not self.environment_id:
+            raise ValueError("identity_id 只能与 environment_id 一起使用")
+        return self
+
+
 class InterfaceForwardingOverview(BaseModel):
     workspace_id: str
     services: list[dict[str, Any]]
     environments: list[dict[str, Any]]
+    interfaces: list[dict[str, Any]]
+    selected_service_id: str
+    interface_total: int
+    page: int
+    page_size: int
+    total_pages: int
 
 
 class InterfaceForwardingResult(BaseModel):
@@ -80,6 +125,3 @@ class InterfaceForwardingRewriteResult(BaseModel):
     service_id: str | None = None
     total: int
     updated: int
-
-
-HttpMethod = Literal["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]

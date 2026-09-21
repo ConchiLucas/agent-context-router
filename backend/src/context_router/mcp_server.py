@@ -35,6 +35,7 @@ from context_router.schemas.ai_task_visualization import (
     AiTaskVerificationItem,
 )
 from context_router.schemas.context import ContextDocumentReadRequest
+from context_router.schemas.mcp_traces import McpCallTraceContext
 from context_router.services.ai_data_visualization import (
     AiDataVisualizationError,
     AiDataVisualizationService,
@@ -304,9 +305,10 @@ PREPARE_TOOL_DESCRIPTION = (
     "required MCP steps, and visualization targets. A bug_investigate task is read-only; a "
     "bug_fix task with error_signal=true must inspect a registered container before applying "
     "changes. access states which task capabilities "
-    "are available. Database aliases and environment config are intentionally omitted; request "
-    "them only when needed with read_task_context. access includes middleware when live Nacos "
-    "middleware context may be requested with read_middleware_context."
+    "are available. workspace_rules lists control-plane rules every project must follow; do not "
+    "copy them into AGENTS.md. Database aliases and environment config are intentionally omitted; "
+    "request them only when needed with read_task_context. access includes middleware when live "
+    "Nacos middleware context may be requested with read_middleware_context."
 )
 READ_TASK_CONTEXT_TOOL_DESCRIPTION = (
     "Read database aliases and/or generic saved environment JSON for an existing task. "
@@ -573,6 +575,7 @@ class ContextRouterMCP(FastMCP):
 
         trace_name, trace_arguments = name, arguments
         request_summary = _request_summary(trace_name, trace_arguments)
+        trace_context = _normalized_trace_context(trace_arguments.get("trace_context"))
         task_id = _positive_int(trace_arguments.get("task_id"))
         if task_id is None and trace_name == GET_WORKSPACE_OPERATION_TOOL_NAME:
             operation_id = trace_arguments.get("operation_id")
@@ -588,6 +591,7 @@ class ContextRouterMCP(FastMCP):
                 tool_name=trace_name,
                 started_at=started_at,
                 request_summary=request_summary,
+                trace_context=trace_context,
             )
             if task_id is not None
             else None
@@ -1445,6 +1449,7 @@ def create_context_router_mcp(
         service: Annotated[str | None, Field(max_length=160)] = None,
         role: Annotated[str | None, Field(max_length=160)] = None,
         limit: Annotated[int, Field(ge=1, le=50, strict=True)] = 10,
+        trace_context: McpCallTraceContext | None = None,
     ) -> dict[str, object]:
         if interface_forwarding_context_service is None:
             raise ToolError("interface_forwarding_disabled: 接口转发 MCP 当前不可用")
@@ -1467,6 +1472,7 @@ def create_context_router_mcp(
     def compare_forwarding_interfaces(
         task_id: Annotated[int, Field(ge=1, strict=True)],
         interface_ids: Annotated[list[str], Field(min_length=2, max_length=5)],
+        trace_context: McpCallTraceContext | None = None,
     ) -> dict[str, object]:
         if interface_forwarding_context_service is None:
             raise ToolError("interface_forwarding_disabled: 接口转发 MCP 当前不可用")
@@ -1486,6 +1492,7 @@ def create_context_router_mcp(
     def read_forwarding_interface_detail(
         task_id: Annotated[int, Field(ge=1, strict=True)],
         interface_id: Annotated[str, Field(min_length=1, max_length=36)],
+        trace_context: McpCallTraceContext | None = None,
     ) -> dict[str, object]:
         if interface_forwarding_context_service is None:
             raise ToolError("interface_forwarding_disabled: 接口转发 MCP 当前不可用")
@@ -1697,6 +1704,19 @@ def _structured_payload(result: object) -> dict[str, Any]:
     return {}
 
 
+def _normalized_trace_context(value: object) -> dict[str, object] | None:
+    if isinstance(value, McpCallTraceContext):
+        return value.model_dump(mode="json")
+    if not isinstance(value, dict):
+        return None
+    try:
+        return McpCallTraceContext.model_validate(value).model_dump(mode="json")
+    except ValueError:
+        # FastMCP reports the canonical argument validation error. Tracing must remain
+        # best-effort and must not replace the tool's own validation response.
+        return None
+
+
 def _attach_tool_call_id(result: object, tool_call_id: int | None) -> None:
     """Expose the persisted trace ID in the structured MCP response for later tool linking."""
     if tool_call_id is None:
@@ -1876,6 +1896,17 @@ def _request_summary(name: str, arguments: dict[str, Any]) -> dict[str, object] 
             "role": _safe_string(arguments.get("role"), 160),
             "limit": arguments.get("limit") if isinstance(arguments.get("limit"), int) else None,
         }
+    if name == COMPARE_FORWARDING_INTERFACES_TOOL_NAME:
+        interface_ids = arguments.get("interface_ids")
+        return {
+            "interface_ids": (
+                [_safe_string(item, 36) for item in interface_ids if isinstance(item, str)]
+                if isinstance(interface_ids, list)
+                else []
+            )
+        }
+    if name == READ_FORWARDING_INTERFACE_DETAIL_TOOL_NAME:
+        return {"interface_id": _safe_string(arguments.get("interface_id"), 36)}
     if name == READ_FORWARDING_REQUEST_HISTORY_TOOL_NAME:
         return {
             "interface_id": _safe_string(arguments.get("interface_id"), 36),
@@ -2088,12 +2119,57 @@ def _result_summary(name: str, payload: dict[str, Any]) -> dict[str, object] | N
             "truncated": payload.get("truncated") is True,
         }
     if name == SEARCH_FORWARDING_INTERFACES_TOOL_NAME:
+        results = payload.get("results")
+        ranked_candidates = []
+        if isinstance(results, list):
+            for fallback_rank, item in enumerate(results[:20], start=1):
+                if not isinstance(item, dict):
+                    continue
+                score = item.get("score")
+                ranked_candidates.append(
+                    {
+                        "interface_id": _safe_string(item.get("interface_id"), 36),
+                        "rank": item.get("rank")
+                        if isinstance(item.get("rank"), int)
+                        else fallback_rank,
+                        "retrieval_rank": item.get("retrieval_rank")
+                        if isinstance(item.get("retrieval_rank"), int)
+                        else None,
+                        "confidence": item.get("confidence")
+                        if isinstance(item.get("confidence"), int | float)
+                        and not isinstance(item.get("confidence"), bool)
+                        else None,
+                        "score": {
+                            str(key): float(value)
+                            for key, value in score.items()
+                            if isinstance(key, str)
+                            and isinstance(value, int | float)
+                            and not isinstance(value, bool)
+                        }
+                        if isinstance(score, dict)
+                        else None,
+                        "matched_slots": [
+                            _safe_string(slot, 64)
+                            for slot in item.get("matched_slots", [])
+                            if isinstance(slot, str)
+                        ][:20],
+                        "conflicting_slots": [
+                            _safe_string(slot, 64)
+                            for slot in item.get("conflicting_slots", [])
+                            if isinstance(slot, str)
+                        ][:20],
+                    }
+                )
         return {
+            "search_id": _safe_string(payload.get("search_id"), 36),
+            "query": _safe_string(payload.get("query"), 2000),
             "returned_count": payload.get("returned_count", 0),
+            "candidate_count": payload.get("candidate_count", 0),
             "environment": _safe_string(payload.get("environment"), 32),
             "match_confidence": _safe_string(payload.get("match_confidence"), 16),
             "goal_completed": payload.get("goal_completed") is True,
             "next_action": _safe_string(payload.get("next_action"), 64),
+            "ranked_candidates": ranked_candidates,
         }
     if name == READ_FORWARDING_REQUEST_HISTORY_TOOL_NAME:
         return {

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from time import perf_counter
 from uuid import uuid4
@@ -35,6 +36,14 @@ from context_router.interface_search.families import (
 )
 from context_router.interface_search.query_understanding import understand_query
 from context_router.interface_search.repository import Candidate, EndpointRepository
+from context_router.interface_search.route_identity import (
+    describe_endpoint_route,
+    infer_endpoint_call_layer,
+    infer_endpoint_route_signals,
+    infer_query_call_layer,
+    infer_query_route_signals,
+    route_identity_score,
+)
 from context_router.interface_search.slots import (
     build_discriminators,
     infer_business_identifiers,
@@ -74,6 +83,15 @@ def build_search_document(endpoint: EndpointCreate) -> str:
         f"操作标识: {endpoint.operation_id}",
         f"必填入参: {required_inputs}",
         f"项目服务: {endpoint.project} {endpoint.service} {endpoint.method}",
+        "路由身份: "
+        + describe_endpoint_route(
+            project=endpoint.project,
+            service=endpoint.service,
+            path=endpoint.path,
+            operation_id=endpoint.operation_id,
+            title=endpoint.title,
+            actions=endpoint.actions,
+        ),
         f"标签: {' '.join(endpoint.tags)}",
     )
     return "\n".join(line for line in lines if not line.endswith(": "))
@@ -270,7 +288,7 @@ class SearchService:
                 "request_schema_paths": request_schema_paths,
                 "response_schema_paths": response_schema_paths,
                 "business_identifiers": business_identifiers,
-                "search_document_version": "v3",
+                "search_document_version": "v4",
                 "semantic_field_sources": semantic_field_sources,
                 "semantic_confidences": semantic_confidences,
             }
@@ -476,7 +494,7 @@ class SearchService:
                 "request_schema_paths": request_schema_paths,
                 "response_schema_paths": response_schema_paths,
                 "business_identifiers": business_identifiers,
-                "search_document_version": "v3",
+                "search_document_version": "v4",
                 "semantic_field_sources": {
                     **endpoint.semantic_field_sources,
                     **{field: "llm_source_analysis" for field in llm_fields},
@@ -568,8 +586,46 @@ class SearchService:
             soft_cardinality=intent.cardinality,
             soft_field_identifiers=intent.field_identifiers,
             schema_direction=intent.schema_direction,
+            semantic_query_terms=_distinctive_query_terms(intent.positive_query),
         )
-        ranked = self._rank(candidates, intent)
+        for candidate in candidates:
+            endpoint = candidate.endpoint
+            endpoint_actions = normalize_actions(
+                endpoint.actions,
+                " ".join(
+                    (
+                        endpoint.path,
+                        endpoint.operation_id,
+                        endpoint.title,
+                        endpoint.purpose,
+                    )
+                ),
+                profile,
+            )
+            if set(endpoint_actions) & set(intent.actions):
+                candidate.structured_recall_score = max(
+                    candidate.structured_recall_score,
+                    0.2,
+                )
+            candidate.route_identity_recall_score = max(
+                candidate.route_identity_recall_score,
+                route_identity_score(
+                    query=request.query,
+                    project=endpoint.project,
+                    service=endpoint.service,
+                    path=endpoint.path,
+                    operation_id=endpoint.operation_id,
+                    title=endpoint.title,
+                    actions=endpoint.actions,
+                    semantic_terms=(
+                        endpoint.purpose,
+                        *endpoint.domains,
+                        *endpoint.scenarios,
+                        *endpoint.aliases,
+                    ),
+                ),
+            )
+        ranked = self._rank(candidates, intent, profile)
         retrieval_ranks = {
             item.candidate.endpoint.id: index for index, item in enumerate(ranked, start=1)
         }
@@ -713,6 +769,7 @@ class SearchService:
         self,
         candidates: list[Candidate],
         intent,
+        profile: WorkspaceProfile | None = None,
     ) -> list[RankedCandidate]:
         if not candidates:
             return []
@@ -724,12 +781,15 @@ class SearchService:
                 item.field_recall_score,
                 item.family_recall_score,
                 item.service_recall_score,
+                item.route_identity_recall_score,
+                item.semantic_lexical_score,
             )
             for item in candidates
         }
         lane_specs = (
             ({item.endpoint.id: item.lexical_score for item in candidates}, 0.0),
             ({item.endpoint.id: item.vector_score for item in candidates}, 0.0),
+            ({item.endpoint.id: item.semantic_lexical_score for item in candidates}, 0.0),
             (structured_scores, 0.05),
         )
         lane_ranks = []
@@ -747,7 +807,7 @@ class SearchService:
         ranked: list[RankedCandidate] = []
         for candidate in candidates:
             endpoint = candidate.endpoint
-            matched_slots, conflicting_slots = _slot_match_details(endpoint, intent)
+            matched_slots, conflicting_slots = _slot_match_details(endpoint, intent, profile)
             supported_lane_count = sum(endpoint.id in lane for lane in lane_ranks)
             rrf_raw = sum(
                 1 / (60 + lane[endpoint.id]) for lane in lane_ranks if endpoint.id in lane
@@ -755,6 +815,59 @@ class SearchService:
             rrf = min(1.0, rrf_raw / normalizer)
             exact = candidate.exact_score
             total = max(0.98, exact) if exact >= 0.95 else min(0.89, 0.89 * rrf)
+            query_route_signals = set(infer_query_route_signals(intent.normalized_query))
+            endpoint_route_signals = set(
+                infer_endpoint_route_signals(
+                    project=endpoint.project,
+                    service=endpoint.service,
+                    path=endpoint.path,
+                    operation_id=endpoint.operation_id,
+                    title=endpoint.title,
+                    actions=endpoint.actions,
+                )
+            )
+            implicit_gateway_bonus = (
+                0.015
+                if "preference:gateway" in query_route_signals
+                and "layer:gateway" in endpoint_route_signals
+                else 0.0
+            )
+            if exact < 0.95:
+                total = min(0.89, total + implicit_gateway_bonus)
+            if (
+                candidate.route_identity_recall_score >= 0.99
+                and candidate.service_recall_score >= 0.99
+            ):
+                total = max(total, 0.95)
+            call_layer_conflict = "call_layer" in conflicting_slots and exact < 0.95
+            semantic_conflict_penalty = _semantic_conflict_penalty(
+                [
+                    slot
+                    for slot in conflicting_slots
+                    if not (
+                        slot == "resource"
+                        and candidate.route_identity_recall_score >= 0.86
+                        and {"transport_mode", "operation_identity"}
+                        <= set(matched_slots)
+                    )
+                    and not (
+                        slot in {"resource", "action", "domain"}
+                        and candidate.semantic_lexical_score >= 0.55
+                    )
+                ],
+                intent,
+                exact=exact,
+                authoritative_identity=(
+                    candidate.route_identity_recall_score >= 0.99
+                    and candidate.service_recall_score >= 0.99
+                ),
+            )
+            conflict_penalty = min(
+                0.24,
+                (0.18 if call_layer_conflict else 0.0) + semantic_conflict_penalty,
+            )
+            if conflict_penalty:
+                total = max(0.0, total - conflict_penalty)
             if endpoint.semantic_stale:
                 total *= 0.9
             structured = structured_scores[endpoint.id]
@@ -762,15 +875,25 @@ class SearchService:
                 "exact": exact,
                 "lexical": candidate.lexical_score,
                 "vector": candidate.vector_score,
+                "semantic_lexical": candidate.semantic_lexical_score,
                 "structured": structured,
                 "rrf": rrf,
                 "support_lanes": float(supported_lane_count),
+                "call_layer_conflict": float(call_layer_conflict),
+                "semantic_conflict_penalty": semantic_conflict_penalty,
+                "implicit_gateway_bonus": implicit_gateway_bonus,
             }
             reasons = _base_reasons(candidate)
             if structured > 0:
                 reasons.append("命中结构化语义条件")
             if candidate.family_recall_score > 0:
                 reasons.append(f"接口家族匹配：{endpoint.interface_family}")
+            if candidate.route_identity_recall_score > 0:
+                reasons.append("命中服务、入口层级或操作身份")
+            if call_layer_conflict:
+                reasons.append("调用层级与提示语不一致")
+            if semantic_conflict_penalty:
+                reasons.append("高置信业务语义条件与提示语不一致")
             if endpoint.semantic_stale:
                 reasons.append("接口契约已变化，现有大模型语义待复核")
             ranked.append(
@@ -789,8 +912,13 @@ class SearchService:
                         ),
                         family_match=round(candidate.family_recall_score, 4),
                         source_confidence=round(endpoint.semantic_confidence, 4),
+                        conflict_penalty=round(conflict_penalty, 4),
                         identifier_match=round(candidate.identifier_recall_score, 4),
                         service_match=round(candidate.service_recall_score, 4),
+                        route_identity_match=round(
+                            candidate.route_identity_recall_score,
+                            4,
+                        ),
                         features={name: round(value, 4) for name, value in features.items()},
                         total=round(total, 4),
                     ),
@@ -799,7 +927,16 @@ class SearchService:
                     conflicting_slots,
                 )
             )
-        ranked.sort(key=lambda item: item.breakdown.total, reverse=True)
+        ranked.sort(
+            key=lambda item: (
+                item.breakdown.total,
+                item.breakdown.features.get("implicit_gateway_bonus", 0.0),
+                item.candidate.semantic_lexical_score,
+                item.candidate.lexical_score,
+                item.candidate.endpoint.id,
+            ),
+            reverse=True,
+        )
         return ranked
 
     @staticmethod
@@ -808,7 +945,7 @@ class SearchService:
         ranked: list[RankedCandidate],
     ) -> SearchTrace:
         return SearchTrace(
-            ranking_strategy_version="support-aware-rrf-v2",
+            ranking_strategy_version="support-aware-rrf-v8",
             candidate_pool_ids=[item.endpoint.id for item in candidates],
             candidates=[
                 SearchCandidateTrace(
@@ -817,11 +954,19 @@ class SearchService:
                         "exact": round(item.candidate.exact_score, 4),
                         "lexical": round(item.candidate.lexical_score, 4),
                         "vector": round(item.candidate.vector_score, 4),
+                        "semantic_lexical": round(
+                            item.candidate.semantic_lexical_score,
+                            4,
+                        ),
                         "schema": round(item.candidate.schema_recall_score, 4),
                         "field": round(item.candidate.field_recall_score, 4),
                         "structured": round(item.candidate.structured_recall_score, 4),
                         "identifier": round(item.candidate.identifier_recall_score, 4),
                         "service": round(item.candidate.service_recall_score, 4),
+                        "route_identity": round(
+                            item.candidate.route_identity_recall_score,
+                            4,
+                        ),
                         "family": round(item.candidate.family_recall_score, 4),
                     },
                     ranking_features=item.breakdown.features,
@@ -832,14 +977,100 @@ class SearchService:
         )
 
 
-def _slot_match_details(endpoint: EndpointRecord, intent) -> tuple[list[str], list[str]]:
+def _slot_match_details(
+    endpoint: EndpointRecord,
+    intent,
+    profile: WorkspaceProfile | None = None,
+) -> tuple[list[str], list[str]]:
     expected_actions = set(intent.actions) - {"query"} or set(intent.actions)
-    actual_actions = set(endpoint.actions) - {"query"} or set(endpoint.actions)
+    normalized_endpoint_actions = normalize_actions(
+        endpoint.actions,
+        " ".join((endpoint.path, endpoint.operation_id, endpoint.title, endpoint.purpose)),
+    )
+    actual_actions = set(normalized_endpoint_actions) - {"query"} or set(
+        normalized_endpoint_actions
+    )
+    query_call_layer = infer_query_call_layer(intent.normalized_query)
+    endpoint_call_layer = infer_endpoint_call_layer(
+        project=endpoint.project,
+        service=endpoint.service,
+        path=endpoint.path,
+        operation_id=endpoint.operation_id,
+        title=endpoint.title,
+        actions=endpoint.actions,
+    )
+    query_route_signals = set(infer_query_route_signals(intent.normalized_query))
+    endpoint_route_signals = set(
+        infer_endpoint_route_signals(
+            project=endpoint.project,
+            service=endpoint.service,
+            path=endpoint.path,
+            operation_id=endpoint.operation_id,
+            title=endpoint.title,
+            actions=endpoint.actions,
+            semantic_terms=(
+                endpoint.purpose,
+                *endpoint.domains,
+                *endpoint.scenarios,
+                *endpoint.aliases,
+            ),
+        )
+    )
+    query_auth = {signal for signal in query_route_signals if signal.startswith("auth:")}
+    endpoint_auth = (
+        {signal for signal in endpoint_route_signals if signal.startswith("auth:")}
+        or {"auth:standard_or_unspecified"}
+    )
+    route_dimensions = {
+        "authentication": (query_auth, endpoint_auth),
+        "transport_mode": (
+            {signal for signal in query_route_signals if signal.startswith("transport:")},
+            {signal for signal in endpoint_route_signals if signal.startswith("transport:")},
+        ),
+        "operation_identity": (
+            {signal for signal in query_route_signals if signal.startswith("operation:")},
+            {signal for signal in endpoint_route_signals if signal.startswith("operation:")},
+        ),
+        "output_form": (
+            {signal for signal in query_route_signals if signal.startswith("output:")},
+            {signal for signal in endpoint_route_signals if signal.startswith("output:")},
+        ),
+    }
+    actual_resources = {endpoint.resource}
+    actual_context_resources: set[str] = set()
+    actual_domains = set(endpoint.domains)
+    if profile:
+        matched_endpoint_resources = _matched_endpoint_resources(endpoint, profile)
+        actual_context_resources.update(
+            resource
+            for resource in matched_endpoint_resources
+            if resource != intent.resource
+        )
+        expected_resources = list(
+            dict.fromkeys(
+                [intent.resource, *intent.context_resources]
+                if intent.resource
+                else intent.context_resources
+            )
+        )
+        for expected_resource in expected_resources:
+            resource_term = profile.term("resource", expected_resource)
+            if not resource_term or expected_resource not in matched_endpoint_resources:
+                continue
+            if expected_resource == intent.resource:
+                actual_resources.add(expected_resource)
+            if expected_resource in intent.context_resources:
+                actual_context_resources.add(expected_resource)
+            actual_domains.update((resource_term.metadata or {}).get("domains", []))
     dimensions = {
         "audience": (set(intent.audiences), set(endpoint.audiences)),
         "service": (set(intent.service_hints), {endpoint.service}),
-        "domain": (set(intent.domains), set(endpoint.domains)),
-        "resource": ({intent.resource} if intent.resource else set(), {endpoint.resource}),
+        "domain": (set(intent.domains), actual_domains),
+        "resource": ({intent.resource} if intent.resource else set(), actual_resources),
+        "context_resource": (
+            set(intent.context_resources),
+            actual_context_resources,
+        ),
         "action": (expected_actions, actual_actions),
         "lookup_key": (set(intent.lookup_keys), set(endpoint.lookup_keys)),
         "identifier_type": (
@@ -854,6 +1085,11 @@ def _slot_match_details(endpoint: EndpointRecord, intent) -> tuple[list[str], li
             {intent.ownership} if intent.ownership != "unknown" else set(),
             {endpoint.ownership},
         ),
+        "call_layer": (
+            {query_call_layer} if query_call_layer != "unknown" else set(),
+            {endpoint_call_layer} if endpoint_call_layer != "unknown" else set(),
+        ),
+        **route_dimensions,
     }
     matched = [
         name for name, (expected, actual) in dimensions.items() if expected and expected & actual
@@ -879,6 +1115,167 @@ def _slot_match_details(endpoint: EndpointRecord, intent) -> tuple[list[str], li
         if set(excluded) & actual_by_dimension.get(name, set())
     )
     return matched, conflicting
+
+
+def _matched_endpoint_resources(
+    endpoint: EndpointRecord,
+    profile: WorkspaceProfile,
+) -> set[str]:
+    """Match configured resources against semantic text and technical identity.
+
+    Workspace vocabulary remains data.  The engine only supplies a generic,
+    boundary-aware matcher so a context resource such as a parent aggregate is
+    not collapsed into a longer adjacent resource name.  Explicit semantic
+    wording wins; technical matches use longest-token-set precedence.
+    """
+
+    semantic_text = " ".join(
+        (
+            endpoint.title,
+            endpoint.purpose,
+            *endpoint.entities,
+            *endpoint.aliases,
+            *endpoint.discriminators,
+        )
+    ).casefold()
+    technical_tokens = set(
+        _technical_identity_tokens(
+            " ".join(
+                (
+                    endpoint.path,
+                    endpoint.operation_id,
+                    endpoint.controller_name,
+                    endpoint.interface_family,
+                )
+            )
+        )
+    )
+    semantic_matches: set[str] = set()
+    technical_matches: dict[str, set[str]] = {}
+    for resource_term in profile.terms:
+        if not resource_term.active or resource_term.dimension != "resource":
+            continue
+        for alias in dict.fromkeys(
+            [resource_term.canonical_value, *resource_term.aliases]
+        ):
+            normalized = alias.strip().casefold()
+            if not normalized:
+                continue
+            if re.search(r"[\u4e00-\u9fff]", normalized):
+                if normalized in semantic_text:
+                    semantic_matches.add(resource_term.canonical_value)
+                continue
+            alias_tokens = set(_technical_identity_tokens(normalized))
+            if alias_tokens and alias_tokens <= technical_tokens:
+                previous = technical_matches.get(resource_term.canonical_value, set())
+                if len(alias_tokens) > len(previous):
+                    technical_matches[resource_term.canonical_value] = alias_tokens
+
+    retained_technical = {
+        canonical
+        for canonical, tokens in technical_matches.items()
+        if not any(
+            tokens < other_tokens
+            for other_canonical, other_tokens in technical_matches.items()
+            if other_canonical != canonical
+        )
+    }
+    return semantic_matches | retained_technical
+
+
+def _technical_identity_tokens(value: str) -> list[str]:
+    expanded = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", value)
+    return [
+        token
+        for token in re.split(r"[^a-z0-9]+", expanded.casefold())
+        if token
+    ]
+
+
+def _semantic_conflict_penalty(
+    conflicting_slots: list[str],
+    intent,
+    *,
+    exact: float,
+    authoritative_identity: bool = False,
+) -> float:
+    """Apply a bounded soft penalty only to explicit, high-confidence slot conflicts."""
+
+    if exact >= 0.95 or authoritative_identity:
+        return 0.0
+    weights = {
+        "domain": 0.05,
+        "resource": 0.06,
+        "context_resource": 0.06,
+        "action": 0.05,
+        "lookup_key": 0.04,
+        "identifier_type": 0.04,
+        "cardinality": 0.03,
+    }
+    penalty = min(
+        0.12,
+        sum(
+            weight
+            for slot, weight in weights.items()
+            if slot in conflicting_slots and intent.slot_confidences.get(slot, 0.0) >= 0.82
+        ),
+    )
+    explicit_route_weights = {
+        "authentication": 0.08,
+        "transport_mode": 0.07,
+        "operation_identity": 0.06,
+        "output_form": 0.05,
+    }
+    penalty += sum(
+        weight for slot, weight in explicit_route_weights.items() if slot in conflicting_slots
+    )
+    return round(min(0.18, penalty), 4)
+
+
+_GENERIC_QUERY_TERMS = {
+    "查询",
+    "分页",
+    "列表",
+    "详情",
+    "运营",
+    "营端",
+    "门户",
+    "户端",
+    "前端",
+    "客户端",
+    "按id",
+    "id",
+    "接口",
+    "信息",
+    "数据",
+    "query",
+    "page",
+    "list",
+    "detail",
+    "get",
+    "post",
+}
+
+
+def _distinctive_query_terms(text: str) -> list[str]:
+    """Extract workspace-neutral business tokens for focused lexical recall."""
+
+    masked = re.sub(
+        r"(?:系统管理端|运营管理端|运营后台|运营端|管理端|后台|"
+        r"PC客户门户|客户端|前端|门户端|门户|登录用户|当前用户|"
+        r"按(?:主键|编号|编码|ID|id)|根据(?:主键|编号|编码|ID|id)|"
+        r"分页查询|查询分页|查询|查看|获取|分页|列表|详情|信息|数据)",
+        " ",
+        text,
+        flags=re.I,
+    )
+    return list(
+        dict.fromkeys(
+            token
+            for token in tokenize(masked)
+            if len(token) >= 2 and token not in _GENERIC_QUERY_TERMS
+        )
+    )[:30]
 
 
 def _base_reasons(candidate: Candidate) -> list[str]:

@@ -16,18 +16,18 @@ def _safe_browser_post_patterns(api_prefix: str) -> tuple[re.Pattern[str], ...]:
         re.compile(rf"^{prefix}/data-sources/[^/]+/test$"),
         re.compile(rf"^{prefix}/mcp/integration/tests$"),
         re.compile(rf"^{prefix}/workspaces/[^/]+/prepare-preview$"),
-        re.compile(rf"^{prefix}/workspaces/[^/]+/refresh$"),
-        re.compile(rf"^{prefix}/workspaces/reload-local-mapping$"),
         re.compile(rf"^{prefix}/workspaces/[^/]+/shared-files/(restore|publish)$"),
+        re.compile(rf"^{prefix}/workspaces/[^/]+/scripts/sync$"),
         re.compile(rf"^{prefix}/workspaces/[^/]+/containers/bulk-action$"),
         re.compile(rf"^{prefix}/workspaces/[^/]+/host-runtime/actions$"),
         re.compile(rf"^{prefix}/workspaces/[^/]+/relation-records/search$"),
         re.compile(rf"^{prefix}/projects/[^/]+/runtime-config/(fast|full)/execute$"),
         re.compile(rf"^{prefix}/interface-forwarding/(import|environments|identities)$"),
+        re.compile(rf"^{prefix}/interface-forwarding/browser-captures(?:/reconcile|/auth)?$"),
         re.compile(rf"^{prefix}/interface-forwarding/interfaces/[^/]+/execute$"),
         re.compile(rf"^{prefix}/value-mappings$"),
         re.compile(rf"^{prefix}/value-mappings/[^/]+/preview$"),
-        re.compile(rf"^{prefix}/shared-config/ai/refresh$"),
+        re.compile(rf"^{prefix}/managed-scripts/[^/]+/autostart$"),
     )
 
 
@@ -55,8 +55,6 @@ def browser_request_allowed(
         ):
             return True
         if re.fullmatch(rf"{prefix}/value-mappings/[^/]+", path):
-            return True
-        if re.fullmatch(rf"{prefix}/shared-config/ai/default", path):
             return True
         return re.fullmatch(rf"{prefix}/system-guides/[^/]+/content", path) is not None
     if normalized_method == "DELETE":

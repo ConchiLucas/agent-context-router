@@ -5,20 +5,8 @@ import Link from "next/link";
 
 import { WorkspaceDetail } from "@/components/workspace-detail";
 import { WorkspaceContainersModal } from "@/components/workspace-containers-modal";
-import {
-  getWorkspace,
-  listWorkspaces,
-  refreshWorkspace,
-  reloadLocalWorkspaceMapping,
-} from "@/lib/api";
-import {
-  clearWorkspaceRefreshError,
-  finishWorkspaceRefresh,
-  replaceWorkspaceSummary,
-  runWorkspaceRefresh,
-  setWorkspaceRefreshError,
-  startWorkspaceRefresh,
-} from "@/lib/workspace-dashboard";
+import { WorkspaceScriptsView } from "@/components/workspace-scripts-view";
+import { listWorkspaces } from "@/lib/api";
 import type { WorkspaceSummary } from "@/lib/types";
 
 const ALL_WORKSPACE_TYPES = "__all__";
@@ -38,13 +26,6 @@ export function WorkspaceDashboard() {
   const [selectedType, setSelectedType] = useState(ALL_WORKSPACE_TYPES);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [reloadingMapping, setReloadingMapping] = useState(false);
-  const [refreshingWorkspaceIds, setRefreshingWorkspaceIds] = useState<
-    Set<string>
-  >(() => new Set());
-  const [refreshErrors, setRefreshErrors] = useState<
-    Record<string, string>
-  >({});
   const lastWorkspaceEntryRef = useRef<HTMLButtonElement>(null);
   const lastWorkspaceEntryIdRef = useRef<string | null>(null);
 
@@ -64,46 +45,6 @@ export function WorkspaceDashboard() {
   useEffect(() => {
     void loadWorkspaces();
   }, [loadWorkspaces]);
-
-  const handleRefreshWorkspace = useCallback(async (workspaceId: string) => {
-    setRefreshingWorkspaceIds((current) =>
-      startWorkspaceRefresh(current, workspaceId),
-    );
-    setRefreshErrors((current) =>
-      clearWorkspaceRefreshError(current, workspaceId),
-    );
-    const result = await runWorkspaceRefresh(
-      workspaceId,
-      refreshWorkspace,
-      getWorkspace,
-    );
-    const refreshed = result.summary;
-    if (refreshed) {
-      setWorkspaces((current) =>
-        replaceWorkspaceSummary(current, refreshed),
-      );
-    }
-    setRefreshErrors((current) =>
-      result.error
-        ? setWorkspaceRefreshError(current, workspaceId, result.error)
-        : clearWorkspaceRefreshError(current, workspaceId),
-    );
-    setRefreshingWorkspaceIds((current) =>
-      finishWorkspaceRefresh(current, workspaceId),
-    );
-  }, []);
-
-  const handleReloadMapping = useCallback(async () => {
-    setReloadingMapping(true);
-    try {
-      setWorkspaces(await reloadLocalWorkspaceMapping());
-      setError(null);
-    } catch (requestError) {
-      setError((requestError as Error).message);
-    } finally {
-      setReloadingMapping(false);
-    }
-  }, []);
 
   useEffect(() => {
     if (
@@ -139,21 +80,9 @@ export function WorkspaceDashboard() {
       : workspaces.filter(
           (workspace) => workspace.workspace_type === selectedType,
         );
-  const refreshError = Object.values(refreshErrors).join("；");
 
   return (
     <>
-      <div className="workspace-mapping-toolbar">
-        <p>卡片显示和目录来自当前项目的本机映射文件。</p>
-        <button
-          type="button"
-          className="secondary-button"
-          disabled={reloadingMapping}
-          onClick={() => void handleReloadMapping()}
-        >
-          {reloadingMapping ? "正在重载…" : "重载本机映射"}
-        </button>
-      </div>
       <nav
         className="project-type-tabs"
         role="tablist"
@@ -190,9 +119,9 @@ export function WorkspaceDashboard() {
         ))}
       </nav>
 
-      {error || refreshError ? (
+      {error ? (
         <div className="error-banner" role="alert">
-          {error ?? refreshError}
+          {error}
         </div>
       ) : null}
       {loading ? <p className="empty-message">正在读取工作空间…</p> : null}
@@ -214,7 +143,6 @@ export function WorkspaceDashboard() {
 
       <section className="workspace-grid" aria-label="工作空间列表">
         {visibleWorkspaces.map((workspace) => {
-          const isRefreshing = refreshingWorkspaceIds.has(workspace.id);
           return (
             <article className="workspace-card" key={workspace.id}>
             <header>
@@ -227,20 +155,6 @@ export function WorkspaceDashboard() {
                 </div>
                 <h2>{workspace.name}</h2>
               </div>
-              <button
-                type="button"
-                className="secondary-button workspace-refresh-button"
-                disabled={isRefreshing}
-                aria-busy={isRefreshing}
-                aria-label={
-                  isRefreshing
-                    ? `正在刷新 ${workspace.name} 的映射`
-                    : `刷新 ${workspace.name} 的映射`
-                }
-                onClick={() => void handleRefreshWorkspace(workspace.id)}
-              >
-                {isRefreshing ? "刷新中…" : "刷新映射"}
-              </button>
             </header>
             <code className="workspace-root-path">{workspace.root_path}</code>
             {workspace.document_reader_count > 0 ? (
@@ -271,12 +185,21 @@ export function WorkspaceDashboard() {
                 </strong>
                 <span>授权</span>
               </div>
+              <div>
+                <strong>{workspace.script_count ?? 0}</strong>
+                <span>脚本</span>
+              </div>
             </div>
             <p className="refresh-time">
               最近更新：{formattedTime(workspace.updated_at)}
             </p>
             <div className="workspace-card-actions">
               <WorkspaceContainersModal workspace={workspace} />
+              <WorkspaceScriptsView
+                workspaceId={workspace.id}
+                workspaceName={workspace.name}
+                scriptCount={workspace.script_count ?? 0}
+              />
               <Link
                 className="secondary-button workspace-environment-defaults-link"
                 href={`/workspaces/${encodeURIComponent(workspace.id)}/mcp-environments`}

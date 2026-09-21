@@ -7,6 +7,12 @@ import {
   listSystemGuides,
   updateSystemGuideContent,
 } from "@/lib/api";
+import {
+  displayMcpToolDescription,
+  groupMatchesQuery,
+  groupMcpTools,
+  mcpToolName,
+} from "@/lib/mcp-tool-catalog";
 import type {
   JsonValue,
   McpToolsListResult,
@@ -16,53 +22,9 @@ import type {
 
 type EditorMode = "tree" | "source";
 const MCP_TOOL_ID_PREFIX = "mcp-tool:";
-const MCP_TOOL_DESCRIPTIONS_ZH: Readonly<Record<string, string>> = {
-  prepare_task_context:
-    "根据当前工作目录识别 Workspace，创建 task_id，并返回精简文档树和可用能力。",
-  read_task_context:
-    "按需读取当前任务的数据库别名或环境配置，不在 prepare 阶段默认返回。",
-  search_context_documents:
-    "在当前 Workspace 的项目文档中搜索相关内容，返回匹配文档和章节定位，不返回正文。",
-  read_context_document:
-    "按文档 ID 读取完整 Markdown、指定章节或系统文档，一次可以批量读取多个目标。",
-  search_database_objects:
-    "在当前任务已授权的数据库中搜索 Schema、表、视图、字段或索引。",
-  execute_database_query:
-    "使用 read_task_context 返回的数据库别名执行一条受限制的只读 SQL。",
-  save_data_visualization_query:
-    "把当前任务识别出的关联数据查询条件保存到数据可视化页面，等待人工确认执行。",
-  save_task_visualization_result:
-    "把当前任务的脱敏结论、代码位置、后续建议和验证结果保存到任务可视化页面。",
-  list_task_containers:
-    "列出当前任务 Workspace 通过运行标签注册的 Docker 容器，不返回其他容器。",
-  inspect_container_errors:
-    "读取一个已注册容器的有界日志快照，确认错误后脱敏并写入日志可视化。",
-  read_table_relations:
-    "读取当前 Workspace 已发布的表关联、写入入口和更新入口。",
-  search_relation_tables:
-    "按业务词或表名搜索当前 Workspace 已发布的表关联目录。",
-  search_value_mappings:
-    "按业务关键词或接口参数查找当前 Workspace 已发布的取值映射。",
-  resolve_value_candidates:
-    "使用已配置的只读数据库规则解析业务值候选，省略环境时继承任务环境。",
-  search_forwarding_interfaces:
-    "在当前任务环境中搜索已导入接口，并显示是否具备可调用路由。",
-  read_forwarding_request_history:
-    "读取当前任务环境内单个接口最近的请求记录，按需返回有界响应，不返回账号请求头。",
-  prepare_forwarding_request:
-    "默认复用成功日志；按取值策略定向刷新或重建业务值，并生成短期只读执行计划。",
-  execute_forwarding_request:
-    "校验计划摘要后单次执行只读接口，请求头由服务端安全注入。",
-  apply_workspace_changes:
-    "根据 Workspace 相对变更路径定位受影响项目，并选择快速或完整更新。",
-  start_workspace:
-    "使用 Workspace 的统一启动配置，启动其中所有已登记的项目和服务。",
-  get_workspace_operation:
-    "查询 Workspace 启动或更新操作的状态、执行步骤和有界日志。",
-};
 
 function toolName(tool: Record<string, JsonValue>): string | null {
-  return typeof tool.name === "string" ? tool.name : null;
+  return mcpToolName(tool);
 }
 
 function toolSelectionId(name: string): string {
@@ -70,13 +32,7 @@ function toolSelectionId(name: string): string {
 }
 
 function displayToolDescription(tool: Record<string, JsonValue>): string {
-  const name = toolName(tool);
-  if (name && MCP_TOOL_DESCRIPTIONS_ZH[name]) {
-    return MCP_TOOL_DESCRIPTIONS_ZH[name];
-  }
-  return typeof tool.description === "string"
-    ? tool.description
-    : "当前 MCP 工具定义";
+  return displayMcpToolDescription(tool);
 }
 
 function displayTool(tool: Record<string, JsonValue>): Record<string, JsonValue> {
@@ -237,19 +193,24 @@ export function SystemGuideManager() {
       : guides;
     const filteredTools = (mcpTools?.tools ?? []).filter((tool) => {
       if (!normalized) return true;
+      const name = toolName(tool) ?? "";
       const values = [
-        toolName(tool) ?? "",
+        name,
         displayToolDescription(tool),
         typeof tool.description === "string" ? tool.description : "",
         "tools/list",
       ];
-      return values.some((value) =>
-        value.toLocaleLowerCase("zh-CN").includes(normalized),
+      if (values.some((value) => value.toLocaleLowerCase("zh-CN").includes(normalized))) {
+        return true;
+      }
+      return groupMcpTools([tool], toolName).some((group) =>
+        groupMatchesQuery(group.label, normalized),
       );
     });
     return {
       guides: filteredGuides,
       tools: filteredTools,
+      toolGroups: groupMcpTools(filteredTools, toolName),
     };
   }, [guides, mcpTools, query]);
 
@@ -348,40 +309,61 @@ export function SystemGuideManager() {
               inputMode="search"
             />
           </label>
+          {mcpTools ? (
+            <p className="system-guide-list-meta">
+              {mcpTools.tools.length} 个 MCP 工具
+              {guides.length > 0 ? ` · ${guides.length} 篇系统文档` : ""}
+            </p>
+          ) : null}
           <div className="system-guide-list-items">
             {loading ? <p className="system-guide-list-message">正在读取内容…</p> : null}
             {!loading && filtered.tools.length === 0 && filtered.guides.length === 0 ? (
               <p className="system-guide-list-message">没有匹配的内容</p>
             ) : null}
-            {filtered.tools.map((tool) => {
-              const name = toolName(tool);
-              if (!name) return null;
-              const description = displayToolDescription(tool);
-              return (
-                <button
-                  type="button"
-                  key={name}
-                  data-active={toolSelectionId(name) === selectedId}
-                  onClick={() => selectTool(tool)}
-                >
-                  <strong>{name}</strong>
-                  <span>{description}</span>
-                  <code>tools/list</code>
-                </button>
-              );
-            })}
-            {filtered.guides.map((guide) => (
-              <button
-                type="button"
-                key={guide.id}
-                data-active={guide.id === selectedId}
-                onClick={() => selectGuide(guide)}
-              >
-                <strong>{guide.title}</strong>
-                <span>{guide.summary}</span>
-                <code>{guide.guide_key}</code>
-              </button>
+            {filtered.toolGroups.map((group) => (
+              <section key={group.id} className="system-guide-list-group" aria-label={group.label}>
+                <h3>
+                  {group.label}
+                  <span>{group.tools.length}</span>
+                </h3>
+                {group.tools.map((tool) => {
+                  const name = toolName(tool);
+                  if (!name) return null;
+                  return (
+                    <button
+                      type="button"
+                      key={name}
+                      data-active={toolSelectionId(name) === selectedId}
+                      onClick={() => selectTool(tool)}
+                    >
+                      <strong>{name}</strong>
+                      <span>{displayToolDescription(tool)}</span>
+                      <code>tools/list</code>
+                    </button>
+                  );
+                })}
+              </section>
             ))}
+            {filtered.guides.length > 0 ? (
+              <section className="system-guide-list-group" aria-label="系统文档">
+                <h3>
+                  系统文档
+                  <span>{filtered.guides.length}</span>
+                </h3>
+                {filtered.guides.map((guide) => (
+                  <button
+                    type="button"
+                    key={guide.id}
+                    data-active={guide.id === selectedId}
+                    onClick={() => selectGuide(guide)}
+                  >
+                    <strong>{guide.title}</strong>
+                    <span>{guide.summary}</span>
+                    <code>{guide.guide_key}</code>
+                  </button>
+                ))}
+              </section>
+            ) : null}
           </div>
         </aside>
 

@@ -3,8 +3,9 @@ from __future__ import annotations
 import json
 import re
 import time
+from contextlib import nullcontext
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 from uuid import uuid4
 
 import httpx
@@ -15,6 +16,8 @@ from psycopg.types.json import Jsonb
 from context_router.interface_search.domain import EndpointCreate
 from context_router.interface_search.search import SearchService
 from context_router.schemas.interface_forwarding import (
+    BrowserInterfaceCapture,
+    InterfaceForwardingBrowserCaptureImport,
     InterfaceForwardingEnvironmentWrite,
     InterfaceForwardingExecute,
     InterfaceForwardingIdentityWrite,
@@ -22,6 +25,10 @@ from context_router.schemas.interface_forwarding import (
     InterfaceForwardingLogWrite,
     InterfaceSemanticsWrite,
 )
+from context_router.services.visualization_security import redact_value
+
+_BROWSER_REQUEST_MAX_BYTES = 262_144
+_BROWSER_RESPONSE_MAX_BYTES = 1_048_576
 
 
 class InterfaceForwardingError(RuntimeError):
@@ -73,7 +80,15 @@ class InterfaceForwardingService:
             raise InterfaceForwardingError("控制面数据库尚未配置")
         return psycopg.connect(self._database_url, row_factory=dict_row)
 
-    def overview(self, workspace_id: str, keyword: str = "") -> dict[str, Any]:
+    def overview(
+        self,
+        workspace_id: str,
+        keyword: str = "",
+        *,
+        service_id: str | None = None,
+        page: int = 1,
+        page_size: int = 50,
+    ) -> dict[str, Any]:
         like = f"%{keyword.strip()}%"
         with self._connect() as connection, connection.cursor() as cursor:
             cursor.execute(
@@ -88,6 +103,41 @@ class InterfaceForwardingService:
                 (workspace_id,),
             )
             services = list(cursor.fetchall())
+            service_ids = {str(item["id"]) for item in services}
+            if service_id is None or (service_id and service_id not in service_ids):
+                selected_service_id = str(services[0]["id"]) if services else ""
+            else:
+                selected_service_id = service_id
+            filter_params = (
+                workspace_id,
+                selected_service_id,
+                selected_service_id,
+                keyword.strip(),
+                like,
+                like,
+                like,
+                like,
+                like,
+            )
+            cursor.execute(
+                """
+                SELECT count(*)::int AS total
+                FROM interface_forwarding_interfaces i
+                LEFT JOIN interface_semantic_index semantic ON semantic.id = i.id
+                WHERE i.workspace_id = %s
+                  AND (%s = '' OR i.service_id = %s)
+                  AND (%s = '' OR i.name ILIKE %s OR i.path ILIKE %s
+                       OR i.description ILIKE %s
+                       OR i.controller_name ILIKE %s
+                       OR semantic.search_document ILIKE %s)
+                """,
+                filter_params,
+            )
+            total_row = cursor.fetchone()
+            interface_total = int(total_row["total"] if total_row else 0)
+            total_pages = max(1, (interface_total + page_size - 1) // page_size)
+            current_page = min(page, total_pages)
+            offset = (current_page - 1) * page_size
             cursor.execute(
                 """
                 SELECT i.id, i.service_id, service.name AS service_name,
@@ -139,25 +189,18 @@ class InterfaceForwardingService:
                     WHERE effect.interface_id = i.id
                 ) effects ON TRUE
                 WHERE i.workspace_id = %s
+                  AND (%s = '' OR i.service_id = %s)
                   AND (%s = '' OR i.name ILIKE %s OR i.path ILIKE %s
                        OR i.description ILIKE %s
                        OR i.controller_name ILIKE %s
                        OR semantic.search_document ILIKE %s)
                 ORDER BY latest.last_requested_at DESC NULLS LAST,
                          lower(i.path), i.method
+                LIMIT %s OFFSET %s
                 """,
-                (
-                    workspace_id,
-                    keyword.strip(),
-                    like,
-                    like,
-                    like,
-                    like,
-                    like,
-                ),
+                (*filter_params, page_size, offset),
             )
             interfaces = list(cursor.fetchall())
-            by_service: dict[str, list[dict[str, Any]]] = {}
             for item in interfaces:
                 item["name"] = self._coalesce_interface_name(
                     str(item["name"]),
@@ -168,22 +211,51 @@ class InterfaceForwardingService:
                 item["semantic"] = self._retrieval_semantic_json(item)
                 item["semantic_governance"] = self._semantic_governance_json(item)
                 for semantic_key in (
-                    "purpose", "audiences", "domains", "scenarios", "actions", "entities",
-                    "aliases", "resource", "lookup_keys", "cardinality", "ownership",
-                    "discriminators", "required_inputs", "request_schema_paths",
-                    "response_schema_paths", "business_identifiers", "interface_family",
-                    "family_size", "sibling_actions", "distinguishing_features", "tags",
-                    "semantic_source", "semantic_model", "semantic_confidence",
-                    "semantic_evidence", "semantic_field_sources", "semantic_confidences",
-                    "search_document_version", "embedding_version", "source_locations",
+                    "purpose",
+                    "audiences",
+                    "domains",
+                    "scenarios",
+                    "actions",
+                    "entities",
+                    "aliases",
+                    "resource",
+                    "lookup_keys",
+                    "cardinality",
+                    "ownership",
+                    "discriminators",
+                    "required_inputs",
+                    "request_schema_paths",
+                    "response_schema_paths",
+                    "business_identifiers",
+                    "interface_family",
+                    "family_size",
+                    "sibling_actions",
+                    "distinguishing_features",
+                    "tags",
+                    "semantic_source",
+                    "semantic_model",
+                    "semantic_confidence",
+                    "semantic_evidence",
+                    "semantic_field_sources",
+                    "semantic_confidences",
+                    "search_document_version",
+                    "embedding_version",
+                    "source_locations",
                     "semantic_stale",
                 ):
                     item.pop(semantic_key, None)
-                by_service.setdefault(str(item["service_id"]), []).append(item)
-            for service in services:
-                service["interfaces"] = by_service.get(str(service["id"]), [])
             environments = self.list_environments(workspace_id, connection=connection)
-        return {"workspace_id": workspace_id, "services": services, "environments": environments}
+        return {
+            "workspace_id": workspace_id,
+            "services": services,
+            "environments": environments,
+            "interfaces": interfaces,
+            "selected_service_id": selected_service_id,
+            "interface_total": interface_total,
+            "page": current_page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+        }
 
     @staticmethod
     def _retrieval_semantic_json(item: dict[str, Any]) -> dict[str, Any] | None:
@@ -909,6 +981,765 @@ class InterfaceForwardingService:
                 ),
             )
             return cursor.fetchone()
+
+    def import_browser_captures(
+        self, payload: InterfaceForwardingBrowserCaptureImport, *, rematch: bool = False
+    ) -> dict[str, Any]:
+        """Acknowledge durable observations, not merely an HTTP-successful batch.
+
+        Matching runs under a savepoint: a matching/log failure cannot discard the
+        original sanitized observation. Revisions prevent delayed retries from
+        overwriting a response with an earlier request-start snapshot.
+        """
+        acknowledged, imported, deduplicated, skipped, rejected = [], [], [], [], []
+        with self._connect() as connection, connection.cursor() as cursor:
+            if payload.environment_id:
+                cursor.execute(
+                    "SELECT environment_key FROM interface_forwarding_environments "
+                    "WHERE workspace_id=%s AND id=%s",
+                    (payload.workspace_id, payload.environment_id),
+                )
+            else:
+                cursor.execute(
+                    "SELECT environment_key FROM workspace_environments "
+                    "WHERE workspace_id=%s AND environment_key=%s",
+                    (payload.workspace_id, payload.environment_key),
+                )
+            environment = cursor.fetchone()
+            if not environment:
+                raise InterfaceForwardingError("录制环境不存在")
+            environment_key = environment["environment_key"]
+            for index, capture in enumerate(payload.captures):
+                capture_id = capture.capture_id or str(uuid4())
+                capture_retained = True
+                try:
+                    safe_url = self._safe_capture_url(capture.url)
+                    if (
+                        urlsplit(safe_url).scheme not in {"http", "https"}
+                        or not urlsplit(safe_url).netloc
+                    ):
+                        raise ValueError("invalid_url")
+                    self._url_origin(safe_url)
+                    request, _, _ = self._bounded_json(
+                        redact_value(capture.request_body), _BROWSER_REQUEST_MAX_BYTES
+                    )
+                    response, _, _ = self._bounded_json(
+                        redact_value(capture.response_body), _BROWSER_RESPONSE_MAX_BYTES
+                    )
+                    safe_capture = capture.model_copy(
+                        update={
+                            "capture_id": capture_id,
+                            "url": safe_url,
+                            "request_body": json.loads(request),
+                            "response_body": json.loads(response),
+                        }
+                    )
+                    with connection.transaction():
+                        cursor.execute(
+                            """INSERT INTO browser_interface_captures
+                            (workspace_id,capture_id,environment_key,revision,payload,match_status)
+                            VALUES (%s,%s,%s,%s,%s,'pending')
+                            ON CONFLICT (workspace_id,capture_id) DO NOTHING""",
+                            (
+                                payload.workspace_id,
+                                capture_id,
+                                environment_key,
+                                capture.revision,
+                                Jsonb(safe_capture.model_dump()),
+                            ),
+                        )
+                        is_new = cursor.rowcount == 1
+                        cursor.execute(
+                            "SELECT * FROM browser_interface_captures "
+                            "WHERE workspace_id=%s AND capture_id=%s FOR UPDATE",
+                            (payload.workspace_id, capture_id),
+                        )
+                        stored = cursor.fetchone()
+                        if stored["environment_key"] != environment_key:
+                            raise ValueError("capture_environment_conflict")
+                        needs_match = is_new or capture.revision > stored["revision"] or rematch
+                        if capture.revision > stored["revision"]:
+                            cursor.execute(
+                                "UPDATE browser_interface_captures "
+                                "SET revision=%s,payload=%s,updated_at=now() "
+                                "WHERE workspace_id=%s AND capture_id=%s",
+                                (
+                                    capture.revision,
+                                    Jsonb(safe_capture.model_dump()),
+                                    payload.workspace_id,
+                                    capture_id,
+                                ),
+                            )
+                        elif not is_new:
+                            safe_capture = BrowserInterfaceCapture.model_validate(stored["payload"])
+                        match_status, reason, log_id = (
+                            stored["match_status"],
+                            stored["reason"],
+                            stored["log_id"],
+                        )
+                        if needs_match:
+                            match_status, reason = "pending", "in_progress"
+                            if safe_capture.capture_state != "started":
+                                try:
+                                    with connection.transaction():
+                                        result = self._import_browser_captures_matched(
+                                            payload.model_copy(update={"captures": [safe_capture]}),
+                                            connection=connection,
+                                        )
+                                    if result["imported"]:
+                                        item = {**result["imported"][0], "index": index}
+                                        imported.append(item)
+                                        match_status, reason, log_id = "matched", "", item["log_id"]
+                                    elif result["deduplicated"]:
+                                        item = {**result["deduplicated"][0], "index": index}
+                                        deduplicated.append(item)
+                                        match_status = "matched"
+                                        reason = "daily_read_deduplicated"
+                                        log_id = item["log_id"]
+                                        capture_retained = False
+                                    else:
+                                        reason = result["skipped"][0]["reason"]
+                                except InterfaceForwardingError:
+                                    reason = "forwarding_configuration_missing"
+                                except psycopg.Error:
+                                    reason = "matching_database_error"
+                            if capture_retained:
+                                cursor.execute(
+                                    "UPDATE browser_interface_captures "
+                                    "SET match_status=%s,reason=%s,log_id=%s,updated_at=now() "
+                                    "WHERE workspace_id=%s AND capture_id=%s",
+                                    (
+                                        match_status,
+                                        reason,
+                                        log_id,
+                                        payload.workspace_id,
+                                        capture_id,
+                                    ),
+                                )
+                            else:
+                                cursor.execute(
+                                    "DELETE FROM browser_interface_captures "
+                                    "WHERE workspace_id=%s AND capture_id=%s",
+                                    (payload.workspace_id, capture_id),
+                                )
+                    acknowledged.append(
+                        {
+                            "index": index,
+                            "capture_id": capture_id,
+                            "revision": max(capture.revision, stored["revision"]),
+                            "status": "stored",
+                            "deduplicated": not capture_retained,
+                            "match_status": match_status,
+                            "reason": reason,
+                            "log_id": log_id,
+                        }
+                    )
+                    if capture_retained and match_status != "matched":
+                        skipped.append(
+                            {"index": index, "url": safe_url, "reason": reason, "saved": True}
+                        )
+                except (ValueError, psycopg.Error):
+                    rejected.append(
+                        {"index": index, "capture_id": capture_id, "reason": "capture_rejected"}
+                    )
+        return {
+            "workspace_id": payload.workspace_id,
+            "environment_id": payload.environment_id,
+            "environment_key": environment_key,
+            "captured_count": len(payload.captures),
+            "stored_count": sum(
+                item["status"] == "stored" and not item["deduplicated"] for item in acknowledged
+            ),
+            "deduplicated_count": len(deduplicated),
+            "imported_count": len(imported),
+            "skipped_count": len(skipped),
+            "imported": imported,
+            "deduplicated": deduplicated,
+            "skipped": skipped,
+            "acknowledged": acknowledged,
+            "rejected": rejected,
+        }
+
+    def browser_captures(
+        self, workspace_id: str, *, limit: int = 50, capture_id: str | None = None
+    ) -> dict[str, Any]:
+        with self._connect() as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT match_status, count(*) AS count FROM browser_interface_captures "
+                "WHERE workspace_id=%s GROUP BY match_status",
+                (workspace_id,),
+            )
+            counts = {row["match_status"]: row["count"] for row in cursor.fetchall()}
+            cursor.execute(
+                """SELECT capture_id,environment_key,revision,match_status,reason,log_id,
+                created_at,updated_at,payload->>'url' AS url,payload->>'method' AS method,
+                payload->>'capture_state' AS capture_state,
+                payload->'status_code' AS status_code,
+                payload->'response_body_missing' AS response_body_missing
+                FROM browser_interface_captures WHERE workspace_id=%s
+                AND (%s::text IS NULL OR capture_id=%s)
+                ORDER BY created_at DESC,capture_id LIMIT %s""",
+                (workspace_id, capture_id, capture_id, limit),
+            )
+            records = list(cursor.fetchall())
+            if capture_id and records:
+                cursor.execute(
+                    "SELECT payload FROM browser_interface_captures "
+                    "WHERE workspace_id=%s AND capture_id=%s",
+                    (workspace_id, capture_id),
+                )
+                records[0]["payload"] = cursor.fetchone()["payload"]
+            return {"counts": counts, "records": records}
+
+    def reconcile_browser_captures(self, workspace_id: str, limit: int = 50) -> dict[str, Any]:
+        with self._connect() as connection, connection.cursor() as cursor:
+            cursor.execute(
+                """SELECT environment_key,payload FROM browser_interface_captures
+                WHERE workspace_id=%s AND match_status='pending'
+                AND payload->>'capture_state' <> 'started' ORDER BY updated_at LIMIT %s""",
+                (workspace_id, limit),
+            )
+            records = list(cursor.fetchall())
+        results = [
+            self.import_browser_captures(
+                InterfaceForwardingBrowserCaptureImport(
+                    workspace_id=workspace_id,
+                    environment_key=record["environment_key"],
+                    captures=[BrowserInterfaceCapture.model_validate(record["payload"])],
+                ),
+                rematch=True,
+            )
+            for record in records
+        ]
+        return {"checked": len(records), "matched": sum(r["imported_count"] for r in results)}
+
+    def _import_browser_captures_matched(
+        self,
+        payload: InterfaceForwardingBrowserCaptureImport,
+        *,
+        connection=None,
+    ) -> dict[str, Any]:
+        """Map trusted browser observations to imported interfaces and persist safe logs.
+
+        This endpoint deliberately accepts no request or response headers. Browser cookies,
+        authorization headers and other ambient credentials therefore never enter the log.
+        """
+        with (
+            nullcontext(connection) if connection is not None else self._connect() as connection,
+            connection.cursor() as cursor,
+        ):
+            environment_where = (
+                "forwarding.id=%s" if payload.environment_id else ("forwarding.environment_key=%s")
+            )
+            environment_value = payload.environment_id or payload.environment_key
+            cursor.execute(
+                f"""SELECT forwarding.id, forwarding.workspace_id, forwarding.service_id,
+                           forwarding.environment_key, forwarding.name,
+                           forwarding.base_url,
+                           workspace.display_name AS workspace_environment_name
+                    FROM interface_forwarding_environments AS forwarding
+                    JOIN workspace_environments AS workspace
+                      ON workspace.workspace_id=forwarding.workspace_id
+                     AND workspace.environment_key=forwarding.environment_key
+                    WHERE {environment_where} AND forwarding.workspace_id=%s
+                    ORDER BY lower(forwarding.name), forwarding.id""",
+                (environment_value, payload.workspace_id),
+            )
+            environments = list(cursor.fetchall())
+            if not environments:
+                raise InterfaceForwardingError(
+                    "转发地址不存在" if payload.environment_id else "当前环境没有转发地址"
+                )
+
+            identity = None
+            if payload.identity_id:
+                cursor.execute(
+                    """SELECT id, login_account, role_name
+                       FROM interface_forwarding_identities
+                       WHERE id=%s AND environment_id=%s AND workspace_id=%s""",
+                    (payload.identity_id, payload.environment_id, payload.workspace_id),
+                )
+                identity = cursor.fetchone()
+                if not identity:
+                    raise InterfaceForwardingError("请求身份不存在或不属于当前环境")
+
+            cursor.execute(
+                """SELECT interface.id, interface.service_id, interface.name,
+                          interface.method, interface.path, interface.operation_kind,
+                          CASE WHEN source.invocation_mode='gateway'
+                               THEN source.gateway_service_id ELSE source.id END
+                            AS effective_service_id
+                   FROM interface_forwarding_interfaces AS interface
+                   JOIN interface_forwarding_services AS source
+                     ON source.id=interface.service_id
+                   WHERE interface.workspace_id=%s
+                     AND source.invocation_mode <> 'disabled'
+                   ORDER BY interface.id""",
+                (payload.workspace_id,),
+            )
+            interfaces = list(cursor.fetchall())
+            imported: list[dict[str, Any]] = []
+            deduplicated: list[dict[str, Any]] = []
+            skipped: list[dict[str, Any]] = []
+
+            for index, capture in enumerate(payload.captures):
+                capture_url = urlsplit(capture.url)
+                if capture_url.scheme not in {"http", "https"} or not capture_url.netloc:
+                    skipped.append({"index": index, "url": capture.url, "reason": "invalid_url"})
+                    continue
+                try:
+                    capture_origin = self._url_origin(capture.url)
+                except ValueError:
+                    skipped.append({"index": index, "url": capture.url, "reason": "invalid_url"})
+                    continue
+                compatible_environments = [
+                    environment
+                    for environment in environments
+                    if payload.allow_origin_mismatch
+                    or self._browser_capture_origins_compatible(
+                        capture_origin,
+                        self._url_origin(str(environment["base_url"])),
+                    )
+                ]
+                if not compatible_environments:
+                    skipped.append(
+                        {"index": index, "url": capture.url, "reason": "origin_mismatch"}
+                    )
+                    continue
+
+                matches: dict[str, tuple[dict[str, Any], dict[str, Any]]] = {}
+                for environment in compatible_environments:
+                    base_url = str(environment["base_url"])
+                    for interface in interfaces:
+                        if str(
+                            interface["method"]
+                        ).upper() != capture.method or not self._capture_matches_interface(
+                            captured_path=capture_url.path,
+                            interface_path=str(interface["path"]),
+                            base_url=base_url,
+                        ):
+                            continue
+                        interface_id = str(interface["id"])
+                        candidate = (interface, environment)
+                        current = matches.get(interface_id)
+                        if current is None or self._browser_environment_rank(*candidate) < (
+                            self._browser_environment_rank(*current)
+                        ):
+                            matches[interface_id] = candidate
+                if matches:
+                    ranks = {
+                        key: self._browser_match_rank(capture_url.path, *candidate)
+                        for key, candidate in matches.items()
+                    }
+                    best = min(ranks.values())
+                    matches = {
+                        key: candidate for key, candidate in matches.items() if ranks[key] == best
+                    }
+                if len(matches) != 1:
+                    skipped.append(
+                        {
+                            "index": index,
+                            "url": capture.url,
+                            "reason": (
+                                "interface_not_found" if not matches else "ambiguous_interface"
+                            ),
+                            "candidate_interface_ids": sorted(matches),
+                        }
+                    )
+                    continue
+
+                interface, environment = next(iter(matches.values()))
+                uses_selected_environment = (
+                    interface["effective_service_id"] == environment["service_id"]
+                )
+                query = self._query_payload(capture.url)
+                request_payload = {
+                    "query": query,
+                    "body": redact_value(capture.request_body),
+                }
+                request_body, request_truncated, _request_bytes = self._bounded_json(
+                    request_payload,
+                    _BROWSER_REQUEST_MAX_BYTES,
+                )
+                response_body, response_truncated, response_bytes = self._bounded_json(
+                    redact_value(capture.response_body),
+                    _BROWSER_RESPONSE_MAX_BYTES,
+                )
+                success = capture.status_code is not None and 200 <= capture.status_code < 400
+                log_id = str(uuid4())
+                environment_name = (
+                    f"{environment['workspace_environment_name']} · {environment['name']}"
+                    if uses_selected_environment
+                    else f"{environment['workspace_environment_name']} · 浏览器录制"
+                )
+                identity_name = (
+                    identity["login_account"] if identity and uses_selected_environment else None
+                )
+                identity_role = (
+                    identity["role_name"] if identity and uses_selected_environment else ""
+                )
+                address_id = environment["id"] if uses_selected_environment else None
+                identity_id = identity["id"] if identity and uses_selected_environment else None
+                common_values = (
+                    log_id,
+                    payload.workspace_id,
+                    interface["id"],
+                    environment_name,
+                    identity_name,
+                    identity_role,
+                    self._safe_capture_url(capture.url),
+                    request_body,
+                    response_body,
+                    capture.status_code,
+                    success,
+                    capture.duration_ms,
+                    environment["environment_key"],
+                    address_id,
+                    identity_id,
+                    response_bytes,
+                    request_truncated or response_truncated,
+                    capture.capture_id,
+                )
+                daily_read = interface["operation_kind"] == "read"
+                if daily_read:
+                    cursor.execute(
+                        """INSERT INTO interface_forwarding_logs
+                        (id, workspace_id, interface_id, environment_name, identity_name,
+                         identity_role, request_url, request_body, response_body, status_code,
+                         success, duration_ms, environment_key, address_id, identity_id,
+                         response_bytes, response_truncated, browser_capture_id,
+                         browser_capture_day, browser_observed_count, browser_success_count,
+                         browser_first_seen_at, browser_last_seen_at,
+                         browser_last_observed_capture_id)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
+                                (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai')::date,
+                                1,CASE WHEN %s THEN 1 ELSE 0 END,
+                                CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,%s)
+                        ON CONFLICT (workspace_id, environment_key, interface_id,
+                                     browser_capture_day)
+                        WHERE browser_capture_day IS NOT NULL DO UPDATE SET
+                        browser_observed_count=
+                            COALESCE(interface_forwarding_logs.browser_observed_count,1)
+                            + CASE WHEN interface_forwarding_logs.browser_last_observed_capture_id
+                                             IS NOT DISTINCT FROM EXCLUDED.browser_capture_id
+                                   THEN 0 ELSE 1 END,
+                        browser_success_count=
+                            COALESCE(interface_forwarding_logs.browser_success_count,
+                                     CASE WHEN interface_forwarding_logs.success THEN 1 ELSE 0 END)
+                            + CASE
+                                WHEN interface_forwarding_logs.browser_last_observed_capture_id
+                                         IS NOT DISTINCT FROM EXCLUDED.browser_capture_id
+                                THEN CASE
+                                    WHEN interface_forwarding_logs.browser_capture_id
+                                             = EXCLUDED.browser_capture_id
+                                    THEN (CASE WHEN EXCLUDED.success THEN 1 ELSE 0 END)
+                                       - (CASE WHEN interface_forwarding_logs.success
+                                               THEN 1 ELSE 0 END)
+                                    ELSE 0
+                                  END
+                                WHEN EXCLUDED.success THEN 1 ELSE 0
+                              END,
+                        browser_last_seen_at=CURRENT_TIMESTAMP,
+                        browser_last_observed_capture_id=EXCLUDED.browser_capture_id,
+                        environment_name=CASE
+                            WHEN interface_forwarding_logs.browser_capture_id
+                                   = EXCLUDED.browser_capture_id
+                                 OR NOT interface_forwarding_logs.success
+                            THEN EXCLUDED.environment_name
+                            ELSE interface_forwarding_logs.environment_name END,
+                        identity_name=CASE
+                            WHEN interface_forwarding_logs.browser_capture_id
+                                   = EXCLUDED.browser_capture_id
+                                 OR NOT interface_forwarding_logs.success
+                            THEN EXCLUDED.identity_name
+                            ELSE interface_forwarding_logs.identity_name END,
+                        identity_role=CASE
+                            WHEN interface_forwarding_logs.browser_capture_id
+                                   = EXCLUDED.browser_capture_id
+                                 OR NOT interface_forwarding_logs.success
+                            THEN EXCLUDED.identity_role
+                            ELSE interface_forwarding_logs.identity_role END,
+                        request_url=CASE
+                            WHEN interface_forwarding_logs.browser_capture_id
+                                   = EXCLUDED.browser_capture_id
+                                 OR NOT interface_forwarding_logs.success
+                            THEN EXCLUDED.request_url
+                            ELSE interface_forwarding_logs.request_url END,
+                        request_body=CASE
+                            WHEN interface_forwarding_logs.browser_capture_id
+                                   = EXCLUDED.browser_capture_id
+                                 OR NOT interface_forwarding_logs.success
+                            THEN EXCLUDED.request_body
+                            ELSE interface_forwarding_logs.request_body END,
+                        response_body=CASE
+                            WHEN interface_forwarding_logs.browser_capture_id
+                                   = EXCLUDED.browser_capture_id
+                                 OR NOT interface_forwarding_logs.success
+                            THEN EXCLUDED.response_body
+                            ELSE interface_forwarding_logs.response_body END,
+                        status_code=CASE
+                            WHEN interface_forwarding_logs.browser_capture_id
+                                   = EXCLUDED.browser_capture_id
+                                 OR NOT interface_forwarding_logs.success
+                            THEN EXCLUDED.status_code
+                            ELSE interface_forwarding_logs.status_code END,
+                        success=CASE
+                            WHEN interface_forwarding_logs.browser_capture_id
+                                   = EXCLUDED.browser_capture_id
+                                 OR NOT interface_forwarding_logs.success
+                            THEN EXCLUDED.success
+                            ELSE interface_forwarding_logs.success END,
+                        duration_ms=CASE
+                            WHEN interface_forwarding_logs.browser_capture_id
+                                   = EXCLUDED.browser_capture_id
+                                 OR NOT interface_forwarding_logs.success
+                            THEN EXCLUDED.duration_ms
+                            ELSE interface_forwarding_logs.duration_ms END,
+                        address_id=CASE
+                            WHEN interface_forwarding_logs.browser_capture_id
+                                   = EXCLUDED.browser_capture_id
+                                 OR NOT interface_forwarding_logs.success
+                            THEN EXCLUDED.address_id
+                            ELSE interface_forwarding_logs.address_id END,
+                        identity_id=CASE
+                            WHEN interface_forwarding_logs.browser_capture_id
+                                   = EXCLUDED.browser_capture_id
+                                 OR NOT interface_forwarding_logs.success
+                            THEN EXCLUDED.identity_id
+                            ELSE interface_forwarding_logs.identity_id END,
+                        response_bytes=CASE
+                            WHEN interface_forwarding_logs.browser_capture_id
+                                   = EXCLUDED.browser_capture_id
+                                 OR NOT interface_forwarding_logs.success
+                            THEN EXCLUDED.response_bytes
+                            ELSE interface_forwarding_logs.response_bytes END,
+                        response_truncated=CASE
+                            WHEN interface_forwarding_logs.browser_capture_id
+                                   = EXCLUDED.browser_capture_id
+                                 OR NOT interface_forwarding_logs.success
+                            THEN EXCLUDED.response_truncated
+                            ELSE interface_forwarding_logs.response_truncated END,
+                        browser_capture_id=CASE
+                            WHEN interface_forwarding_logs.browser_capture_id
+                                   = EXCLUDED.browser_capture_id
+                                 OR NOT interface_forwarding_logs.success
+                            THEN EXCLUDED.browser_capture_id
+                            ELSE interface_forwarding_logs.browser_capture_id END
+                        RETURNING id,browser_capture_id,browser_observed_count,
+                                  browser_success_count""",
+                        (*common_values, success, capture.capture_id),
+                    )
+                    saved_log = cursor.fetchone()
+                    log_id = str(saved_log["id"])
+                    retained_capture_id = str(saved_log["browser_capture_id"])
+                    cursor.execute(
+                        """DELETE FROM browser_interface_captures
+                        WHERE workspace_id=%s AND log_id=%s AND capture_id<>%s""",
+                        (payload.workspace_id, log_id, retained_capture_id),
+                    )
+                else:
+                    cursor.execute(
+                        """INSERT INTO interface_forwarding_logs
+                        (id, workspace_id, interface_id, environment_name, identity_name,
+                         identity_role, request_url, request_body, response_body, status_code,
+                         success, duration_ms, environment_key, address_id, identity_id,
+                         response_bytes, response_truncated, browser_capture_id)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        ON CONFLICT (workspace_id, browser_capture_id)
+                        WHERE browser_capture_id IS NOT NULL DO UPDATE SET
+                        interface_id=EXCLUDED.interface_id,
+                        request_body=EXCLUDED.request_body,response_body=EXCLUDED.response_body,
+                        status_code=EXCLUDED.status_code,success=EXCLUDED.success,
+                        duration_ms=EXCLUDED.duration_ms,response_bytes=EXCLUDED.response_bytes,
+                        response_truncated=EXCLUDED.response_truncated
+                        RETURNING id,browser_capture_id""",
+                        common_values,
+                    )
+                    saved_log = cursor.fetchone()
+                    log_id = str(saved_log["id"])
+                    retained_capture_id = str(saved_log["browser_capture_id"])
+
+                item = {
+                    "index": index,
+                    "log_id": log_id,
+                    "interface_id": str(interface["id"]),
+                    "interface_name": str(interface["name"]),
+                    "method": capture.method,
+                    "path": str(interface["path"]),
+                    "status_code": capture.status_code,
+                    "success": success,
+                    "truncated": request_truncated or response_truncated,
+                    "daily_read": daily_read,
+                }
+                if daily_read and retained_capture_id != capture.capture_id:
+                    item.update(
+                        {
+                            "reason": "daily_read_deduplicated",
+                            "retained_capture_id": retained_capture_id,
+                            "observed_count": saved_log["browser_observed_count"],
+                            "success_count": saved_log["browser_success_count"],
+                        }
+                    )
+                    deduplicated.append(item)
+                else:
+                    if daily_read:
+                        item.update(
+                            {
+                                "observed_count": saved_log["browser_observed_count"],
+                                "success_count": saved_log["browser_success_count"],
+                            }
+                        )
+                    imported.append(item)
+
+        return {
+            "workspace_id": payload.workspace_id,
+            "environment_id": payload.environment_id,
+            "environment_key": payload.environment_key or environments[0]["environment_key"],
+            "captured_count": len(payload.captures),
+            "imported_count": len(imported),
+            "deduplicated_count": len(deduplicated),
+            "skipped_count": len(skipped),
+            "imported": imported,
+            "deduplicated": deduplicated,
+            "skipped": skipped,
+        }
+
+    @staticmethod
+    def _browser_match_rank(captured_path: str, interface: dict, environment: dict) -> tuple:
+        path = str(interface["path"])
+        expected = urlsplit(
+            urljoin(str(environment["base_url"]).rstrip("/") + "/", path.lstrip("/"))
+        ).path
+        direct = any(
+            InterfaceForwardingService._path_template_matches(p, captured_path)
+            for p in (path, expected)
+        )
+        templated = bool(re.search(r"\{[^{}]+\}", path))
+        literal_segments = sum(bool(part) and "{" not in part for part in path.split("/"))
+        # Explicit routes win over templates; suffix fallback remains lower confidence.
+        return (
+            int(not direct) * 2 + int(templated),
+            -literal_segments,
+            int(interface["effective_service_id"] != environment["service_id"]),
+        )
+
+    @staticmethod
+    def _browser_environment_rank(
+        interface: dict[str, Any], environment: dict[str, Any]
+    ) -> tuple[int, str, str]:
+        return (
+            0 if interface["effective_service_id"] == environment["service_id"] else 1,
+            str(environment["name"]).lower(),
+            str(environment["id"]),
+        )
+
+    @staticmethod
+    def _url_origin(url: str) -> tuple[str, str, int | None]:
+        parsed = urlsplit(url)
+        port = parsed.port
+        if port is None:
+            port = 443 if parsed.scheme.lower() == "https" else 80
+        return parsed.scheme.lower(), (parsed.hostname or "").lower(), port
+
+    @staticmethod
+    def _browser_capture_origins_compatible(
+        captured: tuple[str, str, int | None],
+        configured: tuple[str, str, int | None],
+    ) -> bool:
+        if captured == configured:
+            return True
+        loopback_hosts = {"localhost", "127.0.0.1", "::1"}
+        return (
+            captured[0] == configured[0] == "http"
+            and captured[1] in loopback_hosts
+            and configured[1] in loopback_hosts
+        )
+
+    @classmethod
+    def _capture_matches_interface(
+        cls,
+        *,
+        captured_path: str,
+        interface_path: str,
+        base_url: str,
+    ) -> bool:
+        expected_path = urlsplit(
+            urljoin(base_url.rstrip("/") + "/", interface_path.lstrip("/"))
+        ).path
+        return (
+            cls._path_template_matches(expected_path, captured_path)
+            or (
+                expected_path != interface_path
+                and cls._path_template_matches(interface_path, captured_path)
+            )
+            or cls._path_template_matches_suffix(interface_path, captured_path)
+        )
+
+    @classmethod
+    def _path_template_matches_suffix(cls, template: str, actual: str) -> bool:
+        normalized_template = "/" + template.strip("/")
+        normalized_actual = "/" + actual.strip("/")
+        template_segments = normalized_template.strip("/").split("/")
+        actual_segments = normalized_actual.strip("/").split("/")
+        if len(actual_segments) < len(template_segments):
+            return False
+        return cls._path_template_matches(
+            normalized_template,
+            "/" + "/".join(actual_segments[-len(template_segments) :]),
+        )
+
+    @staticmethod
+    def _path_template_matches(template: str, actual: str) -> bool:
+        normalized_template = "/" + template.strip("/")
+        normalized_actual = "/" + actual.strip("/")
+        pieces: list[str] = []
+        position = 0
+        for match in re.finditer(r"\{[^{}]+\}", normalized_template):
+            pieces.append(re.escape(normalized_template[position : match.start()]))
+            pieces.append(r"[^/]+")
+            position = match.end()
+        pieces.append(re.escape(normalized_template[position:]))
+        return re.fullmatch("".join(pieces), normalized_actual) is not None
+
+    @staticmethod
+    def _query_payload(url: str) -> dict[str, Any]:
+        values: dict[str, Any] = {}
+        for key, value in parse_qsl(urlsplit(url).query, keep_blank_values=True):
+            safe_value = redact_value(value, field_name=key)
+            if key not in values:
+                values[key] = safe_value
+            elif isinstance(values[key], list):
+                values[key].append(safe_value)
+            else:
+                values[key] = [values[key], safe_value]
+        return values
+
+    @classmethod
+    def _safe_capture_url(cls, url: str) -> str:
+        parsed = urlsplit(url)
+        host = parsed.hostname or ""
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        netloc = f"{host}:{parsed.port}" if parsed.port is not None else host
+        query = urlencode(cls._query_payload(url), doseq=True)
+        return urlunsplit((parsed.scheme.lower(), netloc, parsed.path, query, ""))
+
+    @staticmethod
+    def _bounded_json(value: Any, max_bytes: int) -> tuple[str, bool, int]:
+        serialized = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+        encoded = serialized.encode("utf-8")
+        if len(encoded) <= max_bytes:
+            return serialized, False, len(encoded)
+        preview = encoded[:max_bytes].decode("utf-8", errors="ignore")
+        while True:
+            bounded = json.dumps(
+                {"_truncated": True, "preview": preview},
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            if len(bounded.encode("utf-8")) <= max_bytes:
+                return bounded, True, len(encoded)
+            preview = preview[:-1]
 
     def execute(self, interface_id: str, payload: InterfaceForwardingExecute) -> dict[str, Any]:
         with self._connect() as connection, connection.cursor() as cursor:

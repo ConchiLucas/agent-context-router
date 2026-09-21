@@ -77,8 +77,23 @@ def get_database_tool_payload(
     response_model=McpTraceDetail,
     response_model_exclude_none=True,
 )
-def get_mcp_trace(task_id: int, request: Request) -> McpTraceDetail:
+def get_mcp_trace(
+    task_id: int,
+    request: Request,
+    run_id: str | None = Query(
+        default=None,
+        min_length=1,
+        max_length=128,
+        pattern=r".*\S.*",
+    ),
+    item_id: str | None = Query(
+        default=None,
+        min_length=1,
+        max_length=128,
+        pattern=r".*\S.*",
+    ),
+) -> McpTraceDetail:
     try:
-        return _service(request).get_trace(task_id)
+        return _service(request).get_trace(task_id, run_id=run_id, item_id=item_id)
     except McpTraceServiceError as exc:
         raise _bad_request(str(exc)) from exc

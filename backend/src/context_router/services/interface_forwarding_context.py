@@ -200,6 +200,8 @@ class InterfaceForwardingContextService:
             )
             results.append(
                 {
+                    "rank": hit.rank,
+                    "retrieval_rank": hit.retrieval_rank,
                     "interface_id": hit.interface_id,
                     "name": hit.title,
                     "controller_name": hit.controller_name,
@@ -224,6 +226,7 @@ class InterfaceForwardingContextService:
                     "conflicting_slots": hit.conflicting_slots,
                     "semantic_stale": hit.semantic_stale,
                     "confidence": hit.confidence,
+                    "score": hit.score.model_dump(mode="json"),
                     "reasons": hit.reasons[:3],
                     "callable": callable_now,
                     "address_count": int(metadata.get("address_count") or 0),

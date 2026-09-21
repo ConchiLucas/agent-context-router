@@ -1,6 +1,10 @@
+import json
+
 import pytest
 
 from context_router.schemas.interface_forwarding import (
+    BrowserInterfaceCapture,
+    InterfaceForwardingBrowserCaptureImport,
     InterfaceForwardingIdentityWrite,
     InterfaceForwardingLogWrite,
 )
@@ -42,6 +46,126 @@ def test_external_log_write_bounds_status_and_duration() -> None:
 
     assert payload.status_code == 200
     assert payload.duration_ms == 120
+
+
+def test_browser_capture_import_bounds_and_normalizes_input() -> None:
+    payload = InterfaceForwardingBrowserCaptureImport(
+        workspace_id="workspace-1",
+        environment_id="address-1",
+        captures=[
+            BrowserInterfaceCapture(
+                url="https://example.test/api/orders/42?token=secret&state=open",
+                method="get",
+                status_code=200,
+                duration_ms=35,
+            )
+        ],
+    )
+
+    assert payload.captures[0].method == "GET"
+    assert payload.allow_origin_mismatch is False
+
+
+def test_browser_capture_import_accepts_environment_key_for_live_collector() -> None:
+    payload = InterfaceForwardingBrowserCaptureImport(
+        workspace_id="workspace-1",
+        environment_key="test",
+        captures=[
+            BrowserInterfaceCapture(
+                capture_id="capture-1",
+                url="http://192.168.0.222:18080/rest/mtp/orders",
+                method="POST",
+            )
+        ],
+    )
+
+    assert payload.environment_id is None
+    assert payload.environment_key == "test"
+    assert payload.captures[0].capture_id == "capture-1"
+
+
+def test_browser_capture_import_requires_exactly_one_environment_selector() -> None:
+    capture = BrowserInterfaceCapture(url="https://example.test/orders", method="GET")
+
+    with pytest.raises(ValueError, match="必须且只能提供一个"):
+        InterfaceForwardingBrowserCaptureImport(
+            workspace_id="workspace-1",
+            captures=[capture],
+        )
+    with pytest.raises(ValueError, match="必须且只能提供一个"):
+        InterfaceForwardingBrowserCaptureImport(
+            workspace_id="workspace-1",
+            environment_id="address-1",
+            environment_key="test",
+            captures=[capture],
+        )
+
+
+def test_browser_capture_matches_exact_and_templated_paths() -> None:
+    service = InterfaceForwardingService(None)
+
+    assert service._capture_matches_interface(
+        captured_path="/gateway/api/orders/42",
+        interface_path="/api/orders/{id}",
+        base_url="https://example.test/gateway",
+    )
+    assert not service._capture_matches_interface(
+        captured_path="/gateway/api/orders/42/items",
+        interface_path="/api/orders/{id}",
+        base_url="https://example.test/gateway",
+    )
+    assert service._capture_matches_interface(
+        captured_path="/rest/portal/member-api/admin/contract/save",
+        interface_path="/member-api/admin/contract/save",
+        base_url="https://example.test/rest/mtp",
+    )
+    assert service._capture_matches_interface(
+        captured_path="/rest/mtp/order-api/admin/entrusted/quote/quoteApprove",
+        interface_path="/order-api/admin/entrusted/quote/quoteApprove",
+        base_url="http://192.168.0.222:18080/rest/mtp",
+    )
+
+
+def test_browser_capture_accepts_local_project_ports_as_one_capture_scope() -> None:
+    service = InterfaceForwardingService(None)
+
+    assert service._browser_capture_origins_compatible(
+        service._url_origin("http://localhost:3000/rest/portal/contracts"),
+        service._url_origin("http://127.0.0.1:3001/rest/mtp"),
+    )
+    assert not service._browser_capture_origins_compatible(
+        service._url_origin("https://example.test/rest/portal/contracts"),
+        service._url_origin("http://127.0.0.1:3001/rest/mtp"),
+    )
+
+
+def test_browser_capture_query_redacts_sensitive_values_and_keeps_repeats() -> None:
+    query = InterfaceForwardingService._query_payload(
+        "https://example.test/orders?token=secret&status=open&status=closed"
+    )
+
+    assert query == {
+        "token": "[REDACTED]",
+        "status": ["open", "closed"],
+    }
+    assert (
+        InterfaceForwardingService._safe_capture_url(
+            "https://user:password@example.test/orders?token=secret&status=open#private"
+        )
+        == "https://example.test/orders?token=%5BREDACTED%5D&status=open"
+    )
+
+
+def test_browser_capture_payload_is_bounded() -> None:
+    serialized, truncated, original_bytes = InterfaceForwardingService._bounded_json(
+        {"result": "汉" * 100},
+        40,
+    )
+
+    assert truncated is True
+    assert json.loads(serialized)["_truncated"] is True
+    assert len(serialized.encode("utf-8")) <= 40
+    assert original_bytes > 40
 
 
 def test_parse_openapi_endpoints_and_resolve_local_schema_refs() -> None:

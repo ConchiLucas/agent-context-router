@@ -35,6 +35,12 @@ import type {
   WorkspaceMcpEnvironmentDefaults,
   WorkspaceNacosProfiles,
   WorkspaceSharedFilesResult,
+  WorkspaceScriptDetail,
+  WorkspaceScriptList,
+  WorkspaceScriptSyncResult,
+  ManagedRuleList,
+  ManagedScript,
+  ManagedScriptList,
   SystemGuideDetail,
   SystemGuideWrite,
   TableRelationDetail,
@@ -58,8 +64,8 @@ import type {
   ValueMappingPreviewResult,
   ValueMappingWrite,
   ValueMapping,
-  SharedAiCatalog,
-  SharedConfigurationCatalog,
+  InterfacePromptMatchList,
+  PromptClientName,
   AiDataQueryLatest,
   AiDataQueryHistory,
   AiInterfaceRequestDetail,
@@ -106,30 +112,6 @@ export function listWorkspaces(): Promise<WorkspaceSummary[]> {
   return request<WorkspaceSummary[]>("/api/workspaces");
 }
 
-export function getSharedAiCatalog(): Promise<SharedAiCatalog> {
-  return request<SharedAiCatalog>("/api/shared-config/ai", { cache: "no-store" });
-}
-
-export function getSharedConfigurationCatalog(): Promise<SharedConfigurationCatalog> {
-  return request<SharedConfigurationCatalog>("/api/shared-config/ai/catalog", {
-    cache: "no-store",
-  });
-}
-
-export function refreshSharedAiCatalog(): Promise<SharedAiCatalog> {
-  return request<SharedAiCatalog>("/api/shared-config/ai/refresh", { method: "POST" });
-}
-
-export function saveSharedAiDefault(
-  providerId: string,
-  revision: number,
-): Promise<SharedAiCatalog> {
-  return request<SharedAiCatalog>("/api/shared-config/ai/default", {
-    method: "PUT",
-    body: JSON.stringify({ provider_id: providerId, revision }),
-  });
-}
-
 export function listSystemGuides(): Promise<SystemGuideDetail[]> {
   return request<SystemGuideDetail[]>("/api/system-guides", { cache: "no-store" });
 }
@@ -141,12 +123,6 @@ export function updateSystemGuideContent(
   return request<SystemGuideDetail>(`/api/system-guides/${guideId}/content`, {
     method: "PUT",
     body: JSON.stringify({ document }),
-  });
-}
-
-export function reloadLocalWorkspaceMapping(): Promise<WorkspaceSummary[]> {
-  return request<WorkspaceSummary[]>("/api/workspaces/reload-local-mapping", {
-    method: "POST",
   });
 }
 
@@ -166,6 +142,56 @@ export function publishWorkspaceSharedFiles(
     `/api/workspaces/${workspaceId}/shared-files/publish`,
     { method: "POST" },
   );
+}
+
+export function listWorkspaceScripts(
+  workspaceId: string,
+): Promise<WorkspaceScriptList> {
+  return request<WorkspaceScriptList>(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/scripts`,
+    { cache: "no-store" },
+  );
+}
+
+export function getWorkspaceScript(
+  workspaceId: string,
+  relativePath: string,
+): Promise<WorkspaceScriptDetail> {
+  const params = new URLSearchParams({ path: relativePath });
+  return request<WorkspaceScriptDetail>(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/scripts/item?${params}`,
+    { cache: "no-store" },
+  );
+}
+
+export function syncWorkspaceScripts(
+  workspaceId: string,
+): Promise<WorkspaceScriptSyncResult> {
+  return request<WorkspaceScriptSyncResult>(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/scripts/sync`,
+    { method: "POST" },
+  );
+}
+
+export function listManagedScripts(): Promise<ManagedScriptList> {
+  return request<ManagedScriptList>("/api/managed-scripts", { cache: "no-store" });
+}
+
+export function setManagedScriptAutostart(
+  scriptId: string,
+  enabled: boolean,
+): Promise<ManagedScript> {
+  return request<ManagedScript>(
+    `/api/managed-scripts/${encodeURIComponent(scriptId)}/autostart`,
+    {
+      method: "POST",
+      body: JSON.stringify({ enabled }),
+    },
+  );
+}
+
+export function listManagedRules(): Promise<ManagedRuleList> {
+  return request<ManagedRuleList>("/api/managed-rules", { cache: "no-store" });
 }
 
 export function getWorkspace(workspaceId: string): Promise<WorkspaceSummary> {
@@ -199,15 +225,6 @@ export function runWorkspaceContainerBulkAction(
       method: "POST",
       body: JSON.stringify({ action, project_kind: projectKind }),
     },
-  );
-}
-
-export function refreshWorkspace(
-  workspaceId: string,
-): Promise<WorkspaceSummary> {
-  return request<WorkspaceSummary>(
-    `/api/workspaces/${workspaceId}/refresh`,
-    { method: "POST" },
   );
 }
 
@@ -753,9 +770,20 @@ export function getAiVisualizationTaskTimeline(
   );
 }
 
-export function getInterfaceForwardingOverview(workspaceId: string, keyword = ""): Promise<InterfaceForwardingOverview> {
-  const params = new URLSearchParams({ workspace_id: workspaceId });
+export function getInterfaceForwardingOverview(
+  workspaceId: string,
+  keyword = "",
+  options?: { serviceId?: string | null; page?: number; pageSize?: number },
+): Promise<InterfaceForwardingOverview> {
+  const params = new URLSearchParams({
+    workspace_id: workspaceId,
+    page: String(options?.page ?? 1),
+    page_size: String(options?.pageSize ?? 50),
+  });
   if (keyword.trim()) params.set("keyword", keyword.trim());
+  if (options?.serviceId !== null && options?.serviceId !== undefined) {
+    params.set("service_id", options.serviceId);
+  }
   return request<InterfaceForwardingOverview>(`/api/interface-forwarding/overview?${params.toString()}`, { cache: "no-store" });
 }
 
@@ -881,5 +909,23 @@ export function previewValueMapping(
       method: "POST",
       body: JSON.stringify({ ...input, limit: input.limit ?? 10 }),
     },
+  );
+}
+
+export function listInterfacePromptMatches(
+  workspaceId: string,
+  page = 1,
+  pageSize = 20,
+  client?: PromptClientName,
+): Promise<InterfacePromptMatchList> {
+  const params = new URLSearchParams({
+    workspace_id: workspaceId,
+    page: String(page),
+    page_size: String(pageSize),
+  });
+  if (client) params.set("client", client);
+  return request<InterfacePromptMatchList>(
+    `/api/interface-prompt-matches?${params.toString()}`,
+    { cache: "no-store" },
   );
 }

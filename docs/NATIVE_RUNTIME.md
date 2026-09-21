@@ -15,7 +15,7 @@ Native Backend / Frontend
 
 ## 本机配置
 
-从 `.env.native.example` 复制 `.env.native.local`。该文件被 Git 忽略。必须设置真实的数据库 URL、Workspace 根、映射文件、共享配置中心地址、Runtime Root 和 Docker Socket。
+从 `.env.native.example` 复制 `.env.native.local`。该文件被 Git 忽略。必须设置真实的数据库 URL、Workspace 根、映射文件、Runtime Root 和 Docker Socket。
 
 Frontend 运行时固定为 Node.js 22。Native 脚本会依次使用 `CONTEXT_ROUTER_NODE_HOME`、Apple Silicon Homebrew、Intel Homebrew 和当前 `PATH` 中满足版本要求的 Node；找不到时直接失败并给出安装提示，不再用其他主版本继续启动。
 
@@ -27,7 +27,7 @@ Host Runner 由 `launchd` 托管时不会继承交互式 Shell 的完整 `PATH`�
 
 - `scripts/bootstrap-native.sh`：检查工具链并安装锁定依赖。
 - `scripts/dev-native.sh`：以前台开发模式启动三项服务。
-- `scripts/start-native-stack.sh`：migration、Backend、Runner、Frontend 生产构建与启动；macOS 下使用当前登录会话的 `launchd` 托管进程，但不安装开机启动项。
+- `scripts/start-native-stack.sh`：migration、Backend、Runner、Frontend 生产构建与启动；三项都已在运行时直接成功返回。macOS 下使用当前登录会话的 `launchd` 托管进程，不写入登录自启。配置管理里的脚本开关只绑定业务项目启动项（如攀枝花 Host Runtime），不安装登录启动项。
 - `scripts/status-native-stack.sh`：检查 PID、HTTP、Runner 心跳和 Docker Engine。
 - `scripts/stop-native-stack.sh`：只停止 Context Router，不停止 Workspace 容器。
 - `scripts/restart-native-stack.sh`：重启 Context Router Native Stack。

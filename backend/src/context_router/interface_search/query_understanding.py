@@ -4,6 +4,7 @@ import re
 
 from context_router.interface_search.domain import IntentCandidate, NegativeConstraint, QueryIntent
 from context_router.interface_search.embedding import tokenize
+from context_router.interface_search.route_identity import extract_service_hints
 from context_router.interface_search.slots import (
     infer_cardinality,
     infer_lookup_keys,
@@ -41,7 +42,10 @@ def understand_query(query: str, profile: WorkspaceProfile | None = None) -> Que
     audiences = _resolve_audience_roles(semantic_text, audiences, profile)
     explicit_audiences = list(audiences)
     domains = match_taxonomy(semantic_text, "domain", profile)
-    service_hints = match_taxonomy(semantic_text, "service", profile)
+    service_hints = extract_service_hints(
+        positive_text,
+        match_taxonomy(semantic_text, "service", profile),
+    )
     action_text = _mask_workspace_resources(semantic_text, profile)
     actions = match_taxonomy(action_text, "action", profile)
     actions = _remove_grammar_only_execute(actions, action_text)
@@ -49,15 +53,32 @@ def understand_query(query: str, profile: WorkspaceProfile | None = None) -> Que
     actions = _remove_field_label_actions(actions, action_text)
     actions = _refine_action_roles(action_text, actions, profile)
     resource_values = profile.match(semantic_text, "resource") if profile else []
-    resource, context_resources = _resolve_resource_roles(semantic_text, domains, profile)
-    resource = resource or infer_resource(semantic_text, domains, profile)
-    if not resource:
+    resource, context_resources, ambiguous_resources = _resolve_resource_roles(
+        semantic_text,
+        domains,
+        profile,
+    )
+    if ambiguous_resources:
+        # A shared alias such as "transport order" may intentionally point to
+        # several mode-specific resources.  Do not turn the first configured
+        # mapping into a false high-confidence resource/domain constraint.
+        # Domain words outside the ambiguous resource span are handled inside
+        # _resolve_resource_roles and would already have resolved the tie.
+        domains = []
+    if not resource and not ambiguous_resources:
+        resource = infer_resource(semantic_text, domains, profile)
+    if not resource and not ambiguous_resources:
         # Controller names remain a useful low-confidence family hint, but are
         # interpreted independently of workspace business vocabulary.
         resource = infer_resource(positive_text, domains, None)
     domains = _refine_domains_for_resource(domains, resource, profile)
     resource_candidates = [
-        IntentCandidate(value=value, confidence=0.92, evidence=[value]) for value in resource_values
+        IntentCandidate(
+            value=value,
+            confidence=0.55 if value in ambiguous_resources else 0.92,
+            evidence=["shared_alias" if value in ambiguous_resources else value],
+        )
+        for value in resource_values
     ]
     if resource and resource not in resource_values:
         resource_candidates.append(
@@ -158,6 +179,10 @@ def understand_query(query: str, profile: WorkspaceProfile | None = None) -> Que
         for key in positive_slots
     }
     slot_confidences.update(negative_confidences)
+    uncertain_slots = []
+    if ambiguous_resources:
+        uncertain_slots.append("resource")
+        uncertain_slots.append("domain")
     return QueryIntent(
         raw_query=query,
         normalized_query=normalized,
@@ -187,7 +212,7 @@ def understand_query(query: str, profile: WorkspaceProfile | None = None) -> Que
         negative_slots=negative_slots,
         negative_constraints=negative_constraints,
         slot_confidences=slot_confidences,
-        uncertain_slots=[],
+        uncertain_slots=uncertain_slots,
     )
 
 
@@ -356,12 +381,12 @@ def _resolve_resource_roles(
     text: str,
     domains: list[str],
     profile: WorkspaceProfile | None,
-) -> tuple[str, list[str]]:
+) -> tuple[str, list[str], list[str]]:
     if profile is None:
-        return "", []
+        return "", [], []
     occurrences = profile.match_occurrences(text, "resource")
     if not occurrences:
-        return "", []
+        return "", [], []
 
     normalized = re.sub(r"[\s_-]+", "", text).lower()
 
@@ -375,7 +400,7 @@ def _resolve_resource_roles(
         if before:
             target = max(before, key=lambda item: (item[2], item[3]))[0]
             contexts = list(dict.fromkeys(item[0] for item in after if item[0] != target))
-            return target, contexts
+            return target, contexts, []
 
     def is_lookup_bound(
         occurrence: tuple[str, int, int, int, str],
@@ -391,13 +416,87 @@ def _resolve_resource_roles(
     lookup_occurrences = [item for item in occurrences if is_lookup_bound(item)]
     target_occurrences = [item for item in occurrences if not is_lookup_bound(item)]
     selection_pool = target_occurrences or occurrences
+    grammar_contexts: list[str] = []
+    action_match = re.search(
+        r"(?:分页查询|批量查询|查询|查看|获取|删除|新增|创建|生成|处理|提交|修改|更新)",
+        normalized,
+    )
+    if action_match:
+        after_action = [item for item in selection_pool if item[1] >= action_match.end()]
+        if after_action:
+            grammar_contexts = list(
+                dict.fromkeys(
+                    item[0]
+                    for item in selection_pool
+                    if item[2] <= action_match.start()
+                    and item[0] not in {candidate[0] for candidate in after_action}
+                )
+            )
+            selection_pool = after_action
+
+    max_alias_length = max(len(re.sub(r"[\s_-]+", "", item[4])) for item in selection_pool)
+    strongest = [
+        item
+        for item in selection_pool
+        if len(re.sub(r"[\s_-]+", "", item[4])) == max_alias_length
+    ]
+    evidence_groups: dict[tuple[int, int, str], list[tuple[str, int, int, int, str]]] = {}
+    for item in strongest:
+        evidence_groups.setdefault(
+            (item[1], item[2], re.sub(r"[\s_-]+", "", item[4]).lower()),
+            [],
+        ).append(item)
+    ambiguous_group = next(
+        (
+            group
+            for group in evidence_groups.values()
+            if len({item[0] for item in group}) > 1
+        ),
+        [],
+    )
+    if ambiguous_group:
+        ambiguous_values = list(dict.fromkeys(item[0] for item in ambiguous_group))
+        resource_spans = {(item[1], item[2]) for item in ambiguous_group}
+        explicit_domains = {
+            canonical
+            for canonical, start, end, _priority, _alias in profile.match_occurrences(
+                text,
+                "domain",
+            )
+            if not any(
+                span_start <= start and end <= span_end
+                for span_start, span_end in resource_spans
+            )
+        }
+        if explicit_domains:
+            compatible = [
+                value
+                for value in ambiguous_values
+                if (term := profile.term("resource", value))
+                and explicit_domains & set(term.metadata.get("domains", []))
+            ]
+            if len(compatible) == 1:
+                contexts = list(
+                    dict.fromkeys(
+                        [
+                            *grammar_contexts,
+                            *(
+                                item[0]
+                                for item in lookup_occurrences
+                                if item[0] != compatible[0]
+                            ),
+                        ]
+                    )
+                )
+                return compatible[0], contexts, []
+        return "", grammar_contexts, ambiguous_values
 
     # Select the most specific phrase first. Domain hints normally disambiguate
     # shared short aliases, but a substantially longer compound resource may
     # correct a domain inferred from a participant noun. Domain compatibility
     # is evaluated only for target-role occurrences; lookup owners are context
     # and must not force the target into their domain.
-    domain_set = set(domains)
+    domain_set = set() if grammar_contexts else set(domains)
     if domain_set:
         compatible = [
             item
@@ -416,7 +515,7 @@ def _resolve_resource_roles(
             )
             strongest_length = len(re.sub(r"[\s_-]+", "", strongest[4]))
             if strongest_length < 6 or strongest[3] < 50:
-                return "", []
+                return "", [], []
         else:
             max_all_length = max(len(re.sub(r"[\s_-]+", "", item[4])) for item in selection_pool)
             max_compatible_length = max(len(re.sub(r"[\s_-]+", "", item[4])) for item in compatible)
@@ -432,8 +531,15 @@ def _resolve_resource_roles(
         selection_pool,
         key=lambda item: (len(re.sub(r"[\s_-]+", "", item[4])), item[3], item[2]),
     )[0]
-    contexts = list(dict.fromkeys(item[0] for item in lookup_occurrences if item[0] != target))
-    return target, contexts
+    contexts = list(
+        dict.fromkeys(
+            [
+                *grammar_contexts,
+                *(item[0] for item in lookup_occurrences if item[0] != target),
+            ]
+        )
+    )
+    return target, contexts, []
 
 
 def _refine_domains_for_resource(

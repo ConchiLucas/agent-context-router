@@ -9,6 +9,9 @@
 | 产品目标、文档格式和全文检索 | [业务功能说明](./BUSINESS_FEATURES.md) | `services/document_tree.py`、`services/document_search.py` |
 | 工作空间/项目只读页面、AI/运维 API 和缓存链路 | [业务功能说明](./BUSINESS_FEATURES.md)、[前后端链路速查](./FRONTEND_BACKEND_FLOW.md) | `workspace-dashboard.tsx`、`workspace-detail.tsx`、`middleware/browser_read_only.py`、`api/workspaces.py`、`services/project_registry.py` |
 | 工作空间本机路径、卡片显示和共享文档目录 | [业务功能说明](./BUSINESS_FEATURES.md)、[启动与开发规范](./STARTUP_GUIDE.md) | `.context-router/workspaces.local.yaml`、`services/local_workspace_mapping.py` |
+| 工作空间脚本只读查看 | [业务功能说明](./BUSINESS_FEATURES.md)、[前后端链路速查](./FRONTEND_BACKEND_FLOW.md) | `workspace-scripts-view.tsx`、`services/workspace_shared_files.py`、`api/workspaces.py` |
+| 项目启动与全局脚本管理 | [业务功能说明](./BUSINESS_FEATURES.md)、[前后端链路速查](./FRONTEND_BACKEND_FLOW.md) | `managed-scripts-manager.tsx`、`services/managed_scripts.py`、`api/managed_scripts.py` |
+| 控制面规则管理 | [业务功能说明](./BUSINESS_FEATURES.md)、[前后端链路速查](./FRONTEND_BACKEND_FLOW.md) | `managed-rules-manager.tsx`、`services/managed_rules.py`、`api/managed_rules.py`、`services/context_preparation.py` |
 | 系统 JSON 文档、prepare 使用说明和系统文档菜单 | [系统文档维护说明](./SYSTEM_GUIDES.md)、[前后端链路速查](./FRONTEND_BACKEND_FLOW.md) | `system-guide-manager.tsx`、`api/system_guides.py`、`services/system_guides.py` |
 | 启动、测试、lint、build | [启动与开发规范](./STARTUP_GUIDE.md) | `docker-compose.yml` |
 | 工作空间/项目持久化和数据库相关判断 | [数据库信息](./DATABASE_INFO.md) | `workspace_repository.py`、`project_repository.py`、`migrations/` |
@@ -17,12 +20,19 @@
 | Workspace 启动、增量更新和 Host Runner | [启动与开发规范](./STARTUP_GUIDE.md)、[前后端链路速查](./FRONTEND_BACKEND_FLOW.md) | `services/workspace_runtime_orchestration.py`、`api/runtime_runner.py`、`scripts/context_router_host_runner.py` |
 | 表关联查询与展示 | [表关联设计](./development-details/table_relation_design.md)、[按表名补全表关联](./development-details/table_relation_complete.md)、[表关联种子怎么写](./development-details/table_relation_seed.md)、[前后端链路速查](./FRONTEND_BACKEND_FLOW.md) | `services/table_relation_query.py`、`services/table_relation_rules.py`、`api/table_relations.py`、`scripts/seed_table_relations.py`、`table-relation-explorer.tsx`、`lib/table-relations.ts` |
 | 接口转发 | [前后端链路速查](./FRONTEND_BACKEND_FLOW.md) | `services/interface_forwarding.py`、`api/interface_forwarding.py`、`interface-forwarding-manager.tsx` |
+| 提示词接口匹配与客户端裁定对照 | [业务功能说明](./BUSINESS_FEATURES.md)、[前后端链路速查](./FRONTEND_BACKEND_FLOW.md) | `interface-prompt-lab.tsx`、`services/interface_prompt_matches.py`、`services/interface_prompt_clients.py`、`api/interface_prompt_matches.py`、`interface_search/` |
 | 接口语义检索与迁移验收 | [接口语义检索迁移验收](./INTERFACE_SEARCH_ACCEPTANCE.md) | `interface_search/`、`services/interface_forwarding_context.py`、`tests/test_interface_search_mcp_flow.py` |
 | 业务值映射、数据库取值规则与接口参数绑定 | [业务功能说明](./BUSINESS_FEATURES.md)、[数据库信息](./DATABASE_INFO.md)、[前后端链路速查](./FRONTEND_BACKEND_FLOW.md) | `services/value_mapping.py`、`api/value_mappings.py`、`value-mapping-manager.tsx` |
 | AI 容器日志排查与日志可视化 | [业务功能说明](./BUSINESS_FEATURES.md)、[启动与开发规范](./STARTUP_GUIDE.md)、[前后端链路速查](./FRONTEND_BACKEND_FLOW.md) | `services/workspace_containers.py`、`services/ai_log_visualization.py`、`api/ai_log_visualization.py`、`log-visualization-workbench.tsx` |
 | AI 任务结论、时间线和调用链路联动 | [MCP 使用说明](./managed/context-router-usage-guide.md)、[前后端链路速查](./FRONTEND_BACKEND_FLOW.md) | `services/ai_task_visualization.py`、`api/ai_task_visualization.py`、`task-visualization-workbench.tsx`、`trace-explorer.tsx` |
 
 ## 当前架构约束
+
+- 浏览器录制 migration head 为 `20260920_0094`；原始采集记录先持久化到
+  `browser_interface_captures`，以 capture_id/revision 确认，随后关联接口日志。
+  不再因接口未收录或歧义匹配丢弃记录。已匹配查询接口按 Workspace、环境、接口和
+  北京时间自然日保留一个成功优先样本；其他操作类型仍逐条保存。扩展的采集/离线/响应补全和限制见
+  `browser-extension/interface-log-capture/README.md`。
 
 - Workspace 和 Project 的根入口文件必须命名为 `AGENTS.md`；Workspace 根入口可选，缺失时使用合成根。新 Project 的入口统一配置在 Workspace 的 `docs/` 层级下。
 - 文档层级只来自 `## 下级文档` 下的“功能说明 / 相对路径”表格。存在真实 Workspace 根 `AGENTS.md` 时，展示树和 prepare 文档树严格保留其显式父子关系，不自动把 Project 根入口追加为直接下级；缺少真实根时，合成根才直接列出各 Project 入口。
@@ -32,8 +42,8 @@
 - 工作空间业务 ID、项目和数据源配置保存在 PostgreSQL；卡片显示、主目录和共享文档目录由当前项目 `.context-router/workspaces.local.yaml` 控制。启用本机文件后，不使用数据库 `root_path` 覆盖本机路径。
 - PostgreSQL 中的 Workspace 文件当前版本是 `docs/`、`script/`、`deploy/context-router/` 和 `deploy/host-runtime/` 的分发源；主目录是运行时物化位置。`document_reader_paths` 中相同代码的其他分支目录可 prepare/search/read 主目录文档，但数据库和部署工具必须拒绝。
 - `workspace_shared_file_sets` 与 `workspace_shared_files` 保存最近 5 个完整版本、集合摘要和逐文件 SHA-256。页面提供发布新版本和原子恢复当前版本；Host Action 执行前自动同步过期物化副本，恢复失败必须回滚。
-- Context Router 自身的使用规则保存在 `system_guides`，不写入业务工作空间；页面另外直接展示当前 MCP `tools/list`，prepare 不返回系统文档。
-- 浏览器管理面以只读查看为主，并允许既有安全操作和已有系统文档 JSON 正文保存。结构化业务值映射的增删改与候选预览只供本机 AI/运维调用，不在页面提供入口；系统文档的新建、删除和元数据调整同样只供本机 AI/运维，页面只有“保存内容”。
+- Context Router 自身的使用规则保存在 `system_guides`，不写入业务工作空间；页面另外直接展示当前 MCP `tools/list`，prepare 不返回系统文档。所有项目必须遵守的控制面规则保存在 `managed_rules`，由 `prepare_task_context.workspace_rules` 下发；各项目 `AGENTS.md` 只写指针，不复制正文。
+- 浏览器管理面以只读查看为主，并允许既有安全操作和已有系统文档 JSON 正文保存。结构化业务值映射的增删改与候选预览只供本机 AI/运维调用，不在页面提供入口；系统文档的新建、删除和元数据调整同样只供本机 AI/运维，页面只有“保存内容”。控制面规则页面只读展示 Markdown，维护走本机 AI/运维接口。
 - 工作空间、项目、数据源、数据库清单、项目授权、环境映射/JSON、默认环境和运行配置仍由本机 AI/运维使用既有受校验 API 维护；此类调用不携带 `Origin` 或 `Sec-Fetch-*` 浏览器请求头。不要为了绕过页面限制直接写 PostgreSQL，否则会跳过路径、事务、环境 revision、缓存与 Connector 失效处理。
 - 物理数据源配置全局共享，数据库授权继续由 `project_databases` 绑定具体 Project；Workspace task 汇总使用所有子项目当前有效的授权，`mcp_alias` 在整个 Workspace 内大小写无关唯一。
 - 每个 Workspace 独立拥有动态环境列表；`local` 固定存在且为默认，`test`、`uat` 或其他名称只按项目实际需要登记。`prepare_task_context` 显式环境记录 `task_explicit`，省略时固定 `local` 并记录 `workspace_default`。环境 task 保存共享 revision，关联变化后旧 task 必须重新 prepare，禁止静默换库。表关联是例外：每个 Workspace 只读取一个已发布基准快照，不继承 task 环境；攀枝花当前基准是 `uat`，其他现有 Workspace 没有快照时按 `local` 规划。
@@ -51,17 +61,17 @@
 - Native Backend 只做运行控制面和快照物化；Host Runtime Runner 通过回环 Token 协议领取租约并执行固定 `deploy.sh`。Context Router 自身不通过 Docker 启动，Backend 禁止直接执行目标 Workspace；业务 Workspace 继续由 Docker Compose 承载。
 - 新 task 的文档搜索固定绑定 Workspace，查询工作空间根文档独立索引及各 Project 同版本索引，再聚合去重；索引不可用时显式失败，不回退到进程内全文扫描。
 - cwd 路由先按最长前缀选择最深 Workspace，再按 Project 的源码根而不是文档入口目录选择最深 Project；`active_project` 只作为元数据，不收窄 Workspace 的文档和数据库范围。任一项目缓存不可用时 prepare 明确失败。
-- prepare 返回 task_id、固化后的环境快照、可用能力、必要 warning，以及节点仅含 `document_id/summary/children` 的任务局部三层投影。环境按 Workspace 已登记别名从任务描述确定；后续工具不能覆盖。数据库访问统一按 `task_id -> database_context_id -> 环境 revision/物理库快照 -> 当前项目授权/连接/策略 -> Connector` 路由，客户端不再传数据库别名。
+- prepare 返回 task_id、固化后的环境快照、可用能力、必要 warning、控制面 `workspace_rules`，以及节点仅含 `document_id/summary/children` 的任务局部三层投影。环境按 Workspace 已登记别名从任务描述确定；后续工具不能覆盖。数据库访问统一按 `task_id -> database_context_id -> 环境 revision/物理库快照 -> 当前项目授权/连接/策略 -> Connector` 路由，客户端不再传数据库别名。
 - 项目数据库只有在数据库可用且非系统库、关联为只读、存在 MCP 别名、Engine 已实现 Connector 时才暴露给 Workspace task；Workspace、数据源和关联均没有启停状态。
 - MySQL、MariaDB、PostgreSQL、ClickHouse 当前实现发现、对象搜索和有界只读查询；SQL Server、SQLite、Oracle 的配置仅供查看并可由 AI/运维 API 维护。
 - SQL 安全策略必须 fail-closed：只允许单条、可解析、限定当前数据库/Schema 的只读语句；不能把客户端 LIMIT 当作唯一边界，仍需服务端行数、字节数、超时和数据库侧只读限制。
 - Connector 延迟创建且生命周期只归 `ConnectorManager`；数据源配置版本变化或删除时必须失效旧连接，应用退出时统一关闭。
 - `mcp_database_calls` 审计历史只保存客观元数据和 SQL SHA-256；两个数据库 MCP 工具另以独立、可过期的有界 JSON 快照保存实际请求和最终 MCP 响应，主 Trace 接口不内联这些大字段。
-- Context Router 当前 26 个 MCP 工具在统一分发入口记录到 `mcp_tool_calls`；任务内顺序由 PostgreSQL 调用 ID 生成，文档/数据库专属明细通过 `tool_call_id` 关联，观测失败不得改变工具业务结果；中间件工具只记录组件数量、脱敏模式和警告数量，不记录连接值；已下线工具的历史仍可查询。
+- Context Router 当前 26 个 MCP 工具在统一分发入口记录到 `mcp_tool_calls`；任务内顺序由 PostgreSQL 调用 ID 生成，文档/数据库专属明细通过 `tool_call_id` 关联，观测失败不得改变工具业务结果。接口检索、候选比较和详情读取可选携带通用 `trace_context`，以 `run_id/item_id/step_id/attempt` 关联外部评测或工作流；核心模型不包含工作空间、批次或业务专属字段。中间件工具只记录组件数量、脱敏模式和警告数量，不记录连接值；已下线工具的历史仍可查询。
 - 调用链路页面记录 Codex、Gemini、Antigravity 客户端实际发送到 Context Router `/mcp` 的当前工具调用，并保留已下线工具的历史记录；不连接、代理、聚合或接收其他 MCP Server 的调用上报，也不建设跨 Server Trace。
 - 顶层页面只读展示 Workspace；进入详情后使用“前端项目 / 后端项目”两页签。环境详情、查看调用记录、查看文档树和查看 MCP JSON 位于 Workspace 工具栏；数据源汇总移动到环境详情页，并由页头环境下拉框统一切换 Nacos、流转说明和授权集合。
 - 完整出入参只对白名单数据库工具 `search_database_objects`、`execute_database_query` 自动采集，并通过 no-store 详情 API 懒加载；prepare/search/read 不建立完整 payload 快照。
 - 新 task 使用 `scope='workspace'` 和无外键的稳定 Workspace/活动项目快照；`scope='project'` 的旧 task 继续按原 project_id/project_key 读取、搜索和解析数据库，避免升级后历史串链。后端启动会收敛遗留 running 调用，Trace API 与页面明确区分完整、运行中和可能不完整。
 - 表关联当前只实现查询展示。关联数据的生成尚未实现（没有命名候选规则、没有跨库推断、没有数据实测），页面数据由种子脚本写入示例。边按「规范化无向对加方向字段」存储，`orientation` 是候选生成期就确定的结构信息而不是实测结论；`cardinality` 统一按父到子存储，`many_to_one` 由读取侧按当前选中表翻转得到，`many_to_many` 由中间表折叠在读取时合成。翻转后的基数直接充当分组依据，页面固定四组 `1 — 1`、`1 — N`、`N — 1`、`N — N`，空组不渲染。junction 折叠是页面级视图偏好，开关在左栏；`tables` 接口按基数额外给出 `folded_*_count`，前端做减法，左栏计数、排序、隐藏判断和顶部总数都跟随折叠状态，和详情实际渲染的行数一致。八个计数由 `project_table_counters()` 走详情同一对视图构造器算出，种子脚本直接复用。`cardinality = 'unknown'` 的边在查询服务就被过滤（不放前端，因为左栏计数存在库里，两处过滤必然对不上）。页面只回答「方向是什么」：状态判定、证据来源、实测指标和表的估算行数、主键、逻辑删除标识既不落库也不展示，一行只有基数徽章和列名对两层，设计保留在 `table_relation_design.md` 等探测流水线实现时再加回。公共字段名单、可展示基数和基数翻转集中在 `services/table_relation_rules.py`，读取路径和种子脚本共用。表关联只有六个只读 GET 接口，没有 rebuild POST，因此不涉及浏览器 POST 白名单和系统任务过滤。
-- migration head 为 `20260905_0078`；`0073` 至 `0075` 重建接口语义检索链路，`0076` 为 Workspace 文件副本增加版本与摘要，`0077` 增加攀枝花工作空间的一键“启动并检查”白名单动作，`0078` 持久化三级就绪状态、耗时和失败摘要。
+- migration head 为 `20260920_0094`；`0073` 至 `0075` 重建接口语义检索链路，`0076` 为 Workspace 文件副本增加版本与摘要，`0077` 增加攀枝花工作空间的一键“启动并检查”白名单动作，`0078` 持久化三级就绪状态、耗时和失败摘要，`0079` 增加项目启动/全局脚本管理，`0080` 拆分三类文件同步，`0081` 增加控制面规则表，`0082` 允许项目启动脚本保障共享配置中心，`0083` 允许项目启动脚本保障 Personal Utils Hub，`0084` 增加提示词与接口匹配记录表，`0085` 为对照表增加正确接口字段，`0086` 增加易混点说明，`0087` 为浏览器实时采集增加防重 ID，`0088` 增加独立原始采集表及版本补全，`0089` 增加多客户端接口盲测结果，`0090` 增加通用 MCP 调用关联上下文，`0091` 删除本机 AI 默认项表，`0092` 增加 Grok Heavy 接口盲测结果，`0093` 增加浏览器查询接口每日样本归并，`0094` 使同一采集 ID 的重试与响应补全计数幂等。
 - 本地服务默认只绑定回环地址；真实 ClickHouse 测试使用根 Compose 的 `integration` profile 和固定镜像版本。

@@ -21,13 +21,17 @@ from context_router.api.document_chain_analytics import (
 )
 from context_router.api.document_read_stats import router as document_read_stats_router
 from context_router.api.interface_forwarding import router as interface_forwarding_router
+from context_router.api.interface_prompt_matches import (
+    router as interface_prompt_matches_router,
+)
+from context_router.api.managed_rules import router as managed_rules_router
+from context_router.api.managed_scripts import router as managed_scripts_router
 from context_router.api.mcp_integration import router as mcp_integration_router
 from context_router.api.mcp_traces import router as mcp_traces_router
 from context_router.api.nacos_profiles import router as nacos_profiles_router
 from context_router.api.projects import router as projects_router
 from context_router.api.runtime_configs import router as runtime_configs_router
 from context_router.api.runtime_runner import router as runtime_runner_router
-from context_router.api.shared_config import router as shared_config_router
 from context_router.api.system_guides import router as system_guides_router
 from context_router.api.table_relations import router as table_relations_router
 from context_router.api.tasks import router as tasks_router
@@ -101,6 +105,21 @@ from context_router.repositories.document_search_repository import (
     DocumentSearchStore,
     PostgresDocumentSearchRepository,
 )
+from context_router.repositories.interface_prompt_match_repository import (
+    InMemoryInterfacePromptMatchRepository,
+    InterfacePromptMatchStore,
+    PostgresInterfacePromptMatchRepository,
+)
+from context_router.repositories.managed_rule_repository import (
+    InMemoryManagedRuleRepository,
+    ManagedRuleStore,
+    PostgresManagedRuleRepository,
+)
+from context_router.repositories.managed_script_repository import (
+    InMemoryManagedScriptRepository,
+    ManagedScriptStore,
+    PostgresManagedScriptRepository,
+)
 from context_router.repositories.mcp_environment_default_repository import (
     InMemoryMcpEnvironmentDefaultRepository,
     McpEnvironmentDefaultStore,
@@ -141,11 +160,6 @@ from context_router.repositories.runtime_runner_repository import (
     InMemoryRuntimeRunnerRepository,
     PostgresRuntimeRunnerRepository,
     RuntimeRunnerStore,
-)
-from context_router.repositories.shared_ai_default_repository import (
-    InMemorySharedAiDefaultRepository,
-    PostgresSharedAiDefaultRepository,
-    SharedAiDefaultStore,
 )
 from context_router.repositories.system_guide_repository import (
     InMemorySystemGuideRepository,
@@ -196,15 +210,19 @@ from context_router.services.document_read_stats import DocumentReadStatsService
 from context_router.services.document_search_index import DocumentSearchIndexer
 from context_router.services.interface_forwarding import InterfaceForwardingService
 from context_router.services.interface_forwarding_context import InterfaceForwardingContextService
+from context_router.services.interface_prompt_clients import (
+    PostgresInterfaceClientJudgmentFinder,
+)
+from context_router.services.interface_prompt_matches import InterfacePromptMatchService
 from context_router.services.local_workspace_mapping import LocalWorkspaceMappingService
+from context_router.services.managed_rules import ManagedRulesService
+from context_router.services.managed_scripts import ManagedScriptsService
 from context_router.services.mcp_integration import McpIntegrationService
 from context_router.services.mcp_trace import McpTraceService
 from context_router.services.nacos_middleware import MiddlewareContextService
 from context_router.services.project_registry import ProjectRegistry, ProjectRegistryError
 from context_router.services.runtime_execution import RuntimeExecutionService
 from context_router.services.runtime_materialization import RuntimeMaterializationService
-from context_router.services.shared_ai_config import SharedAiConfigService
-from context_router.services.shared_config_client import SharedConfigCenterClient
 from context_router.services.system_guides import SystemGuideService
 from context_router.services.table_relation_context import TableRelationContextService
 from context_router.services.value_mapping import ValueMappingService
@@ -247,7 +265,9 @@ def create_app(
     system_guide_repository: SystemGuideStore | None = None,
     nacos_profile_repository: NacosProfileStore | None = None,
     mcp_environment_default_repository: McpEnvironmentDefaultStore | None = None,
-    shared_ai_default_repository: SharedAiDefaultStore | None = None,
+    managed_script_repository: ManagedScriptStore | None = None,
+    managed_rule_repository: ManagedRuleStore | None = None,
+    interface_prompt_match_repository: InterfacePromptMatchStore | None = None,
     ai_data_query_repository: AiDataQueryStore | None = None,
     ai_log_investigation_repository: AiLogInvestigationStore | None = None,
 ) -> FastAPI:
@@ -314,11 +334,6 @@ def create_app(
         if resolved_settings.database_url
         else InMemoryMcpEnvironmentDefaultRepository()
     )
-    resolved_shared_ai_default_repository = shared_ai_default_repository or (
-        PostgresSharedAiDefaultRepository(resolved_settings.database_url)
-        if resolved_settings.database_url
-        else InMemorySharedAiDefaultRepository()
-    )
     resolved_ai_data_query_repository = ai_data_query_repository or (
         PostgresAiDataQueryRepository(resolved_settings.database_url)
         if resolved_settings.database_url
@@ -363,13 +378,6 @@ def create_app(
         else InMemorySystemGuideRepository()
     )
     system_guide_service = SystemGuideService(resolved_system_guide_repository)
-    shared_ai_config_service = SharedAiConfigService(
-        SharedConfigCenterClient(
-            resolved_settings.shared_config_center_base_url,
-            resolved_settings.shared_config_center_timeout_seconds,
-        ),
-        resolved_shared_ai_default_repository,
-    )
     interface_search_service: SearchService | None = None
     if resolved_settings.database_url:
         interface_search_settings = InterfaceSearchSettings(
@@ -436,6 +444,29 @@ def create_app(
         shared_file_repository=resolved_workspace_shared_file_repository,
         registry=registry,
     )
+    resolved_managed_script_repository = managed_script_repository or (
+        PostgresManagedScriptRepository(resolved_settings.database_url)
+        if resolved_settings.database_url
+        else InMemoryManagedScriptRepository()
+    )
+    managed_scripts_service = ManagedScriptsService(
+        settings=resolved_settings,
+        repository=resolved_managed_script_repository,
+        workspaces=resolved_workspace_repository,
+        local_mapping=local_workspace_mapping,
+        shared_files=workspace_shared_files_service,
+    )
+    resolved_managed_rule_repository = managed_rule_repository or (
+        PostgresManagedRuleRepository(resolved_settings.database_url)
+        if resolved_settings.database_url
+        else InMemoryManagedRuleRepository()
+    )
+    managed_rules_service = ManagedRulesService(resolved_managed_rule_repository)
+    resolved_interface_prompt_match_repository = interface_prompt_match_repository or (
+        PostgresInterfacePromptMatchRepository(resolved_settings.database_url)
+        if resolved_settings.database_url
+        else InMemoryInterfacePromptMatchRepository()
+    )
     resolved_runtime_operation_repository = runtime_operation_repository or (
         PostgresRuntimeOperationRepository(resolved_settings.database_url)
         if resolved_settings.database_url
@@ -453,6 +484,8 @@ def create_app(
         ),
         local_mapping=local_workspace_mapping,
         shared_files_service=workspace_shared_files_service,
+        shared_config_ensure=managed_scripts_service.ensure_shared_config,
+        personal_utils_ensure=managed_scripts_service.ensure_personal_utils,
     )
     resolved_read_repository = document_read_repository or PostgresDocumentReadRepository(
         resolved_settings.database_url
@@ -480,6 +513,16 @@ def create_app(
         if resolved_settings.database_url
         else InMemoryMcpToolCallRepository()
     )
+    interface_prompt_match_service = InterfacePromptMatchService(
+        resolved_interface_prompt_match_repository,
+        resolved_workspace_repository,
+        resolved_database_environment_repository,
+        interface_search_service,
+        PostgresInterfaceClientJudgmentFinder(
+            resolved_settings.database_url,
+            resolved_mcp_tool_call_repository,
+        ),
+    )
     resolved_database_payload_repository = database_payload_repository or (
         PostgresDatabaseToolPayloadRepository(resolved_settings.database_url)
         if resolved_settings.database_url
@@ -499,6 +542,7 @@ def create_app(
         data_source_repository=resolved_data_source_repository,
         database_environment_repository=resolved_database_environment_repository,
         local_mapping=local_workspace_mapping,
+        shared_file_repository=resolved_workspace_shared_file_repository,
     )
     database_access_service = DatabaseAccessService(
         settings=resolved_settings,
@@ -571,6 +615,7 @@ def create_app(
         resolved_task_repository,
         database_access_service,
         resolved_mcp_environment_default_repository,
+        managed_rules_service,
     )
     middleware_context_service = MiddlewareContextService(
         registry=registry,
@@ -707,6 +752,9 @@ def create_app(
     app.state.workspace_container_service = workspace_container_service
     app.state.workspace_shared_files_service = workspace_shared_files_service
     app.state.workspace_shared_file_repository = resolved_workspace_shared_file_repository
+    app.state.managed_scripts_service = managed_scripts_service
+    app.state.managed_rules_service = managed_rules_service
+    app.state.interface_prompt_match_service = interface_prompt_match_service
     app.state.workspace_repository = resolved_workspace_repository
     app.state.workspace_management_service = workspace_management_service
     app.state.local_workspace_mapping = local_workspace_mapping
@@ -734,7 +782,6 @@ def create_app(
     app.state.mcp_trace_service = mcp_trace_service
     app.state.system_guide_repository = resolved_system_guide_repository
     app.state.system_guide_service = system_guide_service
-    app.state.shared_ai_config_service = shared_ai_config_service
     app.state.interface_forwarding_service = interface_forwarding_service
     app.state.interface_forwarding_context_service = interface_forwarding_context_service
     app.state.value_mapping_service = value_mapping_service
@@ -776,7 +823,9 @@ def create_app(
     app.include_router(document_read_stats_router, prefix=resolved_settings.api_prefix)
     app.include_router(document_chain_analytics_router, prefix=resolved_settings.api_prefix)
     app.include_router(system_guides_router, prefix=resolved_settings.api_prefix)
-    app.include_router(shared_config_router, prefix=resolved_settings.api_prefix)
+    app.include_router(managed_scripts_router, prefix=resolved_settings.api_prefix)
+    app.include_router(managed_rules_router, prefix=resolved_settings.api_prefix)
+    app.include_router(interface_prompt_matches_router, prefix=resolved_settings.api_prefix)
     app.include_router(interface_forwarding_router, prefix=resolved_settings.api_prefix)
     app.include_router(value_mappings_router, prefix=resolved_settings.api_prefix)
     app.include_router(ai_data_visualization_router, prefix=resolved_settings.api_prefix)

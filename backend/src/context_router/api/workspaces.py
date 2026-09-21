@@ -5,7 +5,12 @@ from fastapi.responses import StreamingResponse
 from context_router.schemas.context import PrepareTaskContextResult
 from context_router.schemas.data_sources import WorkspaceDataSourceSummary
 from context_router.schemas.projects import DocumentDetail, DocumentTreeNode
-from context_router.schemas.workspace_shared_files import WorkspaceSharedFilesResult
+from context_router.schemas.workspace_shared_files import (
+    WorkspaceScriptDetail,
+    WorkspaceScriptList,
+    WorkspaceScriptSyncResult,
+    WorkspaceSharedFilesResult,
+)
 from context_router.schemas.workspaces import (
     WorkspaceContainerBulkAction,
     WorkspaceContainerBulkActionResult,
@@ -282,6 +287,46 @@ def refresh_workspace(
         return _service(request).refresh_workspace(workspace_id)
     except WorkspaceManagementError as exc:
         raise _http_error(exc) from exc
+
+
+@router.get(
+    "/{workspace_id}/scripts",
+    response_model=WorkspaceScriptList,
+)
+def list_workspace_scripts(workspace_id: str, request: Request) -> WorkspaceScriptList:
+    try:
+        return _shared_files_service(request).list_scripts(workspace_id)
+    except WorkspaceSharedFilesError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.get(
+    "/{workspace_id}/scripts/item",
+    response_model=WorkspaceScriptDetail,
+)
+def get_workspace_script(
+    workspace_id: str,
+    request: Request,
+    path: str = Query(..., min_length=1),
+) -> WorkspaceScriptDetail:
+    try:
+        return _shared_files_service(request).get_script(workspace_id, path)
+    except WorkspaceSharedFilesError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post(
+    "/{workspace_id}/scripts/sync",
+    response_model=WorkspaceScriptSyncResult,
+)
+def sync_workspace_scripts(
+    workspace_id: str,
+    request: Request,
+) -> WorkspaceScriptSyncResult:
+    try:
+        return _shared_files_service(request).sync_scripts(workspace_id)
+    except WorkspaceSharedFilesError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.post(

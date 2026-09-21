@@ -60,10 +60,17 @@ class TaskExecutionContract(BaseModel):
     instructions: list[str] = Field(default_factory=list)
 
 
+class WorkspaceRule(BaseModel):
+    id: str
+    title: str
+    body: str
+
+
 class PrepareTaskContextResult(BaseModel):
     task_id: int
     environment: PreparedDatabaseEnvironment | None = None
     documents: ContextDocumentNode
+    workspace_rules: list[WorkspaceRule] = Field(default_factory=list)
     execution_contract: TaskExecutionContract
     access: list[Literal["documents", "database", "environment", "middleware", "runtime"]] = Field(
         default_factory=lambda: [

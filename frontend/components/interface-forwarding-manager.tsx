@@ -15,7 +15,6 @@ import {
   renameInterfaceForwardingService,
 } from "@/lib/api";
 import { groupInterfaceForwardingIdentities } from "@/lib/interface-forwarding-identities";
-import { sortInterfacesByLastRequest } from "@/lib/interface-forwarding-order";
 import type {
   InterfaceForwardingEnvironment,
   InterfaceForwardingIdentity,
@@ -24,6 +23,8 @@ import type {
   InterfaceForwardingOverview,
   WorkspaceSummary,
 } from "@/lib/types";
+
+const INTERFACE_PAGE_SIZE = 50;
 
 type Modal =
   | { kind: "import" }
@@ -82,6 +83,8 @@ export function InterfaceForwardingManager() {
   const [overview, setOverview] = useState<InterfaceForwardingOverview | null>(null);
   const [activeServiceId, setActiveServiceId] = useState<string>("");
   const [keyword, setKeyword] = useState("");
+  const [appliedKeyword, setAppliedKeyword] = useState("");
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [modal, setModal] = useState<Modal>(null);
@@ -94,58 +97,89 @@ export function InterfaceForwardingManager() {
     }).catch((reason: Error) => setError(reason.message));
   }, []);
 
-  const load = useCallback(async (nextKeyword = keyword) => {
+  const load = useCallback(async ({
+    nextKeyword,
+    nextServiceId,
+    nextPage,
+  }: {
+    nextKeyword: string;
+    nextServiceId: string | null;
+    nextPage: number;
+  }) => {
     if (!workspaceId) return;
     const normalizedKeyword = nextKeyword.trim();
     setLoading(true);
     setError("");
     try {
-      const result = await getInterfaceForwardingOverview(workspaceId, normalizedKeyword);
-      setOverview(result);
-      setActiveServiceId((current) => {
-        if (normalizedKeyword) return "";
-        return result.services.some((item) => item.id === current) ? current : result.services[0]?.id || "";
+      const result = await getInterfaceForwardingOverview(workspaceId, normalizedKeyword, {
+        serviceId: nextServiceId,
+        page: nextPage,
+        pageSize: INTERFACE_PAGE_SIZE,
       });
+      setOverview(result);
+      setActiveServiceId(result.selected_service_id);
+      setAppliedKeyword(normalizedKeyword);
+      setPage(result.page);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "接口转发数据加载失败");
     } finally {
       setLoading(false);
     }
-  }, [keyword, workspaceId]);
+  }, [workspaceId]);
 
-  useEffect(() => { void load(""); }, [workspaceId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    setKeyword("");
+    setAppliedKeyword("");
+    setPage(1);
+    void load({ nextKeyword: "", nextServiceId: null, nextPage: 1 });
+  }, [load]);
 
-  const visibleInterfaces = useMemo(() => {
-    if (!overview) return [];
-    const items = activeServiceId
-      ? overview.services.find((service) => service.id === activeServiceId)?.interfaces ?? []
-      : overview.services.flatMap((service) => service.interfaces);
-    return sortInterfacesByLastRequest(items);
-  }, [activeServiceId, overview]);
+  const visibleInterfaces = overview?.interfaces ?? [];
+
+  const reloadCurrent = useCallback(() => load({
+    nextKeyword: appliedKeyword,
+    nextServiceId: activeServiceId,
+    nextPage: page,
+  }), [activeServiceId, appliedKeyword, load, page]);
+
+  const selectService = useCallback((serviceId: string) => {
+    setPage(1);
+    void load({ nextKeyword: appliedKeyword, nextServiceId: serviceId, nextPage: 1 });
+  }, [appliedKeyword, load]);
+
+  const goToPage = useCallback((nextPage: number) => {
+    if (!overview || loading || nextPage < 1 || nextPage > overview.total_pages) return;
+    void load({ nextKeyword: appliedKeyword, nextServiceId: activeServiceId, nextPage });
+  }, [activeServiceId, appliedKeyword, load, loading, overview]);
+
+  const search = useCallback(() => {
+    setPage(1);
+    void load({ nextKeyword: keyword, nextServiceId: "", nextPage: 1 });
+  }, [keyword, load]);
 
   async function destructive(message: string, action: () => Promise<void>) {
     if (!window.confirm(message)) return;
     setBusy(true);
     setError("");
-    try { await action(); await load(); } catch (reason) { setError(reason instanceof Error ? reason.message : "操作失败"); } finally { setBusy(false); }
+    try { await action(); await reloadCurrent(); } catch (reason) { setError(reason instanceof Error ? reason.message : "操作失败"); } finally { setBusy(false); }
   }
 
   async function renameService(serviceId: string, oldName: string) {
     const name = window.prompt("请输入新的服务名称", oldName)?.trim();
     if (!name || name === oldName) return;
     setBusy(true);
-    try { await renameInterfaceForwardingService(serviceId, name); await load(); } catch (reason) { setError(reason instanceof Error ? reason.message : "重命名失败"); } finally { setBusy(false); }
+    try { await renameInterfaceForwardingService(serviceId, name); await reloadCurrent(); } catch (reason) { setError(reason instanceof Error ? reason.message : "重命名失败"); } finally { setBusy(false); }
   }
 
   return (
     <section className="interface-forwarding-page">
       <header className="interface-forwarding-heading">
         <div><p className="eyebrow">INTERFACE FORWARDING</p><h1>接口转发</h1><p>管理接口文档、转发环境和请求身份，并直接测试已登记接口。</p></div>
-        <label>工作空间<select value={workspaceId} onChange={(event) => { setModal(null); setWorkspaceId(event.target.value); }}>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>
+        <label>工作空间<select value={workspaceId} onChange={(event) => { setModal(null); setOverview(null); setWorkspaceId(event.target.value); }}>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>
       </header>
 
       <div className="interface-forwarding-toolbar">
-        <div className="interface-forwarding-search"><input value={keyword} onChange={(event) => setKeyword(event.target.value)} onKeyDown={(event) => event.key === "Enter" && void load()} placeholder="搜索业务描述、接口、路径或 Controller" /><button className="secondary-button" type="button" onClick={() => void load()}>搜索</button></div>
+        <div className="interface-forwarding-search"><input value={keyword} onChange={(event) => setKeyword(event.target.value)} onKeyDown={(event) => event.key === "Enter" && search()} placeholder="搜索业务描述、接口、路径或 Controller" /><button className="secondary-button" type="button" onClick={search}>搜索</button></div>
         <div><button className="secondary-button" type="button" onClick={() => setModal({ kind: "configuration" })}>转发配置</button><button className="primary-button" type="button" onClick={() => setModal({ kind: "import" })}>导入 Swagger</button></div>
       </div>
       {error ? <p className="error-banner" role="alert">{error}</p> : null}
@@ -153,31 +187,31 @@ export function InterfaceForwardingManager() {
       <div className="interface-forwarding-layout">
         <aside className="interface-forwarding-services">
           <header><strong>接口服务</strong><span>{overview?.services.length ?? 0}</span></header>
-          <button type="button" data-active={!activeServiceId} onClick={() => setActiveServiceId("")}><span>全部接口</span><small>{overview?.services.reduce((sum, item) => sum + item.interface_count, 0) ?? 0}</small></button>
+          <button type="button" data-active={!activeServiceId} onClick={() => selectService("")}><span>全部接口</span><small>{overview?.services.reduce((sum, item) => sum + item.interface_count, 0) ?? 0}</small></button>
           {overview?.services.map((service) => (
             <div className="interface-forwarding-service-row" key={service.id} data-active={activeServiceId === service.id}>
-              <button type="button" onClick={() => setActiveServiceId(service.id)}><span>{service.name}</span><small>{service.interface_count}</small></button>
+              <button type="button" onClick={() => selectService(service.id)}><span>{service.name}</span><small>{service.interface_count}</small></button>
               <div><button type="button" title="重命名" onClick={() => void renameService(service.id, service.name)}>✎</button><button type="button" title="删除" disabled={busy} onClick={() => void destructive(`确定删除服务“${service.name}”及其全部接口、参数和日志吗？`, () => deleteInterfaceForwardingService(service.id))}>×</button></div>
             </div>
           ))}
         </aside>
 
         <section className="interface-forwarding-list">
-          <header><div><h2>{activeServiceId ? overview?.services.find((item) => item.id === activeServiceId)?.name : "全部接口"}</h2><p>{visibleInterfaces.length} 个接口</p></div></header>
+          <header><div><h2>{activeServiceId ? overview?.services.find((item) => item.id === activeServiceId)?.name : "全部接口"}</h2><p>{overview?.interface_total ?? 0} 个接口</p></div></header>
           {loading ? <div className="interface-forwarding-empty">正在加载接口…</div> : null}
           {!loading && visibleInterfaces.length === 0 ? <div className="interface-forwarding-empty"><strong>还没有接口</strong><p>导入 Swagger 2 或 OpenAPI 3 JSON 后会在这里建立服务树和接口列表。</p></div> : null}
           {!loading && visibleInterfaces.length > 0 ? (
-            <div className="interface-forwarding-table-wrap"><table><colgroup><col className="interface-forwarding-col-name" /><col className="interface-forwarding-col-controller" /><col className="interface-forwarding-col-path" /><col className="interface-forwarding-col-action" /></colgroup><thead><tr><th>接口名称</th><th>Controller 名称</th><th>接口路径</th><th>操作</th></tr></thead><tbody>{visibleInterfaces.map((item) => (
+            <><div className="interface-forwarding-table-wrap"><table><colgroup><col className="interface-forwarding-col-name" /><col className="interface-forwarding-col-controller" /><col className="interface-forwarding-col-path" /><col className="interface-forwarding-col-action" /></colgroup><thead><tr><th>接口名称</th><th>Controller 名称</th><th>接口路径</th><th>操作</th></tr></thead><tbody>{visibleInterfaces.map((item) => (
               <tr key={item.id}><td><div className="interface-forwarding-name-cell"><button className="interface-forwarding-name-button" type="button" title={item.name} onClick={() => setModal({ kind: "detail", item })}>{item.name}</button>{item.last_requested_at ? <span className="interface-forwarding-requested-badge" title={`最近请求：${formatRequestedAt(item.last_requested_at)}`} aria-label={`已请求，最近请求时间 ${formatRequestedAt(item.last_requested_at)}`}>已请求</span> : null}</div></td><td><code className="interface-forwarding-cell-ellipsis" title={item.controller_name || "未提供 Controller 名称"}>{item.controller_name || "—"}</code></td><td><div className="interface-forwarding-path-cell" tabIndex={0} aria-label={`${item.method} ${item.path}`} data-full-path={item.path}><span className={methodClass(item.method)}>{item.method}</span><code>{item.path}</code></div></td><td><div className="interface-forwarding-row-actions"><button className="interface-forwarding-row-detail" type="button" onClick={() => setModal({ kind: "test", item })}>测试</button><button className="interface-forwarding-row-detail" type="button" onClick={() => setModal({ kind: "detail", item })}>详情</button></div></td></tr>
-            ))}</tbody></table></div>
+            ))}</tbody></table></div><nav className="interface-forwarding-pager" aria-label="接口列表分页"><button type="button" disabled={loading || page <= 1} onClick={() => goToPage(1)}>首页</button><button type="button" disabled={loading || page <= 1} onClick={() => goToPage(page - 1)}>上一页</button><span>第 {page} / {overview?.total_pages ?? 1} 页，共 {overview?.interface_total ?? 0} 条</span><button type="button" disabled={loading || page >= (overview?.total_pages ?? 1)} onClick={() => goToPage(page + 1)}>下一页</button><button type="button" disabled={loading || page >= (overview?.total_pages ?? 1)} onClick={() => goToPage(overview?.total_pages ?? 1)}>末页</button></nav></>
           ) : null}
         </section>
       </div>
 
-      {modal?.kind === "import" ? <ImportModal workspaceId={workspaceId} onClose={() => setModal(null)} onImported={async () => { setModal(null); await load(); }} /> : null}
+      {modal?.kind === "import" ? <ImportModal workspaceId={workspaceId} onClose={() => setModal(null)} onImported={async () => { setModal(null); await reloadCurrent(); }} /> : null}
       {modal?.kind === "configuration" && overview ? <ForwardingConfigurationModal workspaceId={workspaceId} environments={overview.environments} onClose={() => setModal(null)} /> : null}
       {modal?.kind === "detail" && overview ? <InterfaceDetailModal item={modal.item} initialSection={modal.section} onClose={() => setModal(null)} onDelete={() => destructive(`确定删除接口“${modal.item.name}”及其参数和日志吗？`, async () => { await deleteInterfaceForwardingInterface(modal.item.id); setModal(null); })} /> : null}
-      {modal?.kind === "test" && overview ? <TestModal item={modal.item} environments={overview.environments} onClose={() => { setModal(null); void load(); }} /> : null}
+      {modal?.kind === "test" && overview ? <TestModal item={modal.item} environments={overview.environments} onClose={() => { setModal(null); void reloadCurrent(); }} /> : null}
     </section>
   );
 }

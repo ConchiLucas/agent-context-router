@@ -17,6 +17,10 @@ from context_router.repositories.workspace_repository import (
     WorkspaceRepositoryError,
     WorkspaceStore,
 )
+from context_router.repositories.workspace_shared_file_repository import (
+    WorkspaceSharedFileRepositoryError,
+    WorkspaceSharedFileStore,
+)
 from context_router.schemas.data_sources import WorkspaceDataSourceSummary
 from context_router.schemas.projects import DocumentDetail, DocumentTreeNode, ProjectSummary
 from context_router.schemas.workspaces import (
@@ -50,6 +54,7 @@ class WorkspaceManagementService:
         data_source_repository: DataSourceStore,
         database_environment_repository: DatabaseEnvironmentStore | None = None,
         local_mapping: LocalWorkspaceMappingService | None = None,
+        shared_file_repository: WorkspaceSharedFileStore | None = None,
     ) -> None:
         self._settings = settings
         self._paths = RuntimePathResolver(settings)
@@ -59,6 +64,7 @@ class WorkspaceManagementService:
         self._data_source_repository = data_source_repository
         self._database_environment_repository = database_environment_repository
         self._local_mapping = local_mapping
+        self._shared_files = shared_file_repository
 
     def list_workspaces(self) -> list[WorkspaceSummary]:
         try:
@@ -360,6 +366,12 @@ class WorkspaceManagementService:
             assignment_count = data_summary.assignment_count
         except DataSourceRepositoryError:
             pass
+        script_count = 0
+        if self._shared_files is not None:
+            try:
+                script_count = self._shared_files.count_current_files(record.id, "script")
+            except WorkspaceSharedFileRepositoryError:
+                script_count = 0
         return WorkspaceSummary(
             id=record.id,
             name=record.name,
@@ -377,6 +389,7 @@ class WorkspaceManagementService:
                 if self._local_mapping is not None
                 else 0
             ),
+            script_count=script_count,
             created_at=record.created_at,
             updated_at=record.updated_at,
         )

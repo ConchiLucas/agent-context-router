@@ -155,11 +155,14 @@ Codex / Antigravity
   -> 工具完成后更新状态、结束时间、耗时、结果摘要或稳定错误码
   -> 仅数据库工具自动把有界请求和最终 MCP 响应写入独立、可过期 payload 表
   -> GET /api/mcp-traces[/{task_id}]
+     （详情可按 run_id、item_id 精确过滤）
   -> 调用链路页面按服务端 sequence 展示调用树和调用列表
   -> 点击数据库调用后才 GET /api/mcp-traces/{task_id}/calls/{tool_call_id}/database-payload
 ```
 
 `mcp_tool_calls.id` 由 PostgreSQL Identity 生成，任务内展示顺序由后端按该 ID 计算，不依赖客户端 sequence、前端时间戳拼接或任务锁。旧文档/数据库调用由 migration 恢复为 `legacy` 节点，因此升级后仍可查看历史记录。后端启动时会把上次进程遗留的内部 `running` 调用收敛为 `error/server_restarted`，避免页面永久显示运行中。
+
+接口检索、候选比较和详情读取支持可选的 `trace_context`。服务端将其作为调用元数据原样校验并保存，不参与召回或排序；检索调用摘要另保存 `search_id`、完整有界查询、返回候选顺序、检索顺序、分数拆解及命中/冲突槽位。接口测试从轨迹恢复客户端裁定时，以 `item_id=record_id`、task 的客户端身份和该记录最新 `run_id` 为精确关联键；只有题面在工作空间内唯一、不存在精确轨迹且候选历史调用完全没有 `trace_context` 时才按提示词摘要兼容旧数据，已有其他 `item_id` 的轨迹不得跨记录复用。借助 `search_id` 可继续关联 `interface_search_sessions` 中的完整搜索会话，因此评测分析无需从最终答案反推模型当时看到了什么。
 
 这条链路的边界固定在 Context Router 自身：只有进入 `/mcp` 并由 `ContextRouterMCP` 分发的 24 个当前工具会被记录，已下线工具的既有历史继续保留。客户端对 GitHub、浏览器或其他 MCP Server 的直连请求不会经过本服务，也不会通过客户端上报补录；链路页面不尝试呈现跨 Server 调用。
 
@@ -171,13 +174,19 @@ prepare 和文档搜索不建立业务数据库连接。业务数据库离线时
 
 | 页面行为 | 前端 | 后端 API |
 | --- | --- | --- |
-| 浏览六类共享配置并设置本机 AI 默认项 | `shared-ai-config-manager.tsx` | `GET /api/shared-config/ai/catalog` 聚合数据库、AI、本地 CLI、MinIO、图片模型和 Runtime Contract；`GET /api/shared-config/ai`、安全 `PUT /api/shared-config/ai/default` 维护本机 AI 默认项。所有明细实时取自配置中心，本地仅保存默认 Provider ID，失效时回退中心默认并返回提示 |
 | 接收 AI 查询条件并查询关联数据 | `data-visualization-workbench.tsx` | Codex/Antigravity 通过 MCP `save_data_visualization_query` 按 task 保存结构化条件，本机运维也可使用 `POST /api/ai-visualization/query-records`；服务端校验 task、Workspace、环境与发布表并幂等写入。浏览器按 Workspace、环境、来源或 task 读取最近 30 天记录，查询后把状态、耗时和结果规模写回执行摘要 |
 | 查看 AI 任务执行与结论 | `task-visualization-workbench.tsx` | `GET /api/ai-visualization/tasks` 聚合已有 task 的 MCP、数据、接口和日志统计，详情与时间线使用稳定游标读取；AI 通过 MCP `save_task_visualization_result` 更新同一 task 的脱敏结构化结论。浏览器只读，不创建或编辑任务 |
 | 查看 AI 实际执行的接口请求 | `interface-visualization-workbench.tsx` | `GET /api/ai-visualization/interface-requests` 按 `created_at DESC, id DESC` 聚合真实接口日志、任务描述和接口摘要，支持 task 筛选和游标分页；详情通过日志 `plan_id` 返回递归脱敏的最终请求、响应和 `parameter_evidence`。页面只读，不创建第二套请求记录或调用接口 |
 | 加载工作空间卡片 | `workspace-dashboard.tsx` | `GET /api/workspaces` |
+| 查看工作空间数据库脚本 | `workspace-scripts-view.tsx` | `GET /api/workspaces/{id}/scripts`、`GET /api/workspaces/{id}/scripts/item?path=` |
+| 管理项目启动与全局脚本 | `managed-scripts-manager.tsx` | `GET /api/managed-scripts`；安全 `POST /api/managed-scripts/{id}/autostart` 绑定或取消跟随项目启动。全局脚本运行无页面入口 |
+| 查看控制面规则 | `managed-rules-manager.tsx` | `GET /api/managed-rules`，页面只读渲染 Markdown |
+| 维护控制面规则 | 本机 AI/运维，无页面入口 | `POST /api/managed-rules`、`PUT/DELETE /api/managed-rules/{id}`；浏览器请求返回 `405 management_read_only`。规则进入 `prepare_task_context.workspace_rules`，不进入系统文档 |
+| 运行全局脚本 | 本机 AI/运维，无页面入口 | `POST /api/managed-scripts/{id}/run` 按动作分别同步 `script/`、`deploy/` 或 `docs/`；浏览器请求返回 `405 management_read_only` |
+| 将数据库脚本同步到目标目录 | 本机 AI/运维，无页面入口 | 安全 `POST /api/workspaces/{id}/scripts/sync`，只写目标 `script/`，不回写数据库 |
 | 查看并切换 Workspace 环境详情 | `workspace-mcp-environment-defaults.tsx` | `GET /api/workspaces/{id}/environments`、`GET /api/workspaces/{id}/nacos-profiles` |
-| 刷新工作空间映射 | `workspace-dashboard.tsx` | 安全 `POST /api/workspaces/{id}/refresh` |
+| 重载本机映射 | 本机 AI/运维，无页面入口 | `POST /api/workspaces/reload-local-mapping`；浏览器请求返回 `405 management_read_only` |
+| 刷新工作空间映射 | 本机 AI/运维，无页面入口 | `POST /api/workspaces/{id}/refresh` 重建文档缓存与派生搜索索引；浏览器请求返回 `405 management_read_only` |
 | 按工作空间类型切换卡片 | `workspace-dashboard.tsx` | 复用 `GET /api/workspaces` 返回的 `workspace_type` 在前端筛选 |
 | 加载工作空间内项目卡片 | `workspace-detail.tsx`、`project-dashboard.tsx` | `GET /api/workspaces/{id}/projects` |
 | 按前端/后端类型切换项目卡片 | `workspace-detail.tsx`、`project-dashboard.tsx` | 复用项目列表中的 `project_kind` 在前端筛选 |
@@ -194,7 +203,8 @@ prepare 和文档搜索不建立业务数据库连接。业务数据库离线时
 | 加载表关联版本与表清单 | `table-relation-explorer.tsx`、`table-relations.ts` | `GET /api/workspaces/{id}/table-relations/status`、`GET /api/workspaces/{id}/table-relations/tables` |
 | 查看单表关联 | `table-relation-detail.tsx`、`table-relation-edge-row.tsx` | `GET /api/workspaces/{id}/table-relations/table` |
 | 按关联字段关键词查看一层关联记录 | `relation-record-explorer.tsx` | 安全只读 `POST /api/workspaces/{id}/relation-records/search` |
-| 管理并测试接口转发 | `interface-forwarding-manager.tsx` | `GET /api/interface-forwarding/overview` 展示接口契约、紧凑检索语义 JSON、语义治理信息和真实表影响。MCP 先以 `search_forwarding_interfaces` 多路召回，候选相近时使用 `compare_forwarding_interfaces`，需要完整契约时再调用 `read_forwarding_interface_detail`；执行仍通过 prepare/execute 两阶段计划并保留既有 Host Runner、配置指纹、单次使用和日志约束。 |
+| 管理并测试接口转发 | `interface-forwarding-manager.tsx` | `GET /api/interface-forwarding/overview` 按 Workspace、服务和关键词执行服务端分页，默认每页 50 条，并返回过滤总数；当前页展示接口契约、紧凑检索语义 JSON、语义治理信息和真实表影响。MCP 先以 `search_forwarding_interfaces` 多路召回，候选相近时使用 `compare_forwarding_interfaces`，需要完整契约时再调用 `read_forwarding_interface_detail`；执行仍通过 prepare/execute 两阶段计划并保留既有 Host Runner、配置指纹、单次使用和日志约束。 |
+| 对照多执行者接口裁定 | `interface-prompt-lab.tsx` | 页面只读 `GET /api/interface-prompt-matches`：提示词、客户端、返回接口、正确接口、对错、易混点。请求携带当前 `client`，支持 `codex`、`codex-root`、`codex-astra`、`cursor` 和 `antigravity`；经审核结果由本机 AI/运维调用 `POST /api/interface-prompt-matches/client-results/import`，按“题目 + 执行者”幂等保存；重测前可调用 `DELETE /api/interface-prompt-matches/client-results/imported` 并携带 `expected_count` 精确清理一个执行者。页面优先使用持久化结果，旧数据才回退解析 MCP 轨迹。后端在分页前优先排列该客户端已有结果，同组内按创建时间倒序。浏览器不能 POST/DELETE，不执行转发 |
 | 查看与使用业务值映射 | `value-mapping-manager.tsx` | 页面通过 `GET /api/value-mappings/overview` 只读展示；AI/运维接口保留结构化规则维护和预览；数据查询与接口参数都优先使用 `search_value_mappings` 定位已发布规则，再由 `resolve_value_candidates` 按 task 环境执行最多 10 条的服务端生成只读查询；无接口范围时不展开绑定明细，随机选择只在有界候选池内执行 |
 | 数据查询映射短链路 | `task_intent.py`、`mcp_server.py` | `prepare_task_context -> search_value_mappings -> resolve_value_candidates` 不需要先读数据库列表；成功 MCP 响应统一返回 `tool_call_id`，候选解析同时返回可直接复制的 `next_action.arguments`。解析显示字段足够时直接据此调用 `save_data_visualization_query`，由服务端补齐目标并继承成功调用摘要，跳过 Schema、表关系和原始 SQL。只有映射未命中或确需映射未提供的完整字段时才进入数据库探索。随机请求固定传 `selection=random` 和准确 `limit`，禁止映射解析后再用 `ORDER BY RAND()` 重复取值 |
 | 查看单表插入入口 | `table-relation-write-modal.tsx` | `GET /api/workspaces/{id}/table-relations/table/writes` |
@@ -206,6 +216,7 @@ prepare 和文档搜索不建立业务数据库连接。业务数据库离线时
 | 查看后端项目数据源授权 | `project-dashboard.tsx` | `GET /api/projects/{id}/data-source-options` |
 | 查看项目运行配置 | `project-runtime-config.tsx` | `GET /api/projects/{id}/runtime-config` |
 | 查看运行记录与有界日志 | `project-runtime-config.tsx` | `GET /api/projects/{id}/runtime-runs`、`GET /api/projects/{id}/runtime-runs/{run_id}`、`GET /api/projects/{id}/runtime-runs/{run_id}/log` |
+| 自动采集 LOCAL/TEST/UAT 浏览器接口日志 | `browser-extension/interface-log-capture/service-worker.js` | webRequest 保存 Fetch/XHR 请求与状态；Debugger/DevTools 补充响应。浏览器本地持久队列按 capture_id/revision 上传，逐条确认；后端先存 browser_interface_captures，再匹配并写原接口日志。已匹配 read 接口按 Workspace、环境、接口和北京时间自然日保留一个成功优先样本并累计次数；其他类型逐条保存。未匹配保留，可通过 /browser-captures/reconcile 补关联；扩展弹窗查看实际入库记录 |
 | 查看 Workspace 运行配置 | 暂无浏览器写入口 | `GET /api/workspaces/{id}/runtime-config` |
 | 预览仓库 deploy 配置 | `workspace-detail.tsx`、`workspace-runtime-sync.tsx` | 安全 `POST /api/workspaces/{id}/runtime-config/sync-preview` |
 | 按预览摘要原子同步 deploy 配置 | `workspace-runtime-sync.tsx` | 安全 `POST /api/workspaces/{id}/runtime-config/sync` |
@@ -290,13 +301,13 @@ prepare_forwarding_request -> execute_forwarding_request
 - `local_workspace_mapping.py` 读取项目本机 YAML，按 Workspace ID 决定卡片显示、主目录和 reader 目录。`project_registry.py` 以主目录构建唯一文档缓存；reader cwd 返回 `documents_only` 快照，数据库与运行服务按 task.cwd 再次拒绝越权。
 - `workspace_shared_files.py` 扫描主目录 `docs/`、`script/`、固定 `deploy/context-router/` 和 `deploy/host-runtime/`；`workspace_shared_file_repository.py` 在同一 PostgreSQL 事务中新增完整版本并替换 Workspace/Project 运行配置，保留最近 5 版。恢复先校验集合摘要和逐文件 SHA-256，再暂存并原子交换受管目录，异常时回滚。
 - 可信本机 AI/运维可用 `publish-runtime-files` 在已有完整数据库版本上只替换 `script/` 与 `deploy/host-runtime/`；文档和 deploy 沿用当前数据库版本。该兼容入口用于本地主目录历史部署配置暂不完整的 Workspace，不能创建首个版本，也不进入浏览器写操作白名单。
-- `runtime_runner.py` 暴露只允许 Bearer Token 且拒绝浏览器请求的注册、心跳、领取租约和完成回报协议；`scripts/context_router_host_runner.py` 是宿主机执行器。普通部署步骤只执行物化快照；`host_action` 先同步数据库当前 Workspace 文件版本，再接受控制面和 Runner 两端共同登记的动作白名单，并把未指定环境固定为 `local`。攀枝花开机保障动作只能调用其工作空间内固定且哈希与物化状态一致的 `deploy/host-runtime/ensure.sh`，不能执行任意路径或任意命令。
+- `runtime_runner.py` 暴露只允许 Bearer Token 且拒绝浏览器请求的注册、心跳、领取租约和完成回报协议；`scripts/context_router_host_runner.py` 是宿主机执行器。普通部署步骤只执行物化快照；`host_action` 先同步数据库当前 Workspace 文件版本，再接受控制面和 Runner 两端共同登记的动作白名单，并把未指定环境固定为 `local`。攀枝花 Host Runtime 保障动作只能调用其工作空间内固定且哈希与物化状态一致的 `deploy/host-runtime/ensure.sh`，不能执行任意路径或任意命令。打开跟随项目启动后，该工作空间的 `start_workspace` 走 `pzh.start-and-check`。
 - `mcp_server.py` 固定注册 26 个上下文、数据库、中间件、表关联、值映射、数据与任务可视化收件、接口搜索/转发、容器日志和 Workspace 运行工具，并挂载到 `/mcp`。项目、数据源、中间件或容器变化不会改变工具名。
 - `mcp_server.py` 使用统一工具分发埋点记录全部 24 个当前工具；观测持久化失败只降低链路可见性，不改变 MCP 工具原始成功或失败结果。中间件调用摘要只记录数量与开关，不记录返回内容；Trace 查询仍保留已下线工具的历史调用。
 - `mcp_tool_call_repository.py` 保存通用工具调用和任务链路摘要；文档与数据库 Repository 继续保存各自明细，并通过可空唯一 `tool_call_id` 关联。
 - `api/mcp_traces.py` 返回全局任务链路列表和单任务统一调用详情；列表支持项目、Agent、固定内部工具、调用状态和关键词的服务端过滤。普通 task 即使没有成功落下内部调用节点也能显示，`web-preview` 与 `connection-test` 系统任务除外。API 已把文档、数据库明细转换为同一 `artifacts` 数组，并返回 `complete / running / partial` 完整性状态与稳定 warning code；主详情只包含 payload 的 available/status/reason，完整 JSON 由带 `Cache-Control: no-store` 的归属校验接口懒加载。
 - `mcp_integration.py` 生成客户端配置，并接收 `workspace_id`，以 MCP Python Client 对后端自身执行 initialize、tools/list、Workspace 匹配、prepare、search 和 read，不绕过协议直接调用 service。
-- `GET /api/mcp/integration/tools` 直接序列化当前 FastMCP 注册表的 `tools/list` 结果，供系统文档菜单按工具拆分为独立只读项；不从系统文档表复制或维护工具定义。
+- `GET /api/mcp/integration/tools` 直接序列化当前 FastMCP 注册表的 `tools/list` 结果，供系统文档菜单按类型分组展示 26 个只读工具项；不从系统文档表复制或维护工具定义。
 - 接入测试只返回阶段状态、耗时、task_id、read_call_id 和正文字符数；数据库 URL 与 Markdown 正文不进入 API 响应，且该测试不执行项目业务数据库查询。
 
 ## Engine 能力矩阵

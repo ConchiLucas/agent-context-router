@@ -80,6 +80,7 @@ class McpTraceService:
         started_at: datetime | None = None,
         request_summary: dict[str, object] | None = None,
         parent_tool_call_id: int | None = None,
+        trace_context: dict[str, object] | None = None,
     ) -> int | None:
         try:
             return self._tool_calls.create_call(
@@ -92,6 +93,7 @@ class McpTraceService:
                     status="running",
                     started_at=started_at or datetime.now(UTC),
                     request_summary=request_summary,
+                    trace_context=trace_context,
                 )
             )
         except Exception:
@@ -267,10 +269,16 @@ class McpTraceService:
             )
         return summaries
 
-    def get_trace(self, task_id: int) -> McpTraceDetail:
+    def get_trace(
+        self,
+        task_id: int,
+        *,
+        run_id: str | None = None,
+        item_id: str | None = None,
+    ) -> McpTraceDetail:
         try:
             task = self._tasks.get_task(task_id)
-            calls = self._tool_calls.list_calls(task_id)
+            calls = self._tool_calls.list_calls(task_id, run_id=run_id, item_id=item_id)
             document_reads = self._document_reads.list_read_calls(task_id)
             database_calls = self._database_calls.list_calls(task_id)
         except (
@@ -280,6 +288,15 @@ class McpTraceService:
             DatabaseCallRepositoryError,
         ) as exc:
             raise McpTraceServiceError(str(exc)) from exc
+
+        if run_id is not None or item_id is not None:
+            filtered_call_ids = {call.id for call in calls}
+            document_reads = [
+                read for read in document_reads if read.tool_call_id in filtered_call_ids
+            ]
+            database_calls = [
+                call for call in database_calls if call.tool_call_id in filtered_call_ids
+            ]
 
         database_payload_metadata = (
             self._database_payloads.metadata_for_calls(
@@ -358,6 +375,7 @@ class McpTraceService:
                     request_summary=call.request_summary,
                     result_summary=call.result_summary,
                     error_code=call.error_code,
+                    trace_context=call.trace_context,
                     artifacts=artifacts_by_call.get(call.id, []),
                     database_payload_available=(
                         payload_metadata is not None
@@ -381,6 +399,10 @@ class McpTraceService:
             unlinked_document_read_count=unlinked_document_read_count,
             unlinked_database_call_count=unlinked_database_call_count,
         )
+        if (run_id is not None or item_id is not None) and "missing_prepare_call" in warnings:
+            warnings = [warning for warning in warnings if warning != "missing_prepare_call"]
+            if trace_status == "partial" and not warnings:
+                trace_status = "complete"
         last_activity_at = max(
             (call.finished_at or call.started_at for call in calls),
             default=task.created_at,

@@ -1,87 +1,5 @@
 export type ProjectKind = "frontend" | "backend";
 
-export interface SharedAiProvider {
-  id: string;
-  label: string;
-  type: string;
-  base_url: string;
-  api_key: string;
-  model: string;
-  max_tokens: number;
-  voice: string;
-  capabilities: string[];
-  options: Record<string, unknown>;
-  enabled: boolean;
-  active: boolean;
-}
-
-export interface SharedAiCatalog {
-  configured_default_provider_id: string;
-  center_active_provider_id: string;
-  active_provider_id: string;
-  default_source: string;
-  default_recovered: boolean;
-  notice: string | null;
-  revision: number;
-  providers: SharedAiProvider[];
-}
-
-export interface SharedDatabaseConnection {
-  id: string;
-  name: string;
-  type: string;
-  environment: string;
-  host: string;
-  port: number;
-  database: string;
-  username: string;
-  password: string;
-  parameters: Record<string, string>;
-}
-
-export interface SharedLocalCliItem {
-  id: string;
-  label: string;
-  enabled: boolean;
-  command: string;
-  default_args: string[];
-  model: string;
-  reasoning_effort: string;
-  working_directory: string;
-  timeout_seconds: number;
-  capabilities: string[];
-  active: boolean;
-}
-
-export interface SharedLocalCliConfiguration {
-  active_config_id: string;
-  configs: SharedLocalCliItem[];
-}
-
-export interface SharedObjectStorageConfiguration {
-  configured: boolean;
-  enabled: boolean;
-  endpoint: string;
-  access_key_id: string;
-  secret_access_key: string;
-  use_ssl: boolean;
-  bucket_name: string;
-  base_path: string;
-}
-
-export interface SharedImageModelCatalog {
-  active_provider_id: string;
-  providers: SharedAiProvider[];
-}
-
-export interface SharedConfigurationCatalog {
-  ai: SharedAiCatalog;
-  databases: SharedDatabaseConnection[];
-  local_cli: SharedLocalCliConfiguration;
-  object_storage: SharedObjectStorageConfiguration;
-  image_models: SharedImageModelCatalog;
-  runtime: Record<string, unknown>;
-}
 export type DatabaseEnvironment = string;
 export type LegacyDatabaseEnvironment = "test" | "uat";
 export type McpEnvironment = string;
@@ -206,6 +124,7 @@ export interface WorkspaceSummary {
   database_count: number;
   database_authorization_count: number;
   document_reader_count: number;
+  script_count: number;
   created_at?: string;
   updated_at: string;
 }
@@ -247,6 +166,78 @@ export interface WorkspaceSharedFilesResult {
   revision: number;
   digest: string;
   action: "restore" | "publish";
+}
+
+export interface WorkspaceScriptSummary {
+  relative_path: string;
+  name: string;
+  description: string;
+  executable: boolean;
+  content_sha256: string;
+  byte_size: number;
+}
+
+export interface WorkspaceScriptDetail extends WorkspaceScriptSummary {
+  content: string;
+}
+
+export interface WorkspaceScriptList {
+  workspace_id: string;
+  revision: number | null;
+  target_directory: string;
+  scripts: WorkspaceScriptSummary[];
+}
+
+export interface WorkspaceScriptSyncResult {
+  workspace_id: string;
+  target_directory: string;
+  script_count: number;
+  revision: number;
+}
+
+export interface ManagedScriptWorkspace {
+  id: string;
+  name: string;
+}
+
+export interface ManagedScript {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  kind: "autostart" | "global" | string;
+  action_key: string;
+  workspace_id: string | null;
+  workspace_name: string | null;
+  command_path: string | null;
+  autostart_enabled: boolean;
+  autostart_installed: boolean;
+  available: boolean;
+  unavailable_reason: string | null;
+}
+
+export interface ManagedScriptList {
+  scripts: ManagedScript[];
+  workspaces: ManagedScriptWorkspace[];
+}
+
+export interface ManagedScriptRunResult {
+  script_id: string;
+  action: string;
+  workspace_id: string | null;
+  message: string;
+}
+
+export interface ManagedRule {
+  id: string;
+  slug: string;
+  title: string;
+  body: string;
+  sort_order: number;
+}
+
+export interface ManagedRuleList {
+  rules: ManagedRule[];
 }
 
 export interface WorkspaceDataSourceAssignment {
@@ -504,6 +495,11 @@ export interface PreparedDatabaseEnvironment {
 export interface PrepareTaskContextResult {
   task_id: number;
   documents: ContextDocumentNode;
+  workspace_rules: Array<{
+    id: string;
+    title: string;
+    body: string;
+  }>;
   execution_contract: {
     intent_type: AiTaskIntentType;
     error_signal: boolean;
@@ -1518,7 +1514,6 @@ export interface InterfaceForwardingService {
   id: string;
   name: string;
   interface_count: number;
-  interfaces: InterfaceForwardingInterface[];
 }
 
 export interface InterfaceForwardingEnvironment {
@@ -1557,6 +1552,12 @@ export interface InterfaceForwardingOverview {
   workspace_id: string;
   services: InterfaceForwardingService[];
   environments: InterfaceForwardingEnvironment[];
+  interfaces: InterfaceForwardingInterface[];
+  selected_service_id: string;
+  interface_total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
 }
 
 export interface InterfaceForwardingState {
@@ -1701,4 +1702,86 @@ export interface ValueMappingPreviewResult {
   returned_count: number;
   elapsed_ms: number;
   truncated: boolean;
+}
+
+export type PromptMatchVerdict = "resolved" | "needs_selection" | "no_candidate";
+export type PromptClientName =
+  | "codex"
+  | "codex-root"
+  | "codex-astra"
+  | "cursor"
+  | "antigravity";
+export type PromptClientStatus =
+  | "missing"
+  | "searching"
+  | "selected"
+  | "clarify"
+  | "violated"
+  | "failed";
+
+export interface InterfacePromptClientJudgment {
+  client: PromptClientName;
+  status: PromptClientStatus;
+  task_id: number | null;
+  selected_interface_id: string | null;
+  selected_method: string | null;
+  selected_path: string | null;
+  selected_title: string | null;
+  in_candidates: boolean | null;
+  compared: boolean;
+  compared_interface_ids: string[];
+  detailed_interface_ids: string[];
+  tool_calls: string[];
+  prohibited_tool_calls: string[];
+  reason: string;
+}
+
+export interface InterfacePromptMatchCandidate {
+  interface_id: string;
+  method: string;
+  path: string;
+  title: string;
+  service: string;
+  controller_name: string;
+  audiences: string[];
+  domains: string[];
+  resource: string;
+  actions: string[];
+  discriminators: string[];
+  reasons: string[];
+  matched_slots: string[];
+  conflicting_slots: string[];
+}
+
+export interface InterfacePromptIdentity {
+  interface_id: string | null;
+  method: string;
+  path: string;
+  title: string;
+  service?: string;
+}
+
+export interface InterfacePromptMatch {
+  id: string;
+  workspace_id: string;
+  environment_key: string;
+  prompt: string;
+  verdict: PromptMatchVerdict;
+  first_interface_id: string | null;
+  candidates: InterfacePromptMatchCandidate[];
+  remaining_count: number;
+  search_id: string;
+  reason: string;
+  differing_dimensions: string[];
+  created_at: string;
+  note: string;
+  expected: InterfacePromptIdentity | null;
+  clients: InterfacePromptClientJudgment[];
+}
+
+export interface InterfacePromptMatchList {
+  items: InterfacePromptMatch[];
+  total: number;
+  page: number;
+  page_size: number;
 }

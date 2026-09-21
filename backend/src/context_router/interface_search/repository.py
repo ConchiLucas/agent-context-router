@@ -17,6 +17,10 @@ from psycopg.rows import dict_row
 from context_router.interface_search.domain import EndpointRecord, SearchFilters, SearchResponse
 from context_router.interface_search.embedding import cosine_similarity, tokenize
 from context_router.interface_search.families import sibling_action_keys
+from context_router.interface_search.route_identity import (
+    route_identity_score,
+    service_hint_score,
+)
 from context_router.interface_search.workspaces import WorkspaceProfile, WorkspaceTerm
 
 SemanticQueueMode = Literal["all", "unscanned", "stale", "low-confidence"]
@@ -34,6 +38,8 @@ class Candidate:
     identifier_recall_score: float = 0
     service_recall_score: float = 0
     field_recall_score: float = 0
+    route_identity_recall_score: float = 0
+    semantic_lexical_score: float = 0
 
 
 class EndpointRepository(Protocol):
@@ -74,6 +80,7 @@ class EndpointRepository(Protocol):
         soft_cardinality: str = "unknown",
         soft_field_identifiers: list[str] | None = None,
         schema_direction: str = "unknown",
+        semantic_query_terms: list[str] | None = None,
     ) -> list[Candidate]: ...
 
     def record_feedback(self, payload: dict) -> None: ...
@@ -276,8 +283,10 @@ class InMemoryEndpointRepository:
         soft_cardinality: str = "unknown",
         soft_field_identifiers: list[str] | None = None,
         schema_direction: str = "unknown",
+        semantic_query_terms: list[str] | None = None,
     ) -> list[Candidate]:
         query_tokens = set(tokenize(query))
+        semantic_terms = set(semantic_query_terms or [])
         results: list[Candidate] = []
         for endpoint in self._items.values():
             if not endpoint.active:
@@ -304,6 +313,29 @@ class InMemoryEndpointRepository:
                 continue
             document_tokens = set(tokenize(endpoint.search_document))
             overlap = len(query_tokens & document_tokens) / max(1, len(query_tokens))
+            focused_tokens = set(
+                tokenize(
+                    " ".join(
+                        (
+                            endpoint.title,
+                            endpoint.purpose,
+                            endpoint.resource,
+                            *endpoint.domains,
+                            *endpoint.scenarios,
+                            *endpoint.entities,
+                            *endpoint.aliases,
+                            *endpoint.discriminators,
+                            endpoint.path,
+                            endpoint.operation_id,
+                        )
+                    )
+                )
+            )
+            semantic_lexical = (
+                len(semantic_terms & focused_tokens) / len(semantic_terms)
+                if semantic_terms
+                else 0.0
+            )
             schema_tokens = set(
                 tokenize(
                     json.dumps(
@@ -342,7 +374,22 @@ class InMemoryEndpointRepository:
                 resource=soft_resource,
                 identifier_types=soft_identifier_types or [],
             )
-            service_score = float(bool(soft_services and endpoint.service in soft_services))
+            service_score = service_hint_score(endpoint.service, soft_services or [])
+            route_score = route_identity_score(
+                query=query,
+                project=endpoint.project,
+                service=endpoint.service,
+                path=endpoint.path,
+                operation_id=endpoint.operation_id,
+                title=endpoint.title,
+                actions=endpoint.actions,
+                semantic_terms=(
+                    endpoint.purpose,
+                    *endpoint.domains,
+                    *endpoint.scenarios,
+                    *endpoint.aliases,
+                ),
+            )
             field_score = _field_recall_score(
                 endpoint,
                 soft_field_identifiers or [],
@@ -360,6 +407,8 @@ class InMemoryEndpointRepository:
                     identifier_recall_score=identifier,
                     service_recall_score=service_score,
                     field_recall_score=field_score,
+                    route_identity_recall_score=route_score,
+                    semantic_lexical_score=semantic_lexical,
                 )
             )
         results.sort(
@@ -374,6 +423,8 @@ class InMemoryEndpointRepository:
                     item.identifier_recall_score,
                     item.service_recall_score,
                     item.field_recall_score,
+                    item.route_identity_recall_score,
+                    item.semantic_lexical_score,
                 ),
                 item.field_recall_score,
                 item.structured_recall_score,
@@ -881,6 +932,7 @@ class PostgresEndpointRepository:
         soft_cardinality: str = "unknown",
         soft_field_identifiers: list[str] | None = None,
         schema_direction: str = "unknown",
+        semantic_query_terms: list[str] | None = None,
     ) -> list[Candidate]:
         sql = """
             WITH scored AS (
@@ -894,6 +946,21 @@ class PostgresEndpointRepository:
                         ts_rank_cd(e.search_tsvector, websearch_to_tsquery('simple', %(query)s), 32),
                         similarity(e.search_document, %(query)s)
                     ) AS lexical_score,
+                    CASE WHEN %(semantic_query_terms)s::text[] = '{}' THEN 0
+                         ELSE (
+                            SELECT count(*)::float / cardinality(%(semantic_query_terms)s::text[])
+                            FROM unnest(%(semantic_query_terms)s::text[]) term
+                            WHERE lower(concat_ws(
+                                ' ', e.title, e.purpose, e.resource,
+                                array_to_string(e.domains, ' '),
+                                array_to_string(e.scenarios, ' '),
+                                array_to_string(e.entities, ' '),
+                                array_to_string(e.aliases, ' '),
+                                array_to_string(e.discriminators, ' '),
+                                e.path, e.operation_id
+                            )) LIKE '%%' || lower(term) || '%%'
+                         )
+                    END AS semantic_lexical_score,
                     CASE WHEN e.embedding IS NULL THEN 0
                          ELSE 1 - (e.embedding <=> %(embedding)s) END AS vector_score,
                     greatest(
@@ -946,9 +1013,144 @@ class PostgresEndpointRepository:
                             THEN 0.45
                         ELSE 0
                     END AS identifier_recall_score,
-                    CASE WHEN %(soft_services)s::text[] <> '{}'
-                        AND e.service = ANY(%(soft_services)s::text[]) THEN 1.0 ELSE 0
+                    CASE
+                        WHEN %(soft_services)s::text[] = '{}' THEN 0
+                        WHEN EXISTS (
+                            SELECT 1 FROM unnest(%(soft_services)s::text[]) hint
+                            WHERE lower(e.service) = lower(hint)
+                        ) THEN 1.0
+                        WHEN EXISTS (
+                            SELECT 1 FROM unnest(%(soft_services)s::text[]) hint
+                            WHERE lower(hint) = ANY(
+                                regexp_split_to_array(lower(e.service), '[^a-z0-9]+')
+                            )
+                        ) THEN 0.9
+                        ELSE 0
                     END AS service_recall_score,
+                    GREATEST(
+                        CASE WHEN (
+                                (length(e.service) >= 3 AND lower(%(raw_query)s) LIKE
+                                    '%%' || lower(e.service) || '%%')
+                                OR (length(e.project) >= 3 AND lower(%(raw_query)s) LIKE
+                                    '%%' || lower(e.project) || '%%')
+                            )
+                            AND length(regexp_replace(e.path, '^.*/', '')) >= 4
+                            AND lower(regexp_replace(e.path, '^.*/', '')) NOT IN (
+                                'page', 'list', 'query', 'detail', 'save', 'update',
+                                'delete', 'create', 'confirm', 'preview', 'getbyid'
+                            )
+                            AND lower(%(raw_query)s) LIKE '%%'
+                                || lower(regexp_replace(e.path, '^.*/', '')) || '%%'
+                            THEN 1.0
+                            ELSE 0 END,
+                        CASE WHEN length(e.service) >= 3
+                            AND lower(%(raw_query)s) LIKE '%%' || lower(e.service) || '%%'
+                            THEN 0.94
+                            ELSE 0 END,
+                        CASE WHEN length(e.project) >= 3
+                            AND lower(%(raw_query)s) LIKE '%%' || lower(e.project) || '%%'
+                            THEN 0.94
+                            ELSE 0 END,
+                        CASE WHEN lower(%(raw_query)s) ~ '(下游直连|直连接口|直接调用下游|direct)'
+                            AND NOT (
+                                regexp_split_to_array(
+                                    lower(e.service || ' ' || e.project),
+                                    '[^a-z0-9]+'
+                                ) && ARRAY['gateway', 'bff', 'edge', 'facade', 'proxy', 'portal']::text[]
+                            )
+                            THEN 0.92
+                            ELSE 0 END,
+                        CASE WHEN lower(%(raw_query)s) ~ '(门户|portal|web端|前台)'
+                            AND lower(%(raw_query)s) !~ '(下游直连|直连接口|直接调用下游|direct)'
+                            AND regexp_split_to_array(
+                                lower(e.service || ' ' || e.project),
+                                '[^a-z0-9]+'
+                            ) && ARRAY['portal', 'web', 'frontend']::text[]
+                            THEN 0.60
+                            ELSE 0 END,
+                        CASE WHEN lower(%(raw_query)s) ~ '(门户|portal|web端|前台)'
+                            AND regexp_split_to_array(lower(e.path), '[^a-z0-9]+')
+                                && ARRAY['portal', 'web', 'frontend']::text[]
+                            THEN 0.56
+                            ELSE 0 END,
+                        CASE WHEN lower(%(raw_query)s) ~ '(聚合入口|聚合接口|网关入口|网关接口|gateway|bff|facade)'
+                            AND regexp_split_to_array(lower(e.service), '[^a-z0-9]+')
+                                && ARRAY['gateway', 'bff', 'edge', 'facade', 'proxy', 'portal']::text[]
+                            THEN 0.92
+                            ELSE 0 END,
+                        CASE WHEN lower(%(raw_query)s) ~ '(免登录|免鉴权|无需鉴权|noauth|no-auth|anonymous)'
+                            AND lower(e.path || ' ' || e.service) ~ '(noauth|no-auth|anonymous|public)'
+                            THEN 0.88
+                            ELSE 0 END,
+                        CASE WHEN lower(%(raw_query)s) ~ '(远程|remote)'
+                            AND lower(e.path || ' ' || e.service) ~ '(remote|external)'
+                            THEN 0.78
+                            ELSE 0 END,
+                        CASE WHEN lower(%(raw_query)s) ~ '(铁路|railway|rail)'
+                            AND lower(e.path || ' ' || e.service || ' ' || e.title) ~ '(railway|rail|铁路)'
+                            THEN 0.82
+                            ELSE 0 END,
+                        CASE WHEN lower(%(raw_query)s) ~ '(公路|highway|road)'
+                            AND lower(e.path || ' ' || e.service || ' ' || e.title) ~ '(highway|road|公路)'
+                            THEN 0.82
+                            ELSE 0 END,
+                        CASE WHEN lower(%(raw_query)s) ~ '(海运|水运|水路|shipping|ocean|sea)'
+                            AND lower(
+                                e.path || ' ' || e.service || ' ' || e.title || ' '
+                                || e.purpose || ' ' || e.domains::text || ' '
+                                || e.scenarios::text || ' ' || e.aliases::text
+                            ) ~ '(shipping|ocean|sea|海运|水运|水路)'
+                            THEN 0.82
+                            ELSE 0 END,
+                        CASE WHEN lower(%(raw_query)s) ~ '(预览|preview)'
+                            AND lower(e.path || ' ' || e.operation_id || ' ' || e.title) ~ '(preview|预览)'
+                            THEN 0.66
+                            ELSE 0 END,
+                        CASE WHEN lower(%(raw_query)s) ~ '(轨迹|跟踪|track|tracking)'
+                            AND lower(
+                                e.path || ' ' || e.operation_id || ' ' || e.title || ' '
+                                || e.purpose || ' ' || e.scenarios::text || ' '
+                                || e.aliases::text
+                            ) ~ '(轨迹|跟踪|track|tracking)'
+                            THEN 0.74
+                            ELSE 0 END,
+                        CASE WHEN lower(%(raw_query)s) ~ '(详情|明细|detail|getdetail|getinfo|finddetail)'
+                            AND lower(
+                                e.path || ' ' || e.operation_id || ' ' || e.title || ' '
+                                || e.purpose || ' ' || e.scenarios::text || ' '
+                                || e.aliases::text
+                            ) ~ '(详情|明细|detail|getdetail|getinfo|finddetail)'
+                            THEN 0.66
+                            ELSE 0 END,
+                        CASE WHEN lower(%(raw_query)s) ~ '(访问地址|预览地址|文件地址|下载地址|url)'
+                            AND lower(
+                                e.path || ' ' || e.operation_id || ' ' || e.title || ' '
+                                || e.purpose || ' ' || e.scenarios::text || ' '
+                                || e.aliases::text
+                            ) ~ '(url|访问地址|预览地址|文件地址|下载地址)'
+                            THEN 0.62
+                            ELSE 0 END,
+                        CASE WHEN lower(%(raw_query)s) ~ '(文件内容|文件流|流式响应|binary|stream)'
+                            AND lower(
+                                e.path || ' ' || e.operation_id || ' ' || e.title || ' '
+                                || e.purpose || ' ' || e.scenarios::text || ' '
+                                || e.aliases::text
+                            ) ~ '(文件内容|文件流|流式响应|binary|stream)'
+                            THEN 0.62
+                            ELSE 0 END,
+                        CASE WHEN lower(%(raw_query)s) ~ '(到达|抵达|到港|进场|arrive|arrival)'
+                            AND lower(e.path || ' ' || e.operation_id || ' ' || e.title) ~ '(arrive|arrival|到达|抵达|到港|进场)'
+                            THEN 0.66
+                            ELSE 0 END,
+                        CASE WHEN lower(%(raw_query)s) ~ '(生成|generate)'
+                            AND lower(e.path || ' ' || e.operation_id || ' ' || e.title) ~ '(generate|createby|生成)'
+                            THEN 0.66
+                            ELSE 0 END,
+                        CASE WHEN lower(%(raw_query)s) ~ '(驳回|拒绝|reject)'
+                            AND lower(e.path || ' ' || e.operation_id || ' ' || e.title) ~ '(reject|驳回|拒绝)'
+                            THEN 0.66
+                            ELSE 0 END
+                    ) AS route_identity_recall_score,
                     (
                         CASE WHEN %(soft_resource)s <> '' AND e.resource = %(soft_resource)s
                             THEN 0.30 ELSE 0 END
@@ -963,7 +1165,13 @@ class PostgresEndpointRepository:
                         + CASE WHEN %(soft_cardinality)s <> 'unknown'
                             AND e.cardinality = %(soft_cardinality)s THEN 0.05 ELSE 0 END
                         + CASE WHEN %(soft_services)s::text[] <> '{}'
-                            AND e.service = ANY(%(soft_services)s::text[]) THEN 0.10 ELSE 0 END
+                            AND EXISTS (
+                                SELECT 1 FROM unnest(%(soft_services)s::text[]) hint
+                                WHERE lower(e.service) = lower(hint)
+                                   OR lower(hint) = ANY(
+                                       regexp_split_to_array(lower(e.service), '[^a-z0-9]+')
+                                   )
+                            ) THEN 0.10 ELSE 0 END
                     ) AS structured_recall_score,
                     CASE
                         WHEN e.interface_family <> ''
@@ -1014,6 +1222,11 @@ class PostgresEndpointRepository:
                 SELECT id FROM scored ORDER BY greatest(exact_score, lexical_score) DESC LIMIT %(limit)s
             ), vector_lane AS (
                 SELECT id FROM scored ORDER BY vector_score DESC LIMIT %(limit)s
+            ), semantic_lexical_lane AS (
+                SELECT id FROM scored
+                WHERE semantic_lexical_score > 0
+                ORDER BY semantic_lexical_score DESC, lexical_score DESC
+                LIMIT %(limit)s
             ), schema_lane AS (
                 SELECT id FROM scored ORDER BY schema_recall_score DESC LIMIT %(limit)s
             ), field_lane AS (
@@ -1040,6 +1253,12 @@ class PostgresEndpointRepository:
                 WHERE service_recall_score > 0
                 ORDER BY service_recall_score DESC, lexical_score DESC
                 LIMIT %(limit)s
+            ), route_identity_lane AS (
+                SELECT id FROM scored
+                WHERE route_identity_recall_score > 0
+                ORDER BY route_identity_recall_score DESC, lexical_score DESC,
+                    structured_recall_score DESC
+                LIMIT %(limit)s
             ), family_lane AS (
                 SELECT id FROM scored
                 WHERE family_recall_score > 0
@@ -1050,12 +1269,14 @@ class PostgresEndpointRepository:
             WHERE id IN (
                 SELECT id FROM lexical_lane
                 UNION SELECT id FROM vector_lane
+                UNION SELECT id FROM semantic_lexical_lane
                 UNION SELECT id FROM schema_lane
                 UNION SELECT id FROM field_lane
                 UNION SELECT id FROM structured_lane
                 UNION SELECT id FROM lookup_lane
                 UNION SELECT id FROM identifier_lane
                 UNION SELECT id FROM service_lane
+                UNION SELECT id FROM route_identity_lane
                 UNION SELECT id FROM family_lane
             )
         """
@@ -1089,6 +1310,7 @@ class PostgresEndpointRepository:
                 if _normalize_field_identifier(value)
             ],
             "schema_direction": schema_direction,
+            "semantic_query_terms": semantic_query_terms or [],
             "limit": limit,
         }
         with self._connect() as connection, connection.cursor() as cursor:
@@ -1106,6 +1328,8 @@ class PostgresEndpointRepository:
                 float(row["identifier_recall_score"] or 0),
                 float(row["service_recall_score"] or 0),
                 float(row["field_recall_score"] or 0),
+                float(row["route_identity_recall_score"] or 0),
+                float(row["semantic_lexical_score"] or 0),
             )
             for row in rows
         ]
@@ -1326,7 +1550,7 @@ def _structured_recall_score(
         + (0.20 if set(audiences) & set(endpoint.audiences) else 0)
         + (0.15 if set(domains) & set(endpoint.domains) else 0)
         + (0.20 if set(actions) & set(endpoint.actions) else 0)
-        + (0.10 if services and endpoint.service in services else 0)
+        + (0.10 if service_hint_score(endpoint.service, services) > 0 else 0)
         + (0.10 if set(lookup_keys) & set(endpoint.lookup_keys) else 0)
         + (0.10 if set(identifier_types) & set(endpoint.lookup_keys) else 0)
         + (0.05 if cardinality != "unknown" and endpoint.cardinality == cardinality else 0)

@@ -66,6 +66,8 @@ class WorkspaceSharedFileStore(Protocol):
         self, workspace_id: str, revision: int | None = None
     ) -> WorkspaceSharedFileSet | None: ...
 
+    def count_current_files(self, workspace_id: str, file_type: str) -> int: ...
+
     def replace_all(
         self,
         workspace_id: str,
@@ -88,6 +90,12 @@ class InMemoryWorkspaceSharedFileRepository:
         if revision is None:
             return sets[-1]
         return next((item for item in sets if item.revision == revision), None)
+
+    def count_current_files(self, workspace_id: str, file_type: str) -> int:
+        file_set = self.get_file_set(workspace_id)
+        if file_set is None:
+            return 0
+        return sum(item.file_type == file_type for item in file_set.files)
 
     def replace_all(
         self,
@@ -151,6 +159,24 @@ class PostgresWorkspaceSharedFileRepository:
         )
         digest = str(set_row[1]) if set_row[1] else shared_file_set_digest(files)
         return WorkspaceSharedFileSet(revision=int(set_row[0]), digest=digest, files=files)
+
+    def count_current_files(self, workspace_id: str, file_type: str) -> int:
+        try:
+            with psycopg.connect(self._database_url) as connection:
+                row = connection.execute(
+                    """SELECT COUNT(*)
+                       FROM workspace_shared_files AS files
+                       JOIN workspace_shared_file_sets AS sets
+                         ON sets.workspace_id = files.workspace_id
+                        AND sets.revision = files.revision
+                       WHERE files.workspace_id = %s
+                         AND sets.is_current
+                         AND files.file_type = %s""",
+                    (workspace_id, file_type),
+                ).fetchone()
+        except psycopg.Error as exc:
+            raise WorkspaceSharedFileRepositoryError("共享文件计数失败") from exc
+        return int(row[0]) if row else 0
 
     def replace_all(
         self,

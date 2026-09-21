@@ -7,7 +7,9 @@ from context_router.main import create_app
 from context_router.repositories.database_environment_repository import (
     InMemoryDatabaseEnvironmentRepository,
 )
+from context_router.repositories.managed_rule_repository import InMemoryManagedRuleRepository
 from context_router.repositories.project_repository import InMemoryProjectRepository
+from context_router.services.managed_rules import SEED_RULES
 
 
 class FakeTaskRepository:
@@ -51,6 +53,7 @@ summary: 项目导航。
         task_repository=FakeTaskRepository(),
         project_repository=InMemoryProjectRepository(),
         database_environment_repository=InMemoryDatabaseEnvironmentRepository(),
+        managed_rule_repository=InMemoryManagedRuleRepository(),
     )
 
     with TestClient(app) as client:
@@ -98,10 +101,14 @@ summary: 项目导航。
     assert set(payload) == {
         "task_id",
         "documents",
+        "workspace_rules",
         "environment",
         "execution_contract",
         "access",
     }
+    assert [
+        {"title": item["title"], "body": item["body"]} for item in payload["workspace_rules"]
+    ] == [{"title": spec.title, "body": spec.body} for spec in SEED_RULES]
     assert payload["environment"] == {
         "key": "test",
         "name": "TEST",

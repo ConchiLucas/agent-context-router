@@ -18,6 +18,24 @@ ACTION_DESCRIPTIONS = {
     "query": "读取业务数据",
 }
 
+GENERIC_CRUD_OPERATIONS = {
+    "add",
+    "create",
+    "delete",
+    "deletebyid",
+    "deletebyids",
+    "detail",
+    "get",
+    "getbyid",
+    "list",
+    "page",
+    "query",
+    "remove",
+    "save",
+    "saveorupdate",
+    "update",
+}
+
 
 def infer_controller_name(operation_id: str) -> str:
     source_class, separator, _method = operation_id.partition(".")
@@ -42,12 +60,30 @@ def infer_interface_family(*, resource: str, controller_name: str, path: str) ->
 def build_distinguishing_features(endpoint: EndpointCreate) -> dict[str, str]:
     actions = _specific_actions(endpoint.actions)
     primary_action = actions[0] if actions else "query"
+    operation_selector = _operation_selector(endpoint)
+    path_segments = [
+        segment for segment in endpoint.path.split("/") if segment and not segment.startswith("{")
+    ]
     values = {
         "primary_action": primary_action,
         "action_meaning": ACTION_DESCRIPTIONS.get(primary_action, primary_action),
         "cardinality": endpoint.cardinality,
         "ownership": endpoint.ownership,
+        "service_identity": " / ".join(
+            item for item in (endpoint.project, endpoint.service) if item
+        ),
     }
+    if path_segments:
+        values["api_namespace"] = path_segments[0]
+    if len(path_segments) >= 2:
+        values["path_resource_scope"] = path_segments[-2]
+    if operation_selector:
+        values["endpoint_operation"] = operation_selector
+        values["operation_specificity"] = (
+            "generic_crud"
+            if operation_selector.casefold() in GENERIC_CRUD_OPERATIONS
+            else "specialized"
+        )
     if endpoint.lookup_keys:
         values["lookup_keys"] = "、".join(endpoint.lookup_keys[:6])
     if endpoint.required_inputs:
@@ -66,3 +102,13 @@ def sibling_action_keys(actions: list[str]) -> list[str]:
 def _specific_actions(actions: list[str]) -> list[str]:
     specific = [action for action in actions if action != "query"]
     return specific or (["query"] if "query" in actions else [])
+
+
+def _operation_selector(endpoint: EndpointCreate) -> str:
+    _controller, separator, method = endpoint.operation_id.rpartition(".")
+    if separator and method.strip():
+        return method.strip()
+    segments = [
+        segment for segment in endpoint.path.split("/") if segment and not segment.startswith("{")
+    ]
+    return segments[-1] if segments else ""

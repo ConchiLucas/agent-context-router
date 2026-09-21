@@ -20,7 +20,14 @@ from context_router.repositories.workspace_shared_file_repository import (
     WorkspaceSharedFileStore,
     shared_file_set_digest,
 )
-from context_router.schemas.workspace_shared_files import WorkspaceSharedFilesResult
+from context_router.schemas.workspace_shared_files import (
+    WorkspaceScriptDetail,
+    WorkspaceScriptList,
+    WorkspaceScriptSummary,
+    WorkspaceScriptSyncResult,
+    WorkspaceSharedFilesResult,
+    WorkspaceTypedSyncResult,
+)
 from context_router.services.local_workspace_mapping import (
     LocalWorkspaceMappingError,
     LocalWorkspaceMappingService,
@@ -38,6 +45,62 @@ from context_router.services.workspace_deploy_sync import (
 
 class WorkspaceSharedFilesError(ValueError):
     pass
+
+
+MAX_SCRIPT_DESCRIPTION_CHARS = 160
+SCRIPT_PURPOSE_BY_PATH = {
+    "script/test_host_runtime.sh": (
+        "检查宿主机运行脚本语法，并执行 TCP 转发器回归测试和数据库代理 Compose 配置校验。"
+    ),
+    "script/verify_local_runtime.sh": (
+        "只读检查 Host Runtime 基础设施、已注册业务容器和本地业务入口，并输出就绪摘要。"
+    ),
+}
+
+
+def describe_shared_script(content: str, relative_path: str = "") -> str:
+    comments: list[str] = []
+    in_import_block = False
+    for raw in content.splitlines():
+        line = raw.strip()
+        if not line:
+            if comments:
+                break
+            continue
+        if line.startswith("#!"):
+            continue
+        if line.startswith("package "):
+            if comments:
+                break
+            continue
+        if line.startswith("import ("):
+            in_import_block = True
+            continue
+        if in_import_block:
+            if line == ")":
+                in_import_block = False
+            continue
+        if line.startswith("import ") or line.startswith("import\t"):
+            continue
+        stripped = ""
+        if line.startswith("<!--") and line.endswith("-->"):
+            stripped = line.removeprefix("<!--").removesuffix("-->").strip()
+        elif line.startswith("//"):
+            stripped = line[2:].strip()
+        elif line.startswith("#"):
+            stripped = line.lstrip("#").strip()
+        else:
+            break
+        if stripped:
+            comments.append(stripped)
+        elif comments:
+            break
+    text = " ".join(comments).strip()
+    if not text and relative_path:
+        text = SCRIPT_PURPOSE_BY_PATH.get(PurePosixPath(relative_path).as_posix(), "")
+    if len(text) > MAX_SCRIPT_DESCRIPTION_CHARS:
+        return text[: MAX_SCRIPT_DESCRIPTION_CHARS - 1].rstrip() + "…"
+    return text
 
 
 SCRIPT_ROOT = Path("script")
@@ -196,6 +259,124 @@ class WorkspaceSharedFilesService:
             raise WorkspaceSharedFilesError(f"找不到主映射目录：{host_path}")
         return resolved
 
+    def list_scripts(self, workspace_id: str) -> WorkspaceScriptList:
+        root = self._main_root(workspace_id)
+        try:
+            file_set = self._files.get_file_set(workspace_id)
+        except WorkspaceSharedFileRepositoryError as exc:
+            raise WorkspaceSharedFilesError(str(exc)) from exc
+        scripts = (
+            ()
+            if file_set is None
+            else tuple(item for item in file_set.files if item.file_type == "script")
+        )
+        return WorkspaceScriptList(
+            workspace_id=workspace_id,
+            revision=None if file_set is None else file_set.revision,
+            target_directory=str(root / SCRIPT_ROOT),
+            scripts=[self._script_summary(item) for item in scripts],
+        )
+
+    def get_script(self, workspace_id: str, relative_path: str) -> WorkspaceScriptDetail:
+        self._main_root(workspace_id)
+        item = self._script_file(workspace_id, relative_path)
+        return WorkspaceScriptDetail(
+            **self._script_summary(item).model_dump(),
+            content=item.content,
+        )
+
+    def sync_scripts(self, workspace_id: str) -> WorkspaceScriptSyncResult:
+        synced = self._sync_types(
+            workspace_id,
+            frozenset({"script"}),
+            missing_set="数据库中还没有可同步的脚本",
+            missing_files="数据库当前版本没有脚本，无法同步到目标目录",
+            target_root=SCRIPT_ROOT,
+        )
+        return WorkspaceScriptSyncResult(
+            workspace_id=synced.workspace_id,
+            target_directory=synced.target_directory,
+            script_count=synced.file_count,
+            revision=synced.revision,
+        )
+
+    def sync_documents(self, workspace_id: str) -> WorkspaceTypedSyncResult:
+        return self._sync_types(
+            workspace_id,
+            frozenset({"document"}),
+            missing_set="数据库中还没有可同步的文档",
+            missing_files="数据库当前版本没有文档，无法同步到 docs/",
+            target_root=Path("docs"),
+            refresh_registry=True,
+        )
+
+    def sync_deploy(self, workspace_id: str) -> WorkspaceTypedSyncResult:
+        return self._sync_types(
+            workspace_id,
+            frozenset({"deploy", "host_runtime"}),
+            missing_set="数据库中还没有可同步的部署配置",
+            missing_files="数据库当前版本没有部署配置，无法同步到 deploy/",
+            target_root=Path("deploy"),
+        )
+
+    def _sync_types(
+        self,
+        workspace_id: str,
+        file_types: frozenset[str],
+        *,
+        missing_set: str,
+        missing_files: str,
+        target_root: Path,
+        refresh_registry: bool = False,
+    ) -> WorkspaceTypedSyncResult:
+        root = self._main_root(workspace_id)
+        try:
+            file_set = self._files.get_file_set(workspace_id)
+        except WorkspaceSharedFileRepositoryError as exc:
+            raise WorkspaceSharedFilesError(str(exc)) from exc
+        if file_set is None:
+            raise WorkspaceSharedFilesError(missing_set)
+        selected = [item for item in file_set.files if item.file_type in file_types]
+        if not selected:
+            raise WorkspaceSharedFilesError(missing_files)
+        self._validate_file_set(selected)
+        self._apply_managed_files(
+            root,
+            selected,
+            workspace_id=workspace_id if refresh_registry else None,
+        )
+        return WorkspaceTypedSyncResult(
+            workspace_id=workspace_id,
+            file_types=sorted(file_types),
+            target_directory=str(root / target_root),
+            file_count=len(selected),
+            revision=file_set.revision,
+        )
+
+    def _script_file(self, workspace_id: str, relative_path: str) -> WorkspaceSharedFile:
+        normalized = relative_path.strip()
+        try:
+            file_set = self._files.get_file_set(workspace_id)
+        except WorkspaceSharedFileRepositoryError as exc:
+            raise WorkspaceSharedFilesError(str(exc)) from exc
+        if file_set is None:
+            raise WorkspaceSharedFilesError("数据库中还没有可查看的脚本")
+        for item in file_set.files:
+            if item.file_type == "script" and item.relative_path == normalized:
+                return item
+        raise WorkspaceSharedFilesError("数据库中没有这个脚本")
+
+    @staticmethod
+    def _script_summary(item: WorkspaceSharedFile) -> WorkspaceScriptSummary:
+        return WorkspaceScriptSummary(
+            relative_path=item.relative_path,
+            name=PurePosixPath(item.relative_path).name,
+            description=describe_shared_script(item.content, item.relative_path),
+            executable=item.executable,
+            content_sha256=item.content_sha256 or "",
+            byte_size=len(item.content.encode("utf-8")),
+        )
+
     def _scan_documents(self, root: Path) -> list[WorkspaceSharedFile]:
         docs_root = root / "docs"
         if not docs_root.is_dir() or docs_root.is_symlink():
@@ -338,6 +519,72 @@ class WorkspaceSharedFilesService:
             if target.is_symlink():
                 raise WorkspaceSharedFilesError(f"拒绝覆盖符号链接目录：{target}")
             shutil.rmtree(target)
+
+    def _apply_managed_files(
+        self,
+        root: Path,
+        files: list[WorkspaceSharedFile],
+        *,
+        workspace_id: str | None = None,
+    ) -> None:
+        destinations = [(item, self._destination(root, item)) for item in files]
+        temporary_root = Path(tempfile.mkdtemp(prefix=".context-router-typed-sync-", dir=root))
+        stage_root = temporary_root / "stage"
+        backup_root = temporary_root / "backup"
+        stage_root.mkdir()
+        backup_root.mkdir()
+        swaps: list[tuple[Path, Path, bool, bool]] = []
+        try:
+            for item, destination in destinations:
+                staged = stage_root / destination.relative_to(root)
+                staged.parent.mkdir(parents=True, exist_ok=True)
+                staged.write_text(item.content, encoding="utf-8")
+                staged.chmod(0o755 if item.executable else 0o644)
+
+            managed_roots = self._managed_roots(root, tuple(files))
+            for index, target in enumerate(managed_roots):
+                if target.is_symlink():
+                    raise WorkspaceSharedFilesError(f"拒绝覆盖符号链接目录：{target}")
+                staged = stage_root / target.relative_to(root)
+                if not staged.is_dir():
+                    raise WorkspaceSharedFilesError(f"暂存共享目录不完整：{target}")
+                target.parent.mkdir(parents=True, exist_ok=True)
+                backup = backup_root / str(index)
+                existed = target.exists()
+                preserve_inodes = target == root / HOST_RUNTIME_ROOT and existed
+                if existed:
+                    if preserve_inodes:
+                        shutil.copytree(target, backup, copy_function=shutil.copy2)
+                    else:
+                        os.replace(target, backup)
+                swaps.append((target, backup, existed, preserve_inodes))
+                if preserve_inodes:
+                    self._synchronize_tree_in_place(root, staged, target)
+                else:
+                    os.replace(staged, target)
+            if workspace_id is not None:
+                self._registry.refresh_workspace(workspace_id)
+        except Exception as exc:
+            for target, backup, existed, preserve_inodes in reversed(swaps):
+                if preserve_inodes and existed and backup.exists():
+                    self._synchronize_tree_in_place(root, backup, target)
+                    continue
+                if target.exists():
+                    self._remove_tree(root, target)
+                if existed and backup.exists():
+                    os.replace(backup, target)
+            if workspace_id is not None:
+                try:
+                    self._registry.refresh_workspace(workspace_id)
+                except ProjectRegistryError:
+                    pass
+            if isinstance(exc, WorkspaceSharedFilesError):
+                raise
+            if isinstance(exc, ProjectRegistryError):
+                raise WorkspaceSharedFilesError(f"分类同步已回滚，文档映射刷新失败：{exc}") from exc
+            raise WorkspaceSharedFilesError(f"分类同步已回滚：{exc}") from exc
+        finally:
+            shutil.rmtree(temporary_root, ignore_errors=True)
 
     def _restore_atomically(
         self,

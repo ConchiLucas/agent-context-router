@@ -41,6 +41,10 @@ def _app() -> FastAPI:
     def restore_shared_files() -> dict[str, bool]:
         return {"restored": True}
 
+    @app.post("/api/workspaces/workspace-1/scripts/sync")
+    def sync_workspace_scripts() -> dict[str, bool]:
+        return {"synced": True}
+
     @app.post("/api/workspaces/workspace-1/containers/bulk-action")
     def control_containers() -> dict[str, bool]:
         return {"controlled": True}
@@ -69,6 +73,10 @@ def _app() -> FastAPI:
     def execute_forwarding() -> dict[str, bool]:
         return {"forwarded": True}
 
+    @app.post("/api/interface-forwarding/browser-captures")
+    def import_browser_captures() -> dict[str, bool]:
+        return {"imported": True}
+
     @app.delete("/api/interface-forwarding/interfaces/interface-1")
     def delete_forwarding_interface() -> dict[str, bool]:
         return {"deleted": True}
@@ -93,13 +101,29 @@ def _app() -> FastAPI:
     def preview_value_mapping() -> dict[str, bool]:
         return {"read": True}
 
-    @app.post("/api/shared-config/ai/refresh")
-    def refresh_shared_ai() -> dict[str, bool]:
-        return {"refreshed": True}
+    @app.post("/api/managed-scripts/script-1/autostart")
+    def set_managed_script_autostart() -> dict[str, bool]:
+        return {"updated": True}
 
-    @app.put("/api/shared-config/ai/default")
-    def save_shared_ai_default() -> dict[str, bool]:
-        return {"saved": True}
+    @app.post("/api/managed-scripts/script-1/run")
+    def run_managed_script() -> dict[str, bool]:
+        return {"ran": True}
+
+    @app.post("/api/managed-rules")
+    def create_managed_rule() -> dict[str, bool]:
+        return {"created": True}
+
+    @app.put("/api/managed-rules/rule-1")
+    def update_managed_rule() -> dict[str, bool]:
+        return {"updated": True}
+
+    @app.delete("/api/managed-rules/rule-1")
+    def delete_managed_rule() -> dict[str, bool]:
+        return {"deleted": True}
+
+    @app.post("/api/interface-prompt-matches")
+    def create_interface_prompt_match() -> dict[str, bool]:
+        return {"matched": True}
 
     return app
 
@@ -120,11 +144,18 @@ def test_browser_origin_can_read_and_run_allowlisted_actions() -> None:
                 "/api/workspaces/reload-local-mapping",
                 headers=headers,
             ).status_code
-            == 200
+            == 405
         )
         assert (
             client.post(
                 "/api/workspaces/workspace-1/shared-files/restore",
+                headers=headers,
+            ).status_code
+            == 200
+        )
+        assert (
+            client.post(
+                "/api/workspaces/workspace-1/scripts/sync",
                 headers=headers,
             ).status_code
             == 200
@@ -170,7 +201,7 @@ def test_browser_origin_can_read_and_run_allowlisted_actions() -> None:
                 "/api/workspaces/workspace-1/refresh",
                 headers=headers,
             ).status_code
-            == 200
+            == 405
         )
         assert (
             client.put(
@@ -183,6 +214,10 @@ def test_browser_origin_can_read_and_run_allowlisted_actions() -> None:
             client.post(
                 "/api/interface-forwarding/interfaces/interface-1/execute", headers=headers
             ).status_code
+            == 200
+        )
+        assert (
+            client.post("/api/interface-forwarding/browser-captures", headers=headers).status_code
             == 200
         )
         assert (
@@ -204,8 +239,20 @@ def test_browser_origin_can_read_and_run_allowlisted_actions() -> None:
         assert (
             client.post("/api/value-mappings/mapping-1/preview", headers=headers).status_code == 200
         )
-        assert client.post("/api/shared-config/ai/refresh", headers=headers).status_code == 200
-        assert client.put("/api/shared-config/ai/default", headers=headers).status_code == 200
+        assert client.post("/api/shared-config/ai/refresh", headers=headers).status_code == 405
+        assert client.put("/api/shared-config/ai/default", headers=headers).status_code == 405
+        assert (
+            client.post(
+                "/api/managed-scripts/script-1/autostart",
+                headers=headers,
+            ).status_code
+            == 200
+        )
+        assert client.post("/api/managed-scripts/script-1/run", headers=headers).status_code == 405
+        assert client.post("/api/managed-rules", headers=headers).status_code == 405
+        assert client.put("/api/managed-rules/rule-1", headers=headers).status_code == 405
+        assert client.delete("/api/managed-rules/rule-1", headers=headers).status_code == 405
+        assert client.post("/api/interface-prompt-matches", headers=headers).status_code == 405
 
 
 def test_browser_origin_cannot_call_configuration_commands() -> None:

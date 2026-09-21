@@ -21,12 +21,14 @@ from context_router.schemas.context import (
     TaskEnvironmentContext,
     TaskIntentSource,
     TaskIntentType,
+    WorkspaceRule,
 )
 from context_router.services.database_access import (
     DatabaseAccessError,
     DatabaseAccessService,
 )
 from context_router.services.document_tree import CachedTreeNode
+from context_router.services.managed_rules import ManagedRulesService
 from context_router.services.project_registry import (
     ProjectRegistry,
     ProjectRegistryError,
@@ -64,11 +66,13 @@ class ContextPreparationService:
         task_repository: TaskStore,
         database_access_service: DatabaseAccessService | None = None,
         mcp_environment_defaults: McpEnvironmentDefaultStore | None = None,
+        managed_rules_service: ManagedRulesService | None = None,
     ) -> None:
         self._registry = registry
         self._task_repository = task_repository
         self._database_access_service = database_access_service
         self._mcp_environment_defaults = mcp_environment_defaults
+        self._managed_rules_service = managed_rules_service
 
     def read_task_context(
         self,
@@ -556,6 +560,7 @@ class ContextPreparationService:
                     else None
                 ),
                 documents=documents,
+                workspace_rules=self._workspace_rules(warning_items),
                 execution_contract=build_task_execution_contract(
                     intent_type=intent_type,
                     error_signal=error_signal,
@@ -576,6 +581,15 @@ class ContextPreparationService:
                 "任务上下文准备失败",
                 task_id=task_id,
             ) from exc
+
+    def _workspace_rules(self, warning_items: list[str]) -> list[WorkspaceRule]:
+        if self._managed_rules_service is None:
+            return []
+        try:
+            return self._managed_rules_service.list_prepare_rules()
+        except Exception:
+            warning_items.append("读取控制面规则失败")
+            return []
 
     def _context_node(
         self,
