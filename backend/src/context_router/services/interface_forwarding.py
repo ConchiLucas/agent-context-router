@@ -4,8 +4,10 @@ import json
 import re
 import time
 from contextlib import nullcontext
+from functools import lru_cache
+from threading import BoundedSemaphore
 from typing import Any
-from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, quote, urlencode, urljoin, urlsplit, urlunsplit
 from uuid import uuid4
 
 import httpx
@@ -25,10 +27,13 @@ from context_router.schemas.interface_forwarding import (
     InterfaceForwardingLogWrite,
     InterfaceSemanticsWrite,
 )
+from context_router.services.forwarding_safety import is_sse_control
+from context_router.services.interface_request_status import request_status
 from context_router.services.visualization_security import redact_value
 
 _BROWSER_REQUEST_MAX_BYTES = 262_144
 _BROWSER_RESPONSE_MAX_BYTES = 1_048_576
+_BROWSER_IMPORT_SLOTS = BoundedSemaphore(2)
 
 
 class InterfaceForwardingError(RuntimeError):
@@ -78,7 +83,7 @@ class InterfaceForwardingService:
     def _connect(self):
         if not self._database_url:
             raise InterfaceForwardingError("控制面数据库尚未配置")
-        return psycopg.connect(self._database_url, row_factory=dict_row)
+        return psycopg.connect(self._database_url, row_factory=dict_row, connect_timeout=5)
 
     def overview(
         self,
@@ -88,7 +93,15 @@ class InterfaceForwardingService:
         service_id: str | None = None,
         page: int = 1,
         page_size: int = 50,
+        environment: str = "",
+        status_filter: str = "",
     ) -> dict[str, Any]:
+        valid_statuses = {
+            "not_requested", "has_data", "no_data", "succeeded", "not_found",
+            "business_error", "error", "requested",
+        }
+        if status_filter and status_filter not in valid_statuses:
+            raise InterfaceForwardingError("请求状态筛选值无效")
         like = f"%{keyword.strip()}%"
         with self._connect() as connection, connection.cursor() as cursor:
             cursor.execute(
@@ -119,32 +132,87 @@ class InterfaceForwardingService:
                 like,
                 like,
             )
-            cursor.execute(
-                """
-                SELECT count(*)::int AS total
-                FROM interface_forwarding_interfaces i
-                LEFT JOIN interface_semantic_index semantic ON semantic.id = i.id
-                WHERE i.workspace_id = %s
-                  AND (%s = '' OR i.service_id = %s)
-                  AND (%s = '' OR i.name ILIKE %s OR i.path ILIKE %s
-                       OR i.description ILIKE %s
-                       OR i.controller_name ILIKE %s
-                       OR semantic.search_document ILIKE %s)
-                """,
-                filter_params,
-            )
-            total_row = cursor.fetchone()
-            interface_total = int(total_row["total"] if total_row else 0)
+            status_ids: list[str] | None = None
+            if status_filter:
+                cursor.execute(
+                    """
+                    SELECT i.id, i.operation_kind,
+                           latest.last_requested_at, latest.last_status_code,
+                           latest.last_success, latest.last_response_body,
+                           latest.last_truncated
+                    FROM interface_forwarding_interfaces i
+                    LEFT JOIN interface_semantic_index semantic ON semantic.id = i.id
+                    LEFT JOIN LATERAL (
+                        SELECT logs.created_at AS last_requested_at,
+                               logs.status_code AS last_status_code,
+                               logs.success AS last_success,
+                               left(logs.response_body, 65536) AS last_response_body,
+                               (logs.response_truncated OR length(logs.response_body) > 65536)
+                                 AS last_truncated
+                        FROM interface_forwarding_logs logs
+                        WHERE logs.interface_id = i.id
+                          AND (%s = '' OR logs.environment_key = %s)
+                        ORDER BY logs.created_at DESC, logs.id DESC
+                        LIMIT 1
+                    ) latest ON TRUE
+                    WHERE i.workspace_id = %s
+                      AND (%s = '' OR i.service_id = %s)
+                      AND (%s = '' OR i.name ILIKE %s OR i.path ILIKE %s
+                           OR i.description ILIKE %s
+                           OR i.controller_name ILIKE %s
+                           OR semantic.search_document ILIKE %s)
+                    ORDER BY latest.last_requested_at DESC NULLS LAST,
+                             lower(i.path), i.method, i.id
+                    """,
+                    (environment, environment, *filter_params),
+                )
+                status_ids = [
+                    str(item["id"])
+                    for item in cursor.fetchall()
+                    if request_status(
+                        requested=item.get("last_requested_at") is not None,
+                        operation_kind=str(item.get("operation_kind") or "unknown"),
+                        status_code=item.get("last_status_code"),
+                        success=item.get("last_success"),
+                        response_body=item.get("last_response_body"),
+                        truncated=bool(item.get("last_truncated", False)),
+                    ) == status_filter
+                ]
+                interface_total = len(status_ids)
+            else:
+                cursor.execute(
+                    """
+                    SELECT count(*)::int AS total
+                    FROM interface_forwarding_interfaces i
+                    LEFT JOIN interface_semantic_index semantic ON semantic.id = i.id
+                    WHERE i.workspace_id = %s
+                      AND (%s = '' OR i.service_id = %s)
+                      AND (%s = '' OR i.name ILIKE %s OR i.path ILIKE %s
+                           OR i.description ILIKE %s
+                           OR i.controller_name ILIKE %s
+                           OR semantic.search_document ILIKE %s)
+                    """,
+                    filter_params,
+                )
+                total_row = cursor.fetchone()
+                interface_total = int(total_row["total"] if total_row else 0)
             total_pages = max(1, (interface_total + page_size - 1) // page_size)
             current_page = min(page, total_pages)
             offset = (current_page - 1) * page_size
-            cursor.execute(
-                """
+            selected_ids = status_ids[offset:offset + page_size] if status_ids is not None else None
+            if selected_ids is not None and not selected_ids:
+                interfaces = []
+            else:
+                status_constraint = "AND i.id = ANY(%s::text[])" if selected_ids is not None else ""
+                cursor.execute(
+                    f"""
                 SELECT i.id, i.service_id, service.name AS service_name,
                        i.name, i.path, i.method, i.description,
                        i.controller_name, i.operation_id, i.operation_kind,
                        i.request_schema, i.response_schema, i.created_at, i.updated_at,
                        latest.last_requested_at,
+                       latest.last_environment, latest.last_status_code,
+                       latest.last_success, latest.last_response_body, latest.last_truncated,
                        semantic.purpose, semantic.audiences, semantic.domains,
                        semantic.scenarios, semantic.actions, semantic.entities,
                        semantic.aliases, semantic.resource, semantic.lookup_keys,
@@ -163,10 +231,17 @@ class InterfaceForwardingService:
                 JOIN interface_forwarding_services service ON service.id = i.service_id
                 LEFT JOIN interface_semantic_index semantic ON semantic.id = i.id
                 LEFT JOIN LATERAL (
-                    SELECT logs.created_at AS last_requested_at
+                    SELECT logs.created_at AS last_requested_at,
+                           logs.environment_key AS last_environment,
+                           logs.status_code AS last_status_code,
+                           logs.success AS last_success,
+                           left(logs.response_body, 65536) AS last_response_body,
+                           (logs.response_truncated OR length(logs.response_body) > 65536)
+                             AS last_truncated
                     FROM interface_forwarding_logs logs
                     WHERE logs.interface_id = i.id
-                    ORDER BY logs.created_at DESC
+                      AND (%s = '' OR logs.environment_key = %s)
+                    ORDER BY logs.created_at DESC, logs.id DESC
                     LIMIT 1
                 ) latest ON TRUE
                 LEFT JOIN LATERAL (
@@ -194,14 +269,27 @@ class InterfaceForwardingService:
                        OR i.description ILIKE %s
                        OR i.controller_name ILIKE %s
                        OR semantic.search_document ILIKE %s)
+                  {status_constraint}
                 ORDER BY latest.last_requested_at DESC NULLS LAST,
-                         lower(i.path), i.method
+                         lower(i.path), i.method, i.id
                 LIMIT %s OFFSET %s
                 """,
-                (*filter_params, page_size, offset),
-            )
-            interfaces = list(cursor.fetchall())
+                    (
+                        environment, environment, *filter_params,
+                        *((selected_ids,) if selected_ids is not None else ()),
+                        page_size, 0 if selected_ids is not None else offset,
+                    ),
+                )
+                interfaces = list(cursor.fetchall())
             for item in interfaces:
+                item["request_status"] = request_status(
+                    requested=item.get("last_requested_at") is not None,
+                    operation_kind=str(item.get("operation_kind") or "unknown"),
+                    status_code=item.get("last_status_code"),
+                    success=item.pop("last_success", None),
+                    response_body=item.pop("last_response_body", None),
+                    truncated=bool(item.pop("last_truncated", False)),
+                )
                 item["name"] = self._coalesce_interface_name(
                     str(item["name"]),
                     summary=str(item["description"] or ""),
@@ -926,9 +1014,11 @@ class InterfaceForwardingService:
             interface = cursor.fetchone()
             if not interface:
                 raise InterfaceForwardingError("接口不存在")
+            if is_sse_control(str(interface["path"])):
+                raise InterfaceForwardingError("SSE 连接与订阅控制不支持普通接口转发")
             cursor.execute(
                 """SELECT forwarding.id, forwarding.service_id, forwarding.name,
-                          forwarding.base_url,
+                          forwarding.base_url, forwarding.environment_key,
                           workspace.display_name AS workspace_environment_name
                 FROM interface_forwarding_environments AS forwarding
                 JOIN workspace_environments AS workspace
@@ -960,8 +1050,8 @@ class InterfaceForwardingService:
                 """INSERT INTO interface_forwarding_logs
                 (id, workspace_id, interface_id, environment_name, identity_name,
                  identity_role, request_url, request_body, response_body, status_code,
-                 success, duration_ms)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                 success, duration_ms, environment_key)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 RETURNING id, environment_name, identity_name, identity_role,
                           request_url, request_body, response_body, status_code,
                           success, duration_ms, created_at""",
@@ -978,11 +1068,23 @@ class InterfaceForwardingService:
                     payload.status_code,
                     payload.success,
                     payload.duration_ms,
+                    environment["environment_key"],
                 ),
             )
             return cursor.fetchone()
 
     def import_browser_captures(
+        self, payload: InterfaceForwardingBrowserCaptureImport, *, rematch: bool = False
+    ) -> dict[str, Any]:
+        # Fail promptly: waiting imports must not exhaust the shared HTTP thread pool.
+        if not _BROWSER_IMPORT_SLOTS.acquire(blocking=False):
+            raise InterfaceForwardingError("采集入库繁忙，请稍后重试")
+        try:
+            return self._import_browser_captures_bounded(payload, rematch=rematch)
+        finally:
+            _BROWSER_IMPORT_SLOTS.release()
+
+    def _import_browser_captures_bounded(
         self, payload: InterfaceForwardingBrowserCaptureImport, *, rematch: bool = False
     ) -> dict[str, Any]:
         """Acknowledge durable observations, not merely an HTTP-successful batch.
@@ -1009,6 +1111,7 @@ class InterfaceForwardingService:
             if not environment:
                 raise InterfaceForwardingError("录制环境不存在")
             environment_key = environment["environment_key"]
+            connection.commit()
             for index, capture in enumerate(payload.captures):
                 capture_id = capture.capture_id or str(uuid4())
                 capture_retained = True
@@ -1030,11 +1133,13 @@ class InterfaceForwardingService:
                         update={
                             "capture_id": capture_id,
                             "url": safe_url,
-                            "request_body": json.loads(request),
-                            "response_body": json.loads(response),
+                            "request_body": self._postgres_safe_json(json.loads(request)),
+                            "response_body": self._postgres_safe_json(json.loads(response)),
                         }
                     )
                     with connection.transaction():
+                        cursor.execute("SET LOCAL lock_timeout = '1500ms'")
+                        cursor.execute("SET LOCAL statement_timeout = '5000ms'")
                         cursor.execute(
                             """INSERT INTO browser_interface_captures
                             (workspace_id,capture_id,environment_key,revision,payload,match_status)
@@ -1361,11 +1466,16 @@ class InterfaceForwardingService:
                     request_payload,
                     _BROWSER_REQUEST_MAX_BYTES,
                 )
+                observed_response = self._browser_response(capture)
                 response_body, response_truncated, response_bytes = self._bounded_json(
-                    redact_value(capture.response_body),
+                    redact_value(observed_response),
                     _BROWSER_RESPONSE_MAX_BYTES,
                 )
-                success = capture.status_code is not None and 200 <= capture.status_code < 400
+                response_truncated = response_truncated or (
+                    isinstance(observed_response, dict)
+                    and bool(observed_response.get("_truncated"))
+                )
+                success = self._browser_success(capture, observed_response, response_truncated)
                 log_id = str(uuid4())
                 environment_name = (
                     f"{environment['workspace_environment_name']} · {environment['name']}"
@@ -1397,7 +1507,7 @@ class InterfaceForwardingService:
                     address_id,
                     identity_id,
                     response_bytes,
-                    request_truncated or response_truncated,
+                    response_truncated,
                     capture.capture_id,
                 )
                 daily_read = interface["operation_kind"] == "read"
@@ -1656,6 +1766,7 @@ class InterfaceForwardingService:
         )
 
     @classmethod
+    @lru_cache(maxsize=16384)
     def _capture_matches_interface(
         cls,
         *,
@@ -1692,6 +1803,15 @@ class InterfaceForwardingService:
     def _path_template_matches(template: str, actual: str) -> bool:
         normalized_template = "/" + template.strip("/")
         normalized_actual = "/" + actual.strip("/")
+        if "{" not in normalized_template:
+            return normalized_template == normalized_actual
+        return InterfaceForwardingService._compiled_path_template(normalized_template).fullmatch(
+            normalized_actual
+        ) is not None
+
+    @staticmethod
+    @lru_cache(maxsize=8192)
+    def _compiled_path_template(normalized_template: str) -> re.Pattern:
         pieces: list[str] = []
         position = 0
         for match in re.finditer(r"\{[^{}]+\}", normalized_template):
@@ -1699,7 +1819,7 @@ class InterfaceForwardingService:
             pieces.append(r"[^/]+")
             position = match.end()
         pieces.append(re.escape(normalized_template[position:]))
-        return re.fullmatch("".join(pieces), normalized_actual) is not None
+        return re.compile("".join(pieces))
 
     @staticmethod
     def _query_payload(url: str) -> dict[str, Any]:
@@ -1723,6 +1843,60 @@ class InterfaceForwardingService:
         netloc = f"{host}:{parsed.port}" if parsed.port is not None else host
         query = urlencode(cls._query_payload(url), doseq=True)
         return urlunsplit((parsed.scheme.lower(), netloc, parsed.path, query, ""))
+
+    @staticmethod
+    def _postgres_safe_json(value: Any) -> Any:
+        """JSONB rejects NUL even when JSON serialization escapes it."""
+        if isinstance(value, str):
+            return value.replace("\x00", "\\u0000")
+        if isinstance(value, list):
+            return [InterfaceForwardingService._postgres_safe_json(item) for item in value]
+        if isinstance(value, dict):
+            return {
+                key.replace("\x00", "\\u0000"): InterfaceForwardingService._postgres_safe_json(item)
+                for key, item in value.items()
+            }
+        return value
+
+    @staticmethod
+    def _browser_response(capture: BrowserInterfaceCapture) -> Any:
+        if capture.capture_state == "incomplete":
+            return {"_capture_kind": "incomplete"}
+        if capture.response_body_missing:
+            return {"_capture_kind": "missing"}
+        value = capture.response_body
+        if isinstance(value, str) and ("\x00" in value or "\\u0000" in value):
+            return {"_capture_kind": "binary", "legacy_decoded": True}
+        return value
+
+    @staticmethod
+    def _browser_success(capture: BrowserInterfaceCapture, value: Any, truncated: bool) -> bool:
+        status = request_status(
+            requested=True,
+            operation_kind="read",
+            status_code=capture.status_code,
+            success=None,
+            response_body=json.dumps(value, ensure_ascii=False),
+            truncated=truncated,
+        )
+        if status in {"has_data", "no_data"}:
+            return True
+        if status == "requested" and not truncated and isinstance(value, dict):
+            if not value.get("_capture_kind") and not value.get("_truncated"):
+                return value.get("success") is True or str(value.get("code")).lower() in {
+                    "0",
+                    "200",
+                    "ok",
+                    "success",
+                }
+        # Binary is a completed transport result, not evidence of JSON query data.
+        return bool(
+            capture.status_code is not None
+            and 200 <= capture.status_code < 300
+            and isinstance(value, dict)
+            and value.get("_capture_kind") == "binary"
+            and not truncated
+        )
 
     @staticmethod
     def _bounded_json(value: Any, max_bytes: int) -> tuple[str, bool, int]:
@@ -1795,7 +1969,27 @@ class InterfaceForwardingService:
                 body = json.loads(payload.request_body)
             except json.JSONDecodeError as exc:
                 raise InterfaceForwardingError("请求参数不是合法 JSON") from exc
-        url = urljoin(environment["base_url"].rstrip("/") + "/", interface["path"].lstrip("/"))
+        route_path = str(interface["path"])
+        path_matches = re.findall(r"\{([A-Za-z_][A-Za-z0-9_]*)\}", route_path)
+        path_names = set(path_matches)
+        if "{" in route_path or "}" in route_path:
+            open_count = route_path.count("{")
+            if len(path_matches) != open_count or open_count != route_path.count("}"):
+                raise InterfaceForwardingError("接口路径模板无效")
+        if set(payload.path_params) != path_names:
+            raise InterfaceForwardingError("路径参数与接口模板不匹配")
+        for name in path_names:
+            value = str(payload.path_params[name])
+            if not value or len(value) > 200 or value in {".", ".."} or any(
+                character in value for character in "/\\?#"
+            ):
+                raise InterfaceForwardingError(f"路径参数 {name} 无效")
+            route_path = route_path.replace("{" + name + "}", quote(value, safe=""))
+        base_url = environment["base_url"].rstrip("/") + "/"
+        url = urljoin(base_url, route_path.lstrip("/"))
+        base_parts, url_parts = urlsplit(base_url), urlsplit(url)
+        if (url_parts.scheme, url_parts.netloc) != (base_parts.scheme, base_parts.netloc):
+            raise InterfaceForwardingError("请求地址越过转发地址边界")
         started = time.perf_counter()
         status_code: int | None = None
         success = False
@@ -1842,8 +2036,8 @@ class InterfaceForwardingService:
                 """INSERT INTO interface_forwarding_logs
                 (id, workspace_id, interface_id, environment_name, identity_name,
                  identity_role, request_url, request_body, response_body, status_code,
-                 success, duration_ms)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                 success, duration_ms, environment_key)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                 (
                     str(uuid4()),
                     interface["workspace_id"],
@@ -1857,6 +2051,7 @@ class InterfaceForwardingService:
                     status_code,
                     success,
                     duration_ms,
+                    environment["environment_key"],
                 ),
             )
         return {

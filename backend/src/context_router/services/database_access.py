@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 from context_router.config import Settings
 from context_router.database.errors import DatabaseAccessError
@@ -191,7 +192,7 @@ class DatabaseAccessService:
                 database_updated_at=database.database_updated_at,
                 engine=database.engine,
                 remote_name=database.database_remote_name,
-                connection_config=database.connection_config,
+                connection_config=self._runtime_connection_config(database.connection_config),
             ),
             policy=policy,
             capabilities=capabilities,
@@ -263,11 +264,26 @@ class DatabaseAccessService:
                 database_updated_at=database.database_updated_at,
                 engine=database.engine,
                 remote_name=database.database_remote_name,
-                connection_config=database.connection_config,
+                connection_config=self._runtime_connection_config(database.connection_config),
             ),
             policy=policy,
             capabilities=capabilities,
         )
+
+    def _runtime_connection_config(self, connection_config: Mapping[str, Any]) -> dict[str, Any]:
+        """Adapt container-oriented loopback aliases to the active runtime.
+
+        Existing business data sources were registered while Context Router ran in
+        Docker, where ``host.docker.internal`` reaches host-only VPN relays.  The
+        native backend must connect to those same relays through its own loopback
+        interface.  Keep the persisted configuration unchanged so container mode
+        remains portable and apply the translation only to the ephemeral connector
+        specification.
+        """
+        values = dict(connection_config)
+        if self._settings.runtime_mode == "native" and values.get("host") == "host.docker.internal":
+            values["host"] = "127.0.0.1"
+        return values
 
     def list_prepared_databases(self, project_id: str) -> list[PreparedDatabase]:
         if not self._settings.database_tools_enabled:

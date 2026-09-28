@@ -322,7 +322,7 @@ class _DataSourceRepository:
             data_source_category="公司内网服务器",
             engine="mysql",
             data_source_description="",
-            connection_config={},
+            connection_config={"host": "host.docker.internal", "port": 48306},
             config_version=1,
             source_created_at=now,
             source_updated_at=now,
@@ -349,6 +349,7 @@ def _access_service(
     active_environment: str = "uat",
     selector_configured: bool = True,
     payloads_configured: bool = False,
+    runtime_mode: str = "native",
 ) -> DatabaseAccessService:
     connectors = ConnectorRegistry()
     connectors.register(
@@ -365,7 +366,7 @@ def _access_service(
         ),
     )
     return DatabaseAccessService(
-        settings=Settings(),
+        settings=Settings(runtime_mode=runtime_mode),  # type: ignore[arg-type]
         registry=_Registry(),  # type: ignore[arg-type]
         task_repository=_TaskRepository(  # type: ignore[arg-type]
             revision=task_revision,
@@ -393,6 +394,29 @@ def test_environment_mapping_resolves_stable_alias_to_uat_physical_database() ->
     assert resolved.database.mcp_alias == "c12_admin_db"
     assert resolved.database.database_remote_name == "uat_admin"
     assert resolved.database.link_id == "link-uat"
+
+
+def test_native_runtime_translates_docker_host_alias_for_database_connectors() -> None:
+    resolved = _access_service(task_revision=1, current_revision=1).resolve(
+        task_id=41,
+        mcp_alias="c12_admin_db",
+    )
+
+    assert resolved.spec.connection_config["host"] == "127.0.0.1"
+    assert resolved.spec.connection_config["port"] == 48306
+
+
+def test_container_runtime_preserves_docker_host_alias_for_database_connectors() -> None:
+    resolved = _access_service(
+        task_revision=1,
+        current_revision=1,
+        runtime_mode="container",
+    ).resolve(
+        task_id=41,
+        mcp_alias="c12_admin_db",
+    )
+
+    assert resolved.spec.connection_config["host"] == "host.docker.internal"
 
 
 def test_environment_revision_change_rejects_stale_task_before_database_lookup() -> None:

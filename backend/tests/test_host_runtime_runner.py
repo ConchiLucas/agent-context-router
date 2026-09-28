@@ -228,15 +228,21 @@ def test_controlled_environment_adds_host_tool_paths_for_launchd(monkeypatch) ->
     assert path_entries.count("/usr/bin") == 1
 
 
-def test_runner_executes_server_leased_forwarding_request(monkeypatch, tmp_path: Path) -> None:
+@pytest.mark.parametrize("binary", [False, True])
+def test_runner_executes_server_leased_forwarding_request(
+    monkeypatch, tmp_path: Path, binary
+) -> None:
     module = load_runner_module()
 
     class FakeResponse:
         status = 200
-        headers = {"Content-Type": "application/json", "Set-Cookie": "secret"}
+        headers = {
+            "Content-Type": "application/zip" if binary else "application/json",
+            "Set-Cookie": "secret",
+        }
 
         def __init__(self) -> None:
-            self._chunks = [b'{"code":0}', b""]
+            self._chunks = [b'PK\x00\xff' if binary else b'{"code":0}', b""]
 
         def read(self, _size: int) -> bytes:
             return self._chunks.pop(0)
@@ -282,8 +288,15 @@ def test_runner_executes_server_leased_forwarding_request(monkeypatch, tmp_path:
     result = api.completed_forwarding[0]
     assert result[:3] == ("job-1", "runner-1", "l" * 48)
     assert result[3]["status_code"] == 200
-    assert result[3]["response_body"] == '{"code":0}'
-    assert result[3]["response_headers"] == {"content-type": "application/json"}
+    if binary:
+        assert result[3]["response_body"].startswith("[binary response omitted;")
+        assert "\x00" not in result[3]["response_body"]
+        assert result[3]["response_bytes"] == 4
+    else:
+        assert result[3]["response_body"] == '{"code":0}'
+    assert result[3]["response_headers"] == {
+        "content-type": "application/zip" if binary else "application/json"
+    }
 
 
 @pytest.mark.parametrize("method", ["POST", "PUT", "PATCH", "DELETE"])

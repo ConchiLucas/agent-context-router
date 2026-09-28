@@ -190,8 +190,17 @@ MCP_SERVER_INSTRUCTIONS = (
     "value_strategy=reuse_successful preserves the latest successful request. Use "
     "refresh_selected with refresh_value_keys only when the user asks to replace named business "
     "values, refresh_mapped when all mapped values should be regenerated, and ignore_history only "
-    "when the user explicitly rejects history. Caller values always win. Never invent business "
-    "IDs: inspect parameter_evidence, value_resolutions, and warnings. "
+    "when the user explicitly rejects history. For read pagination with caller-provided page "
+    "fields, ignore_history only auto-maps required fields; pass optional filters explicitly "
+    "when they are intended. Caller values always win. Never invent business "
+    "IDs: inspect parameter_evidence, value_resolutions, and warnings. If a required business "
+    "value has no usable history or published mapping, use the interface detail's business "
+    "semantics, table effects, source file, and source method to verify the parameter in the "
+    "Workspace source. Then resolve the task-bound database target, inspect the real table and "
+    "columns, and execute one bounded read-only query for candidates in the task environment. "
+    "Pass the selected candidate explicitly to prepare_forwarding_request with ignore_history. "
+    "If the source, database target, or field meaning remains ambiguous, stop with a missing-value "
+    "result instead of guessing. "
     "When the user asks to start services, call start_workspace: start always means every "
     "registered project in the task Workspace. After modifying registered Workspace code, "
     "call apply_workspace_changes once with task_id and actual Workspace-relative changed "
@@ -448,7 +457,9 @@ PREPARE_FORWARDING_REQUEST_TOOL_DESCRIPTION = (
     "evidence, and confidence; historical IDs not backed by an explicit database mapping are "
     "reported in warnings. value_strategy defaults to reuse_successful; refresh_selected replaces "
     "only refresh_value_keys, refresh_mapped replaces every mapped interface value, and "
-    "ignore_history rebuilds without request history. Caller values always override generated "
+    "ignore_history rebuilds without request history; on read pagination with explicit page "
+    "fields it only auto-maps required values, not optional filters. Caller values always "
+    "override generated "
     "values. When no successful selection exists, a sole current address or identity is selected; "
     "multiple candidates require an explicit address/account/role from the caller. Returns a "
     "short-lived immutable plan only when all required values are present. "
@@ -1542,7 +1553,7 @@ def create_context_router_mcp(
         role_name: Annotated[str | None, Field(max_length=160)] = None,
         path: Annotated[dict[str, Any] | None, Field(default=None)] = None,
         query: Annotated[dict[str, Any] | None, Field(default=None)] = None,
-        body: Annotated[dict[str, Any] | None, Field(default=None)] = None,
+        body: Annotated[dict[str, Any] | list[Any] | None, Field(default=None)] = None,
         value_strategy: Literal[
             "reuse_successful",
             "refresh_selected",

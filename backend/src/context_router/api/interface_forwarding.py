@@ -44,6 +44,8 @@ def overview(
     workspace_id: str,
     keyword: str = "",
     service_id: str | None = None,
+    environment: str = Query(default="", max_length=64),
+    request_status: str = Query(default="", max_length=32),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=200),
 ):
@@ -54,6 +56,8 @@ def overview(
             service_id=service_id,
             page=page,
             page_size=page_size,
+            environment=environment,
+            status_filter=request_status,
         )
     except InterfaceForwardingError as exc:
         raise _error(exc) from exc

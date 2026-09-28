@@ -25,8 +25,7 @@ def test_native_stack_scripts_keep_workspace_docker_separate() -> None:
 
     assert "uvicorn context_router.main:create_app" in service
     assert "npm run build:native" in start
-    assert "npm run build:native" in start
-    assert "launchctl submit" in start
+    assert "native_launch_service" in start
     assert "Native Stack 已在运行" in start
     assert "node_modules/next/dist/bin/next start" in service
     assert "context_router_host_runner.py" in start
@@ -38,4 +37,5 @@ def test_native_stack_scripts_keep_workspace_docker_separate() -> None:
     assert "CONTEXT_ROUTER_RUNTIME_MODE=native" in common
     assert "native_require_node22" in common
     assert "NO_PROXY" in common and "127.0.0.1" in common
-    assert "launchctl remove" in common
+    assert '"KeepAlive": False' in common
+    assert "launchctl bootout" in common

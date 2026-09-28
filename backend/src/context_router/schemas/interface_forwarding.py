@@ -51,6 +51,7 @@ class InterfaceForwardingExecute(BaseModel):
     environment_id: str
     identity_id: str | None = None
     request_body: str = "{}"
+    path_params: dict[str, str | int] = Field(default_factory=dict)
 
 
 class InterfaceForwardingLogWrite(BaseModel):

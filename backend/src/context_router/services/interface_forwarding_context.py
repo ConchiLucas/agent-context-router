@@ -9,11 +9,12 @@ import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
-from urllib.parse import quote, urljoin, urlsplit
+from urllib.parse import quote, unquote, urljoin, urlsplit
 from uuid import uuid4
 
 import httpx
 import psycopg
+from jsonschema import Draft202012Validator
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
@@ -25,8 +26,32 @@ from context_router.repositories.database_environment_repository import (
     DatabaseEnvironmentStore,
 )
 from context_router.repositories.task_repository import TaskReader, TaskRepositoryError
+from context_router.services.forwarding_safety import is_sse_control
 from context_router.services.mcp_trace import current_tool_call_id
 from context_router.services.value_mapping import ValueMappingError, ValueMappingService
+
+
+def _response_preview(content: bytes, content_type: str) -> str:
+    """Store binary responses as metadata, never as decoded file contents.
+
+    Kept identical in the standalone runner and backend; parity is regression-tested.
+    The digest covers retained bytes only (the HTTP stream may be truncated).
+    """
+    media_type = content_type.partition(";")[0].strip().lower()
+    textual = (
+        not media_type
+        or media_type.startswith("text/")
+        or media_type in {"application/json", "application/xml", "application/javascript"}
+        or media_type.endswith(("+json", "+xml"))
+    )
+    if textual and b"\x00" not in content:
+        return content.decode("utf-8", errors="replace")
+    return (
+        "[binary response omitted; "
+        f"retained_bytes={len(content)}; "
+        f"retained_sha256={hashlib.sha256(content).hexdigest()}]"
+    )
+
 
 OperationKind = Literal["read", "write", "destructive", "unknown"]
 _EXECUTABLE_OPERATION_KINDS = frozenset({"read", "write", "destructive", "unknown"})
@@ -311,7 +336,7 @@ class InterfaceForwardingContextService:
             interface = self._load_interface(cursor, workspace_id, interface_id)
             cursor.execute(
                 """SELECT log.id, log.created_at, log.status_code, log.success,
-                          log.duration_ms, log.request_body, log.response_body,
+                          log.duration_ms, log.request_url, log.request_body, log.response_body,
                           log.response_bytes, log.response_truncated,
                           address.name AS address_name,
                           log.identity_name, log.identity_role,
@@ -322,7 +347,7 @@ class InterfaceForwardingContextService:
                    LEFT JOIN interface_forwarding_request_plans AS plan
                      ON plan.id=log.plan_id
                    WHERE log.workspace_id=%s AND log.interface_id=%s
-                     AND (log.environment_key=%s OR log.environment_key IS NULL)
+                     AND log.environment_key=%s
                      AND (%s=false OR log.success=true)
                    ORDER BY log.created_at DESC, log.id DESC
                    LIMIT %s""",
@@ -332,6 +357,12 @@ class InterfaceForwardingContextService:
 
         requests: list[dict[str, object]] = []
         for row in rows:
+            request = self._parse_log_payload(row["request_body"])
+            request = self._with_recovered_path_values(
+                request,
+                path_template=str(interface["path"]),
+                request_url=row["request_url"],
+            )
             item: dict[str, object] = {
                 "log_id": str(row["id"]),
                 "created_at": self._iso(row["created_at"]),
@@ -341,7 +372,7 @@ class InterfaceForwardingContextService:
                 "address_name": row["address_name"],
                 "login_account": row["identity_name"],
                 "role_name": row["identity_role"],
-                "request": self._parse_log_payload(row["request_body"]),
+                "request": self._safe_integer_view(request),
                 "parameter_evidence": (
                     row["parameter_evidence"] if isinstance(row["parameter_evidence"], dict) else {}
                 ),
@@ -379,7 +410,7 @@ class InterfaceForwardingContextService:
         role_name: str | None = None,
         path: dict[str, Any] | None = None,
         query: dict[str, Any] | None = None,
-        body: dict[str, Any] | None = None,
+        body: dict[str, Any] | list[Any] | None = None,
         value_strategy: ValueStrategy = "reuse_successful",
         refresh_value_keys: list[str] | None = None,
     ) -> dict[str, object]:
@@ -388,6 +419,8 @@ class InterfaceForwardingContextService:
                 "refresh_value_keys 只用于 refresh_selected 策略",
                 code="invalid_refresh_value_keys",
             )
+        for location, value in (("path", path), ("query", query), ("body", body)):
+            self._validate_caller_numbers(value, location)
         intent: dict[str, object] = {
             "value_strategy": value_strategy,
             "refresh_value_keys": refresh_value_keys or [],
@@ -402,6 +435,10 @@ class InterfaceForwardingContextService:
                     "operation_kind": interface["operation_kind"],
                     "message": "接口操作类型无效，无法生成执行计划",
                 }
+            if is_sse_control(self._route_path(interface)):
+                raise InterfaceForwardingContextError(
+                    "SSE 连接与订阅控制不支持普通接口转发", code="sse_control_not_supported"
+                )
             if interface["invocation_mode"] == "disabled" or not interface["route_service_id"]:
                 return {
                     "status": "route_unavailable",
@@ -551,6 +588,13 @@ class InterfaceForwardingContextService:
             value_resolutions: list[dict[str, object]] = []
             resolution_issues: list[dict[str, object]] = []
             if value_strategy != "reuse_successful":
+                required_paths = None
+                if (
+                    value_strategy == "ignore_history"
+                    and interface["operation_kind"] == "read"
+                    and self._has_caller_pagination(query, body)
+                ):
+                    required_paths = self._required_mapping_paths(contract)
                 value_resolutions, resolution_issues = self._refresh_mapped_values(
                     task_id=task_id,
                     interface_id=interface_id,
@@ -559,13 +603,14 @@ class InterfaceForwardingContextService:
                     values=values,
                     sources=sources,
                     evidence=evidence,
-                    caller_values={"path": path or {}, "query": query or {}, "body": body or {}},
+                    caller_values={"path": path or {}, "query": query or {}, "body": body},
+                    required_paths=required_paths,
                 )
             self._merge_values(
                 values,
                 sources,
                 evidence,
-                {"path": path or {}, "query": query or {}, "body": body or {}},
+                {"path": path or {}, "query": query or {}, "body": body},
                 "caller",
             )
             warnings = self._parameter_warnings(values, evidence)
@@ -582,6 +627,16 @@ class InterfaceForwardingContextService:
                     "history": history,
                     "normalizations": normalizations,
                     "warnings": warnings,
+                    "request_contract": self._contract_summary(contract),
+                }
+            values["body"] = self._normalize_integer_array(contract, values["body"], caller=body)
+            invalid = self._body_validation_error(contract, values["body"])
+            if invalid is not None:
+                return {
+                    "status": "invalid_parameters",
+                    "message": "请求体不符合接口数组/对象合同",
+                    "parameter": "body",
+                    "constraint": invalid,
                     "request_contract": self._contract_summary(contract),
                 }
             missing = self._missing_required(contract, values)
@@ -614,6 +669,8 @@ class InterfaceForwardingContextService:
                 "path_template": self._route_path(interface),
                 "values": values,
             }
+            if isinstance(values["body"], list):
+                request_payload["integer_encoding"] = "decimal-v1"
             request_sha256 = self._hash(request_payload)
             fingerprint = self._fingerprint(interface, address, identity)
             plan_id = str(uuid4())
@@ -664,7 +721,7 @@ class InterfaceForwardingContextService:
             },
             "address": self._public_address(address),
             "identity": self._public_identity(identity) if identity else None,
-            "request": values,
+            "request": self._safe_integer_view(values),
             "sources": sources,
             "parameter_evidence": evidence,
             "history": history,
@@ -714,6 +771,19 @@ class InterfaceForwardingContextService:
             plan = cursor.fetchone()
             if not plan:
                 raise InterfaceForwardingContextError("执行计划不存在", code="plan_not_found")
+            if is_sse_control(str(plan["path"])) or is_sse_control(
+                str(plan["request_payload"].get("path_template", ""))
+            ):
+                raise InterfaceForwardingContextError(
+                    "SSE 连接与订阅控制不支持普通接口转发", code="sse_control_not_supported"
+                )
+            stored = plan["request_payload"]
+            stored_body = stored.get("values", {}).get("body")
+            if isinstance(stored_body, list) and stored.get("integer_encoding") != "decimal-v1":
+                if any(type(item) is int and abs(item) > 2**53 - 1 for item in stored_body):
+                    raise InterfaceForwardingContextError(
+                        "旧计划含大整数，请以十进制字符串重新 prepare", code="unsafe_integer_plan"
+                    )
             if plan["environment_key"] != environment:
                 raise InterfaceForwardingContextError(
                     "执行计划环境与任务环境不一致", code="environment_mismatch"
@@ -931,7 +1001,7 @@ class InterfaceForwardingContextService:
         url: str,
         headers: dict[str, str],
         query_values: dict[str, Any],
-        body_values: dict[str, Any],
+        body_values: dict[str, Any] | list[Any],
     ) -> dict[str, Any]:
         started = time.perf_counter()
         status_code: int | None = None
@@ -947,7 +1017,9 @@ class InterfaceForwardingContextService:
                     url,
                     headers=headers,
                     params=query_values or None,
-                    json=(body_values or None if method.upper() not in {"GET", "HEAD"} else None),
+                    json=(body_values if isinstance(body_values, list) else body_values or None)
+                    if method.upper() not in {"GET", "HEAD"}
+                    else None,
                 ) as response:
                     status_code = response.status_code
                     response_headers = {
@@ -966,7 +1038,9 @@ class InterfaceForwardingContextService:
                         if response_bytes > _MAX_RESPONSE_BYTES:
                             response_truncated = True
                             break
-                    response_body = b"".join(chunks).decode("utf-8", errors="replace")
+                    response_body = _response_preview(
+                        b"".join(chunks), response_headers.get("content-type", "")
+                    )
         except httpx.HTTPError as exc:
             error_type = exc.__class__.__name__
             response_body = f"请求失败：{error_type}"
@@ -1124,13 +1198,17 @@ class InterfaceForwardingContextService:
         error_type: str | None,
         duration_ms: int,
     ) -> None:
+        # Old runners may still submit decoded binary files containing NUL.
+        # Escape at the persistence boundary, including JSONB header values.
+        response_body = response_body.replace("\x00", "\\u0000")
+        error_type = error_type.replace("\x00", "\\u0000") if error_type else error_type
         encoded = response_body.encode("utf-8")
         if len(encoded) > _MAX_RESPONSE_BYTES:
             encoded = encoded[:_MAX_RESPONSE_BYTES]
-            response_body = encoded.decode("utf-8", errors="replace")
+            response_body = encoded.decode("utf-8", errors="ignore")
             response_truncated = True
         safe_headers = {
-            key.lower(): value
+            key.lower(): value.replace("\x00", "\\u0000")
             for key, value in response_headers.items()
             if key.lower() in _SAFE_RESPONSE_HEADERS
         }
@@ -1373,6 +1451,7 @@ class InterfaceForwardingContextService:
         sources: dict[str, dict[str, str]],
         evidence: dict[str, dict[str, dict[str, object]]],
         caller_values: dict[str, Any],
+        required_paths: set[tuple[str, str]] | None = None,
     ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
         requested_keys = list(dict.fromkeys(item.strip().casefold() for item in refresh_value_keys))
         if strategy == "refresh_selected" and not requested_keys:
@@ -1434,13 +1513,38 @@ class InterfaceForwardingContextService:
                 if isinstance(item, dict)
                 and item.get("location") in {"path", "query", "body"}
                 and isinstance(item.get("parameter_path"), str)
+                and (
+                    required_paths is None
+                    or (item["location"], item["parameter_path"]) in required_paths
+                )
             ]
+            if not bindings:
+                resolutions.append(
+                    {
+                        "mapping_id": mapping_id,
+                        "value_key": value_key,
+                        "status": "skipped_optional_filter",
+                        "fields": [],
+                    }
+                )
+                continue
             refresh_bindings: list[dict[str, Any]] = []
             caller_bindings: list[dict[str, str]] = []
             previous_values: list[object] = []
             for binding in bindings:
                 location = str(binding["location"])
                 parameter_path = str(binding["parameter_path"])
+                if location == "body" and (
+                    isinstance(caller_values.get("body"), list)
+                    or isinstance(values.get("body"), list)
+                ):
+                    issues.append(
+                        {
+                            "code": "unsupported_mapping_path",
+                            "message": "根数组请整体传入；暂不支持逐字段刷新",
+                        }
+                    )
+                    continue
                 if self._path_exists(caller_values.get(location, {}), parameter_path):
                     caller_bindings.append({"location": location, "parameter_path": parameter_path})
                     continue
@@ -1553,6 +1657,47 @@ class InterfaceForwardingContextService:
             )
         return resolutions, issues
 
+    @staticmethod
+    def _has_caller_pagination(query: object, body: object) -> bool:
+        pagination_fields = {
+            "page",
+            "pagenumber",
+            "pagesize",
+            "pagenum",
+            "pageno",
+            "pageindex",
+            "size",
+            "limit",
+            "offset",
+        }
+        return any(
+            isinstance(values, dict)
+            and any(str(key).casefold() in pagination_fields for key in values)
+            for values in (query, body)
+        )
+
+    @staticmethod
+    def _required_mapping_paths(contract: dict[str, Any]) -> set[tuple[str, str]]:
+        required_paths: set[tuple[str, str]] = set()
+
+        def visit(location: str, schema: object, prefix: str = "") -> None:
+            if not isinstance(schema, dict):
+                return
+            properties = schema.get("properties")
+            required = schema.get("required")
+            if not isinstance(properties, dict) or not isinstance(required, list):
+                return
+            for name in required:
+                if not isinstance(name, str):
+                    continue
+                field_path = f"{prefix}.{name}" if prefix else name
+                required_paths.add((location, field_path))
+                visit(location, properties.get(name), field_path)
+
+        for location in ("path", "query", "body"):
+            visit(location, contract.get(location))
+        return required_paths
+
     @classmethod
     def _path_exists(cls, values: object, parameter_path: str) -> bool:
         return cls._path_value(values, parameter_path)[0]
@@ -1601,13 +1746,16 @@ class InterfaceForwardingContextService:
         identity_id: str | None,
     ) -> tuple[dict[str, Any], dict[str, object] | None]:
         cursor.execute(
-            """SELECT id, request_body, created_at, status_code
-               FROM interface_forwarding_logs
-               WHERE interface_id=%s AND success=true
-                 AND (environment_key=%s OR environment_key IS NULL)
+            """SELECT log.id, log.request_url, log.request_body, log.created_at,
+                      log.status_code, interface.path AS interface_path
+               FROM interface_forwarding_logs AS log
+               JOIN interface_forwarding_interfaces AS interface
+                 ON interface.id=log.interface_id
+               WHERE log.interface_id=%s AND log.success=true
+                 AND log.environment_key=%s
                  AND (address_id=%s OR address_id IS NULL)
                  AND identity_id::text IS NOT DISTINCT FROM %s::text
-               ORDER BY created_at DESC LIMIT 1""",
+               ORDER BY log.created_at DESC LIMIT 1""",
             (interface_id, environment, address_id, identity_id),
         )
         row = cursor.fetchone()
@@ -1617,6 +1765,8 @@ class InterfaceForwardingContextService:
             parsed = json.loads(row["request_body"])
         except (TypeError, json.JSONDecodeError):
             return {}, None
+        if isinstance(parsed, list):
+            parsed = {"body": parsed}
         if not isinstance(parsed, dict):
             return {}, None
         history = {
@@ -1625,9 +1775,51 @@ class InterfaceForwardingContextService:
             "status_code": row["status_code"],
             "selection": "latest_success_same_environment_address_identity",
         }
-        if any(key in parsed for key in ("path", "query", "body")):
-            return parsed, history
-        return {"body": parsed}, history
+        values = (
+            parsed if any(key in parsed for key in ("path", "query", "body")) else {"body": parsed}
+        )
+        return (
+            InterfaceForwardingContextService._with_recovered_path_values(
+                values,
+                path_template=str(row["interface_path"]),
+                request_url=row["request_url"],
+            ),
+            history,
+        )
+
+    @staticmethod
+    def _with_recovered_path_values(
+        request: object,
+        *,
+        path_template: str,
+        request_url: object,
+    ) -> object:
+        """Recover legacy path parameters that were stored only in request_url."""
+        if not isinstance(request, dict):
+            return request
+        values = dict(request)
+        existing = values.get("path")
+        path_values = dict(existing) if isinstance(existing, dict) else {}
+        if not isinstance(request_url, str) or not request_url or "{" not in path_template:
+            if "path" in values:
+                values["path"] = path_values
+            return values
+
+        names = re.findall(r"\{([^{}]+)\}", path_template)
+        if not names:
+            return values
+        fragments = re.split(r"\{[^{}]+\}", path_template)
+        pattern = "".join(
+            re.escape(fragment) + (r"([^/]+)" if index < len(names) else "")
+            for index, fragment in enumerate(fragments)
+        )
+        matched = re.search(pattern + r"$", urlsplit(request_url).path)
+        if matched is None:
+            return values
+        for name, value in zip(names, matched.groups(), strict=True):
+            path_values.setdefault(name, unquote(value))
+        values["path"] = path_values
+        return values
 
     @staticmethod
     def _parse_log_payload(value: object) -> object:
@@ -1665,8 +1857,17 @@ class InterfaceForwardingContextService:
         }.get(source, "low")
         for location in ("path", "query", "body"):
             values = incoming.get(location, {})
+            if location == "body" and isinstance(values, list):
+                target[location] = list(values)
+                sources[location] = {"$": source}
+                evidence[location] = {"$": {"source": source, "confidence": confidence}}
+                continue
             if not isinstance(values, dict):
                 continue
+            if not isinstance(target[location], dict):
+                target[location] = {}
+                sources[location] = {}
+                evidence[location] = {}
             target[location].update(values)
             sources[location].update({str(key): source for key in values})
             for key in values:
@@ -1687,6 +1888,8 @@ class InterfaceForwardingContextService:
     ) -> None:
         for location in ("path", "query", "body"):
             schema = contract.get(location, {})
+            if schema.get("type") == "array" or not isinstance(values[location], dict):
+                continue
             properties = schema.get("properties", {}) if isinstance(schema, dict) else {}
             if not isinstance(properties, dict):
                 continue
@@ -1730,6 +1933,11 @@ class InterfaceForwardingContextService:
         changes: list[dict[str, object]] = []
         for location in ("path", "query", "body"):
             raw_values = incoming.get(location, {})
+            if location == "body" and isinstance(raw_values, list):
+                sanitized[location] = cls._strip_volatile_history_values(
+                    {"items": raw_values}, location=location, path=(), changes=changes
+                )["items"]
+                continue
             if not isinstance(raw_values, dict):
                 continue
             values = cls._strip_volatile_history_values(
@@ -1851,10 +2059,83 @@ class InterfaceForwardingContextService:
         ]
 
     @staticmethod
+    def _validate_caller_numbers(value: Any, location: str) -> None:
+        """Reject potentially rounded caller numbers before merging trusted values."""
+        if type(value) in (int, float) and not -(2**53 - 1) <= value <= 2**53 - 1:
+            raise InterfaceForwardingContextError(
+                f"{location}：超出安全范围的数字必须使用原始十进制字符串，禁止 Number 转换",
+                code="unsafe_integer_input",
+            )
+        if isinstance(value, dict):
+            for key, item in value.items():
+                InterfaceForwardingContextService._validate_caller_numbers(
+                    item, f"{location}.{key}"
+                )
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                InterfaceForwardingContextService._validate_caller_numbers(
+                    item, f"{location}[{index}]"
+                )
+
+    @staticmethod
+    def _safe_integer_view(value: Any) -> Any:
+        """Client JSON must never round a server-side integer silently."""
+        if type(value) is int and abs(value) > 2**53 - 1:
+            return str(value)
+        if isinstance(value, list):
+            return [InterfaceForwardingContextService._safe_integer_view(item) for item in value]
+        if isinstance(value, dict):
+            return {
+                key: InterfaceForwardingContextService._safe_integer_view(item)
+                for key, item in value.items()
+            }
+        return value
+
+    @staticmethod
+    def _normalize_integer_array(contract: dict[str, Any], body: Any, *, caller: Any) -> Any:
+        schema = contract.get("body") or {}
+        items = schema.get("items") or {}
+        if schema.get("type") != "array" or items.get("type") != "integer":
+            return body
+        if not isinstance(body, list):
+            return body
+        if isinstance(caller, list) and any(
+            isinstance(item, (int, float)) and not isinstance(item, bool) and abs(item) > 2**53 - 1
+            for item in caller
+        ):
+            raise InterfaceForwardingContextError(
+                "大整数数组元素必须使用十进制字符串，禁止客户端 Number 转换",
+                code="unsafe_integer_input",
+            )
+        result = []
+        for item in body:
+            if isinstance(item, str) and re.fullmatch(r"-?(0|[1-9][0-9]{0,18})", item):
+                item = int(item)
+            if type(item) is int and items.get("format") == "int64":
+                if not -(2**63) <= item < 2**63:
+                    raise InterfaceForwardingContextError(
+                        "整数超出 int64 范围", code="invalid_parameters"
+                    )
+            result.append(item)
+        return result
+
+    @staticmethod
+    def _body_validation_error(contract: dict[str, Any], body: object) -> str | None:
+        schema = contract.get("body") or {}
+        # Do not tighten legacy object validation as part of root-array support.
+        if schema.get("type") != "array" and not isinstance(body, list):
+            return None
+        schema = schema if schema.get("type") else {"type": "object"}
+        error = next(Draft202012Validator(schema).iter_errors(body), None)
+        return str(error.validator) if error is not None else None
+
+    @staticmethod
     def _missing_required(contract: dict[str, Any], values: dict[str, Any]) -> list[dict[str, str]]:
         missing: list[dict[str, str]] = []
         for location in ("path", "query", "body"):
             schema = contract.get(location, {})
+            if schema.get("type") == "array":
+                continue
             required = schema.get("required", []) if isinstance(schema, dict) else []
             for name in required if isinstance(required, list) else []:
                 if name not in values[location] or values[location][name] in (None, ""):
@@ -1917,6 +2198,8 @@ class InterfaceForwardingContextService:
                     total_fields += 1
             result[location] = fields
         result["truncated"] = truncated
+        if (contract.get("body") or {}).get("type") == "array":
+            result["body_schema"] = contract["body"]
         return result
 
     @staticmethod
@@ -1945,7 +2228,7 @@ class InterfaceForwardingContextService:
     @staticmethod
     def _materialize_request(
         base_url: str, payload: dict[str, Any]
-    ) -> tuple[str, dict[str, Any], dict[str, Any]]:
+    ) -> tuple[str, dict[str, Any], dict[str, Any] | list[Any]]:
         values = payload.get("values", {})
         path_values = values.get("path", {}) if isinstance(values, dict) else {}
         route_path = str(payload["path_template"])

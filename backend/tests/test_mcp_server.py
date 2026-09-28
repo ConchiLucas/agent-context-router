@@ -473,6 +473,11 @@ def test_mcp_exposes_stable_context_and_runtime_tools() -> None:
         "include_response",
     }
     forwarding_prepare_schema = tool_by_name["prepare_forwarding_request"].inputSchema
+    assert {item["type"] for item in forwarding_prepare_schema["properties"]["body"]["anyOf"]} == {
+        "object",
+        "array",
+        "null",
+    }
     assert forwarding_prepare_schema["required"] == ["task_id", "interface_id"]
     assert set(forwarding_prepare_schema["properties"]) == {
         "task_id",

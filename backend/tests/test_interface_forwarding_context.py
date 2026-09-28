@@ -270,6 +270,50 @@ def test_successful_history_is_sanitized_and_pagination_is_bounded() -> None:
     }
 
 
+def test_history_values_require_exact_environment_and_recover_url_path_parameter() -> None:
+    cursor = _Cursor(
+        {
+            "id": "log-1",
+            "request_url": (
+                "http://127.0.0.1/rest/mtp/order-api/admin/entrusted/getById/order%2F2026"
+            ),
+            "request_body": '{"query":{},"body":{}}',
+            "created_at": datetime(2026, 9, 22, 9, 0, tzinfo=UTC),
+            "status_code": 200,
+            "interface_path": "/order-api/admin/entrusted/getById/{id}",
+        }
+    )
+
+    values, history = InterfaceForwardingContextService._history_values(
+        cursor,
+        interface_id="interface-1",
+        environment="test",
+        address_id="address-1",
+        identity_id="identity-1",
+    )
+
+    assert "log.environment_key=%s" in cursor.statement
+    assert "environment_key IS NULL" not in cursor.statement
+    assert cursor.parameters == ("interface-1", "test", "address-1", "identity-1")
+    assert values == {
+        "path": {"id": "order/2026"},
+        "query": {},
+        "body": {},
+    }
+    assert history is not None
+    assert history["selection"] == "latest_success_same_environment_address_identity"
+
+
+def test_recovered_url_path_does_not_override_structured_history_value() -> None:
+    request = InterfaceForwardingContextService._with_recovered_path_values(
+        {"path": {"id": "current"}, "query": {}, "body": {}},
+        path_template="/orders/{id}",
+        request_url="http://127.0.0.1/rest/orders/legacy",
+    )
+
+    assert request == {"path": {"id": "current"}, "query": {}, "body": {}}
+
+
 def test_parameter_evidence_keeps_source_and_caller_overrides_history() -> None:
     values = {"path": {}, "query": {}, "body": {}}
     sources = {"path": {}, "query": {}, "body": {}}
@@ -508,6 +552,70 @@ def test_refresh_mapped_refreshes_every_bound_business_value() -> None:
     assert values["body"]["shipperId"] == "shipper-new"
     assert values["body"]["carrierId"] == "carrier-new"
     assert [item["status"] for item in resolutions] == ["refreshed", "refreshed"]
+
+
+def test_ignore_history_pagination_only_maps_required_fields() -> None:
+    mappings = _ValueMappings()
+    service = _context_service(mappings)
+    contract = {
+        "path": {"type": "object", "properties": {}},
+        "query": {"type": "object", "properties": {}},
+        "body": {
+            "type": "object",
+            "properties": {"shipperId": {"type": "string"}, "carrierId": {"type": "string"}},
+            "required": ["shipperId"],
+        },
+    }
+    assert service._has_caller_pagination({}, {"pageNumber": 1, "pageSize": 10})
+    assert service._has_caller_pagination({"offset": 0, "limit": 10}, {})
+    assert not service._has_caller_pagination({}, {"carrierOrderNo": "CO-1"})
+    required_paths = service._required_mapping_paths(contract)
+    values = {"path": {}, "query": {}, "body": {"pageNumber": 1, "pageSize": 10}}
+    sources = {"path": {}, "query": {}, "body": {}}
+    evidence = {"path": {}, "query": {}, "body": {}}
+
+    resolutions, issues = service._refresh_mapped_values(
+        task_id=9,
+        interface_id="interface-1",
+        strategy="ignore_history",
+        refresh_value_keys=[],
+        values=values,
+        sources=sources,
+        evidence=evidence,
+        caller_values={"path": {}, "query": {}, "body": {"pageNumber": 1, "pageSize": 10}},
+        required_paths=required_paths,
+    )
+
+    assert issues == []
+    assert mappings.resolved == ["mapping-shipper"]
+    assert values["body"] == {"pageNumber": 1, "pageSize": 10, "shipperId": "shipper-old"}
+    assert [item["status"] for item in resolutions] == ["refreshed", "skipped_optional_filter"]
+
+
+def test_required_mapping_paths_only_follow_required_parents() -> None:
+    contract = {
+        "body": {
+            "type": "object",
+            "required": ["requiredGroup"],
+            "properties": {
+                "requiredGroup": {
+                    "type": "object",
+                    "required": ["id"],
+                    "properties": {"id": {"type": "string"}},
+                },
+                "optionalGroup": {
+                    "type": "object",
+                    "required": ["id"],
+                    "properties": {"id": {"type": "string"}},
+                },
+            },
+        }
+    }
+
+    assert InterfaceForwardingContextService._required_mapping_paths(contract) == {
+        ("body", "requiredGroup"),
+        ("body", "requiredGroup.id"),
+    }
 
 
 def test_refresh_selected_requires_at_least_one_stable_value_key() -> None:
