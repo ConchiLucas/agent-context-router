@@ -1473,6 +1473,9 @@ export interface InterfaceForwardingInterface {
   created_at: string;
   updated_at: string;
   last_requested_at: string | null;
+  request_status?: "not_requested" | "has_data" | "no_data" | "succeeded" | "not_found" | "business_error" | "error" | "requested";
+  last_environment?: string | null;
+  last_status_code?: number | null;
 }
 
 export interface InterfaceRetrievalSemantics {

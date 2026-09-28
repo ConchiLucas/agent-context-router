@@ -183,6 +183,15 @@ At 200% zoom the interface must collapse without hiding the primary or cancel ac
 
 ## Components and interaction states
 
+Interface request badges use one literal label per row: 未请求、有数据、无数据、请求成功、404、业务报错、其他报错,
+with 已请求 reserved for unclassifiable saved responses. Reuse the existing compact badge, accent success,
+neutral empty/unknown and danger error tokens; no new palette. A keyboard-focusable badge exposes the
+saved request environment, HTTP code and time. The toolbar offers a labelled dynamic environment filter
+(including 全部环境) and a request-status filter using the existing literal badge labels (including 全部状态).
+Changing either filter resets pagination; status filtering applies to the full server-side result set, not
+only the current page. In all-environment mode the latest saved log wins,
+and the tooltip names its environment. These are saved-log outcomes, not live service health.
+
 | Component | Implementation | Required behavior |
 |---|---|---|
 | Workspace card | `.workspace-card` | Show the locally resolved primary path, shared-reader count, refresh action, and enter action. No status-badge matrix. |

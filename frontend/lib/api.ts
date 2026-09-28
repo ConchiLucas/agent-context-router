@@ -773,7 +773,7 @@ export function getAiVisualizationTaskTimeline(
 export function getInterfaceForwardingOverview(
   workspaceId: string,
   keyword = "",
-  options?: { serviceId?: string | null; page?: number; pageSize?: number },
+  options?: { serviceId?: string | null; page?: number; pageSize?: number; environment?: string; requestStatus?: string },
 ): Promise<InterfaceForwardingOverview> {
   const params = new URLSearchParams({
     workspace_id: workspaceId,
@@ -781,6 +781,8 @@ export function getInterfaceForwardingOverview(
     page_size: String(options?.pageSize ?? 50),
   });
   if (keyword.trim()) params.set("keyword", keyword.trim());
+  if (options?.environment) params.set("environment", options.environment);
+  if (options?.requestStatus) params.set("request_status", options.requestStatus);
   if (options?.serviceId !== null && options?.serviceId !== undefined) {
     params.set("service_id", options.serviceId);
   }

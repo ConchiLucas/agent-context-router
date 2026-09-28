@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   deleteInterfaceForwardingInterface,
@@ -15,6 +15,7 @@ import {
   renameInterfaceForwardingService,
 } from "@/lib/api";
 import { groupInterfaceForwardingIdentities } from "@/lib/interface-forwarding-identities";
+import { interfaceRequestStatus } from "@/lib/interface-request-status";
 import type {
   InterfaceForwardingEnvironment,
   InterfaceForwardingIdentity,
@@ -25,6 +26,26 @@ import type {
 } from "@/lib/types";
 
 const INTERFACE_PAGE_SIZE = 50;
+type RequestStatusFilter = NonNullable<InterfaceForwardingInterface["request_status"]> | "";
+const REQUEST_STATUS_FILTERS: { value: RequestStatusFilter; label: string }[] = [
+  { value: "", label: "全部状态" },
+  { value: "not_requested", label: "未请求" },
+  { value: "has_data", label: "有数据" },
+  { value: "no_data", label: "无数据" },
+  { value: "succeeded", label: "请求成功" },
+  { value: "not_found", label: "404" },
+  { value: "business_error", label: "业务报错" },
+  { value: "error", label: "其他报错" },
+  { value: "requested", label: "已请求" },
+];
+
+function RequestStatusBadge({ item }: { item: InterfaceForwardingInterface }) {
+  const { label, tone } = interfaceRequestStatus(item);
+  const title = item.last_requested_at
+    ? `${label} · 环境：${item.last_environment || "历史未标注"} · HTTP ${item.last_status_code ?? "无响应"} · 最近保存请求：${formatRequestedAt(item.last_requested_at)}`
+    : "当前环境范围内暂无请求记录";
+  return <span className="interface-forwarding-requested-badge" data-tone={tone} tabIndex={0} title={title} aria-label={title}>{label}</span>;
+}
 
 type Modal =
   | { kind: "import" }
@@ -80,6 +101,10 @@ function ModalFrame({ title, children, onClose, wide = false }: { title: string;
 export function InterfaceForwardingManager() {
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [workspaceId, setWorkspaceId] = useState("");
+  const [environment, setEnvironment] = useState("");
+  const [statusFilter, setStatusFilter] = useState<RequestStatusFilter>("");
+  const statusFilterRef = useRef<RequestStatusFilter>("");
+  const loadSequence = useRef(0);
   const [overview, setOverview] = useState<InterfaceForwardingOverview | null>(null);
   const [activeServiceId, setActiveServiceId] = useState<string>("");
   const [keyword, setKeyword] = useState("");
@@ -101,12 +126,15 @@ export function InterfaceForwardingManager() {
     nextKeyword,
     nextServiceId,
     nextPage,
+    nextStatus,
   }: {
     nextKeyword: string;
     nextServiceId: string | null;
     nextPage: number;
+    nextStatus: RequestStatusFilter;
   }) => {
     if (!workspaceId) return;
+    const sequence = ++loadSequence.current;
     const normalizedKeyword = nextKeyword.trim();
     setLoading(true);
     setError("");
@@ -115,47 +143,59 @@ export function InterfaceForwardingManager() {
         serviceId: nextServiceId,
         page: nextPage,
         pageSize: INTERFACE_PAGE_SIZE,
+        environment,
+        requestStatus: nextStatus,
       });
+      if (sequence !== loadSequence.current) return;
       setOverview(result);
       setActiveServiceId(result.selected_service_id);
       setAppliedKeyword(normalizedKeyword);
       setPage(result.page);
     } catch (reason) {
+      if (sequence !== loadSequence.current) return;
       setError(reason instanceof Error ? reason.message : "接口转发数据加载失败");
     } finally {
-      setLoading(false);
+      if (sequence === loadSequence.current) setLoading(false);
     }
-  }, [workspaceId]);
+  }, [workspaceId, environment]);
 
   useEffect(() => {
     setKeyword("");
     setAppliedKeyword("");
     setPage(1);
-    void load({ nextKeyword: "", nextServiceId: null, nextPage: 1 });
+    void load({ nextKeyword: "", nextServiceId: null, nextPage: 1, nextStatus: statusFilterRef.current });
   }, [load]);
 
-  const visibleInterfaces = overview?.interfaces ?? [];
+  const visibleInterfaces = error ? [] : overview?.interfaces ?? [];
 
   const reloadCurrent = useCallback(() => load({
     nextKeyword: appliedKeyword,
     nextServiceId: activeServiceId,
     nextPage: page,
-  }), [activeServiceId, appliedKeyword, load, page]);
+    nextStatus: statusFilter,
+  }), [activeServiceId, appliedKeyword, load, page, statusFilter]);
 
   const selectService = useCallback((serviceId: string) => {
     setPage(1);
-    void load({ nextKeyword: appliedKeyword, nextServiceId: serviceId, nextPage: 1 });
-  }, [appliedKeyword, load]);
+    void load({ nextKeyword: appliedKeyword, nextServiceId: serviceId, nextPage: 1, nextStatus: statusFilter });
+  }, [appliedKeyword, load, statusFilter]);
 
   const goToPage = useCallback((nextPage: number) => {
     if (!overview || loading || nextPage < 1 || nextPage > overview.total_pages) return;
-    void load({ nextKeyword: appliedKeyword, nextServiceId: activeServiceId, nextPage });
-  }, [activeServiceId, appliedKeyword, load, loading, overview]);
+    void load({ nextKeyword: appliedKeyword, nextServiceId: activeServiceId, nextPage, nextStatus: statusFilter });
+  }, [activeServiceId, appliedKeyword, load, loading, overview, statusFilter]);
 
   const search = useCallback(() => {
     setPage(1);
-    void load({ nextKeyword: keyword, nextServiceId: "", nextPage: 1 });
-  }, [keyword, load]);
+    void load({ nextKeyword: keyword, nextServiceId: "", nextPage: 1, nextStatus: statusFilter });
+  }, [keyword, load, statusFilter]);
+
+  const changeStatusFilter = useCallback((nextStatus: RequestStatusFilter) => {
+    statusFilterRef.current = nextStatus;
+    setStatusFilter(nextStatus);
+    setPage(1);
+    void load({ nextKeyword: appliedKeyword, nextServiceId: activeServiceId, nextPage: 1, nextStatus });
+  }, [activeServiceId, appliedKeyword, load]);
 
   async function destructive(message: string, action: () => Promise<void>) {
     if (!window.confirm(message)) return;
@@ -175,10 +215,12 @@ export function InterfaceForwardingManager() {
     <section className="interface-forwarding-page">
       <header className="interface-forwarding-heading">
         <div><p className="eyebrow">INTERFACE FORWARDING</p><h1>接口转发</h1><p>管理接口文档、转发环境和请求身份，并直接测试已登记接口。</p></div>
-        <label>工作空间<select value={workspaceId} onChange={(event) => { setModal(null); setOverview(null); setWorkspaceId(event.target.value); }}>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>
+        <label>工作空间<select value={workspaceId} onChange={(event) => { ++loadSequence.current; setModal(null); setOverview(null); setEnvironment(""); statusFilterRef.current = ""; setStatusFilter(""); setWorkspaceId(event.target.value); }}>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>
       </header>
 
       <div className="interface-forwarding-toolbar">
+        <label>请求环境<select value={environment} onChange={(event) => { ++loadSequence.current; setEnvironment(event.target.value); }}><option value="">全部环境</option>{overview?.environments.map((item) => <option key={item.environment_key} value={item.environment_key}>{item.display_name}</option>)}</select></label>
+        <label>请求状态<select value={statusFilter} onChange={(event) => changeStatusFilter(event.target.value as RequestStatusFilter)}>{REQUEST_STATUS_FILTERS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
         <div className="interface-forwarding-search"><input value={keyword} onChange={(event) => setKeyword(event.target.value)} onKeyDown={(event) => event.key === "Enter" && search()} placeholder="搜索业务描述、接口、路径或 Controller" /><button className="secondary-button" type="button" onClick={search}>搜索</button></div>
         <div><button className="secondary-button" type="button" onClick={() => setModal({ kind: "configuration" })}>转发配置</button><button className="primary-button" type="button" onClick={() => setModal({ kind: "import" })}>导入 Swagger</button></div>
       </div>
@@ -199,10 +241,10 @@ export function InterfaceForwardingManager() {
         <section className="interface-forwarding-list">
           <header><div><h2>{activeServiceId ? overview?.services.find((item) => item.id === activeServiceId)?.name : "全部接口"}</h2><p>{overview?.interface_total ?? 0} 个接口</p></div></header>
           {loading ? <div className="interface-forwarding-empty">正在加载接口…</div> : null}
-          {!loading && visibleInterfaces.length === 0 ? <div className="interface-forwarding-empty"><strong>还没有接口</strong><p>导入 Swagger 2 或 OpenAPI 3 JSON 后会在这里建立服务树和接口列表。</p></div> : null}
+          {!loading && !error && visibleInterfaces.length === 0 ? <div className="interface-forwarding-empty"><strong>{overview?.services.length ? "没有符合条件的接口" : "还没有接口"}</strong><p>{overview?.services.length ? "试试调整请求状态、环境或搜索条件。" : "导入 Swagger 2 或 OpenAPI 3 JSON 后会在这里建立服务树和接口列表。"}</p></div> : null}
           {!loading && visibleInterfaces.length > 0 ? (
             <><div className="interface-forwarding-table-wrap"><table><colgroup><col className="interface-forwarding-col-name" /><col className="interface-forwarding-col-controller" /><col className="interface-forwarding-col-path" /><col className="interface-forwarding-col-action" /></colgroup><thead><tr><th>接口名称</th><th>Controller 名称</th><th>接口路径</th><th>操作</th></tr></thead><tbody>{visibleInterfaces.map((item) => (
-              <tr key={item.id}><td><div className="interface-forwarding-name-cell"><button className="interface-forwarding-name-button" type="button" title={item.name} onClick={() => setModal({ kind: "detail", item })}>{item.name}</button>{item.last_requested_at ? <span className="interface-forwarding-requested-badge" title={`最近请求：${formatRequestedAt(item.last_requested_at)}`} aria-label={`已请求，最近请求时间 ${formatRequestedAt(item.last_requested_at)}`}>已请求</span> : null}</div></td><td><code className="interface-forwarding-cell-ellipsis" title={item.controller_name || "未提供 Controller 名称"}>{item.controller_name || "—"}</code></td><td><div className="interface-forwarding-path-cell" tabIndex={0} aria-label={`${item.method} ${item.path}`} data-full-path={item.path}><span className={methodClass(item.method)}>{item.method}</span><code>{item.path}</code></div></td><td><div className="interface-forwarding-row-actions"><button className="interface-forwarding-row-detail" type="button" onClick={() => setModal({ kind: "test", item })}>测试</button><button className="interface-forwarding-row-detail" type="button" onClick={() => setModal({ kind: "detail", item })}>详情</button></div></td></tr>
+              <tr key={item.id}><td><div className="interface-forwarding-name-cell"><button className="interface-forwarding-name-button" type="button" title={item.name} onClick={() => setModal({ kind: "detail", item })}>{item.name}</button><RequestStatusBadge item={item} /></div></td><td><code className="interface-forwarding-cell-ellipsis" title={item.controller_name || "未提供 Controller 名称"}>{item.controller_name || "—"}</code></td><td><div className="interface-forwarding-path-cell" tabIndex={0} aria-label={`${item.method} ${item.path}`} data-full-path={item.path}><span className={methodClass(item.method)}>{item.method}</span><code>{item.path}</code></div></td><td><div className="interface-forwarding-row-actions"><button className="interface-forwarding-row-detail" type="button" onClick={() => setModal({ kind: "test", item })}>测试</button><button className="interface-forwarding-row-detail" type="button" onClick={() => setModal({ kind: "detail", item })}>详情</button></div></td></tr>
             ))}</tbody></table></div><nav className="interface-forwarding-pager" aria-label="接口列表分页"><button type="button" disabled={loading || page <= 1} onClick={() => goToPage(1)}>首页</button><button type="button" disabled={loading || page <= 1} onClick={() => goToPage(page - 1)}>上一页</button><span>第 {page} / {overview?.total_pages ?? 1} 页，共 {overview?.interface_total ?? 0} 条</span><button type="button" disabled={loading || page >= (overview?.total_pages ?? 1)} onClick={() => goToPage(page + 1)}>下一页</button><button type="button" disabled={loading || page >= (overview?.total_pages ?? 1)} onClick={() => goToPage(overview?.total_pages ?? 1)}>末页</button></nav></>
           ) : null}
         </section>
