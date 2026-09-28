@@ -2,20 +2,16 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>com.conchi.agent-context-router.vpn-relay</string>
+  <key>Label</key><string>com.conchi.agent-context-router.login</string>
   <key>ProgramArguments</key>
   <array>
     <string>/usr/bin/python3</string>
     <string>/Users/conchi/workforce/my_github_workforce/agent-context-router/scripts/bounded_run.py</string>
     <string>--log-prefix</string>
-    <string>/Users/conchi/workforce/my_github_workforce/agent-context-router/scripts/vpn_tcp_relay</string>
+    <string>/Users/conchi/workforce/my_github_workforce/agent-context-router/scripts/start-native-stack</string>
     <string>--</string>
-    <string>/usr/bin/python3</string>
-    <string>/Users/conchi/workforce/my_github_workforce/agent-context-router/scripts/vpn_tcp_relay.py</string>
-    <string>--forward</string>
-    <string>48306:192.168.0.219:8306</string>
-    <string>--forward</string>
-    <string>49030:192.168.0.227:9030</string>
+    <string>/Users/conchi/workforce/my_github_workforce/agent-context-router/scripts/run-managed-autostart.sh</string>
+    <string>/Users/conchi/workforce/my_github_workforce/agent-context-router/scripts/start-native-stack.sh</string>
   </array>
   <key>WorkingDirectory</key><string>/Users/conchi/workforce/my_github_workforce/agent-context-router</string>
   <key>EnvironmentVariables</key>

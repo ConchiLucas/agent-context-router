@@ -145,7 +145,7 @@ fi
 cd "$native_repo_root/backend"
 uv run alembic upgrade head
 if native_launchd_available; then
-  launchctl submit -l "$native_launchd_backend_label" -- \
+  native_launch_service "$native_launchd_backend_label" \
     "$native_repo_root/scripts/run-native-service.sh" backend "$uv_bin" "$python_bin" "$node_bin"
 else
   nohup "$native_repo_root/scripts/run-native-service.sh" backend "$uv_bin" "$python_bin" "$node_bin" >/dev/null 2>&1 &
@@ -155,7 +155,7 @@ if ! native_wait_http "$CONTEXT_ROUTER_CONTROL_URL/health" "Backend"; then
 fi
 
 if native_launchd_available; then
-  launchctl submit -l "$native_launchd_runner_label" -- \
+  native_launch_service "$native_launchd_runner_label" \
     "$native_repo_root/scripts/run-native-service.sh" runner "$uv_bin" "$python_bin" "$node_bin"
 else
   nohup "$native_repo_root/scripts/run-native-service.sh" runner "$uv_bin" "$python_bin" "$node_bin" >/dev/null 2>&1 &
@@ -173,7 +173,7 @@ for _ in {1..30}; do
 done
 unset runner_token
 if [[ "$runner_ready" != true ]]; then
-  print -u2 "Host Runner 启动检查失败，请查看 $native_runtime_root/host-runner.log"
+  print -u2 "Host Runner 启动检查失败，请查看 $native_script_dir/run-native-service.runner.error.log"
   "$native_repo_root/scripts/stop-native-stack.sh" || true
   exit 1
 fi
@@ -183,7 +183,7 @@ native_ensure_panzhihua_host_runtime
 cd "$native_repo_root/frontend"
 npm run build:native
 if native_launchd_available; then
-  launchctl submit -l "$native_launchd_frontend_label" -- \
+  native_launch_service "$native_launchd_frontend_label" \
     "$native_repo_root/scripts/run-native-service.sh" frontend "$uv_bin" "$python_bin" "$node_bin"
 else
   nohup "$native_repo_root/scripts/run-native-service.sh" frontend "$uv_bin" "$python_bin" "$node_bin" >/dev/null 2>&1 &

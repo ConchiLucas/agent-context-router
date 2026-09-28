@@ -44,7 +44,52 @@ cp .env.native.example .env.native.local
 | OpenAPI | `http://127.0.0.1:49173/docs` |
 | MCP | `http://127.0.0.1:49173/mcp` |
 
-Native Stack 不会停止或重启已注册 Workspace 的业务容器。在 macOS 上，启动脚本通过当前登录会话的 `launchd` 托管三个 Native 进程，退出终端后服务仍保持运行；这不会安装开机自启动配置。
+Native Stack 不会停止或重启已注册 Workspace 的业务容器。在 macOS 上，启动脚本通过当前登录会话的 `launchd` 托管三个 Native 进程，退出终端后服务仍保持运行；仅执行该脚本不会安装登录自启动配置。需要自启时，使用下节的用户 LaunchAgent。
+
+### macOS 登录自启与有界日志
+
+本机安装两份用户启动项到 `~/Library/LaunchAgents/`：
+
+- `com.conchi.agent-context-router.login.plist`：通过日志包装器和
+  `run-managed-autostart.sh` 调用现有 `start-native-stack.sh`。
+- `com.conchi.agent-context-router.vpn-relay.plist`：保留现有两条 VPN 转发映射。
+
+对应源文件在仓库 `launchd/` 下，包含本机绝对路径、PATH 和 JAVA_HOME；迁移机器时必须修改。
+两者均为 `RunAtLoad=true`、`KeepAlive=false`，没有定时、目录监听或失败重试触发器。
+三个 Native 子服务也使用显式 `KeepAlive=false` 的临时 plist（位于 `.runtime-runner/`），
+由主脚本依次 bootstrap，不再使用会隐式开启 keepalive 的 `launchctl submit`。
+这些临时配置不是独立登录项，避免服务绕过 migration 和依赖检查并行启动。
+这是用户登录后启动，不是登录前的系统守护进程。Docker Desktop 自己的登录启动需单独开启。
+主入口只在约 60 秒内有限探测 Docker 就绪，每次探测最多 3 秒；未就绪直接失败，
+不执行主启动脚本、不反复启动服务。PostgreSQL 不可用时原有 migration 会失败，也不重试。
+
+用 `launchctl bootstrap "gui/$(id -u)" <已安装 plist 的绝对路径>` 加载，
+用 `launchctl bootout "gui/$(id -u)/<Label>"` 卸载；修改配置后先 bootout 再 bootstrap。
+不要为一次性启动入口添加 KeepAlive，也不要额外独立启动第二个 Runner。
+
+`scripts/bounded_run.py` 只执行命令一次、传递退出码和终止信号，不是重启管理器。
+它按字节持续读取两个输出流（超长行也受限），每个文件上限 10 MiB，
+历史只有 `.1`、`.2`、`.3`，最旧历史自动删除；每路输出合计最多 40 MiB。
+写日志失败时结束子进程，不回退到无限追加。每个日志前缀使用独占文件锁防止重复进程争写。
+日志权限 0600，固定放在对应启动脚本所在的 `scripts/`：
+
+| 启动对象 | 日志前缀（分别添加 `.error.log`、`.out.log`） |
+| --- | --- |
+| Native Stack 登录启动 | `start-native-stack` |
+| 后端、前端、Runner | `run-native-service.backend`、`run-native-service.frontend`、`run-native-service.runner` |
+| VPN 转发 | `vpn_tcp_relay` |
+
+LaunchAgent 自身的 stdout/stderr 指向 `/dev/null`，防止日志包装器启动失败产生无限追加文件；
+业务命令输出由包装器写入上表日志。若解释器或包装器本身无法启动，查看 `launchctl print` 的退出状态。
+五个前缀、每个两路输出，总上限约 400 MiB，不含历史旧日志和其他业务项目自行写入的日志。
+旧 `.runtime-runner/*.log` 和 `/tmp/agent-context-router-vpn-relay*.log` 不自动删除，切换后不再使用。
+外部项目自身日志、Runner 按任务保存的部署日志不在这次登录启动日志控制范围内。
+
+隔离测试（包含真实临时 LaunchAgent 的失败不重启测试；自动卸载测试项）：
+
+```bash
+backend/.venv-native/bin/python scripts/test_bounded_run.py
+```
 
 Native 脚本将前端和后端显式绑定 `127.0.0.1`，不会监听局域网网卡。后端 CORS 只允许 `http://127.0.0.1:49175` 和 `http://localhost:49175`；本项目当前定位为本机工具，不提供应用层鉴权。若未来需要远程访问，应先补 HTTPS、鉴权和新的 Origin 配置，而不是直接改成公网绑定。
 
@@ -317,7 +362,8 @@ uv run --directory backend python scripts/import_browser_har.py /path/to/uat.har
 需要网页操作后自动保存时，加载仓库
 `browser-extension/interface-log-capture/` 下的 Chrome 扩展。扩展监听 3000/3001
 (LOCAL)、18080(TEST) 与 28080(UAT) 的 Fetch/XHR；webRequest 保存请求条目，Debugger/DevTools
-补充响应内容。浏览器本地队列先持久化再上传，断线每30秒重试，逐条确认；未确认记录不自动删除，
+补充响应内容。浏览器本地队列先持久化再上传，同环境满 10 条或最早待传记录等待 5 秒触发，
+每批最多 10 条/1 MiB；断线按 5/10/20/30 秒退避，后台休眠由 30 秒周期检查兜底，逐条确认；未确认记录不自动删除，
 100 MiB 满额会明确报错。后端先保存脱敏原始记录，再关联接口；未匹配可在扩展弹窗查看、重新匹配。
 启用前停用旧用户录制脚本并刷新已有页面。安装步骤和采集边界见扩展目录 `README.md`。
 首次启用前必须执行 migration 并重启 Native Stack。
@@ -325,9 +371,9 @@ uv run --directory backend python scripts/import_browser_har.py /path/to/uat.har
 ```bash
 ./scripts/restart-native-stack.sh
 ./scripts/status-native-stack.sh
-tail -n 100 .runtime-runner/backend.log
-tail -n 100 .runtime-runner/frontend.log
-tail -n 100 .runtime-runner/host-runner.log
+tail -n 100 scripts/run-native-service.backend.error.log
+tail -n 100 scripts/run-native-service.frontend.error.log
+tail -n 100 scripts/run-native-service.runner.error.log
 ```
 
 ## 后端验证

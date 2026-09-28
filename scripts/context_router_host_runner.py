@@ -70,6 +70,28 @@ READINESS_PATTERN = re.compile(
 )
 
 
+def _response_preview(content: bytes, content_type: str) -> str:
+    """Store binary responses as metadata, never as decoded file contents.
+
+    Kept identical in the standalone runner and backend; parity is regression-tested.
+    The digest covers retained bytes only (the HTTP stream may be truncated).
+    """
+    media_type = content_type.partition(";")[0].strip().lower()
+    textual = (
+        not media_type
+        or media_type.startswith("text/")
+        or media_type in {"application/json", "application/xml", "application/javascript"}
+        or media_type.endswith(("+json", "+xml"))
+    )
+    if textual and b"\x00" not in content:
+        return content.decode("utf-8", errors="replace")
+    return (
+        "[binary response omitted; "
+        f"retained_bytes={len(content)}; "
+        f"retained_sha256={hashlib.sha256(content).hexdigest()}]"
+    )
+
+
 class RunnerError(RuntimeError):
     pass
 
@@ -351,7 +373,9 @@ class HostRuntimeRunner:
                     if response_bytes > max_response_bytes:
                         response_truncated = True
                         break
-                response_body = b"".join(chunks).decode("utf-8", errors="replace")
+                response_body = _response_preview(
+                    b"".join(chunks), response_headers.get("content-type", "")
+                )
         except (
             RunnerError,
             urllib.error.URLError,
@@ -386,6 +410,9 @@ class HostRuntimeRunner:
             raise RunnerSecurityError("宿主机接口转发方法不受支持")
         url = _required_string(payload, "url")
         parsed = urllib.parse.urlsplit(url)
+        normalized_path = re.sub(r"/+", "/", urllib.parse.unquote(parsed.path)).rstrip("/").lower()
+        if re.search(r"/sse/(connect|disconnect|subscribe|unsubscribe)$", normalized_path):
+            raise RunnerSecurityError("SSE 连接与订阅控制不支持普通接口转发")
         if (
             parsed.scheme not in {"http", "https"}
             or not parsed.hostname
@@ -395,11 +422,13 @@ class HostRuntimeRunner:
         ):
             raise RunnerSecurityError("宿主机接口转发地址无效")
         query = payload.get("query") or {}
-        body = payload.get("body") or {}
+        body = payload.get("body")
+        if body is None:
+            body = {}
         headers = payload.get("headers") or {}
         if (
             not isinstance(query, dict)
-            or not isinstance(body, dict)
+            or not isinstance(body, (dict, list))
             or not isinstance(headers, dict)
         ):
             raise RunnerSecurityError("宿主机接口转发参数格式无效")

@@ -23,6 +23,9 @@ node_modules/
 out/
 coverage/
 .runtime-runner/
+scripts/*.log
+scripts/*.log.[123]
+scripts/*.log.lock
 
 # Mounted project documents
 document-sources/*

@@ -6,6 +6,15 @@ native_script_dir=${0:A:h}
 native_repo_root=${native_script_dir:h}
 native_env_file=${CONTEXT_ROUTER_NATIVE_ENV_FILE:-"$native_repo_root/.env.native.local"}
 
+# launchctl-submitted children do not inherit an interactive shell toolchain.
+export PATH="/opt/homebrew/opt/node@22/bin:${HOME}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH}"
+if [[ -z "${JAVA_HOME:-}" && -x /usr/libexec/java_home ]]; then
+  export JAVA_HOME=$(/usr/libexec/java_home 2>/dev/null || true)
+fi
+if [[ -n "${JAVA_HOME:-}" ]]; then
+  export PATH="$JAVA_HOME/bin:$PATH"
+fi
+
 if [[ -f "$native_env_file" ]]; then
   set -a
   source "$native_env_file"
@@ -162,6 +171,33 @@ native_launchd_running() {
   launchctl print "gui/$(id -u)/$1" >/dev/null 2>&1
 }
 
+native_launch_service() {
+  local label=$1
+  shift
+  local plist_path="$native_runtime_root/$label.plist"
+  # launchctl submit implicitly creates a keepalive job. Explicit temporary
+  # plists preserve ordered startup without making three separate login items.
+  /usr/bin/python3 - "$plist_path" "$label" "$@" <<'PY'
+import os
+import plistlib
+import sys
+path, label, *arguments = sys.argv[1:]
+with open(path, "wb") as stream:
+    plistlib.dump({
+        "Label": label,
+        "ProgramArguments": arguments,
+        "RunAtLoad": True,
+        "KeepAlive": False,
+        "ExitTimeOut": 10,
+        "EnvironmentVariables": {key: os.environ[key] for key in
+                                 ("PATH", "JAVA_HOME") if key in os.environ},
+        "StandardOutPath": "/dev/null",
+        "StandardErrorPath": "/dev/null",
+    }, stream)
+PY
+  launchctl bootstrap "gui/$(id -u)" "$plist_path"
+}
+
 native_service_running() {
   local label=$1
   local pid_path=$2
@@ -178,7 +214,7 @@ native_stop_service() {
   local marker=$3
   local name=$4
   if native_launchd_available && native_launchd_running "$label"; then
-    launchctl remove "$label"
+    launchctl bootout "gui/$(id -u)/$label"
     rm -f "$pid_path"
     print "$name：已停止"
     return 0
