@@ -142,7 +142,7 @@ Codex / Antigravity
 
 接口转发 MCP 的执行也优先使用具备 `interface-forwarding` 能力的在线 Host Runner：控制面先完成计划、只读分类、配置指纹和单次使用校验，再创建短租约任务；Runner 只执行服务端组装的 HTTP(S) GET/POST 请求并回传有界结果。账号请求头不落任务表、不进入 MCP 响应；Runner 不可用时仅保留现有 Backend 直连兼容路径。c12-data 的原始 Controller 路径不直接开放，只有登记为 MTP 可调用接口的明确包装路径才能执行。
 
-`prepare_forwarding_request` 先解析转发配置。显式 `address_id`、`login_account`、`role_name` 优先；省略时在当前接口、task 环境和仍存在的候选中选择最近成功日志的地址与身份；没有成功记录但仅有一个候选时自动选择；其余情况返回 `needs_selection`。显式账号或角色会先排除不包含该身份的地址。`selection_evidence` 分别记录地址和身份来自 `caller`、`successful_history` 或 `single_candidate`；调用摘要只记录来源，不记录登录请求头。配置确定后，再按同接口、同环境、同转发地址、同身份选择最近一条成功日志，并在合并前移除验证码、临时令牌、时间戳等易失字段，把历史页码重置为 1、历史分页大小限制到 20。默认 `value_strategy=reuse_successful`，不会因为存在映射就查询业务数据库。用户要求更换指定业务值时使用 `refresh_selected + refresh_value_keys`；要求所有业务值重新造数时使用 `refresh_mapped`；明确拒绝历史时才使用 `ignore_history`。刷新只处理当前接口的精确参数绑定，先移除对应历史值，再从最多 10 个候选中稳定选择一个与旧值不同的值；调用方显式值最后覆盖且会跳过该字段的映射查询。返回的 `parameter_evidence` 标记 `caller`、`successful_history`、`value_mapping`、Schema 默认/示例或安全分页默认，`value_resolutions` 说明哪些映射被刷新或由 caller 覆盖；无法安全刷新时返回 `needs_value_resolution`，不生成计划。
+`prepare_forwarding_request` 先解析转发配置。显式 `address_id`、`login_account`、`role_name` 优先；省略时在当前接口、task 环境和仍存在的候选中选择最近成功日志的地址与身份；没有成功记录但仅有一个候选时自动选择；其余情况返回 `needs_selection`。显式账号或角色会先排除不包含该身份的地址。`selection_evidence` 分别记录地址和身份来自 `caller`、`successful_history` 或 `single_candidate`；调用摘要只记录来源，不记录登录请求头。配置确定后，再按同接口、同环境、同转发地址、同身份选择最近一条成功日志，并在合并前移除验证码、临时令牌、时间戳等易失字段，把历史页码重置为 1、历史分页大小限制到 20。默认 `value_strategy=reuse_successful`，不会因为存在映射就查询业务数据库。用户要求更换指定业务值时使用 `refresh_selected + refresh_value_keys`；要求所有业务值重新造数时使用 `refresh_mapped`；明确拒绝历史时才使用 `ignore_history`。对于调用方显式提供页码或分页大小的只读接口，`ignore_history` 只自动映射契约中的必填字段，不自动填充可选业务筛选；确实需要筛选时由调用方显式传入。其他情况仍按原策略映射。刷新只处理当前接口的精确参数绑定，先移除对应历史值，再从最多 10 个候选中稳定选择一个与旧值不同的值；调用方显式值最后覆盖且会跳过该字段的映射查询。返回的 `parameter_evidence` 标记 `caller`、`successful_history`、`value_mapping`、Schema 默认/示例或安全分页默认，`value_resolutions` 说明哪些映射被刷新、跳过或由 caller 覆盖；无法安全刷新时返回 `needs_value_resolution`，不生成计划。
 
 业务值取值链路既可由 AI 调用 `search_value_mappings -> execute_mapped_data_query` 原子完成查询和数据可视化落库，也可由 `prepare_forwarding_request` 在刷新策略下按接口绑定自动完成。搜索工具只读取当前 task Workspace 的已发布映射；原子工具不接收环境、SQL、连接信息或任意数据源，只执行映射中保存的受限规则并继承 task 环境，结果最多 10 条。`include_record=true` 默认按映射已经确定的表和值字段读取命中记录，成功的主数据查询返回 `goal_completed=true`、禁止继续调用的工具和唯一终态动作，客户端不再解析数据库、猜测字段或二次保存。`resolve_value_candidates` 保留给接口组参等只需候选、不需要创建数据可视化的场景。
 
@@ -245,6 +245,33 @@ api/table_relations.py
 ```
 
 接口转发的语义检索与执行链路：
+
+本地 REST 转发执行及外部日志补录均从已校验的转发地址读取 `environment_key` 并写入
+`interface_forwarding_logs`，不从展示名称猜测环境；HTTP 错误和网络失败日志也保留所选环境。
+历史空环境日志只在原始地址和请求证据足够时定向修复，不通过重复执行业务接口补齐。
+
+计划 prepare 在合并 caller 参数前递归检查 body/path/query：超过 ±9007199254740991
+的数值（以及非有限浮点值）返回 unsafe_integer_input 和字段路径，要求原始十进制字符串。
+该检查不改写字符串或可信数据库值；根整数数组仍按既有合同精确转换 int64。
+字符串形式但内容已错误的 ID 无法自动恢复，仍须由调用方对照原始取值证据。
+
+接口列表通过 `overview?environment=<key>` 按环境读取每个接口最近保存的一条日志；省略环境
+表示全部环境，标签悬浮说明来源环境、HTTP 状态与时间。`interface_request_status.py` 计算
+未请求、有数据、无数据、请求成功、404、业务报错、其他报错；未知结构、未知操作类型或截断响应保留
+已请求（已知失败仍显示其他报错）。HTTP 404 优先，HTTP 200 且响应 code 失败或 success=false
+显示业务报错，其他 HTTP/网络失败显示其他报错；不能只凭日志 success=false 推定业务错误。
+仅 read 判断核心 data/分页集合，
+write/destructive 成功不要求有返回数据。0/false 是有效查询值，分页总数不替代本页数据。
+查询详情对象的直接业务字段全部为 null 时显示无数据（例如空轨迹 DTO）；只检查直接字段，
+不把嵌套对象、非空列表、0 或 false 当成 null，保留未知包装结构与截断响应的保守判断。
+全空详情包含 `code: null` 或 `success: null` 时也按无数据处理，不将这些业务字段直接
+当成未知响应包装；外层业务失败判断仍优先。含分页元数据（total/totalCount/pageNumber）
+但没有可识别集合的对象继续保守显示已请求。
+列表只在服务端读取最多 65536 字符的响应片段，超长内容不做数据分类，也不回传响应正文。
+已进入data的详情若含code/success及其他非null业务字段，按有数据处理（包括0/false）；
+只有code/success/msg/message/timestamp的未知包装仍保守显示已请求，外层错误优先级不变。
+复用既有日志、不迁移数据库、不重新执行接口；浏览器日归并记录仍是已有的成功优先样本，
+因此标签描述最近保存的日志样本，不保证代表浏览器最后一次网络观察。
 
 ```text
 Swagger/OpenAPI 导入
@@ -369,6 +396,31 @@ Workspace 调用记录通过 `task-history.ts` 保留文档读取批次和单批
 任务可视化页不建立第二套任务状态机。`AiTaskVisualizationService` 直接以 `mcp_tasks.id` 聚合最近 30 天的统一工具调用、数据查询、接口转发日志和容器错误快照；详情接口同时把真实计数归一为 MCP、数据、接口、日志和结论五项链路健康状态。数据查询区分 pending/succeeded/failed，接口区分全部成功、部分失败和全部失败，未产生记录统一标记为 `unused` 而不是故障；已解决任务中的历史失败调用标为 `attention` 并说明已经恢复。`save_task_visualization_result` 的 `resolved` 路径只引用同一 task 的成功调用并由服务端生成验证项；`interface_execute` 可省略 `verification_call_ids`，服务端自动绑定最近一次成功执行，避免客户端为取调用号重复执行。Trace 对常见参数错误保存缺失字段、非法字段和允许值，不保存敏感原文。列表、详情和最新在前的时间线均只读，关联按钮只在对应记录存在时显示，并带同一个 task_id 进入其他可视化页面。
 
 接口可视化页由 `AiInterfaceVisualizationService` 聚合真实 `interface_forwarding_logs`、`mcp_tasks`、接口元数据和请求计划。接口执行任务通过普通搜索取得候选，再由 `prepare_forwarding_request` 组装参数并执行；服务端不再保存意图评分、搜索质量事件或响应规则验证。页面仅观察最终真实请求，同配置同请求的成功重试继续复用既有结果。
+
+接口转发的 Host Runner 与直接执行路径对非文本 Content-Type 或包含 NUL 的响应只保存
+`[binary response omitted; ...]` 摘要，不保存文件原文或 Base64。摘要中的
+`retained_bytes` / `retained_sha256` 只对应最多 1 MiB 的保留片段，不代表截断文件的完整大小或完整哈希；
+`response_bytes` 是停止读取前已观察到的字节数，超限仍标记 `response_truncated`。
+HTTP 状态和传输异常保持原样，下载摘要不被视作查询业务数据（成功时使用“已请求”兜底）。
+完成回报入口对旧 Runner 的 NUL 文本、响应头和错误类型做转义，再限制正文大小，
+避免 PostgreSQL 拒绝 NUL 导致完成回报失败并最终误显 `HostRunnerTimeout`。
+独立 Runner 不依赖后端包，两处小型预览函数通过回归测试保持一致。
+
+MCP prepare 的 body 支持对象与根数组。根数组按接口合同的 items/数量约束校验，
+历史数组与调用方数组按整体替换而非对象字段合并；显式 `[]` 不会转成 null。
+直接执行与 Host Runner 都保留原始 JSON 结构，计划、哈希和日志仍使用现有 JSON 字段，
+无需迁移。合同摘要通过 body_schema 暴露根数组合同；当前业务值映射不支持根数组逐字段刷新，
+AI 应先取得同环境候选再整体传入。对象请求维持既有校验和合并逻辑。
+
+根数组 items=integer 支持规范十进制字符串，服务端精确转换后按 schema 校验；int64
+检查有符号 64 位范围。调用方以 JSON number 传入超过 2^53-1 的整数会被拒绝，避免客户端
+舍入后的 ID 静默执行。prepare/history 对大整数提供字符串视图，内部计划、哈希及 HTTP
+序列化保留精确整数；旧计划中无 decimal-v1 标记的大整数根数组拒绝执行，要求重新 prepare。
+这不是任意字符串强制转数值，也不修改字符串数组及普通对象请求合同。
+
+普通转发入口拒绝路径 /sse/connect、disconnect、subscribe、unsubscribe（含网关前缀）。
+prepare、执行旧计划、本机转发 API 和 Host Runner 均设防，GET/read 元数据不能绕过。
+不自动更新历史日志或接口目录，不关闭现有连接；其他接口仍需按源码核验只读语义。
 
 日志可视化链路为 `prepare_task_context -> list_task_containers -> inspect_container_errors`。容器列表只来自 `runtime-runner.workspace-id` 标签；快照读取前再次校验容器归属，使用非跟随 Docker logs、默认最近 15 分钟/500 行和 512000 字节硬上限。显式关键词必须命中才记录；服务端按相邻因果签名生成稳定指纹，用合并后的错误事件累计出现次数并脱敏。列表支持 task 筛选、最近 30 天窗口和 `last_seen_at + id` 不透明游标；浏览器只读，不直接访问 Docker Socket。
 
