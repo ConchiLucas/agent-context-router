@@ -22,6 +22,7 @@ node_modules/
 .next/
 out/
 coverage/
+*.tsbuildinfo
 .runtime-runner/
 scripts/*.log
 scripts/*.log.[123]
