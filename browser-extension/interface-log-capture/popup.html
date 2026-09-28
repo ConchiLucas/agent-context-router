@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>接口录制状态</title><link rel="stylesheet" href="popup.css"></head>
+<body><main>
+<h1>接口录制状态</h1>
+<p id="mode" role="status">正在读取状态…</p>
+<p id="error" role="alert" hidden></p>
+<dl id="counts"></dl>
+<p>已入库包含待匹配记录。响应内容缺失时仍保存请求和状态码。</p>
+<nav aria-label="录制操作"><button id="refresh">刷新状态</button><button id="retry">重试待传</button><button id="reconcile">重新匹配</button></nav>
+<h2>最近保存的请求</h2>
+<p id="summary"></p><section id="records" aria-label="最近请求"></section>
+<p>范围：LOCAL 3000/3001、TEST 18080、UAT 28080、PRE 30080 的 Fetch/XHR。请停用旧的用户录制脚本，避免两套采集器重复记录。</p>
+</main><script src="popup.js"></script></body></html>

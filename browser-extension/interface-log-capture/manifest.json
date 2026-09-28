@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Context Router 接口日志采集",
+  "version": "0.3.18",
+  "minimum_chrome_version": "125",
+  "description": "持久化采集 LOCAL/TEST/PRE/UAT 请求，断线补传，保留待匹配记录。",
+  "permissions": ["alarms", "debugger", "storage", "unlimitedStorage", "tabs", "webRequest"],
+  "host_permissions": [
+    "http://localhost:2077/*",
+    "http://127.0.0.1:2077/*",
+    "http://localhost:3000/*",
+    "http://127.0.0.1:3000/*",
+    "http://localhost:3001/*",
+    "http://127.0.0.1:3001/*",
+    "http://192.168.0.222:18080/*",
+    "http://192.168.0.222:28080/*",
+    "http://223.87.29.28:30080/*",
+    "http://127.0.0.1:49173/*"
+  ],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "devtools_page": "devtools.html",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Context Router 接口日志采集"
+  }
+}
